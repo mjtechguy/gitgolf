@@ -4,7 +4,7 @@ import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import { RepositoryImage, type DocumentContext } from './RepositoryImage';
+import { RepositoryImage, RepositoryPicture, type DocumentContext } from './RepositoryImage';
 import type { Root, Element, RootContent } from 'hast';
 import { Code2, Eye } from 'lucide-react';
 import { CopyButton } from './RepositoryUI';
@@ -55,6 +55,8 @@ export const MarkdownBody = memo(function MarkdownBody({text,label,context,linkR
   p:({children,node})=><p className={node?.properties.align==='center'?'markdown-align-center':node?.properties.align==='right'?'markdown-align-right':undefined}>{children}</p>,
   a:({href,children})=>href?<a href={href} onClick={event=>{if(href.startsWith('/')&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&!event.altKey&&event.button===0){event.preventDefault();void navigate({href});}}} target={/^https?:/.test(href)?'_blank':undefined} rel="noopener noreferrer">{children}</a>:<span>{children}</span>,
   img:({src,alt,height,width})=><RepositoryImage src={src} alt={alt} height={height} width={width} context={context}/>,
+  picture:({node})=><RepositoryPicture node={node} context={context}/>,
+  source:()=>null,
   code:({className,children})=><code className={className}><Tokens text={String(children)} language={className?.replace(/^language-/,'')||''}/></code>,
   pre:({children,node})=><div className="code-block"><CopyButton text={node?.children.map(nodeText).join('')||''} label="Copy code block"/><pre>{children}</pre></div>,
  }),[navigate,context?.repositoryId,context?.owner,context?.name,context?.ref,context?.path,context?.userId,context?.sourceAddress?.kind,context?.sourceAddress?.name]);

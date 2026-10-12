@@ -1,6 +1,6 @@
 # Golf: Cloudflare Git challenge readiness
 
-Reviewed: 2026-10-01. **The current bootstrap is not a competition-ready entry.** The product plan has the right workflow ambitions, but the contest needs a working concurrent-agent experience built with Workers and Artifacts. A Gitea repository dashboard is useful foundation work; the agent collaboration and Cloudflare execution remain to be implemented and demonstrated.
+Reviewed: 2026-10-07. **Golf is not yet a competition-ready entry.** Local collaboration and bounded CI execution provide a foundation; live concurrent-agent Cloudflare execution, application provisioning and protected previews remain to be qualified. The draft [Cloudflare build and scale plan](CLOUDFLARE_BUILD_PLAN.md) gives the proposed implementation sequence and acceptance gates.
 
 This review preserves the private repository, existing licensing state and the instruction to add no repository CI workflows. It does not submit an entry, accept terms, establish eligibility or authorize publication.
 
@@ -10,13 +10,13 @@ This review preserves the private repository, existing licensing state and the i
 
 The [official challenge page](https://www.cloudflare.com/git-competition/) and [announcement](https://blog.cloudflare.com/next-git-platform-on-cloudflare/) describe a new Git collaboration experience in which multiple agents work concurrently. Workers and Artifacts are required technologies, also explicitly confirmed by a checkbox on the [submission form](https://www.cloudflare.com/git-competition/submit/). The announcement requires permissively licensed source, such as MIT, Apache or BSD; a 5–10-minute demonstration; and instructions for running or trying the project.
 
-The published deadline is **October 14, 2026**. The landing page lists finalist announcements on October 16, three selected teams, travel/event attendance for up to two people per team, and a first-place award of $25,000 in Cloudflare credits. The precise submission cutoff time and timezone remain unverified. Do not assume end of day in the developer's timezone. Sources: [challenge](https://www.cloudflare.com/git-competition/), [announcement](https://blog.cloudflare.com/next-git-platform-on-cloudflare/).
+The submission cutoff is **October 14, 2026 at 11:59 p.m. Pacific daylight time**, or October 15 at 06:59 UTC. The rules require Workers, Artifacts and concurrent agents, a 5–10 minute demonstration, runnable source and an MIT, Apache 2.0 or BSD 2/3 license with a LICENSE file. Source: [official rules](https://www.cloudflare.com/documents/build-next-gen-git-platform-competition-terms.pdf).
 
 The form accepts MP4, WebM or MOV video files up to 2 GiB. It asks for team/contact/location/attendee information, project vision, explanation of Cloudflare use, an open-source repository URL and run instructions. It requires confirmation of the terms and states that submitted details/video are retained for up to 180 days. This review read the form without entering data or accepting anything. Source: [submission form](https://www.cloudflare.com/git-competition/submit/).
 
-The challenge links [official competition terms (PDF)](https://www.cloudflare.com/documents/build-next-gen-git-platform-competition-terms.pdf). Their content could not be verified: direct retrieval failed, and the browser's PDF extension surface was blocked by the automation security policy. Eligibility, geographic/age conditions, exact cutoff, judging weights, rights and licensing details must be reviewed from that document before submission. No bypass was attempted.
+The [official competition terms (PDF)](https://www.cloudflare.com/documents/build-next-gen-git-platform-competition-terms.pdf) are now accessible. Judging weights originality/prototype quality at 50%, multi-agent concurrency/coordination/context/review/conflict handling at 25%, and usability at 25%. The rules restrict entrants to eligible adults legally resident in the United States or Canada; personal eligibility and publication/submission choices remain owner decisions. Finalist presentations are October 21 in San Francisco.
 
-Do not borrow rules from [The Cold Start](https://www.cloudflare.com/connect/cold-start/), a separate Cloudflare contest. Its funding/geographic requirements, prizes and service-count judging weights are not established requirements for this Git challenge. No verified scoring rubric for this Git challenge was available in the reviewed accessible pages.
+Do not borrow rules from [The Cold Start](https://www.cloudflare.com/connect/cold-start/), a separate Cloudflare contest. This Git challenge's verified rubric is the one above. Broad service use should support observable application provisioning and collaboration outcomes.
 
 ## Requirement and evidence matrix
 
@@ -27,7 +27,7 @@ Do not borrow rules from [The Cold Start](https://www.cloudflare.com/connect/col
 | Permissive source and accessible repository | Section 13.5; P0.8 | Repository requested private; plan license intention alone is insufficient | Review dependency licenses/notices and actual submission terms; obtain explicit owner authorization for the specific open-source publication. |
 | 5–10-minute video | Section 22 | Storyboard exists; no completed recording | Real captured workflow, measured duration, visible evidence and clearly identified edited waits. |
 | Reproducible instructions | P8.7/P8.10; bootstrap README/Compose | Initial local setup is being implemented and checked | Clean-machine rehearsal of the demonstrated Cloudflare path, prerequisites, provider plan/cost, fixture data and cleanup. |
-| Deadline and eligibility | Section 21 | Published date confirmed; detailed terms unverified | Review linked rules and exact cutoff; verify entrant eligibility before any entry. |
+| Deadline and eligibility | Section 21 | Exact cutoff and rubric verified from official rules | Verify entrant eligibility and prepare the entry before the cutoff. |
 | Honest scale claim | Sections 8/15/22 | No relevant load results in bootstrap | Publish actual concurrency, inputs, resource limits, queue behavior, timings, failures and cost. |
 | Useful broader developer product | Full plan, especially 5/7/11/12 | Narrow user-token/repository slice; later capabilities disabled | Prioritize demonstrated outcomes; qualify each additional integration before adding it to the story. |
 
@@ -42,7 +42,7 @@ Use a focused developer problem: two agents propose independently tested solutio
 3. Display live task state, touched files, patches, test results and retained task context. Show which task is working on which concern. Distinguish permission failure, failed tests, cancellation and provider interruption from success.
 4. Include one deliberate overlapping change or moved-base scenario. Detect the conflict, preserve both proposals and require tests on the resulting integration commit. A green result from an old base cannot authorize merging the newly combined change.
 5. Let a reviewer compare proposals using exact commits, tests and measured cost/time, then choose or combine them. Record why a candidate was rejected or selected. The chosen output must remain inspectable through ordinary Git operations.
-6. Deliver a real protected preview for the selected candidate if the preview adapter is qualified. Show an unauthenticated denial and authenticated access, and connect the running application to its source/output evidence. Scope this as an extension if it would displace the required concurrent-agent proof.
+6. Deliver a real protected preview with isolated D1/R2/AI application resources and an approved DNS hostname. Show unauthenticated denial, authorized reviewer access and alternate-host protection, and publish stable plus immutable links through the supported PR API. This is a requested Golf showcase acceptance target; it is not an additional official competition requirement.
 7. Demonstrate cancellation and resource cleanup. Publish a bounded scale run separately from the short recording, with actual concurrency and resource limits. The challenge's large-scale vision is not evidence that Golf already supports hundreds of thousands of live agents.
 8. End with concise architecture and reproducibility: why Workers and Artifacts participate in the demonstrated operation, what the Gitea/origin core owns, which features remain planned, and how another developer can run it.
 
@@ -66,6 +66,8 @@ Golf's regular developer workflows remain usable without AI. The **competition r
 Artifacts' [open-beta changelog](https://developers.cloudflare.com/changelog/post/2026-10-01-artifacts-open-beta/) identifies Workers Paid plan availability and describes task repository bindings/events and Builds handoffs. Its billing start date says October 14, while the same-day [announcement](https://blog.cloudflare.com/next-git-platform-on-cloudflare/) says October 15. Confirm actual pricing/account billing before enabling paid resources; the source discrepancy is unresolved here.
 
 ## Next implementation priorities
+
+Follow CF0–CF5 in the [Cloudflare build and scale plan](CLOUDFLARE_BUILD_PLAN.md) for the current competition milestone. Its requested scope includes Clef, inference APIs, D1/R2 application provisioning and DNS/Zero Trust-protected PR previews. The earlier portable sequence below remains the dependency context; live provider qualification may proceed alongside corresponding portable consumers without requiring the entire local roadmap to finish first.
 
 1. Finish and record the current portable bootstrap verification. Keep it as the foundation; do not present it as the challenge's core innovation.
 2. Pull the smallest concurrent-task slice forward from P5.2/P6.2/P6.9: task identity and run manifest, Worker-to-Artifacts fork/token flow, two real supported agent runs, cancellation, and result comparison. Complete the relevant account/harness proofs before calling this available.

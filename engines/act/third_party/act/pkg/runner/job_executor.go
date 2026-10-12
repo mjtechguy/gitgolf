@@ -199,6 +199,11 @@ func setJobOutputs(ctx context.Context, rc *RunContext) {
 
 func useStepLogger(rc *RunContext, stepModel *model.Step, stage stepStage, executor common.Executor) common.Executor {
 	return func(ctx context.Context) error {
+		if rc.BeforeStep != nil {
+			if err := rc.BeforeStep(ctx); err != nil {
+				return err
+			}
+		}
 		ctx = withStepLogger(ctx, stepModel.ID, rc.ExprEval.Interpolate(ctx, stepModel.String()), stage.String())
 
 		rawLogger := common.Logger(ctx).WithField("raw_output", true)

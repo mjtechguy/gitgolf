@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { test,expect,type Page } from '@playwright/test';
 import { request,respond,reject } from './rpc';
 import { AgentEventBodyState, ListAgentTaskEventsRequestSchema, ListAgentTaskEventsResponseSchema, ActionRunKind,GetActionRunRequestSchema,GetActionRunResponseSchema,ListActionRunsRequestSchema,ListActionRunsResponseSchema,GetSessionResponseSchema,GetRepositoryResponseSchema,ListCapabilitiesResponseSchema,InspectWorkflowsResponseSchema,GetAuthenticationOptionsResponseSchema,CancelAgentTaskResponseSchema,CancelAgentTaskRequestSchema } from '../src/gen/golf/v1/golf_pb';
@@ -8,7 +9,7 @@ async function fixture(page:Page){
  await page.route('**/rpc/**',async route=>{const method=new URL(route.request().url()).pathname.split('/').at(-1)!;state.methods.push(method);
  if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:owner,login:'alex'}});
  if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
- if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+ if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
  if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:repo,name:'private',fullName:'alex/private',defaultBranch:'main',private:true}});
  if(method==='InspectWorkflows')return respond(route,InspectWorkflowsResponseSchema,{repositoryId:repo,commitId:commit,catalogVersion:'fixture'});
  if(method==='ListActionRuns'){const input=request(route,ListActionRunsRequestSchema);state.lists.push(input);if(state.barrier)await state.barrier;if(state.deny)return reject(route,'permission_denied','Repository run access revoked.');const rows=(state.inventorySize?Array.from({length:state.inventorySize},(_,index)=>({...summary(ActionRunKind.WORKFLOW,`12345678-1234-4234-8234-${String(index+1).padStart(12,'0')}`),title:`Build ${String(index+1).padStart(2,'0')}`,createdAt:`2026-10-01T12:00:${String(index).padStart(2,'0')}Z`})):[summary(ActionRunKind.WORKFLOW),summary(ActionRunKind.CODING_TASK),summary(ActionRunKind.REVIEW)]).map(row=>({...row,state:state.listStates[row.ref.kind]||row.state})).filter(row=>!input.kindFilter||row.ref.kind===input.kindFilter);return respond(route,ListActionRunsResponseSchema,{repositoryId:state.bad==='listrepo'?'22':repo,runs:rows,nextCursor:input.cursor?'':'next-exact-page'});}

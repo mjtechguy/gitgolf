@@ -22,8 +22,8 @@ import (
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 )
 
-// Images are bounded private RPC responses. Never forward forge credentials to
-// external hosts, follow redirects, or expose an authenticated generic proxy.
+// Images are bounded private RPC responses. External hosts and every redirect
+// are allowlisted; forge credentials never leave Golf through this path.
 func repositoryImagePath(document, reference string) (string, error) {
 	u, e := url.Parse(reference)
 	if e != nil || u.IsAbs() || u.Host != "" || strings.ContainsAny(reference, "\\\x00\r\n") {
@@ -44,7 +44,7 @@ func externalImageURL(reference string) (*url.URL, error) {
 		return nil, invalid("Unsupported external image URL.")
 	}
 	switch u.Host {
-	case "raw.githubusercontent.com", "img.shields.io", "avatars.githubusercontent.com", "user-images.githubusercontent.com", "github.githubassets.com", "badgen.net", "expressjs.com", "sindresorhus.com", "api.securityscorecards.dev":
+	case "raw.githubusercontent.com", "img.shields.io", "avatars.githubusercontent.com", "user-images.githubusercontent.com", "github.githubassets.com", "badgen.net", "expressjs.com", "sindresorhus.com", "api.securityscorecards.dev", "github.com", "vite.dev", "sponsors.vite.dev":
 	default:
 		return nil, invalid("This image host is not supported.")
 	}
@@ -70,8 +70,11 @@ func fetchRepositoryImage(ctx context.Context, reference string) ([]byte, error)
 	}
 	transport := &http.Transport{Proxy: nil, DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, e := net.SplitHostPort(address)
-		if e != nil || host != u.Hostname() || port != "443" {
+		if e != nil || port != "443" {
 			return nil, invalid("Unsupported image destination.")
+		}
+		if _, e := externalImageURL("https://" + host + "/"); e != nil {
+			return nil, e
 		}
 		addresses, e := net.DefaultResolver.LookupIPAddr(ctx, host)
 		if e != nil || len(addresses) == 0 {
@@ -85,7 +88,13 @@ func fetchRepositoryImage(ctx context.Context, reference string) ([]byte, error)
 		return (&net.Dialer{Timeout: 4 * time.Second}).DialContext(ctx, network, net.JoinHostPort(addresses[0].IP.String(), port))
 	}}
 	defer transport.CloseIdleConnections()
-	client := http.Client{Transport: transport, Timeout: 6 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := http.Client{Transport: transport, Timeout: 6 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) > 3 {
+			return invalid("Image redirect limit exceeded.")
+		}
+		_, e := externalImageURL(req.URL.String())
+		return e
+	}}
 	req, e := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if e != nil {
 		return nil, e

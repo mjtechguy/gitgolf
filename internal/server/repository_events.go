@@ -221,8 +221,24 @@ func (s *Server) repositoryEventWebhook(w http.ResponseWriter, r *http.Request) 
 		fail(http.StatusBadRequest)
 		return
 	}
-	for _, header := range []string{"Content-Type", "X-Gitea-Delivery", "X-Gitea-Event", "X-Gitea-Event-Type", "X-Gitea-Signature", "X-Gitea-Hook-Installation-Target-Type"} {
+	for _, header := range []string{"Content-Type", "X-Gitea-Delivery", "X-Gitea-Event", "X-Gitea-Event-Type", "X-Gitea-Signature"} {
 		if len(r.Header.Values(header)) != 1 {
+			fail(http.StatusBadRequest)
+			return
+		}
+	}
+	// Forgejo 15 omits the scope header; its native and compatibility headers must agree.
+	if s.config.ForgeKind == "forgejo" {
+		for _, suffix := range []string{"Delivery", "Event", "Event-Type", "Signature"} {
+			if len(r.Header.Values("X-Forgejo-"+suffix)) != 1 || r.Header.Get("X-Forgejo-"+suffix) != r.Header.Get("X-Gitea-"+suffix) {
+				fail(http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	scopes := r.Header.Values("X-Gitea-Hook-Installation-Target-Type")
+	if len(scopes) != 1 || scopes[0] != "repository" {
+		if s.config.ForgeKind != "forgejo" || len(scopes) != 0 {
 			fail(http.StatusBadRequest)
 			return
 		}
@@ -233,7 +249,7 @@ func (s *Server) repositoryEventWebhook(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	delivery := r.Header.Get("X-Gitea-Delivery")
-	if !canonicalEventUUID(delivery) || r.Header.Get("X-Gitea-Event") != "push" || r.Header.Get("X-Gitea-Event-Type") != "push" || r.Header.Get("X-Gitea-Hook-Installation-Target-Type") != "repository" {
+	if !canonicalEventUUID(delivery) || r.Header.Get("X-Gitea-Event") != "push" || r.Header.Get("X-Gitea-Event-Type") != "push" {
 		fail(http.StatusBadRequest)
 		return
 	}

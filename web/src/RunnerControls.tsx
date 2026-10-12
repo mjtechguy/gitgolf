@@ -1,3 +1,4 @@
+import { isWorkflowPath as workflow } from './workflowPaths';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,7 +14,6 @@ type Context = { userId: string; signingOut: boolean; revalidating: boolean; cli
 const states = [RunnerControlState.ACTIVE, RunnerControlState.DRAINING, RunnerControlState.REVOKED];
 const stateName = (state: RunnerControlState) => ({ [RunnerControlState.ACTIVE]: 'Active', [RunnerControlState.DRAINING]: 'Draining', [RunnerControlState.REVOKED]: 'Revoked' })[state as RunnerControlState.ACTIVE | RunnerControlState.DRAINING | RunnerControlState.REVOKED] ?? 'Unknown';
 const nativeId = (value: string) => /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9223372036854775807n;
-const workflow = (value: string) => value === '.gitlab-ci.yml' || value.length <= 255 && /^\.github\/workflows\/[A-Za-z0-9_.-]+\.ya?ml$/.test(value) && !value.includes('..');
 const version = (value: string) => /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9223372036854775807n;
 export function validRunnerInventory(rows: EnrolledRunner[]) {
   return rows.length <= 100 && new Set(rows.map(row => row.workerId)).size === rows.length && rows.every(row => /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(row.workerId) && states.includes(row.state) && version(row.version) && (row.lastSeen === undefined || Number.isFinite(Date.parse(row.lastSeen))) && (!row.recentConnection || row.lastSeen !== undefined) && !(row.state === RunnerControlState.REVOKED && row.hasActiveAttempt));

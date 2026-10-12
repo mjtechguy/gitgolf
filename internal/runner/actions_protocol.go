@@ -13,6 +13,7 @@ import (
 const ActionsCatalog = "golf.workflow.act.v0.2.89.linux.v1"
 const ActionsInputsCatalog = "golf.workflow.act.v0.2.89.linux.v2"
 const ActionsAgentCatalog = "golf.workflow.act.v0.2.89.linux.agents088.v1"
+const ActionsRemoteCatalog = "golf.workflow.act.v0.2.89.linux.remote-node24.v1"
 const WorkflowAgentAction = "golf/agent@v1"
 const ManualInputsCapability = "golf.workflow.dispatch.inputs.v1"
 const ActionsEngineCommit = "4f411281417e88660bea1c1a1749aa71ae0bd60f"
@@ -20,10 +21,11 @@ const ActionsDaemonImage = "docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688
 
 // This identifies known wire catalogs, not configured availability or authority.
 func IsActionsCatalog(c string) bool {
-	return c == ActionsCatalog || c == ActionsInputsCatalog || c == ActionsAgentCatalog
+	return c == ActionsCatalog || c == ActionsInputsCatalog || c == ActionsAgentCatalog || c == ActionsRemoteCatalog
 }
 
 type ActionPlanInput struct {
+	RemoteActions            []ActionBundle    `json:"remoteActions,omitempty"`
 	ManualInputsContract     string            `json:"manualInputsContract,omitempty"`
 	ManualInputsSchemaSHA256 string            `json:"manualInputsSchemaSha256,omitempty"`
 	Catalog                  string            `json:"catalog"`
@@ -44,44 +46,49 @@ type ActionStep struct {
 	AgentPrompt string `json:"agentPrompt,omitempty"`
 }
 type ActionJob struct {
-	InstanceID string              `json:"instanceId"`
-	JobID      string              `json:"jobId"`
-	Name       string              `json:"name"`
-	Image      string              `json:"image"`
-	Matrix     []ActionMatrixEntry `json:"matrix"`
-	Needs      []string            `json:"needs"`
-	Steps      []ActionStep        `json:"steps"`
+	TimeoutSeconds uint32              `json:"timeoutSeconds,omitempty"`
+	InstanceID     string              `json:"instanceId"`
+	JobID          string              `json:"jobId"`
+	Name           string              `json:"name"`
+	Image          string              `json:"image"`
+	Matrix         []ActionMatrixEntry `json:"matrix"`
+	Needs          []string            `json:"needs"`
+	Steps          []ActionStep        `json:"steps"`
 }
 type ActionDependency struct {
 	MetadataPath   string `json:"metadataPath"`
 	MetadataSHA256 string `json:"metadataSha256"`
 }
 type ActionPlan struct {
-	ManualInputsContract     string             `json:"manualInputsContract,omitempty"`
-	ManualInputsSchemaSHA256 string             `json:"manualInputsSchemaSha256,omitempty"`
-	Catalog                  string             `json:"catalog"`
-	EngineCommit             string             `json:"engineCommit"`
-	WorkflowPath             string             `json:"workflowPath"`
-	WorkflowBlobID           string             `json:"workflowBlobId"`
-	ArchiveSHA256            string             `json:"archiveSha256"`
-	Event                    string             `json:"event"`
-	Ref                      string             `json:"ref"`
-	Jobs                     []ActionJob        `json:"jobs"`
-	Events                   []string           `json:"events"`
-	ActionsSHA256            string             `json:"actionsSha256"`
-	LocalActions             []ActionDependency `json:"localActions"`
+	RemoteActions            []ActionRemoteIdentity `json:"remoteActions,omitempty"`
+	ManualInputsContract     string                 `json:"manualInputsContract,omitempty"`
+	ManualInputsSchemaSHA256 string                 `json:"manualInputsSchemaSha256,omitempty"`
+	Catalog                  string                 `json:"catalog"`
+	EngineCommit             string                 `json:"engineCommit"`
+	WorkflowPath             string                 `json:"workflowPath"`
+	WorkflowBlobID           string                 `json:"workflowBlobId"`
+	ArchiveSHA256            string                 `json:"archiveSha256"`
+	Event                    string                 `json:"event"`
+	Ref                      string                 `json:"ref"`
+	Jobs                     []ActionJob            `json:"jobs"`
+	Events                   []string               `json:"events"`
+	ActionsSHA256            string                 `json:"actionsSha256"`
+	LocalActions             []ActionDependency     `json:"localActions"`
 }
 type ActionExecutionInput struct {
-	GitSource            *GitSourceManifest    `json:"gitSource,omitempty"`
-	ManualInputs         *ActionManualInputs   `json:"manualInputs,omitempty"`
-	JobResources         *JobResourceBinding   `json:"jobResources,omitempty"`
-	Input                ActionPlanInput       `json:"input"`
-	Plan                 ActionPlan            `json:"plan"`
-	EventJSON            []byte                `json:"eventJson"`
-	CommitID             string                `json:"commitId"`
-	TimeoutSeconds       int                   `json:"timeoutSeconds"`
-	ResolvedImages       map[string]string     `json:"resolvedImages"`
-	ExecutionEnvironment *ExecutionEnvironment `json:"executionEnvironment,omitempty"`
+	JobTLSCA             []byte                  `json:"jobTlsCa,omitempty"`
+	DependencyAccess     *ActionDependencyAccess `json:"dependencyAccess,omitempty"`
+	JobGit               *JobGitContext          `json:"jobGit,omitempty"`
+	GitSource            *GitSourceManifest      `json:"gitSource,omitempty"`
+	ManualInputs         *ActionManualInputs     `json:"manualInputs,omitempty"`
+	JobResources         *JobResourceBinding     `json:"jobResources,omitempty"`
+	Input                ActionPlanInput         `json:"input"`
+	Plan                 ActionPlan              `json:"plan"`
+	EventJSON            []byte                  `json:"eventJson"`
+	CommitID             string                  `json:"commitId"`
+	TimeoutSeconds       int                     `json:"timeoutSeconds"`
+	ResolvedImages       map[string]string       `json:"resolvedImages"`
+	ExecutionEnvironment *ExecutionEnvironment   `json:"executionEnvironment,omitempty"`
 }
 
 // Values remain private execution data. Schema/values digests bind the exact
@@ -108,7 +115,8 @@ type ActionFrame struct {
 	Text          string `json:"text,omitempty"`
 }
 type ActionAck struct {
-	Sequence int `json:"sequence"`
+	Sequence int               `json:"sequence"`
+	JobGit   *JobGitCredential `json:"jobGit,omitempty"`
 }
 
 // Docker drops tags from RepoDigests. Manifest content identity, not a display

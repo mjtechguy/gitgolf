@@ -1,0 +1,66 @@
+{
+  "sourceRevision": "6e35c3d30f317e11fe00f9dadf4578436bb27e29",
+  "sourceFiles": {
+    "cmd/golf-runner/main.go": "6c844f36cb9319b13c7680e13aea89a841b69508e86024fa9a394e13d5efdc55",
+    "cmd/golf-runner/git_capability_test.go": "eba75272e3b1bbae1768ebca0647303c50531156337cb44fc41ba8bafb1a101c",
+    "cmd/golf-runner/git_execution.go": "1098aabf4fff0760288c1139413cd84fb36e4986df8effa41cc3deb09fb61b26",
+    "cmd/golf-runner/git_execution_test.go": "451187d058db02e593ff60f7c2916bf3f001e22139eb4948e8095ff9c99e3342",
+    "internal/runner/actions.go": "50d17817a71f9df1322702274deaa61e8d2ede1545ddea098466edb1e0792350",
+    "internal/runner/actions_git_source.go": "1534276a57cec23095622825ed005e9fa3009798c9481d61b11589655e474d14",
+    "internal/runner/git_preparation.go": "587061532a2f2e141d9d19b1d1865d60226476bdea19427b4a22120892c414b7",
+    "internal/runner/git_source_envelope.go": "42ee95dc4f676cb951cfc5a4d5d68adea8ad5279afa316157a00b2e335d04ba9",
+    "engines/act/git_source.go": "67db30a41bfadc46098cb9c3235ecc5731ba96010b92d1890134e52eaf339d2e",
+    "engines/act/execute.go": "b9ef2ae03538ef578c35626275967542dd8c069d869fd9ccdb287570685b6f6b",
+    "engines/act/job_disk.go": "f135482d5d0a725c982c93779fa71f765011cdf0e3cfefeafb232d05941d6781",
+    "engines/act/upstream_source_manifest.json": "5fd9106000dc50772c5247767ba4674b5ca77caa761f2792f7d25802cdce856e",
+    "engines/act/third_party/act/pkg/container/docker_run.go": "7fd8b92058797295c6980e0358cfb8fb2d95b1b5d543106db0decd7f1535f1bc",
+    "scripts/actions-git-source-smoke.py": "c325c829247bdfb6d11539a04f017bf99abee872663649370fb6944a52154d28"
+  },
+  "binaries": {
+    "plan-engine": "8eebfdd85f23323509b40873e97815609a25a629dc5951da2d2ca381d11b7949",
+    "linux-engine": "8eebfdd85f23323509b40873e97815609a25a629dc5951da2d2ca381d11b7949",
+    "qualification.test": "0bd86bd19b54ba7bcd9b2cbc8237fcc854fddc68068fe70f1fdc307972cb7eec"
+  },
+  "registryManifestSHA256": "sha256:6e3a07cc4c3cd8c47b86c12297b4835b721b4d2ec35d5b313a7ff0b994c9415d",
+  "registryConfigSHA256": "sha256:460c90884aefd2fcf18620a0cc70338fed64046f5a86e31dde2383a2457c00a8",
+  "cachedPlatformManifestSHA256": "sha256:6e3a07cc4c3cd8c47b86c12297b4835b721b4d2ec35d5b313a7ff0b994c9415d",
+  "cachedConfigurationSHA256": "sha256:460c90884aefd2fcf18620a0cc70338fed64046f5a86e31dde2383a2457c00a8",
+  "actualTestExitCode": 0,
+  "cases": [
+    "git_execution_test.go:278: ACTUAL_GIT_JOB case=success H=ee3696c059f8045dd4302ef10b4b55f205ae2638 workflowBlob=54f8ae90f9ddac5dbd6b82015811f3e83d04d996 tree=317f01c9bf1a7f935f4148a3a4663a504fd969a3 archiveSHA=a2438975bf6739cae549bec8a327c4a98e1d30db6eea120b94ad6f151774360c metadataSHA=dcf388618c03e520615c2de18cff32264cabf55aaf09aa634ab16a747a178aa1 frames=true/true/true ownedCleanup=true nativeEngineStage=",
+    "git_execution_test.go:278: ACTUAL_GIT_JOB case=wrong_tree H=10ad9a579cf190a2b854655a87ed0c5aaeb96e28 workflowBlob=54f8ae90f9ddac5dbd6b82015811f3e83d04d996 tree=0000000000000000000000000000000000000000 archiveSHA=a2438975bf6739cae549bec8a327c4a98e1d30db6eea120b94ad6f151774360c metadataSHA=d5059f88b485c109226b834f1e7e0548e4c27e30b285af3d6ff0708dd94831b3 frames=false/false/false ownedCleanup=true nativeEngineStage=engine_job_source_readback",
+    "git_execution_test.go:278: ACTUAL_GIT_JOB case=cancel H=166e0b3378cd1cbadfc7bb7ee208fe5bdee3f3dd workflowBlob=064a5d56127a3c28c2ef86ba5c76817d298f52ad tree=846f7e3f2711c45570765570a0802671698b1551 archiveSHA=dfe1586c196a0abbfa118bb4ce394ffadc369fe66666b36818dde3dcf5a171bf metadataSHA=3aa2acdf9ba793412859dc67a9f7e2ca408cc02ae362064552f46b7bb2074bd3 frames=true/false/false ownedCleanup=true nativeEngineStage=durable_frame_ack",
+    "git_execution_test.go:278: ACTUAL_GIT_JOB case=disk_full H=588a98240e240ac477e1c5f68ed749651db9e6a9 workflowBlob=e03ff96d3eeaeb6a3fbd8951cff746cf72d70832 tree=a75b31a7fbe68041f347ea53c9a16a22aa715926 archiveSHA=6c8a53623e12997f6915f3429e07eaefbfd68740eed7bb9b5415b3bdaffb3e4e metadataSHA=87ee30339e60c2d4f605ab2160b884128f150c5930d5986b2d516d4a5f8276f6 frames=true/true/true ownedCleanup=true nativeEngineStage=",
+    "git_execution_test.go:278: ACTUAL_GIT_JOB case=inode_full H=1dbf721c69302592d534f9b47dba9a83878e51b4 workflowBlob=485ef3f0bf558e389c367c5a21a6879838510b40 tree=a35c971076a371f9b559cff4aaa37f6c60d9010f archiveSHA=38ccd3e87859a9a9c7226ca85d4119d47fb9b3f3c3f340cac0abed0efc117714 metadataSHA=0e28ad8bce602c97f5e62e772c5f5b62f6c074ef527f865c853359997e9faec6 frames=true/true/true ownedCleanup=true nativeEngineStage=",
+    "git_execution_test.go:231: ACTUAL_GIT_JOB case=lost_create H=f03054292261642340752ecd8b20506e66f06ea9 withheldMetadata=true workerReuseRefused=true ownedCleanup=true"
+  ],
+  "jobDiskQuota": true,
+  "cleanupComplete": true,
+  "format": "golf.compatibility.actual-git-engine.v1",
+  "packet": "A1",
+  "recorded_at": "2026-10-07",
+  "passed": true,
+  "deployed": false,
+  "evidence_layers": [
+    "actual-Docker",
+    "native-Git",
+    "TLS-fixture"
+  ],
+  "private_receipt_sha256": "18770c3ac5cc8010c2c9274dfea2d0fb364b7f0ab3a2ce60dc9ce99353765379",
+  "sourceImageIdentity": "sha256:c210c62e3fab294c0936a459d57e389ea42810addbbf3b600a44c4078ec2156b",
+  "platform": "linux/amd64",
+  "jobDisk": {
+    "profile": "opt-in Git source only",
+    "readOnlyRoot": true,
+    "workspaceBytes": 134217728,
+    "actEnvironmentBytes": 33554432,
+    "toolCacheBytes": 67108864,
+    "temporaryBytes": 33554432,
+    "inodesPerMount": 8192
+  },
+  "limitations": [
+    "Owned TLS native Git fixture; no Golf/Gitea enrollment in this receipt.",
+    "Exact admitted H/depth1 protocol-v0 only; no checkout action, job credentials, remote actions, dependency egress or Requests.",
+    "Controlled CLI drops acknowledgement after real owned Docker create in the lost_create case."
+  ]
+}

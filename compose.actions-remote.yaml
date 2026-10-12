@@ -1,0 +1,28 @@
+# Opt-in public Node24 Actions. Combine with compose.ci.yaml,
+# compose.actions-engine.yaml and compose.runner-tls.yaml; explicit policy and
+# native sponsor grants still govern admission. See docs/ACTIONS_REMOTE.md.
+services:
+  golf:
+    environment:
+      GOLF_ACTIONS_ENGINE_CATALOG: golf.workflow.act.v0.2.89.linux.remote-node24.v1
+      GOLF_ACTIONS_REMOTE_BUNDLES: /run/golf/actions/bundles.json
+    volumes:
+      - type: bind
+        source: ${GOLF_REMOTE_ACTIONS_BUNDLES:?Supply the acquired absolute bundles.json path}
+        target: /run/golf/actions/bundles.json
+        read_only: true
+        bind:
+          create_host_path: false
+  runner:
+    environment:
+      GOLF_RUNNER_JOB_GIT: '1'
+      GOLF_RUNNER_ACTIONS_REMOTE_BUNDLES: /run/golf/actions/bundles.json
+      GOLF_RUNNER_ACTIONS_EGRESS_NETWORK: bridge
+      GOLF_RUNNER_ACTIONS_EGRESS_HOST: ${GOLF_RUNNER_ACTIONS_EGRESS_HOST:?Supply the worker's reachable literal IPv4 address}
+    volumes:
+      - type: bind
+        source: ${GOLF_REMOTE_ACTIONS_BUNDLES:?Supply the acquired absolute bundles.json path}
+        target: /run/golf/actions/bundles.json
+        read_only: true
+        bind:
+          create_host_path: false

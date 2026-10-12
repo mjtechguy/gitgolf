@@ -1,0 +1,140 @@
+{
+  "GetTree": {
+    "method": "GET",
+    "path": "/repos/{owner}/{repo}/git/trees/{sha}",
+    "state": "native-tested",
+    "disposition": "product",
+    "complete": false,
+    "reason": "Bounded immutable native source consumer proved in the owned manual/push fixture; full fields, pagination/roles and retained deployment remain unqualified.",
+    "consumers": [
+      "internal/server/source_objects.go"
+    ],
+    "ui": [
+      "source browser; workflow discovery"
+    ],
+    "cli_mcp": [],
+    "native_token_scope": "read:repository",
+    "unit_permission": "code read",
+    "pagination": "See immutable Swagger parameters and consumer limits; native completeness remains unqualified.",
+    "limits": [
+      "Exact native objects; bounded direct tree pagination; no recursive workflow discovery."
+    ],
+    "tests": [
+      "internal/server/source_selection_test.go"
+    ],
+    "request_fields_complete": false,
+    "response_fields_complete": false,
+    "qualified_roles": [
+      "ordinary native owner, private owned fixture"
+    ],
+    "deployed_evidence": [],
+    "native_evidence": [
+      "docs/compatibility/evidence/native-gitea-paths.json"
+    ]
+  },
+  "GetBlob": {
+    "method": "GET",
+    "path": "/repos/{owner}/{repo}/git/blobs/{sha}",
+    "state": "native-tested",
+    "disposition": "product",
+    "complete": false,
+    "reason": "Bounded immutable native source consumer proved in the owned manual/push fixture; full fields, pagination/roles and retained deployment remain unqualified.",
+    "consumers": [
+      "internal/server/source_objects.go"
+    ],
+    "ui": [
+      "source browser; workflow source admission"
+    ],
+    "cli_mcp": [],
+    "native_token_scope": "read:repository",
+    "unit_permission": "code read",
+    "pagination": "See immutable Swagger parameters and consumer limits; native completeness remains unqualified.",
+    "limits": [
+      "Bounded immutable blobs; executable evidence covers ordinary non-LFS source only."
+    ],
+    "tests": [
+      "internal/server/workflow_source_test.go"
+    ],
+    "request_fields_complete": false,
+    "response_fields_complete": false,
+    "qualified_roles": [
+      "ordinary native owner, private owned fixture"
+    ],
+    "deployed_evidence": [],
+    "native_evidence": [
+      "docs/compatibility/evidence/native-gitea-paths.json"
+    ]
+  },
+  "repoMergePullRequest": {
+    "method": "POST",
+    "path": "/repos/{owner}/{repo}/pulls/{index}/merge",
+    "state": "source-tested",
+    "disposition": "product",
+    "complete": false,
+    "reason": "Bounded existing consumer; complete field/role/native assessment remains open.",
+    "consumers": [
+      "internal/server/standard_pull_merge.go"
+    ],
+    "ui": [
+      "ordinary PR merge/squash"
+    ],
+    "cli_mcp": [],
+    "native_token_scope": "write:repository",
+    "unit_permission": "pull requests write",
+    "pagination": "See immutable Swagger parameters and consumer limits; native completeness remains unqualified.",
+    "limits": [
+      "Protected targets refused; no expected-base CAS, rebase or protected publication proof."
+    ],
+    "tests": [
+      "internal/server/standard_pull_merge_test.go"
+    ],
+    "request_fields_complete": false,
+    "response_fields_complete": false,
+    "qualified_roles": [],
+    "deployed_evidence": []
+  },
+  "ActionsListRepositoryWorkflows": {
+    "method": "GET",
+    "path": "/repos/{owner}/{repo}/actions/workflows",
+    "state": "missing",
+    "disposition": "product",
+    "complete": false,
+    "reason": "Native Actions consumer is missing; Golf-owned runs must not be mapped to native IDs.",
+    "consumers": [],
+    "ui": [],
+    "cli_mcp": [],
+    "native_token_scope": "read:repository",
+    "unit_permission": "actions read",
+    "pagination": "See immutable Swagger parameters and consumer limits; native completeness remains unqualified.",
+    "limits": [
+      "Native Actions consumer is missing; Golf-owned runs must not be mapped to native IDs."
+    ],
+    "tests": [],
+    "request_fields_complete": false,
+    "response_fields_complete": false,
+    "qualified_roles": [],
+    "deployed_evidence": []
+  },
+  "repoCancelScheduledAutoMerge": {
+    "method": "DELETE",
+    "path": "/repos/{owner}/{repo}/pulls/{index}/merge",
+    "state": "missing",
+    "disposition": "product",
+    "complete": false,
+    "reason": "Scheduled native auto-merge cancellation consumer is missing.",
+    "consumers": [],
+    "ui": [],
+    "cli_mcp": [],
+    "native_token_scope": "write:repository",
+    "unit_permission": "pull requests write",
+    "pagination": "See immutable Swagger parameters and consumer limits; native completeness remains unqualified.",
+    "limits": [
+      "Scheduled native auto-merge cancellation consumer is missing."
+    ],
+    "tests": [],
+    "request_fields_complete": false,
+    "response_fields_complete": false,
+    "qualified_roles": [],
+    "deployed_evidence": []
+  }
+}

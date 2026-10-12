@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { disabledAgentTasks, disabledAgentUsage } from './rpc';
 import { test, expect, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -13,7 +14,7 @@ async function backend(page: Page) {
  if(method === 'GetAgentUsage') return disabledAgentUsage(route);
   if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
   if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex' } });
-  if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+  if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, {repository:{id:'9007199254740997',name:'private',fullName:'alex/private',defaultBranch:'main'}});
   if (method === 'InspectWorkflows') return respond(route, InspectWorkflowsResponseSchema, { repositoryId: '9007199254740997', commitId: 'a'.repeat(40), catalogVersion: 'catalog' });
   if (method === 'GetExecutionPolicy') return respond(route, GetExecutionPolicyResponseSchema, { policy: { scope: ExecutionScope.REPOSITORY, scopeId: '9007199254740997', authorityRevision: 'b'.repeat(64) } });

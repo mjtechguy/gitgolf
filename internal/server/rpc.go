@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -131,6 +132,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewWorkflowArtifactServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewActionRunServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewCapabilityServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewOperationsServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewAuditServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewApiCredentialServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewGitAccessServiceHandler(s, options...))
@@ -174,13 +176,15 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		switch procedure {
 		case golfv1connect.PasswordRecoveryServiceRequestPasswordRecoveryProcedure, golfv1connect.PasswordRecoveryServiceCompletePasswordRecoveryProcedure, golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceCompletePasswordMFAProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
-		case golfv1connect.AgentControlServiceGetAgentControlProcedure, golfv1connect.AgentControlServiceSubmitAgentCommandProcedure, golfv1connect.AgentControlServiceListWorkflowAgentChildrenProcedure, golfv1connect.DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadStateProcedure, golfv1connect.DiscussionAttachmentUploadServiceSubmitDiscussionAttachmentUploadProcedure, golfv1connect.DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadOperationProcedure, golfv1connect.RepositoryFileBatchServiceSubmitRepositoryFileBatchProcedure, golfv1connect.RepositoryFileBatchServiceGetRepositoryFileBatchOperationProcedure, golfv1connect.DiscussionAttachmentServiceListDiscussionAttachmentsProcedure, golfv1connect.DiscussionAttachmentServiceDownloadDiscussionAttachmentProcedure, golfv1connect.PasswordRecoveryEnrollmentServiceGetOwnPasswordRecoveryEnrollmentProcedure, golfv1connect.PasswordRecoveryEnrollmentServiceSaveOwnPasswordRecoveryEnrollmentProcedure, golfv1connect.ReviewerServiceGetReviewerProcedure, golfv1connect.ReviewerServiceSaveReviewerProcedure, golfv1connect.ReviewerServiceListReviewerRunsProcedure, golfv1connect.ReviewerServiceRequestReviewProcedure, golfv1connect.AgentTaskServiceCreateAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTasksProcedure, golfv1connect.AgentTaskServiceGetAgentTaskProcedure, golfv1connect.AgentTaskServiceCancelAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTaskEventsProcedure, golfv1connect.AgentUsageServicePreviewAgentTaskProcedure, golfv1connect.AgentUsageServiceGetAgentUsageProcedure, golfv1connect.AgentUsageServiceSaveAgentUsageProcedure, golfv1connect.AgentUsageServiceListAgentModelsProcedure, golfv1connect.CodexAccountServiceCompleteAgentLoginProcedure, golfv1connect.CodexAccountServiceListCodexConnectionsProcedure, golfv1connect.CodexAccountServiceCreateCodexConnectionProcedure, golfv1connect.CodexAccountServiceSetCodexConnectionAccessProcedure, golfv1connect.CodexAccountServiceGetCodexConnectionProcedure, golfv1connect.CodexAccountServiceStartCodexLoginProcedure, golfv1connect.CodexAccountServiceCancelCodexLoginProcedure, golfv1connect.CodexAccountServiceRefreshCodexConnectionProcedure, golfv1connect.CodexAccountServiceDisconnectCodexConnectionProcedure,
+		case golfv1connect.OperationsServiceGetOperationsDashboardProcedure, golfv1connect.AgentControlServiceGetAgentControlProcedure, golfv1connect.AgentControlServiceSubmitAgentCommandProcedure, golfv1connect.AgentControlServiceListWorkflowAgentChildrenProcedure, golfv1connect.DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadStateProcedure, golfv1connect.DiscussionAttachmentUploadServiceSubmitDiscussionAttachmentUploadProcedure, golfv1connect.DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadOperationProcedure, golfv1connect.RepositoryFileBatchServiceSubmitRepositoryFileBatchProcedure, golfv1connect.RepositoryFileBatchServiceGetRepositoryFileBatchOperationProcedure, golfv1connect.DiscussionAttachmentServiceListDiscussionAttachmentsProcedure, golfv1connect.DiscussionAttachmentServiceDownloadDiscussionAttachmentProcedure, golfv1connect.PasswordRecoveryEnrollmentServiceGetOwnPasswordRecoveryEnrollmentProcedure, golfv1connect.PasswordRecoveryEnrollmentServiceSaveOwnPasswordRecoveryEnrollmentProcedure, golfv1connect.ReviewerServiceGetReviewerProcedure, golfv1connect.ReviewerServiceSaveReviewerProcedure, golfv1connect.ReviewerServiceListReviewerRunsProcedure, golfv1connect.ReviewerServiceRequestReviewProcedure, golfv1connect.AgentTaskServiceCreateAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTasksProcedure, golfv1connect.AgentTaskServiceGetAgentTaskProcedure, golfv1connect.AgentTaskServiceCancelAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTaskEventsProcedure, golfv1connect.AgentUsageServicePreviewAgentTaskProcedure, golfv1connect.AgentUsageServiceGetAgentUsageProcedure, golfv1connect.AgentUsageServiceSaveAgentUsageProcedure, golfv1connect.AgentUsageServiceListAgentModelsProcedure, golfv1connect.CodexAccountServiceCompleteAgentLoginProcedure, golfv1connect.CodexAccountServiceListCodexConnectionsProcedure, golfv1connect.CodexAccountServiceCreateCodexConnectionProcedure, golfv1connect.CodexAccountServiceSetCodexConnectionAccessProcedure, golfv1connect.CodexAccountServiceGetCodexConnectionProcedure, golfv1connect.CodexAccountServiceStartCodexLoginProcedure, golfv1connect.CodexAccountServiceCancelCodexLoginProcedure, golfv1connect.CodexAccountServiceRefreshCodexConnectionProcedure, golfv1connect.CodexAccountServiceDisconnectCodexConnectionProcedure,
 			golfv1connect.AutomationGrantServiceListAutomationGrantsProcedure, golfv1connect.AutomationGrantServiceCreateAutomationGrantProcedure, golfv1connect.AutomationGrantServiceRevokeAutomationGrantProcedure,
 			golfv1connect.AccountSecurityServiceGetOwnMFAProcedure, golfv1connect.AccountSecurityServiceBeginOwnMFAProcedure, golfv1connect.AccountSecurityServiceConfirmOwnMFAProcedure, golfv1connect.AccountSecurityServiceDisableOwnMFAProcedure, golfv1connect.AccountSecurityServiceRegenerateOwnMFARecoveryProcedure,
 			golfv1connect.AccountSecurityServiceGetAccountSecurityProcedure, golfv1connect.AccountSecurityServiceChangeOwnPasswordProcedure, golfv1connect.AccountSecurityServiceChangeOwnLoginEmailProcedure,
 			golfv1connect.InstanceAdminServiceResetRegularLocalMFAProcedure, golfv1connect.InstanceAdminServiceEnrollRegularLocalAccountProcedure, golfv1connect.InstanceAdminServiceResetRegularLocalPasswordProcedure, golfv1connect.InstanceAdminServiceEnableRegularLocalAccountProcedure,
 			golfv1connect.ProfileServiceGetProfileProcedure, golfv1connect.ProfileServiceUpdateProfileProcedure,
 			golfv1connect.InfrastructureConnectionServiceListInfrastructureConnectionsProcedure, golfv1connect.InfrastructureConnectionServiceSaveInfrastructureConnectionProcedure, golfv1connect.InfrastructureConnectionServiceTestInfrastructureConnectionProcedure, golfv1connect.InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure,
+			golfv1connect.InfrastructureConnectionServiceProvisionCloudflareEnvironmentResourcesProcedure, golfv1connect.InfrastructureConnectionServiceGetCloudflareEnvironmentResourcesProcedure, golfv1connect.InfrastructureConnectionServiceRemoveCloudflareEnvironmentResourcesProcedure,
+			golfv1connect.InfrastructureConnectionServiceListCloudflareEnvironmentResourcesProcedure,
 			golfv1connect.OrganizationCreationServiceGetOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceCreateOrganizationProcedure,
 			golfv1connect.ExecutionPolicyServiceGetExecutionPolicyProcedure, golfv1connect.ExecutionPolicyServiceUpdateExecutionPolicyProcedure,
 			golfv1connect.ActionRunServiceListActionRunsProcedure, golfv1connect.ActionRunServiceGetActionRunProcedure,
@@ -227,7 +231,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
 			golfv1connect.RepositoryActivityServiceWatchRepositoryProcedure,
 			golfv1connect.RepositoryServiceGetRepositoryStarProcedure, golfv1connect.RepositoryServiceSetRepositoryStarProcedure, golfv1connect.RepositoryServiceListRepositoryReleasesProcedure, golfv1connect.RepositoryServiceGetRepositoryReleaseProcedure, golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryCreationProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryOverviewProcedure,
-			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListTagsProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure, golfv1connect.RepositoryServiceResolveRepositorySourceProcedure,
+			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListTagsProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure, golfv1connect.RepositoryServiceGetRepositoryFileIndexProcedure, golfv1connect.RepositoryServiceResolveRepositorySourceProcedure,
 			golfv1connect.RepositoryServiceGetCommitDiffProcedure, golfv1connect.RepositoryServiceGetPullRequestDiffProcedure, golfv1connect.RepositoryServiceGetRepositoryComparisonProcedure, golfv1connect.RepositoryServiceListPullRequestCommitsProcedure, golfv1connect.RepositoryServiceListPullRequestChecksProcedure, golfv1connect.RepositoryServiceGetRepositoryImageProcedure,
 			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure,
 			golfv1connect.DiscussionCollaborationServiceListOwnForgeNotificationsProcedure, golfv1connect.DiscussionCollaborationServiceListIssueTemplatesProcedure, golfv1connect.DiscussionCollaborationServiceGetDiscussionEngagementProcedure, golfv1connect.DiscussionCollaborationServiceListDiscussionTimelineProcedure,
@@ -596,6 +600,16 @@ func (s *Server) GetContents(ctx context.Context, req *connect.Request[golfv1.Ge
 			return nil, rpcError(err)
 		}
 	}
+	var sourcePage, sourceLimit uint32
+	if req.Msg.Page != nil {
+		if id == 0 || !objectID.MatchString(req.Msg.Ref) {
+			return nil, rpcError(invalid("Directory pagination requires the repository ID and an immutable commit."))
+		}
+		sourcePage, sourceLimit, err = pagination(pageFrom(req.Msg.Page))
+		if err != nil {
+			return nil, rpcError(err)
+		}
+	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	result, err := s.getBoundContents(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), id, req.Msg.Ref, req.Msg.Path, req.Msg.IncludeLatestChanges)
@@ -603,6 +617,23 @@ func (s *Server) GetContents(ctx context.Context, req *connect.Request[golfv1.Ge
 		return nil, rpcError(err)
 	}
 	response := &golfv1.GetContentsResponse{RepositoryId: strconv.FormatInt(result.RepositoryID, 10), CommitId: result.CommitID, Path: result.Path, Kind: sourceType(result.Kind)}
+	response.TotalEntries = uint32(len(result.Entries))
+	if req.Msg.Page != nil && result.File == nil {
+		sort.Slice(result.Entries, func(i, j int) bool {
+			a, b := result.Entries[i], result.Entries[j]
+			if (a.Type == "dir") != (b.Type == "dir") {
+				return a.Type == "dir"
+			}
+			return a.Name < b.Name
+		})
+		start := min(uint64(sourcePage-1)*uint64(sourceLimit), uint64(len(result.Entries)))
+		end := min(start+uint64(sourceLimit), uint64(len(result.Entries)))
+		response.Page = &golfv1.PageResponse{}
+		if end < uint64(len(result.Entries)) {
+			response.Page.NextPage = sourcePage + 1
+		}
+		result.Entries = result.Entries[start:end]
+	}
 	for _, entry := range result.Entries {
 		response.Entries = append(response.Entries, wireEntry(entry))
 	}
@@ -677,7 +708,7 @@ func (s *Server) ListCapabilities(ctx context.Context, _ *connect.Request[golfv1
 	if !ready {
 		state, reason = golfv1.CapabilityState_CAPABILITY_STATE_DEGRADED, "A required service is unavailable. Check system health before using repositories."
 	}
-	capabilities := []*golfv1.Capability{{Id: "repositories", Label: "Repositories", State: state, Reason: reason}}
+	capabilities := []*golfv1.Capability{{Id: "repositories", Label: "Repositories", State: state, Reason: reason}, {Id: "operations.dashboard", Label: "Operations dashboard", State: golfv1.CapabilityState_CAPABILITY_STATE_READY, Reason: "Current instance administrators; aggregate process metrics and dependency checks. Provider billing is not collected."}}
 	pipelineState, pipelineReason := golfv1.CapabilityState_CAPABILITY_STATE_DISABLED, "Manual Docker shell execution requires an enrolled worker; higher-level policies default to deny."
 	if len(s.runnerKeys) > 0 {
 		pipelineState, pipelineReason = golfv1.CapabilityState_CAPABILITY_STATE_DEGRADED, "Manual Docker shell execution is configured; no currently enrolled worker heartbeat is confirmed."
@@ -745,7 +776,16 @@ func (s *Server) ListCapabilities(ctx context.Context, _ *connect.Request[golfv1
 	} {
 		capabilities = append(capabilities, &golfv1.Capability{Id: entry.id, Label: entry.label, State: golfv1.CapabilityState_CAPABILITY_STATE_DISABLED, Reason: entry.reason})
 	}
-	return connect.NewResponse(&golfv1.ListCapabilitiesResponse{Capabilities: capabilities}), nil
+	for _, entry := range []struct{ id, label, reason string }{
+		{"settings.infrastructure", "Portable infrastructure settings", "PostgreSQL and S3/RustFS/R2 connection editors are supported; activation, verification and migration remain separate."},
+		{"settings.runners", "Portable runner settings", "Docker runner pools and resource ceilings are supported. Hosting this control plane on Kubernetes does not qualify a Kubernetes execution adapter."},
+		{"settings.local-auth", "Golf account security", "Portable password, MFA, session and SSH settings are supported under current account authority."},
+		{"settings.notifications", "Portable email settings", "SMTP transport and verified subscription editors are supported; delivery depends on current transport state."},
+		{"settings.cloudflare-resources", "Optional Cloudflare allocations", "The bridge's D1/R2 allocation API is supported; an administrator must configure and verify an eligible account. Native Workers app hosting uses its separate setup."},
+	} {
+		capabilities = append(capabilities, &golfv1.Capability{Id: entry.id, Label: entry.label, State: golfv1.CapabilityState_CAPABILITY_STATE_READY, Reason: entry.reason})
+	}
+	return connect.NewResponse(&golfv1.ListCapabilitiesResponse{Capabilities: capabilities, RuntimeProfile: s.config.RuntimeProfile}), nil
 }
 
 func wireOrganization(org forgeOrganization) *golfv1.Organization {

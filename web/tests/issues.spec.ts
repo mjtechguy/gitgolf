@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -23,7 +24,7 @@ const listURL = '/repositories/alex/project?view=issues';
 const detailURL = `${listURL}&issue=12`;
 type Failure = 'permission_denied' | 'not_found' | 'unauthenticated' | 'unavailable' | 'already_exists';
 
-async function backend(page: Page) {
+async function backend(page: Page, native = false, engagement = false) {
   const state = {
     user, signedIn: true, repoId: repository.id, issueId: issue.id, issue: { ...issue }, comments: [comment],
     issueReadWait: undefined as Promise<void> | undefined, issueRows: undefined as Issue[] | undefined, listPages: [] as number[], serverQueries: [] as unknown[], emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
@@ -31,12 +32,13 @@ async function backend(page: Page) {
     canEditAssignees: false, assignees: [create(UserSchema,{id:'9007199254740993',login:'PRIVATE_ASSIGNEE_A',fullName:'Alex Reviewer'}),create(UserSchema,{id:'12',login:'PRIVATE_ASSIGNEE_B'})], assigneeReads: 0, assigneeWait: undefined as Promise<void> | undefined,
     canEditLabels: false, labels: [create(DiscussionLabelSchema,{id:"9",name:"PRIVATE_LABEL_A",color:"aabbcc"}),create(DiscussionLabelSchema,{id:"12",name:"PRIVATE_LABEL_B",color:"aaff00"})], labelPages: [] as number[], labelMore: false,
     canEditMilestone: false, milestones: [create(DiscussionMilestoneSchema, { id:'51', title:'PRIVATE_MILESTONE_A', state:IssueState.OPEN }), create(DiscussionMilestoneSchema, { id:'52', title:'PRIVATE_MILESTONE_B', state:IssueState.CLOSED })], milestonePages: [] as number[], milestoneMore:false,
-    reaction:false,subscribed:false,engagementReads:0,canEngage:true,notificationUnread:true,templateEnabled:false,yamlTemplate:false,
+    methods: [] as string[], reaction:false,subscribed:false,engagementReads:0,canEngage:true,notificationUnread:true,templateEnabled:false,yamlTemplate:false,
     canManage: false, resourceUnknown:false, resourceRequests: [] as SubmitDiscussionResourceOperationRequest[], resourceRecords:new Map<string,DiscussionResourceOperation>(), resourceInspections:[] as string[],
     records: new Map<string, IssueMutation>(), errors: {} as Record<string, Failure>, barrier: undefined as Promise<void> | undefined,
   };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
+    state.methods.push(method);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user: state.user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
@@ -44,7 +46,7 @@ async function backend(page: Page) {
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Sign in required.');
     if (method === 'GetRepositoryStar') return reject(route, 'unimplemented', 'Stars are outside this issue fixture.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, native ? {runtimeProfile:'cloudflare-native',capabilities:[{id:'discussion.resources',state:3},{id:'discussion.comments',state:3},...(engagement?[{id:'discussion.activity',state:3}]:[])]} : portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { ...repository, id: state.repoId } });
     if (method === 'ListRepositoryAssignees') {
@@ -842,3 +844,34 @@ test('Markdown issue template selection pre-fills an editable draft and confirms
 test('YAML issue forms validate required fields then prepare sanitized editable Markdown through the existing issue journal',async({page})=>{
  const state=await backend(page);state.yamlTemplate=true;await page.goto('/alex/project/issues/new');await page.getByText('Issue templates',{exact:true}).click();await page.getByRole('button',{name:'Use template'}).click();await expect(page.getByRole('form',{name:'Issue template form'})).toBeVisible();await expect(page.getByLabel('Issue title')).toHaveCount(0);await page.getByRole('button',{name:'Review issue draft'}).click();await expect(page.getByRole('alert')).toContainText('Complete Version');expect(state.creates).toHaveLength(0);await page.getByLabel('Version *',{exact:true}).fill('1.2.3');await page.getByLabel('Logs',{exact:true}).fill('echo test\n```unsafe\n');await page.getByRole('button',{name:'Review issue draft'}).click();await expect(page.getByRole('alert')).toContainText('Complete required choices for Agreement');await page.getByRole('checkbox',{name:'I checked existing issues. *'}).check();await page.getByRole('button',{name:'Review issue draft'}).click();await expect(page.getByLabel('Issue title')).toHaveValue('[Bug]');const body=page.getByLabel('Description, plain text',{exact:true});const text=await body.inputValue();expect(text).toContain('### Version\n\n1.2.3');expect(text).toContain('````shell\necho test\n```unsafe');expect(text).toContain('### Platform\n\nLinux');expect(text).toContain('- [x] I checked existing issues.');expect(text).not.toContain('Please provide enough detail.');expect(state.creates).toHaveLength(0);
 });
+
+for(const width of [1440,390])test(`native metadata controls use repository labels ${width}`,async({page})=>{
+ await page.setViewportSize({width,height:1000});const state=await backend(page,true);enableLabels(state);state.canManage=true;state.labels=state.labels.map(r=>({...r,revision:'a'.repeat(64)}));
+ const inherited:boolean[]=[];page.on('request',r=>{if(r.url().endsWith('/ListRepositoryLabels')) inherited.push(Boolean(r.postDataJSON().includeOrganizationLabels));});
+ await page.goto(detailURL);await page.getByRole('button',{name:'Edit issue labels',exact:true}).click();
+ await page.getByRole('checkbox',{name:'PRIVATE_LABEL_B',exact:true}).check();await page.getByRole('region',{name:'Edit issue labels',exact:true}).getByRole('button',{name:'Save changes',exact:true}).click();
+ await expect.poll(()=>state.updates.length).toBe(1);expect(inherited.length).toBeGreaterThan(0);expect(inherited.every(value=>!value)).toBe(true);
+ await page.goto(listURL);await page.getByRole('button',{name:'Labels',exact:true}).click();const panel=page.getByRole('region',{name:'labels administration'});
+ await panel.getByRole('button',{name:'New label',exact:true}).click();await panel.getByLabel('Name',{exact:true}).fill('native-bug');await panel.getByRole('button',{name:'Save label',exact:true}).click();
+ await expect.poll(()=>state.resourceRequests.length).toBe(1);await expect(panel).toContainText('Change confirmed.');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+});
+
+test('native comment editing is enabled independently of reactions and notifications',async({page})=>{
+ const state=await backend(page,true);state.comments=[{...comment,revision:'a'.repeat(64),canEdit:true,canDelete:true}];await page.goto(detailURL);
+ await page.getByRole('button',{name:`Edit comment ${comment.id}`,exact:true}).click();const form=page.getByRole('form',{name:`Edit comment ${comment.id}`,exact:true});
+ await form.getByLabel('Comment',{exact:true}).fill('Native comment edited');await form.getByRole('button',{name:'Save comment',exact:true}).click();
+ await expect.poll(()=>state.resourceRequests.length).toBe(1);await expect(page.getByLabel(`Comment ${comment.id}, rendered Markdown`)).toContainText('Native comment edited');
+ await expect(page.getByLabel('Issue reactions and notifications')).toHaveCount(0);
+});
+
+ test('native engagement mounts working controls without unsupported attachments or templates',async({page})=>{
+ const state=await backend(page,true,true);await page.goto(detailURL);
+ const controls=page.getByLabel('Issue reactions and notifications');
+ await controls.getByRole('button',{name:'Subscribe',exact:true}).click();
+ await expect(controls.getByRole('button',{name:'Unsubscribe',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Activity',exact:true})).toBeVisible();
+ expect(state.methods).not.toContain('ListDiscussionAttachments');
+ await page.goto('/alex/project/issues/new');
+ await expect(page.getByRole('heading',{name:'Create an issue',exact:true})).toBeVisible();
+ expect(state.methods).not.toContain('ListIssueTemplates');
+ });

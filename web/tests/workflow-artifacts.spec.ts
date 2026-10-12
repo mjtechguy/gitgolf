@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import {expect,test,type Page} from '@playwright/test';
 import {respond,reject,disabledAgentTasks} from './rpc';
 import {GetSessionResponseSchema,LogoutResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryResponseSchema,GetWorkflowRunResponseSchema,GetWorkflowRunLogsResponseSchema,GetWorkflowArtifactResponseSchema,WorkflowFormat,WorkflowRunState,WorkflowRunOrigin} from '../src/gen/golf/v1/golf_pb';
@@ -9,7 +10,7 @@ async function backend(page:Page){
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:state.logged?{id:'42',login:'alex'}:undefined});
   if(method==='Logout'){state.logged=false;return respond(route,LogoutResponseSchema,{});}
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:'11',name:'demo',fullName:'alex/demo',defaultBranch:'main',private:true}});
   if(method==='ListAgentTasks')return disabledAgentTasks(route);

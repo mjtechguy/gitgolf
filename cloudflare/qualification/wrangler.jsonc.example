@@ -1,0 +1,10 @@
+{
+  "name": "golf-binding-qualification",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-07",
+  "workers_dev": false,
+  "preview_urls": false,
+  "artifacts": [{ "binding": "ARTIFACTS", "namespace": "REPLACE_WITH_APPROVED_NAMESPACE" }],
+  "r2_buckets": [{ "binding": "EVIDENCE", "bucket_name": "REPLACE_WITH_OWNED_BUCKET" }],
+  "vars": { "GOLF_PROBE_OBJECT_KEY": "REPLACE_WITH_OWNED_FIXTURE_KEY" }
+}

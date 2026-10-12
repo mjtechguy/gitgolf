@@ -15,7 +15,6 @@ import { sourceRepositoryID } from './sourceReads';
 import { isCommitID, isRunID } from './navigation';
 import type { WorkflowDispatchInputValue, WorkflowRun } from './gen/golf/v1/golf_pb';
 import { WorkflowRunOrigin, WorkflowRunState } from './gen/golf/v1/golf_pb';
-import { RepositorySettingsLayout } from './AccountSettings';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
 import { repositoryOptions, defaultRepositorySearch, type RepositoryLocation } from './navigation';
@@ -29,7 +28,7 @@ type LegacyDispatchIntent = { actorId:string; key:string; owner:string; name:str
 type TypedDispatchIntent=LegacyDispatchIntent&{version:2;inputContract:string;schemaSha256:string;submittedSha256:string;effectiveSha256:string};
 type DispatchIntent=LegacyDispatchIntent|TypedDispatchIntent;
 const typedIntent=(intent:DispatchIntent):intent is TypedDispatchIntent=>'version' in intent&&intent.version===2;
-const workflowPath = (value:string) => /^(?:\.github\/workflows\/[^/]+\.ya?ml|\.gitlab-ci\.yml)$/.test(value) && new TextEncoder().encode(value).length<=4096 && !/[\\\p{Cc}\uD800-\uDFFF]/u.test(value);
+const workflowPath = (value:string) => /^(?:\.(?:forgejo|gitea|github)\/workflows\/[^/]+\.ya?ml|\.gitlab-ci\.yml)$/.test(value) && new TextEncoder().encode(value).length<=4096 && !/[\\\p{Cc}\uD800-\uDFFF]/u.test(value);
 function validDispatchIntent(value:unknown, actor:string,repo:string):value is DispatchIntent {
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const v=value as Record<string,unknown>;
@@ -210,15 +209,16 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
           <p className="panel-footnote">{result.configurations.length} configuration{result.configurations.length === 1 ? '' : 's'} inspected or reported as unsupported.</p>
         </>}
         <details className="metadata-details panel-disclosure"><summary>Inspection scope and execution requirements</summary>
-          {result ? <p className="panel-footnote">Catalog <code>{result.catalogVersion}</code>. Direct <code>.github/workflows/*.yml</code>/<code>*.yaml</code> and root <code>.gitlab-ci.yml</code> only; nested and custom locations are excluded.</p> : null}
+          {result ? <p className="panel-footnote">Catalog <code>{result.catalogVersion}</code>. The first existing directory in the operator’s configured workflow order is selected, even when empty. Direct <code>*.yml</code>/<code>*.yaml</code> and root <code>.gitlab-ci.yml</code> only; nested and custom locations are unsupported.</p> : null}
           <p className="panel-footnote">Limits: 20 files, 64 KiB per inspected file and 512 KiB in total. Oversized files stay metadata-only; an overfull inventory fails visibly.</p>
           <p className="panel-footnote">Static inspection does not grant execution. Scripts and provider-specific semantics remain untrusted. Every applicable execution policy must allow the repository and workflow. Automatic pushes also require an active automation grant; deployments remain unavailable.</p>
+          <p className="panel-footnote">GitLab-format execution supports one job with a pinned image. Job-level <code>before_script</code> and <code>script</code> share one shell, with at most 50 entries combined. Includes, rules, multiple jobs and <code>after_script</code> are not supported. This is Golf’s shell executor; GitLab Runner compatibility is not available.</p>
         </details>
       </section>;
 
   const content = <>
     <section className="page-stack" aria-labelledby="workflow-configurations-title">
-      <header className="repository-intro"><div>{workView ? null : <span className="eyebrow">REPOSITORY CONFIGURATION</span>}<h1 id="workflow-configurations-title"><FileCode2 size={29} />{workView?'Actions':'Workflow configuration'}</h1>{!workView?<p>Inspect Actions and GitLab configuration from the current default-branch commit.</p>:null}</div>{workView?<button className="button secondary" aria-expanded={tasksOpen} onClick={()=>setTasksOpen(open=>!open)}><Bot size={15}/>New coding task</button>:null}</header>
+      <header className={workView?"repository-intro actions-intro":"repository-intro"}><div>{workView ? null : <span className="eyebrow">REPOSITORY CONFIGURATION</span>}<h1 id="workflow-configurations-title"><FileCode2 size={29} />{workView?'Actions':'Workflow configuration'}</h1>{!workView?<p>Inspect Actions and GitLab configuration from the current default-branch commit.</p>:null}</div>{workView?<button className="button secondary" aria-expanded={tasksOpen} onClick={()=>setTasksOpen(open=>!open)}><Bot size={15}/>New coding task</button>:null}</header>
       {workView ? <>
         {result&&!result.executionAvailable?<p className="workflow-readiness" role="status">Workflow execution is unavailable. <Link to="/$owner/$name/settings/workflows" params={{owner,name}}>Review workflow settings</Link></p>:null}
         {dispatchNotice}
@@ -239,5 +239,5 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
       <p className="panel-footnote"><Link {...repositoryOptions({owner,name,view:'actions'})}>Open Actions run history</Link> for workflows, coding tasks and PR reviews.</p></> : null}
     </section>
   </>;
-  return workView ? content : <RepositorySettingsLayout owner={owner} name={name}>{content}</RepositorySettingsLayout>;
+  return workView ? content : <>{content}</>;
 }

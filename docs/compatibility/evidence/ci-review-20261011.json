@@ -1,0 +1,33 @@
+{
+  "format": "golf.ci.review.qualification.v1",
+  "date": "2026-10-11",
+  "forge": "forgejo-15.0.9",
+  "executor": "golf.workflow.shell.v1",
+  "coreImage": "sha256:3f635a335da57dd7b3618a419d52094b4e86eb64242c0da756e4c42d6c6568a6",
+  "runnerImage": "sha256:c0050f44737c7098d891097ca2a0edb9bb715b3fb66506b769a9962649cfa6fd",
+  "sourceHead": "6e35c3d30f317e11fe00f9dadf4578436bb27e29",
+  "dirtyWorktree": true,
+  "sourceFilesSha256": {
+    "internal/server/workflows.go": "a07a5c2227e8ccc03d116ccb3148af028231b3c6bf21d2ecd92ee7df9a70a9bc",
+    "internal/server/workflow_execution.go": "875d6277c8912eaaf59839b243c0649e5e3ddbd244e3fac5a1683eb392b31980",
+    "scripts/ci-compose-smoke.py": "58d203e6c0abeff82a25000514ee989185a71bbdedb1a288b21fbeb7d558032d"
+  },
+  "command": "python3 scripts/ci-compose-smoke.py --forge-kind forgejo --image golf-review-core:ci --runner-image golf-compat-runner:m2",
+  "checks": [
+    "GitLab job-level before_script variables and working directory persist into script",
+    "Actions separate step shells and progress/log boundaries",
+    "default deny and independent manual/push policy ceilings",
+    "exact source queues survive core restart; idempotent dispatch",
+    "failure and cancellation; policy revocation",
+    "logs continue over 4 pages / 49 chunks",
+    "keyset run history has no duplicates/skips",
+    "owned stack, attempts, volumes and network cleanup"
+  ],
+  "cleanup": true,
+  "limits": [
+    "Golf shell executor only; not GitLab Runner/coordinator compatibility",
+    "No multi-job GitLab stages, includes/rules, after_script or native artifact/cache protocols",
+    "No hosted rollout or cloud scale qualification",
+    "CI image predates the final shared-menu CSS correction; browser/build checks qualify UI separately"
+  ]
+}

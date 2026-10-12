@@ -37,6 +37,9 @@ func run() error {
 
 func runCommand(ctx context.Context, args []string, output io.Writer, logger zerolog.Logger) error {
 	if len(args) > 0 {
+		if args[0] == "cloudflare" {
+			return inspectCloudflare(ctx, args, output)
+		}
 		if args[0] == "email-worker" {
 			return runEmailWorker(ctx, args)
 		}
@@ -79,6 +82,10 @@ func serverConfig() server.Config {
 		databaseTLS = parsed.Query().Get("sslmode")
 	}
 	return server.Config{
+		ForgeKind: os.Getenv("GOLF_FORGE_KIND"), ForgeInstanceID: os.Getenv("GOLF_FORGE_INSTANCE_ID"),
+		ForgeURL: os.Getenv("GOLF_FORGE_URL"), ForgeWorkflowDirs: os.Getenv("GOLF_FORGE_WORKFLOW_DIRS"),
+		ForgePublicURL: os.Getenv("GOLF_FORGE_PUBLIC_URL"), ForgeOAuthClientID: os.Getenv("GOLF_FORGE_OAUTH_CLIENT_ID"), ForgeOAuthClientSecret: os.Getenv("GOLF_FORGE_OAUTH_CLIENT_SECRET"),
+		RuntimeProfile:          env("GOLF_DEPLOYMENT_RUNTIME", "portable"),
 		WebhookEgressPolicyJSON: os.Getenv("GOLF_WEBHOOK_EGRESS_POLICY"),
 		AgentImage:              os.Getenv("GOLF_AGENT_IMAGE"),
 		ReviewImage:             os.Getenv("GOLF_REVIEW_IMAGE"),
@@ -89,12 +96,14 @@ func serverConfig() server.Config {
 		PushCIEnabled:           os.Getenv("GOLF_PUSH_CI_ENABLED") == "true",
 		ActionsEngineCatalog:    os.Getenv("GOLF_ACTIONS_ENGINE_CATALOG"),
 		ActionsEngineBinary:     os.Getenv("GOLF_ACTIONS_ENGINE_BINARY"),
+		ActionsRemoteBundles:    os.Getenv("GOLF_ACTIONS_REMOTE_BUNDLES"),
 		DatabaseEndpoint:        databaseEndpoint, DatabaseTLSMode: databaseTLS, NativeDatabaseEndpoint: os.Getenv("GOLF_NATIVE_DATABASE_ENDPOINT"),
 		ObjectStoreConfig:              objectstore.Config{Endpoint: os.Getenv("GOLF_OBJECT_ENDPOINT"), Bucket: os.Getenv("GOLF_OBJECT_BUCKET"), Region: env("GOLF_OBJECT_REGION", "us-east-1"), Prefix: os.Getenv("GOLF_OBJECT_PREFIX"), AccessKeyID: os.Getenv("GOLF_OBJECT_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("GOLF_OBJECT_SECRET_ACCESS_KEY"), SessionToken: os.Getenv("GOLF_OBJECT_SESSION_TOKEN"), PathStyle: os.Getenv("GOLF_OBJECT_PATH_STYLE") == "true", AllowHTTP: os.Getenv("GOLF_OBJECT_ALLOW_HTTP") == "true"},
 		RepositoryEventConnectionsJSON: os.Getenv("GOLF_REPOSITORY_EVENT_CONNECTIONS"),
 		RunnerKeysJSON:                 os.Getenv("GOLF_RUNNER_KEYS"), RunnerImagesJSON: os.Getenv("GOLF_RUNNER_IMAGES"),
-		PublicURL: env("GOLF_PUBLIC_URL", "http://localhost:8080"), GiteaURL: env("GITEA_URL", "http://gitea:3000"),
+		PublicURL: env("GOLF_PUBLIC_URL", "http://localhost:8080"), GiteaURL: os.Getenv("GITEA_URL"),
 		GiteaPublicURL: os.Getenv("GITEA_PUBLIC_URL"), GiteaOAuthClientID: os.Getenv("GITEA_OAUTH_CLIENT_ID"),
+		GiteaWorkflowDirs:      os.Getenv("GOLF_GITEA_WORKFLOW_DIRS"),
 		GiteaOAuthClientSecret: os.Getenv("GITEA_OAUTH_CLIENT_SECRET"),
 		EncryptionKey:          os.Getenv("GOLF_ENCRYPTION_KEY"), EncryptionKeysJSON: os.Getenv("GOLF_ENCRYPTION_KEYS"),
 		EncryptionActiveKeyID: os.Getenv("GOLF_ACTIVE_ENCRYPTION_KEY"),

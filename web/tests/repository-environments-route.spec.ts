@@ -1,11 +1,13 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
-import { GetAccountSecurityResponseSchema, GetRepositoryAccessResponseSchema, GetSessionResponseSchema, ListRepositoryEnvironmentsRequestSchema, ListRepositoryEnvironmentsResponseSchema, RepositoryEnvironmentCapability } from '../src/gen/golf/v1/golf_pb';
+import { ListCapabilitiesResponseSchema, GetAccountSecurityResponseSchema, GetRepositoryAccessResponseSchema, GetSessionResponseSchema, ListRepositoryEnvironmentsRequestSchema, ListRepositoryEnvironmentsResponseSchema, RepositoryEnvironmentCapability } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 async function backend(page: Page, local = true, permission = 'owner') {
   const counts = { writes: 0, inventory: 0 };
   await page.route('**/rpc/**', route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '42', login: 'alice' } });
     if (method === 'GetAccountSecurity') return respond(route, GetAccountSecurityResponseSchema, { security: { userId: '42', accountId: local ? '2' : '', credentialVersion: local ? '1' : '', canManage: local } });
     if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: { repositoryId: '9007199254740993', ownerId: '42', owner: { id: '42', login: 'alice' }, revision: 'a'.repeat(64), currentPermission: permission, canManage: permission === 'owner' } });

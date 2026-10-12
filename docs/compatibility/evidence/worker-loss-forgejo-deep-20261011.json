@@ -1,0 +1,120 @@
+{
+  "sourceRevision": "6e35c3d30f317e11fe00f9dadf4578436bb27e29",
+  "sourceDirty": true,
+  "sourceFiles": {
+    "internal/workflowpath/path.go": "e29e095b38a7ee99bdcc4ba55a672139da639b9bbc4fa6f999962a4d578c9b87",
+    "internal/server/workflows.go": "a07a5c2227e8ccc03d116ccb3148af028231b3c6bf21d2ecd92ee7df9a70a9bc",
+    "internal/server/workflow_runs.go": "6261010d46ce8ebc416333e40ad78222548fa8d403f00643dd27e37f21b797e9",
+    "internal/server/server.go": "da712747a6bf64914bf8cccc17abe42237a1b77f782f0a9d958d8b782f753df5",
+    "internal/server/repository_events.go": "826338967a896101cedbb60a93cb09e0d0746fb2c58c64b7744924d3d5624a2d",
+    "internal/server/execution_policy.go": "c23c57e52c963a7347da46e0c5fc76d30394f15bf6e08f83499ef35bc7fa59e9",
+    "scripts/actions-two-job-smoke.py": "5e6eee58145889f42bc7d66f4a7fe77bcf2874909348a7d4a511b4a50d5d9faa",
+    "compose.forgejo.yaml": "48b347dcea43fddffb4d5fd75ce04ebf15b7e73f504f204e52c0fa52577e8de0",
+    "deploy/postgres/forgejo-init.sh": "d16c708568aee50653a846453e537114a9947edab5e6269429c55a359e804c08",
+    "compose.actions-engine.yaml": "b2e7173353cad239726c887fa039c7c2e73e55de6bdb0a11a7c7d60601079236",
+    "cmd/golf-runner/main.go": "c0ccd830997079817d20bef265669bb5b5bd6b50e1a2abcd24b941bf1de912d3",
+    "cmd/golf-runner/git_execution.go": "1098aabf4fff0760288c1139413cd84fb36e4986df8effa41cc3deb09fb61b26",
+    "internal/server/runner_transport.go": "f3d27af632e87824b1f4bad2f2b73750506c7217450b574b14bdd8655d8308a7",
+    "internal/runner/actions_git_source.go": "1534276a57cec23095622825ed005e9fa3009798c9481d61b11589655e474d14",
+    "engines/act/execute.go": "66b516cfa9ee49db47a1fd7979e4dbb0bd16a84e22bcb8443b1c9eac23cf03eb",
+    "engines/act/git_source.go": "67db30a41bfadc46098cb9c3235ecc5731ba96010b92d1890134e52eaf339d2e",
+    "engines/act/job_disk.go": "aa3aa82e0cded1395195e569f16789f80c42f20468ebc4b2657e2b70c41209b5",
+    "engines/act/upstream_source_manifest.json": "df4323e753823175c390625bde94ce780d488a939d6f790f740f753ea9555dd8"
+  },
+  "schema": 202610110095,
+  "platforms": {
+    "golf": "linux/amd64",
+    "runner": "linux/amd64",
+    "native": "linux/amd64",
+    "postgres": "linux/amd64",
+    "daemon": "linux/amd64"
+  },
+  "images": {
+    "golf": "sha256:fb78f6fbaa8ed6f553e24e3f24dd737650cac3ed949ef23f5c3b1951c96e32c1",
+    "runner": "sha256:ee036ac90db0460a4c09da117872e36d6afff009a9248551094739159a5169f7",
+    "native": "sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413",
+    "postgres": "sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15",
+    "daemon": "sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0"
+  },
+  "binarySha256": {
+    "golf/golf": "78dcde93b698be53efb10ca09aa8f3c9e868dfafd92b73225e9342479d7f950a",
+    "runner/golf-runner": "49ef9e74dc3895cb56ec85bd81ce8271ec363a6a698fc41e121ae85c003d4312",
+    "golf/golf-actions-engine": "c98a509cf33a1fa227572556c3d3f72465ba39bf6a2153e3c834b1f0045d69e5",
+    "runner/golf-actions-engine": "c98a509cf33a1fa227572556c3d3f72465ba39bf6a2153e3c834b1f0045d69e5"
+  },
+  "fixtureSha256": {
+    ".forgejo/workflows/two-job.yml": "612fbe009d273e85ad41b67bd340c50fbc5dc1e47d374f7f94c5402ace60b455",
+    "bin/executable.sh": "37143bc028213d4ac205639dca6355a0a97252ec597411bd5370d44fac16665a"
+  },
+  "workflowPath": ".forgejo/workflows/two-job.yml",
+  "withPush": true,
+  "servedFrontendIndexSha256": "65850cca76c3c96370c414e0ea5cfcaceea7dab01e1f0952a266ad514aee76d4",
+  "installedSpec": {
+    "version": "15.0.9+gitea-1.22.0",
+    "canonicalSha256": "98d1a3969ec545b9dab7745de948d9bfacf19990589dabfe779a3991febd3208",
+    "pathsDefinitionsSecurityMatch": true,
+    "instance": "fresh owned qualification forgejo; not the retained installation",
+    "nativeActionsEnabled": false,
+    "workflowDirs": ".forgejo/workflows,.gitea/workflows,.github/workflows"
+  },
+  "dependencyOrderVerified": true,
+  "freshWorkspaceMarkerVerified": true,
+  "suppressedDirectoryRefusedWithoutAdmission": true,
+  "nativeSignedPush": true,
+  "actualDockerCleanup": {
+    "attemptContainersAbsent": true,
+    "attemptVolumesAbsent": true
+  },
+  "historicalSource": {
+    "admittedCommit": "8683d9bec257934c27897314162a558e127d94e3",
+    "advancedBranchCommit": "9843430742d8c634c122d0e64f232993e7e02492",
+    "branchAdvancedBeforeWorker": true
+  },
+  "historicalGitReadback": {
+    "commit": "8683d9bec257934c27897314162a558e127d94e3",
+    "tree": "788a50c6d3ad1628e0ea863e2df1dcdfadfb991f",
+    "workflowBlob": "fe83a30f24d249e7c9f17e6114cdb2aa3e874595",
+    "executableMode": "100755",
+    "twoIndependentJobs": true,
+    "advancedCommitExcluded": true,
+    "independentNativeGitFetch": true
+  },
+  "workerDeath": {
+    "duringAdmittedStep": true,
+    "signal": "SIGKILL",
+    "residueObserved": true,
+    "reuseRefused": true,
+    "explicitCoordinatorFence": true,
+    "originalAttemptLost": true,
+    "replacementRunCreated": false,
+    "attemptContainersAbsent": true,
+    "attemptVolumesAbsent": true
+  },
+  "runCount": 3,
+  "restart": {
+    "originalRunAndAttemptUnchanged": true,
+    "originalDispatchNoReplay": true,
+    "runCount": 1
+  },
+  "tls": {
+    "version": "TLSv1.3",
+    "serverAuthenticationOnly": true,
+    "wrongHostnameDenied": true,
+    "untrustedCADenied": true,
+    "tls12Denied": true
+  },
+  "complete": true,
+  "passed": true,
+  "cleanupPassed": true,
+  "foreignIdentityUnchanged": true,
+  "forgeKind": "forgejo",
+  "nativeWebhookDialect": "gitea",
+  "nativeSpecSHA256": "657cfc907353f1182b2a85c906d0ad2e48e71367454411685246a387a3fbfc1e",
+  "date": "2026-10-11",
+  "profile": "forgejo-maintained-actions-historical-worker-loss",
+  "limitations": [
+    "Owned two-job manual/push fixture with .forgejo workflow precedence and historical exact Git source; not arbitrary Actions compatibility.",
+    "Abrupt worker loss is fenced and explicitly recovered; no automatic retry or replacement run is permitted or qualified.",
+    "No retained installation rollout, sustained load or broad matrix/secret/artifact qualification in this packet."
+  ]
+}

@@ -1,13 +1,32 @@
-import { createRootRoute, createRoute, createRouter, notFound, redirect, Outlet, stripSearchParams } from '@tanstack/react-router';
+import { useMemo } from 'react';
+import { createRootRoute, createRoute, createRouter, notFound, isNotFound, redirect, useMatches, stripSearchParams } from '@tanstack/react-router';
 import { App } from './App';
 import { defaultRepositorySearch, isCommitID, isRunID, isWorkflowJobInstanceID, isWorkflowStepID } from './navigation';
 import { sourcePath, sourceRef, sourceRepositoryID } from './sourceReads';
-import type { RepositorySearch } from './navigation';
+import type { Location, RepositorySearch } from './navigation';
+
+type LocationMatch = { params: { owner: string; name: string; organization: string; teamId: string; _splat?: string }; search: RepositorySearch & { repositoryId: string; auth_error?: string; team?: string } };
+declare module '@tanstack/react-router' {
+  interface StaticDataRouteOption { golfLocation?: (match: LocationMatch) => Location }
+}
+function RoutedApp() {
+  const matches = useMatches();
+  const failed = matches.find(match => match.status === 'error' || match.status === 'notFound' || match._notFound);
+  const match = matches.at(-1);
+  const params = match?.params, search = match?.search, resolve = match?.staticData.golfLocation;
+  // Router pending-state updates must not restart panel navigation effects.
+  const location = useMemo(() => !failed && resolve ? resolve({params, search} as unknown as LocationMatch) : {kind:'missing' as const}, [failed, resolve, params, search]);
+  if (failed) {
+    if (failed.status === 'notFound' || failed._notFound || isNotFound(failed.error)) return <App location={{kind:'missing'}}/>;
+    throw failed.error;
+  }
+  return <App location={location} />;
+}
 
 const rootRoute = createRootRoute({
-  component: Outlet,
+  component: RoutedApp,
   notFoundComponent: () => <App location={{ kind: 'missing' }} />,
-  errorComponent: () => <App location={{ kind: 'missing' }} />,
+  errorComponent: ({ error }) => isNotFound(error) || error instanceof Error && isNotFound(error.cause) ? <App location={{ kind: 'missing' }} /> : <main className="page-stack"><section className="browser-panel credential-form-content"><h1>Golf could not load this page.</h1><p>The page or its required assets are unavailable. Reload to check your sign-in and fetch the current version.</p><button className="button primary" onClick={() => window.location.reload()}>Reload Golf</button></section></main>,
 });
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -15,40 +34,40 @@ const homeRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { auth_error?: 'oauth_failed' } => ({
     auth_error: search.auth_error === 'oauth_failed' ? 'oauth_failed' : undefined,
   }),
-  component: HomePage,
+  staticData: { golfLocation: HomePage },
 });
 const organizationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/organizations',
-  component: () => <App location={{ kind: 'organizations' }} />,
+  staticData: { golfLocation: () => ({ kind: 'organizations' }) },
 });
-const notificationInboxRoute=createRoute({getParentRoute:()=>rootRoute,path:'/notifications',component:()=> <App location={{kind:'notifications'}}/>});
-const statusRoute = createRoute({ getParentRoute: () => rootRoute, path: '/status', component: () => <App location={{ kind: 'status' }} /> });
+const notificationInboxRoute=createRoute({getParentRoute:()=>rootRoute,path:'/notifications',staticData: { golfLocation: () => ({kind:'notifications'}) }});
+const statusRoute = createRoute({ getParentRoute: () => rootRoute, path: '/status', staticData: { golfLocation: () => ({ kind: 'status' }) } });
 const auditRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/audit',
-  component: () => <App location={{ kind: 'audit' }} />,
+  staticData: { golfLocation: () => ({ kind: 'audit' }) },
 });
 const apiCredentialsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/account/api-credentials',
-  component: () => <App location={{ kind: 'api-credentials' }} />,
+  staticData: { golfLocation: () => ({ kind: 'api-credentials' }) },
 });
-const accountConnectionsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/account/connections',component:()=> <App location={{kind:'account-connections'}}/>});
-const accountAgentsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/agents', component: () => <App location={{ kind: 'account-agents' }} /> });
-const accountInvitationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/invitations', component: () => <App location={{ kind: 'account-invitations' }} /> });
-const accountSecurityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/security', component: () => <App location={{ kind: 'account-security' }} /> });
+const accountConnectionsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/account/connections',staticData: { golfLocation: () => ({kind:'account-connections'}) }});
+const accountAgentsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/agents', staticData: { golfLocation: () => ({ kind: 'account-agents' }) } });
+const accountInvitationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/invitations', staticData: { golfLocation: () => ({ kind: 'account-invitations' }) } });
+const accountSecurityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/security', staticData: { golfLocation: () => ({ kind: 'account-security' }) } });
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/account/settings',
-  component: () => <App location={{ kind: 'settings' }} />,
+  staticData: { golfLocation: () => ({ kind: 'settings' }) },
 });
 const sessionsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/account/sessions',
-  component: () => <App location={{ kind: 'sessions' }} />,
+  staticData: { golfLocation: () => ({ kind: 'sessions' }) },
 });
 const sshKeysRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/account/ssh-keys',
-  component: () => <App location={{ kind: 'ssh-keys' }} />,
+  staticData: { golfLocation: () => ({ kind: 'ssh-keys' }) },
 });
 function validateRepositoryIdentity(owner: string, name: string) {
   if (!owner || !name || /[\/\\]/.test(owner + name)) throw notFound();
@@ -56,7 +75,7 @@ function validateRepositoryIdentity(owner: string, name: string) {
 const canonicalRepositorySettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/$owner/$name/settings',
   beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
-  component: RepositorySettingsPage,
+  staticData: { golfLocation: RepositorySettingsPage },
 });
 // The original native identity survives repository absence. Do not resolve this
 // route through repository metadata or adopt a replacement at the same address.
@@ -68,23 +87,23 @@ const canonicalRepositoryDeletionRoute = createRoute({
     if (typeof id !== 'string' || !/^[1-9][0-9]{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) throw notFound();
     return { repositoryId: id };
   },
-  component: () => { const { owner, name } = canonicalRepositoryDeletionRoute.useParams(); const { repositoryId } = canonicalRepositoryDeletionRoute.useSearch(); return <App location={{ kind: 'repository-deletion', owner, name, repositoryId }} />; },
+  staticData: { golfLocation: (match) => { const { owner, name } = match.params; const { repositoryId } = match.search; return { kind: 'repository-deletion', owner, name, repositoryId }; } },
 });
 const canonicalRepositoryAccessSettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/$owner/$name/settings/access',
   beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
-  component: () => { const { owner, name } = canonicalRepositoryAccessSettingsRoute.useParams(); return <App location={{ kind: 'repository-access-settings', owner, name }} />; },
+  staticData: { golfLocation: (match) => { const { owner, name } = match.params; return { kind: 'repository-access-settings', owner, name }; } },
 });
-const canonicalRepositoryGitRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/git',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),component:()=>{const {owner,name}=canonicalRepositoryGitRoute.useParams();return <App location={{kind:'repository-git',owner,name}}/>;}});
-const canonicalRepositoryRulesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/rules',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),component:()=>{const {owner,name}=canonicalRepositoryRulesRoute.useParams();return <App location={{kind:'repository-rules',owner,name}}/>;}});
-const canonicalRepositoryRunnersRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/runners',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),component:()=>{const {owner,name}=canonicalRepositoryRunnersRoute.useParams();return <App location={{kind:'repository-runners',owner,name}}/>;}});
-const canonicalRepositorySecretsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/secrets',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),component:()=>{const {owner,name}=canonicalRepositorySecretsRoute.useParams();return <App location={{kind:'repository-secrets',owner,name}}/>;}});
-const canonicalRepositoryEnvironmentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/environments',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),component:()=>{const {owner,name}=canonicalRepositoryEnvironmentsRoute.useParams();return <App location={{kind:'repository-environments',owner,name}}/>;}});
-const canonicalRepositoryWebhooksRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/webhooks',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),component:()=>{const {owner,name}=canonicalRepositoryWebhooksRoute.useParams();return <App location={{kind:'repository-webhooks',owner,name}}/>;}});
+const canonicalRepositoryGitRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/git',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),staticData: { golfLocation: (match) => {const {owner,name}=match.params;return {kind:'repository-git',owner,name}; } }});
+const canonicalRepositoryRulesRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/rules',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),staticData: { golfLocation: (match) => {const {owner,name}=match.params;return {kind:'repository-rules',owner,name}; } }});
+const canonicalRepositoryRunnersRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/runners',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),staticData: { golfLocation: (match) => {const {owner,name}=match.params;return {kind:'repository-runners',owner,name}; } }});
+const canonicalRepositorySecretsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/secrets',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),staticData: { golfLocation: (match) => {const {owner,name}=match.params;return {kind:'repository-secrets',owner,name}; } }});
+const canonicalRepositoryEnvironmentsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/environments',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),staticData: { golfLocation: (match) => {const {owner,name}=match.params;return {kind:'repository-environments',owner,name}; } }});
+const canonicalRepositoryWebhooksRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/webhooks',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),staticData: { golfLocation: (match) => {const {owner,name}=match.params;return {kind:'repository-webhooks',owner,name}; } }});
 const canonicalRepositoryWorkflowsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/$owner/$name/settings/workflows',
   beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
-  component: () => { const { owner, name } = canonicalRepositoryWorkflowsRoute.useParams(); return <App location={{ kind: 'repository-workflows', owner, name }} />; },
+  staticData: { golfLocation: (match) => { const { owner, name } = match.params; return { kind: 'repository-workflows', owner, name }; } },
 });
 // Old links normalize without probing repository data or changing page authority.
 const repositorySettingsRoute = createRoute({
@@ -102,23 +121,24 @@ const repositoryWorkflowsRoute = createRoute({
 const organizationSettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/organizations/$organization/settings',
   beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization)) throw notFound(); },
-  component: OrganizationSettingsPage,
+  staticData: { golfLocation: OrganizationSettingsPage },
 });
-const organizationLabelsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/organizations/$organization/settings/labels', beforeLoad: ({params}) => {if(!params.organization || /[\/\\]/.test(params.organization))throw notFound();}, component: () => {const {organization}=organizationLabelsRoute.useParams();return <App location={{kind:'organization-labels',organization}}/>;} });
-const organizationSecretsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/organizations/$organization/settings/secrets', beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization)) throw notFound(); }, component: () => { const { organization } = organizationSecretsRoute.useParams(); return <App location={{ kind: 'organization-secrets', organization }} />; } });
+const organizationLabelsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/organizations/$organization/settings/labels', beforeLoad: ({params}) => {if(!params.organization || /[\/\\]/.test(params.organization))throw notFound();}, staticData: { golfLocation: (match) => {const {organization}=match.params;return {kind:'organization-labels',organization}; } } });
+const organizationSecretsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/organizations/$organization/settings/secrets', beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization)) throw notFound(); }, staticData: { golfLocation: (match) => { const { organization } = match.params; return { kind: 'organization-secrets', organization }; } } });
 const organizationTeamSettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/organizations/$organization/teams/$teamId/settings',
   beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization) || !/^[1-9][0-9]{0,18}$/.test(params.teamId) || BigInt(params.teamId) > 9223372036854775807n) throw notFound(); },
-  component: OrganizationTeamSettingsPage,
+  staticData: { golfLocation: OrganizationTeamSettingsPage },
 });
-const instanceExecutionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/execution', component: () => <App location={{ kind: 'instance-settings', view: 'execution' }} /> });
-const instanceOrganizationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/organizations', component: () => <App location={{ kind: 'instance-settings', view: 'organizations' }} /> });
-const instanceAgentsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/agents', component: () => <App location={{ kind: 'instance-settings', view: 'agents' }} /> });
-const instanceNotificationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings/notifications', component: () => <App location={{ kind: 'instance-settings', view: 'notifications' }} /> });
-const instanceRunnersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings/runners', component: () => <App location={{ kind: 'instance-settings', view: 'runners' }} /> });
-const instanceInfrastructureRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings/infrastructure', component: () => <App location={{ kind: 'instance-settings', view: 'infrastructure' }} /> });
-const instanceOverviewRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin', component: () => <App location={{ kind: 'instance-settings', view: 'overview' }} /> });
-const instanceSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings', component: () => <App location={{ kind: 'instance-settings' }} /> });
+const instanceExecutionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/execution', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'execution' }) } });
+const instanceOrganizationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/organizations', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'organizations' }) } });
+const instanceAgentsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/agents', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'agents' }) } });
+const instanceNotificationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings/notifications', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'notifications' }) } });
+const instanceRunnersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings/runners', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'runners' }) } });
+const instanceInfrastructureRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings/infrastructure', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'infrastructure' }) } });
+const instanceOperationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/operations', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'operations' }) } });
+const instanceOverviewRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'overview' }) } });
+const instanceSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings', staticData: { golfLocation: () => ({ kind: 'instance-settings' }) } });
 const organizationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/organizations/$organization',
@@ -129,7 +149,7 @@ const organizationRoute = createRoute({
     if (!params.organization || /[\/\\]/.test(params.organization)) throw notFound();
     if (search.team !== undefined && (!/^[1-9][0-9]{0,18}$/.test(search.team) || BigInt(search.team) > 9223372036854775807n)) throw notFound();
   },
-  component: OrganizationPage,
+  staticData: { golfLocation: OrganizationPage },
 });
 const validateRepositorySearch = (search: Record<string, unknown>): RepositorySearch => {
     if (search.refKind !== undefined && search.refKind !== 'branch' && search.refKind !== 'tag' || (search.refKind === undefined) !== (search.refName === undefined) || search.refName !== undefined && (typeof search.refName !== 'string' || !sourceRef(search.refName))) throw notFound();
@@ -189,7 +209,7 @@ const repositoryRoute = createRoute({
     if(search.runKind&&!search.run||search.jobInstanceId!==undefined&&(search.view!=='actions'||!search.run))throw notFound();
   },
   search: { middlewares: [stripSearchParams(defaultRepositorySearch)] },
-  component: RepositoryPage,
+  staticData: { golfLocation: RepositoryPage },
 });
 
 // Explicitly keep legacy query URLs readable. New navigation uses familiar
@@ -217,6 +237,11 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
     return {...location,view:'source' as const,ref:'',path:'',sourceSuffix:suffix,sourceRoute:parts[0] as 'tree'|'blob'};
   }
   if(tail==='packages')return {...location,view:'packages' as const};
+  if(tail.startsWith('packages/')) {
+    const parts=tail.split('/');
+    if((parts.length===2||parts.length===3)&&/^(sha256:[a-f0-9]{64}|sha512:[a-f0-9]{128})$/.test(parts[1] || '')&&['overview','sbom','vulnerabilities','signatures','provenance','activity'].includes(parts[2]||'overview')) return {...location,view:'packages' as const,packageDigest:parts[1],packagePanel:(parts[2]||'overview') as RepositorySearch['packagePanel']};
+    throw notFound();
+  }
   if(parts[0]==='wiki'){
     if(parts.length===1&&search.wikiPage===undefined)return {...location,view:'wiki' as const,wikiPage:undefined};
     if(parts.length===2&&item&&item!=='.'&&item!=='..'&&item.length<=1024&&/^[A-Za-z0-9_.~+%\-]+$/.test(item)){try{decodeURIComponent(item.replaceAll('+',' '));}catch{throw notFound();}if(search.wikiPage!==undefined&&search.wikiPage!==item)throw notFound();return {...location,view:'wiki' as const,wikiPage:item};}
@@ -268,40 +293,40 @@ const canonicalRepositoryPageRoute=createRoute({getParentRoute:()=>rootRoute,pat
     }
   },
   search:{middlewares:[stripSearchParams(defaultRepositorySearch)]},
-  component:()=>{const p=canonicalRepositoryPageRoute.useParams();return <App location={canonicalLocation(p.owner,p.name,p._splat||'',canonicalRepositoryPageRoute.useSearch())}/>;}});
+  staticData: { golfLocation: (match) => {const p=match.params;return canonicalLocation(p.owner,p.name,p._splat||'',match.search); } }});
 
-function RepositorySettingsPage() {
-  const { owner, name } = canonicalRepositorySettingsRoute.useParams();
-  return <App location={{ kind: 'repository-settings', owner, name }} />;
+function RepositorySettingsPage(match: LocationMatch): Location {
+  const { owner, name } = match.params;
+  return { kind: 'repository-settings', owner, name };
 }
-function OrganizationTeamSettingsPage() {
-  const { organization, teamId } = organizationTeamSettingsRoute.useParams();
-  return <App location={{ kind: 'organization-team-settings', organization, teamId }} />;
+function OrganizationTeamSettingsPage(match: LocationMatch): Location {
+  const { organization, teamId } = match.params;
+  return { kind: 'organization-team-settings', organization, teamId };
 }
-function OrganizationSettingsPage() {
-  const { organization } = organizationSettingsRoute.useParams();
-  return <App location={{ kind: 'organization-settings', organization }} />;
+function OrganizationSettingsPage(match: LocationMatch): Location {
+  const { organization } = match.params;
+  return { kind: 'organization-settings', organization };
 }
-function RepositoryPage() {
-  const params = repositoryRoute.useParams();
-  const search = repositoryRoute.useSearch();
-  return <App location={{ ...params, ...search, kind: 'repository' }} />;
-}
-
-function HomePage() {
-  const search = homeRoute.useSearch();
-  return <App location={{ kind: 'home', oauthFailed: search.auth_error === 'oauth_failed' }} />;
+function RepositoryPage(match: LocationMatch): Location {
+  const params = match.params;
+  const search = match.search;
+  return { ...params, ...search, kind: 'repository' };
 }
 
-function OrganizationPage() {
-  const { organization } = organizationRoute.useParams();
-  const { team } = organizationRoute.useSearch();
-  return <App location={{ kind: 'organizations', organization, team }} />;
+function HomePage(match: LocationMatch): Location {
+  const search = match.search;
+  return { kind: 'home', oauthFailed: search.auth_error === 'oauth_failed' };
+}
+
+function OrganizationPage(match: LocationMatch): Location {
+  const { organization } = match.params;
+  const { team } = match.search;
+  return { kind: 'organizations', organization, team };
 }
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountConnectionsRoute,accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOperationsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountConnectionsRoute,accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => {

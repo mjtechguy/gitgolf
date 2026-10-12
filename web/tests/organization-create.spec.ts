@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
 import { OrganizationCreationMode, OrganizationVisibility, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListOrganizationsResponseSchema, GetOrganizationCreationPolicyResponseSchema, CreateOrganizationRequestSchema, CreateOrganizationResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { request, respond, reject } from './rpc';
@@ -7,7 +8,7 @@ async function backend(page: Page) {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex' } });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'GetOrganizationCreationPolicy') return respond(route, GetOrganizationCreationPolicyResponseSchema, { policy: { mode: OrganizationCreationMode.ALL_USERS, revision: '7', revocationEpoch: '7', canCreate: state.canCreate, enforcementScope: 'Golf API' } });
     if (method === 'ListOrganizations') return respond(route, ListOrganizationsResponseSchema, { organizations: [{ id: '20', name: 'public-lab', visibility: OrganizationVisibility.PUBLIC }, ...(state.created ? [{ id: '9007199254740997', name: 'private-lab', fullName: 'Private Lab', description: 'Created fixture', visibility: OrganizationVisibility.PRIVATE }] : [])] });
     if (method === 'CreateOrganization') { const input = request(route, CreateOrganizationRequestSchema); state.writes.push(input); if (state.fail) { if (state.fail === 'unavailable') state.created = true; return reject(route, state.fail, state.fail === 'permission_denied' ? 'Native organization creation denied.' : state.fail === 'failed_precondition' ? 'Organization policy changed.' : 'Receipt lost.'); } state.created = true; return respond(route, CreateOrganizationResponseSchema, { organization: { id: '9007199254740997', name: input.username, fullName: input.fullName, description: input.description, visibility: state.wrongVisibility ? OrganizationVisibility.PUBLIC : OrganizationVisibility.PRIVATE } }); }

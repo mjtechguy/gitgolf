@@ -17,6 +17,7 @@ import (
 type previewConfiguration struct {
 	address, origin, fingerprint string
 	tls                          *tls.Config
+	cloudflare                   *cloudflarePreview
 }
 
 func previewConfig(public string, insecure bool, getenv func(string) string) (*previewConfiguration, error) {
@@ -64,12 +65,12 @@ func previewConfig(public string, insecure bool, getenv func(string) string) (*p
 	}
 	cert.Leaf = leaf
 	sum := sha256.Sum256(append([]byte("golf.local-static.v1\x00"+u.String()+"\x00"), leaf.RawSubjectPublicKeyInfo...))
-	return &previewConfiguration{vals[0], u.String(), hex.EncodeToString(sum[:]), &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert}}}, nil
+	return &previewConfiguration{address: vals[0], origin: u.String(), fingerprint: hex.EncodeToString(sum[:]), tls: &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert}}}, nil
 }
 
 // Bind before any listeners serve; only this listener serves project content.
 func (s *Server) BindPreviewListener() (*http.Server, net.Listener, error) {
-	if s.preview == nil {
+	if s.preview == nil || s.preview.cloudflare != nil {
 		return nil, nil, nil
 	}
 	l, e := net.Listen("tcp", s.preview.address)

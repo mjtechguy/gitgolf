@@ -98,7 +98,53 @@ engine-check:
 	go -C engines/act vet ./...
 	go -C engines/act test ./...
 	go -C engines/act/third_party/act test ./pkg/runner
-check: fmt vet test web-check generate-check engine-check
+.PHONY: compatibility-check
+compatibility-check:
+	python3 scripts/compatibility/inventory.py --check
+	python3 -m unittest discover -s scripts/compatibility -p 'test_*.py'
+.PHONY: cloudflare-check
+cloudflare-check:
+	node cloudflare/forge/capabilities-check.mjs
+	node --test web/tests/runtime-capabilities.test.ts web/tests/repository-picture.test.ts web/tests/navigation-cache.test.ts web/tests/rpc-fetch.test.ts web/tests/operations-metrics.test.ts
+	node --test cloudflare/forge/*.test.mjs
+	node --check cloudflare/forge/prepare.mjs
+	node --check cloudflare/forge/prepare-proof.mjs
+	node --check cloudflare/forge/ui-check.mjs
+	node --check cloudflare/forge/repository-rpc-check.mjs
+	node --check cloudflare/forge/ui-assets.mjs
+	node --check cloudflare/forge/runtime-check.mjs
+	node --check cloudflare/forge/review-runtime-check.mjs
+	node --check cloudflare/forge/demo-check.mjs
+	node --test cloudflare/control/worker.test.mjs
+	node --check cloudflare/control/prepare.mjs
+	node --check cloudflare/control/runtime-check.mjs
+	python3 -m unittest discover -s scripts -p 'test_cloudflare_setup.py'
+	python3 -m unittest discover -s scripts -p 'test_cloudflare_forge.py'
+	python3 -m unittest discover -s scripts -p 'test_cloudflare_demo.py'
+	python3 -m unittest discover -s scripts -p 'test_cloudflare_release.py'
+	go test -race ./internal/cli -count=1
+	go test -race ./internal/cloudflare ./cmd/golf -run 'TestInspectionBoundary|TestManagementInspectionBoundary|TestResourceClientBoundary|TestProfileInspectionBoundary|TestCloudflareCommand' -count=1
+	node --check cloudflare/previews/prepare.mjs
+	node --test cloudflare/previews/worker.test.mjs
+	node --test cloudflare/qualification/worker.test.mjs
+	node --check cloudflare/qualification/prepare.mjs
+	node --test cloudflare/agents/*.test.mjs
+	node --check cloudflare/agents/src/worker.mjs
+	node --check cloudflare/agents/prepare.mjs
+	python3 -m py_compile scripts/cloudflare-foundation-smoke.py scripts/cloudflare-product-smoke.py scripts/cloudflare-preview-smoke.py scripts/cloudflare_agents.py scripts/cloudflare-forge-smoke.py scripts/cloudflare_forge.py scripts/cloudflare_demo.py scripts/cloudflare_demo_cleanup.py
+	python3 scripts/cloudflare_agents.py
+	python3 scripts/cloudflare_registry_check_test.py
+.PHONY: cloudflare-setup cloudflare-status cloudflare-stop
+cloudflare-setup:
+	python3 scripts/cloudflare_setup.py init $(CLOUDFLARE_SETUP_ARGS)
+cloudflare-status:
+	python3 scripts/cloudflare_setup.py status
+cloudflare-stop:
+	python3 scripts/cloudflare_setup.py stop
+.PHONY: qualify-cloudflare-product
+qualify-cloudflare-product:
+	python3 scripts/cloudflare-product-smoke.py
+check: fmt vet test web-check generate-check engine-check compatibility-check cloudflare-check
 helm-check:
 	python3 deploy/helm/golf/check.py
 up: setup
@@ -151,3 +197,13 @@ qualify-pull-inline-publication-browser:
 .PHONY: qualify-source-identity
 qualify-source-identity: cli
 	python3 scripts/source-identity-smoke.py --stack-root "$(CURDIR)" --cli bin/golf
+
+.PHONY: forgejo-setup forgejo-up forgejo-stop forgejo-qualify
+forgejo-setup:
+	python3 scripts/init-forgejo-env.py
+forgejo-up: forgejo-setup
+	docker compose -p golf-forgejo --env-file .env.forgejo -f compose.forgejo.yaml up -d --build
+forgejo-stop:
+	docker compose -p golf-forgejo --env-file .env.forgejo -f compose.forgejo.yaml stop
+forgejo-qualify:
+	python3 scripts/forgejo-qualify.py --output .tmp/forgejo-qualification/receipt.json

@@ -1,3 +1,4 @@
+import { useRuntimeCapabilities } from './useRuntimeCapabilities';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -5,7 +6,7 @@ import { Code, ConnectError } from '@connectrpc/connect';
 import { Link } from '@tanstack/react-router';
 import { ArrowDown, ArrowLeft, Building2, LoaderCircle, RefreshCw, Users } from 'lucide-react';
 import { OrganizationCreate } from './OrganizationCreate';
-import { errorMessage, organizationClient } from './api';
+import { errorMessage, organizationClient, repositoryClient } from './api';
 import { OrganizationVisibility, TeamPermission, TeamVisibility } from './gen/golf/v1/golf_pb';
 import type { PageResponse } from './gen/golf/v1/golf_pb';
 import { organizationOptions, repositoryOptions } from './navigation';
@@ -49,9 +50,10 @@ function PagedPanel<T extends { id: string }>({ title, queryKey, load, render, e
 }
 
 function OrganizationList({ userId }: { userId: string }) {
+  const runtime = useRuntimeCapabilities();
   const client = useQueryClient();
   return <><header className="repository-intro"><div><span className="eyebrow">YOUR FORGE MEMBERSHIPS</span><h1><Building2 size={29} />Organizations</h1><p>Your organizations, repositories and team access.</p></div></header>
-    <OrganizationCreate key={userId} userId={userId} signingOut={false} onCreated={async () => { await client.invalidateQueries({ queryKey: ['organizations', userId] }); }} />
+    {runtime.isSuccess && runtime.data.runtimeProfile !== 'cloudflare-native' ? <OrganizationCreate key={userId} userId={userId} signingOut={false} onCreated={async () => { await client.invalidateQueries({ queryKey: ['organizations', userId] }); }} /> : null}
     <PagedPanel title="Your organizations" queryKey={['organizations', userId]} empty="No organization memberships returned."
       load={async (page, signal) => { const response = await organizationClient.listOrganizations({ page: { page, limit: 20 } }, { signal, timeoutMs: 8_000 }); return { items: response.organizations, page: response.page }; }}
       render={(organization) => <><div className="organization-row-title"><h3><Link {...organizationOptions({ organization: organization.name })}>{organization.name}</Link></h3><span className="visibility">{OrganizationVisibility[organization.visibility]?.toLowerCase() || 'unknown'}</span></div>{organization.fullName ? <p>{organization.fullName}</p> : null}<p>{organization.description || 'No description provided.'}</p></>} />
@@ -83,6 +85,8 @@ function TeamDetail({ organization, teamId, queryKey }: { organization: string; 
 }
 
 function OrganizationDetail({ organization: name, teamId, userId }: { organization: string; teamId?: string; userId: string }) {
+  const runtime = useRuntimeCapabilities();
+  const native = runtime.data?.runtimeProfile === 'cloudflare-native';
   const queryKey = ['organization', userId, name];
   const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'metadata'], queryFn: async ({ signal }) => {
     const response = await organizationClient.getOrganization({ organization: name }, { signal, timeoutMs: 8_000 });
@@ -94,7 +98,9 @@ function OrganizationDetail({ organization: name, teamId, userId }: { organizati
     {query.isError ? <Failure error={query.error} retry={() => void query.refetch()} /> : !organization ? <Loading label="Opening organization…" /> : <>
       <header className="repository-intro"><div><span className="eyebrow">ORGANIZATION</span><h1><Building2 size={29} />{organization.name}<span className="visibility">{OrganizationVisibility[organization.visibility]?.toLowerCase() || 'unknown'}</span></h1>{organization.fullName ? <p>{organization.fullName}</p> : null}<p>{organization.description || 'No description provided.'}</p></div><div className="panel-actions"><Link className="button secondary" to="/organizations/$organization/settings" params={{ organization: organization.name }}>Settings</Link><Refresh label="Refresh organization access" busy={query.isFetching} refresh={() => void query.refetch()} /></div></header>
       <p className="organization-guidance">Golf requires your membership to browse this organization. Visibility labels describe organization settings; they do not grant access to this Golf page. Your account must have permission to read the organization and its teams.</p>
-      {teamId ? <TeamDetail key={teamId} organization={name} teamId={teamId} queryKey={queryKey} /> : <PagedPanel title="Teams" queryKey={[...queryKey, 'teams']} empty="No visible teams in the loaded pages."
+      {native && !teamId ? <PagedPanel title="Repositories" queryKey={[...queryKey, 'repositories']} empty="No accessible repositories in this workspace."
+        load={async (page, signal) => { const response = await repositoryClient.listRepositories({ page: { page, limit: 20 } }, { signal, timeoutMs: 8000 }); return { items: response.repositories.filter(r => r.fullName.startsWith(name + '/')), page: response.page }; }}
+        render={repository => <><h3><Link {...repositoryOptions({ owner: name, name: repository.name })}>{repository.fullName}</Link></h3><p>{repository.description || 'No description provided.'}</p></>} /> : teamId ? <TeamDetail key={teamId} organization={name} teamId={teamId} queryKey={queryKey} /> : <PagedPanel title="Teams" queryKey={[...queryKey, 'teams']} empty="No visible teams in the loaded pages."
         load={async (page, signal) => { const response = await organizationClient.listTeams({ organization: name, page: { page, limit: 20 } }, { signal, timeoutMs: 8_000 }); return { items: response.teams, page: response.page }; }}
         render={(team) => <><div className="organization-row-title"><h3><Link {...organizationOptions({ organization: name, team: team.id })}>{team.name}</Link></h3><span className="visibility">{TeamVisibility[team.visibility]?.toLowerCase() || 'unknown'}</span></div><p>{team.description || 'No description provided.'}</p><p className="organization-native-permission">Native permission: {permission(team.permission)}</p></>} />}
     </>}

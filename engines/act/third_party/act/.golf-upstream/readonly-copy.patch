@@ -1,0 +1,93 @@
+--- a/pkg/container/container_types.go
++++ b/pkg/container/container_types.go
+@@ -28,0 +29,2 @@
++	VolumeOptions  map[string]map[string]string // Golf: local-driver options keyed by mount destination
++	CopyViaExec    bool                         // Golf: copy through actual writable mounts on read-only job roots
+--- a/pkg/container/docker_run.go
++++ b/pkg/container/docker_run.go
+@@ -12,0 +13 @@
++	"os/exec"
+@@ -17,0 +19 @@
++	"time"
+@@ -95 +97 @@
+-					if cr.UID != 0 || cr.GID != 0 {
++					if !cr.input.CopyViaExec && (cr.UID != 0 || cr.GID != 0) {
+@@ -132 +134 @@
+-			if cr.UID != 0 || cr.GID != 0 {
++			if !cr.input.CopyViaExec && (cr.UID != 0 || cr.GID != 0) {
+@@ -439,0 +442,5 @@
++			if options := input.VolumeOptions[mountTarget]; options != nil {
++				if _, err := cr.cli.VolumeCreate(ctx, client.VolumeCreateOptions{Name: mountSource, Driver: "local", DriverOpts: options}); err != nil {
++					return err
++				}
++			}
+@@ -441,3 +448,4 @@
+-				Type:   mount.TypeVolume,
+-				Source: mountSource,
+-				Target: mountTarget,
++				Type:          mount.TypeVolume,
++				Source:        mountSource,
++				Target:        mountTarget,
++				VolumeOptions: &mount.VolumeOptions{NoCopy: input.CopyViaExec},
+@@ -708,0 +717,18 @@
++// Golf's read-only-root profile cannot use Docker's archive writes, which
++// reject the root filesystem and can miss tmpfs mounts on rootless daemons.
++// Source bytes stay stdin; a fixed argv writes through the running mount.
++func (cr *containerReference) copyArchive(ctx context.Context, destination string, content io.Reader) error {
++	if !cr.input.CopyViaExec {
++		_, err := cr.cli.CopyToContainer(ctx, cr.id, client.CopyToContainerOptions{DestinationPath: destination, Content: content})
++		return err
++	}
++	cmd := exec.CommandContext(ctx, "docker", "exec", "-i", cr.id, "/bin/tar", "-xf", "-", "-C", destination)
++	cmd.Stdin = content
++	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
++	cmd.WaitDelay = 2 * time.Second
++	if cmd.Run() != nil {
++		return errors.New("Golf mounted archive transfer failed")
++	}
++	return nil
++}
++
+@@ -722 +748,8 @@
+-	_, err := cr.cli.CopyToContainer(ctx, cr.id, client.CopyToContainerOptions{DestinationPath: "/", Content: buf})
++	var err error
++	if cr.input.CopyViaExec {
++		// GNU tar cannot traverse a read-only root into a writable mount.
++		// Native argv creates the directory directly inside that mount.
++		err = cr.Exec([]string{"/bin/mkdir", "-p", destPath}, nil, "", "")(ctx)
++	} else {
++		err = cr.copyArchive(ctx, "/", buf)
++	}
+@@ -727 +760 @@
+-	_, err = cr.cli.CopyToContainer(ctx, cr.id, client.CopyToContainerOptions{DestinationPath: destPath, Content: tarStream})
++	err = cr.copyArchive(ctx, destPath, tarStream)
+@@ -732 +765 @@
+-	if cr.UID != 0 || cr.GID != 0 {
++	if !cr.input.CopyViaExec && (cr.UID != 0 || cr.GID != 0) {
+@@ -801 +834 @@
+-		_, err = cr.cli.CopyToContainer(ctx, cr.id, client.CopyToContainerOptions{DestinationPath: "/", Content: tarFile})
++		err = cr.copyArchive(ctx, "/", tarFile)
+@@ -835 +868 @@
+-		_, err := cr.cli.CopyToContainer(ctx, cr.id, client.CopyToContainerOptions{DestinationPath: dstPath, Content: &buf})
++		err := cr.copyArchive(ctx, dstPath, &buf)
+--- a/pkg/runner/runner.go
++++ b/pkg/runner/runner.go
+@@ -47,0 +48,2 @@
++	ContainerVolumeOptions             map[string]map[string]string // Golf: local-driver options keyed by mount destination
++	ContainerCopyViaExec               bool                         // Golf: trusted tar stdin into writable job mounts
+--- a/pkg/runner/run_context.go
++++ b/pkg/runner/run_context.go
+@@ -32,0 +33,2 @@
++	// Golf: refresh scoped job values before native step expression/env setup.
++	BeforeStep          func(context.Context) error
+@@ -410,0 +413,2 @@
++			VolumeOptions:  rc.Config.ContainerVolumeOptions,
++			CopyViaExec:    rc.Config.ContainerCopyViaExec,
+--- a/pkg/runner/job_executor.go
++++ b/pkg/runner/job_executor.go
+@@ -201,0 +202,5 @@
++		if rc.BeforeStep != nil {
++			if err := rc.BeforeStep(ctx); err != nil {
++				return err
++			}
++		}

@@ -142,17 +142,9 @@ func compileWorkflowForTrigger(format golfv1.WorkflowFormat, data []byte, push b
 			}
 		}
 		plan.ImageDigest = workflowField(value, "image").Value
-		script := workflowField(value, "script")
-		commands := []string{script.Value}
-		if script.Kind == yaml.SequenceNode {
-			if len(script.Content) > 50 {
-				return nil, connect.NewError(connect.CodeFailedPrecondition, errWorkflowExecutionUnsupported)
-			}
-			commands = nil
-			for _, command := range script.Content {
-				commands = append(commands, command.Value)
-			}
-		}
+		commands, _ := workflowScript(workflowField(value, "before_script"))
+		script, _ := workflowScript(workflowField(value, "script"))
+		commands = append(commands, script...)
 		// GitLab script entries share a shell context. Separate processes would
 		// silently lose variables, cwd and shell functions between list items.
 		plan.Steps = []workflowExecutionStep{{Name: job.Name, Run: strings.Join(commands, "\n"), Shell: "sh"}}

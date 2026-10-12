@@ -1,0 +1,1712 @@
+[
+  {
+    "schema": "golf.cloudflare.native-evidence.v1",
+    "name": "golf-native-20261012-07a3a7de",
+    "state": "failed",
+    "checks": {
+      "repository_id": "1",
+      "pipeline_execution_boundary": [
+        {
+          "path": ".github/workflows/lint.yml",
+          "sha256": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99",
+          "sourceCommit": "e3938d5dbdb49ee22e352b6a87b8a66c54588e35",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        },
+        {
+          "path": ".gitlab-ci.yml",
+          "sha256": "809a971b79a8eeccd150c9c167dd7c34cda9f80f9b309dfa102d70cfe0b7a46a",
+          "sourceCommit": "e3938d5dbdb49ee22e352b6a87b8a66c54588e35",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        }
+      ],
+      "evidence_operation_key": "4e647902-9fa2-483c-a46d-739205e004ea",
+      "evidence_job_id": "53fa7fa2-855f-41be-97dc-6fa3a341e1ef",
+      "container_test_failure": {
+        "jobId": "53fa7fa2-855f-41be-97dc-6fa3a341e1ef",
+        "commitId": "5afe6318287ee8ea5295c6e00683589011a4d6a9",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "module": "test_calc",
+        "policySha256": "ea662395e22b3dac9a96b7348ef3d3c6b4e2da71f06e8f63d0cec73132c574c3",
+        "state": "FAILED",
+        "cleanup": "destroyed",
+        "deniedRequests": 1,
+        "exitCode": 1,
+        "stdout": "",
+        "stderr": "test_add (test_calc.Math.test_add) ... ERROR\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n======================================================================\nERROR: test_add (test_calc.Math.test_add)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/repo/test_calc.py\", line 4, in test_add\n    def test_add(self): self.assertEqual(add(2, 3), 5); __import__(\"registry_publish\").publish()\n                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/repo/registry_publish.py\", line 40, in publish\n    request('/v2/' + image + '/blobs/uploads/?digest=' + sha(data), data, 'POST')\n  File \"/workspace/repo/registry_publish.py\", line 22, in request\n    try: response = urllib.request.urlopen(req, timeout=20)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 216, in urlopen\n    return opener.open(url, data, timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 519, in open\n    response = self._open(req, data)\n               ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 536, in _open\n    result = self._call_chain(self.handle_open, protocol, protocol +\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 496, in _call_chain\n    result = func(*args)\n             ^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 1404, in https_open\n    return self.do_open(http.client.HTTPSConnection, req,\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 1365, in do_open\n    r = h.getresponse()\n        ^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/http/client.py\", line 1403, in getresponse\n    response.begin()\n  File \"/usr/lib/python3.11/http/client.py\", line 323, in begin\n    version, status, reason = self._read_status()\n                              ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/http/client.py\", line 292, in _read_status\n    raise RemoteDisconnected(\"Remote end closed connection without\"\nhttp.client.RemoteDisconnected: Remote end closed connection without response\n\n----------------------------------------------------------------------\nRan 2 tests in 0.730s\n\nFAILED (errors=1)\n",
+        "finishedAt": 1791764866428
+      }
+    },
+    "cleanup": {
+      "test_tasks": "absent",
+      "managed_apps": "absent",
+      "preview_domain": "absent",
+      "control_domain": "absent",
+      "queue_consumer": "absent",
+      "workflow": "absent",
+      "registry_retired": "absent",
+      "preview_worker": "absent",
+      "worker": "absent",
+      "durable_object_namespaces": "absent",
+      "registry_resources": "absent",
+      "app_outbound": "absent",
+      "dispatch": "absent",
+      "test_applications": "absent",
+      "test_image": "absent",
+      "queue": "absent",
+      "gateway": "absent",
+      "bucket": "absent",
+      "preview_access": "absent",
+      "control_access": "absent",
+      "preview_service_token": "absent",
+      "namespace": "absent",
+      "database": "absent",
+      "secret_store": "absent",
+      "analytics_token": "absent",
+      "cleanup_token": "absent",
+      "management_token": "absent"
+    },
+    "source_sha256": {
+      "scripts/cloudflare-forge-smoke.py": "51876becb6484bd19a84ab252be65805b17218f29729cc2f61a59cefc3a1765a",
+      "scripts/cloudflare_hosted_check.py": "89ea16354369765ae14ccfa304f6b319f34d3a24194fed9f0cb9938e1df2513b",
+      "scripts/fixtures/registry_publish.py": "a9363abbeb6bf0af3b4130896c6e800d68a100bad2bc882dfb97b1c0f664a961",
+      "scripts/cloudflare_registry_check.py": "d54ec7b92af582fc68c7b25f66a8771acedb5401179495dd298a76cf092ae1bf",
+      "scripts/cloudflare_rehearsal.py": "20e09f334f5f6f371b8e08e139d9b2cf346d079eeff1999154d06f3b8e6614c0",
+      "scripts/cloudflare_demo.py": "bc6fdd054f153456a50e9fd888096d15735b5f7df5c2c82e2d8bcc1c53251f70",
+      "cloudflare/forge/schema.sql": "81b16fb29427f692a5081ffc1dfb291eb8a2023076a7da23900d705dd2d3b391",
+      "cloudflare/forge/prepare.mjs": "0adcc7dedeca3db7cb1ca9b8e77c7135fb06b4a3c86d6e130d335168fdac9980",
+      "internal/cli/cli.go": "aac0d7c341cacf951b60a1c853aa75814958678797a9e6efd5b7e8a4f400587d",
+      "internal/cli/writes.go": "cb3229c68b75d771364a3e6c7503fc708a0edbb9fb2b24c9ebf018909f5a8f3d",
+      "cmd/golfctl/main.go": "7ad93c0979a8d31e0d9b86a6f9006375cbb56e4163f015d1cf9f4f573133979a",
+      "go.mod": "361309076d02639d8db5a49c188d5335377786abc46644a3940ee15ca7510862",
+      "go.sum": "b11696d77385aad5633bb22aa3d0903e33f5cb05e9033d7f827034837a2b0ca3",
+      "cloudflare/forge/src/activity.mjs": "4c5419061b600e3dc2816c77c4e537efac8fdf472f4eea73738cbcdef8d8c0e5",
+      "cloudflare/forge/src/agent-entry.mjs": "7562ea36ea8cfb429d33243c56f237950896c9d3259da37d28c612fe7c07f79b",
+      "cloudflare/forge/src/agent-policy.mjs": "2b7c18a1afad142786d50239c4636f76b2cceaa342e8da8603379cb60d9e8a3a",
+      "cloudflare/forge/src/agent-worker.mjs": "bb412c3a4ca47bacc55c84ea83ce193c0b36b878e360631d85847de1cc961676",
+      "cloudflare/forge/src/agents.mjs": "d3647cdfb8852d1d119914a9c6c394e469e978df04face5e579ff7cc1bc6c312",
+      "cloudflare/forge/src/app-outbound.mjs": "4c5e52dbbdef305a874eca40f5a0241073b8a4bf919e94ab19694388ce6158fa",
+      "cloudflare/forge/src/app-policy.mjs": "f0345c91c5c1d65bbf488a28735f2dfa58de0804ddaf5cdd61834639621330ad",
+      "cloudflare/forge/src/apps.mjs": "79027310f5ab1ba9698d1f121d4e71796bdf38ec2b6ec1bc929f491d9aac842e",
+      "cloudflare/forge/src/codeowners.mjs": "73beed29804eef7de0075b7b12a1735de2500668b2a86c95e84f51ac3dbb3dec",
+      "cloudflare/forge/src/collaboration.mjs": "6fefccec22014ac77855e95f240d70214dda8cb4a7e1fb9f407b472f7d430bcb",
+      "cloudflare/forge/src/common.mjs": "0c2a91d6b2ef662b3f99e9588f3cac3c7d9db97cf00331ee7f4edfa1e986c9f6",
+      "cloudflare/forge/src/core.mjs": "eb500173f925a40681d3c441d4958aa8fbcf220dd05fb65e30f4ca4e2fa8d0e7",
+      "cloudflare/forge/src/delivery.mjs": "556be6fb3a03db07d33b9c5170a848bef3aea68c4670d3ded62fc7f1960f8587",
+      "cloudflare/forge/src/discussion-engagement.mjs": "1fba4cc851b823626cbcde9bed976bd1dbaf08f8ca4a75b92b2ab17cdec27bef",
+      "cloudflare/forge/src/discussion-resources.mjs": "3d5dff8639405bdf1fe8cf9a3a407506290d919b4e9c0b1175940988d9321020",
+      "cloudflare/forge/src/evidence.mjs": "cd4979de4463a339ae5e5639335ccb7d0377e35b76bd175e06f056859666d38e",
+      "cloudflare/forge/src/file-index.mjs": "1b43674f85d50027a8d7ebd312a31c37c2c2531e8c13a41954c9c45622e6fbc3",
+      "cloudflare/forge/src/git-credentials.mjs": "e577f50f41cf545001112aa64c81c963e5781bc9bc54985642837467d881d3bf",
+      "cloudflare/forge/src/git.mjs": "adc362829ae962993950f61592c0d60cbea446b85b9af48b0a0e1d4cb685c7c3",
+      "cloudflare/forge/src/invitations.mjs": "597e1ee88c4a6efceddcc65779093243ce32b108cfda4c4402d129ac68a9fcc0",
+      "cloudflare/forge/src/metadata-jobs.mjs": "7d776ff04decf5631b65b09fcd8efff6f58fc394f9e483183aec127457134ec1",
+      "cloudflare/forge/src/operations-provider.mjs": "68da854583e2672244b1cb785424aea742041c039237acc5f5642a19dc00db17",
+      "cloudflare/forge/src/operations.mjs": "88cbab66bf71659b5ead43e162e8d9b4be109ac63ad81df62c6b079cb738c328",
+      "cloudflare/forge/src/performance.mjs": "8ef58d78939b88fbc501fcc798e14678e47c8243fdea5d805f6b2e3c08b9d5f3",
+      "cloudflare/forge/src/preview-gateway.mjs": "a2070cc8be63ba93879c067f47099b25af857c7a73f5252ed852c0170e57a6af",
+      "cloudflare/forge/src/public.mjs": "95f5b62261469703b10d75deaa580d934992afcb238a19de6889917630fec183",
+      "cloudflare/forge/src/pull-reviews.mjs": "a5495901957b65610e0866217345f66b413fef20d1fe6f4d9a4ab71b2e01c577",
+      "cloudflare/forge/src/repository-cache.mjs": "21ffe71706f6cdadfad4856b0cd6c430470f6bc037d174e3b175dc0d3518f2dc",
+      "cloudflare/forge/src/repository-diff.mjs": "44e8667512b4364612cdc4f05eaf4e5ab24fca0fd54225c653317df8633aa273",
+      "cloudflare/forge/src/repository-images.mjs": "b255f1c680ca72a3983d84ab1d95d01834233b9359274fe1cae5473feca74347",
+      "cloudflare/forge/src/repository-indexes.mjs": "881c516870a37c9d2e5e52953efc7c9e6eb0dbe840f6a1b1e99b68bf9373e93d",
+      "cloudflare/forge/src/repository-metadata.mjs": "5846237933a598404f44e7ea8fa704b6f03f13e615ab58924df39af5b78f299b",
+      "cloudflare/forge/src/repository-reads.mjs": "968d257fbe1416c624af9f3f9a565c34b92df59eb8bb3ab62e383d18223b940e",
+      "cloudflare/forge/src/repository-rules.mjs": "76398882480c2761a0b509fed17fd9a8c1f9d750c8fd7280fa653d6bf2bf55dd",
+      "cloudflare/forge/src/repository-settings.mjs": "b15afd2812965f83424be110e319d074697f1d664bfe134d24a53642492d0a1c",
+      "cloudflare/forge/src/review-authoring.mjs": "ad18bff02fcc34faa56810df85f278d31c9fe33e3fca2da58e909dba4866e176",
+      "cloudflare/forge/src/telemetry.mjs": "8848543bc46c4b71e03c4991108e687e7afa3dcdfe85e1f57c398a0338533fbf",
+      "cloudflare/forge/src/test-entry.mjs": "fcf07f8bdca275806623843407a93005a2fad0a91056673133549d68016e55e7",
+      "cloudflare/forge/src/test-policy.mjs": "e73acebaaf483ba218e4206bb386d927ffe38dbb8330cece1a50642caed4c2d3",
+      "cloudflare/forge/src/test-worker.mjs": "3274af3f573b18698b0a628a2a16c780fe831f9c83d1b03f0c5aa3e028a7fadd",
+      "cloudflare/forge/src/webhooks.mjs": "c08c9156fb0ab18c20920afc8cb4e303148a52c96b2d5a81bc5f8ad99fb90e62",
+      "cloudflare/forge/src/worker.mjs": "683352f9ca7f14a698c6342039e90c97cca93997c81a78355d2893e404822710",
+      "cloudflare/forge/src/workspace-ui.mjs": "eed6e1ffe52e01e566e3aff1ad0f71fbca97f0d259c95be5d9e930dc42f59214",
+      "cloudflare/agents/Dockerfile": "1f6cb1042f14b28447fc763449ef259ee22dbedb3680bea5724118d624e0dab8",
+      "cloudflare/agents/package-lock.json": "00fb5e578b1a3172b40bdc73b4be32821faf4ab8b868df1265bd86c12dfe8e8d",
+      "cloudflare/agents/src/policy.mjs": "e77bb65adedfbfad6d404b57e419032e355387ff8e8bc101bc6ec9a07a8b259e",
+      "cloudflare/agents/src/worker.mjs": "1518dcaee4af9d9938d42a3c90bd3ca9ea84aa7b9c70ebda9d9b84b79e71bad4",
+      "cloudflare/forge/prepare-proof.mjs": "5774877356e10016210b7102547709381533577c5eb4ea1c0ca5a3e5cfb6893e",
+      "cfcr/src/protocol.mjs": "0e5a80e8666836cb2e6c8d5e909798e3f48ac6a26543deba5f315c3f4a4ac99c",
+      "cfcr/src/evidence.mjs": "e4e56a092306d0746d6200f6407758e3669815379b0b70feedde92bd87ac21cb",
+      "cfcr/src/trust.mjs": "b0679485762bd6e64fdbf5247b2644c857adb6f00277ac6b5e989809028f070b",
+      "cfcr/src/sbom.mjs": "1355de24dc0e7b77a30a0c459152ca99964925767bf635aa9b85bbd429ad58ca",
+      "cfcr/src/worker.mjs": "d58648c7b7214e96a1df9d4ba60e4ef98d255d49b68c33981c3d94493647a346",
+      "cfcr/src/limits.mjs": "ea31b12db68951b62a3879579488f49e3c51a89bdf5abc4054fc1e152b163342",
+      "cfcr/src/scanner.mjs": "5d37a3c2e9d23db75b763a24b55cb7da180292b40a0d96993567071150f088ef",
+      "cfcr/src/lifecycle.mjs": "0dab95afd9c89b03e01e39f2b492ef225e5b6f807f25da55980ae317171826a6",
+      "cfcr/src/jobs.mjs": "6b73198d4c073be9c6e8e7628ebe11546df3fb810448d03bf0e7b3299d13a52b",
+      "cfcr/src/policy.mjs": "35c332faf42db3d0a02007365f631c044ae8155ed596c837dae4916c05843f8b",
+      "cfcr/src/management.mjs": "27914aaaa4640ca5dbc4f3713eca066290cc5510930817c24795d39ce57fb127",
+      "cfcr/src/uploads.mjs": "d57b10c71da5e8bca87ba5702beea529314197b49d260ccdc66c7febac43bd48",
+      "cfcr/src/verification.mjs": "4d63a3b4706c91c07975579351e7fc7767898ff9bfc41a0354b8e34920f79c4e",
+      "cfcr/src/catalog.mjs": "ce8c566a351d242f0cbc7be3ca8938b74e32dd6eb98669bbf9e17458cb1ce846",
+      "cfcr/scripts/prepare.mjs": "bdd671719f575d41131b2dd0135e95f0744b4284e72b40e0cd07b3b05ece8cc4",
+      "cfcr/scripts/hosted-clients.mjs": "be89bcc1ea3a259de3dbafc95f50bb29262bb5377803f2bb5cd8265ca7e46b64"
+    },
+    "finished_at": "2026-10-12T00:29:46.401611+00:00"
+  },
+  {
+    "schema": "golf.cloudflare.native-evidence.v1",
+    "name": "golf-native-20261012-68b32cda",
+    "state": "failed",
+    "checks": {
+      "repository_id": "2",
+      "pipeline_execution_boundary": [
+        {
+          "path": ".github/workflows/lint.yml",
+          "sha256": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99",
+          "sourceCommit": "7ce85032e831f2b9f14aa6e7f93cd08b1f3c1e4c",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        },
+        {
+          "path": ".gitlab-ci.yml",
+          "sha256": "809a971b79a8eeccd150c9c167dd7c34cda9f80f9b309dfa102d70cfe0b7a46a",
+          "sourceCommit": "7ce85032e831f2b9f14aa6e7f93cd08b1f3c1e4c",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        }
+      ],
+      "evidence_operation_key": "bed15eca-6c92-4ad8-b578-f5ff9727b62e",
+      "evidence_job_id": "e6090bf3-50cc-45d3-8bc1-2dfe80c3529d",
+      "container_test_failure": {
+        "jobId": "e6090bf3-50cc-45d3-8bc1-2dfe80c3529d",
+        "commitId": "c6a4969d23034948d94c39a18c57d6e6e61d96f2",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "module": "test_calc",
+        "policySha256": "ea662395e22b3dac9a96b7348ef3d3c6b4e2da71f06e8f63d0cec73132c574c3",
+        "state": "FAILED",
+        "cleanup": "destroyed",
+        "deniedRequests": 1,
+        "exitCode": 1,
+        "stdout": "",
+        "stderr": "test_add (test_calc.Math.test_add) ... ERROR\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n======================================================================\nERROR: test_add (test_calc.Math.test_add)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/repo/test_calc.py\", line 4, in test_add\n    def test_add(self): self.assertEqual(add(2, 3), 5); __import__(\"registry_publish\").publish()\n                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/repo/registry_publish.py\", line 40, in publish\n    request('/v2/' + image + '/blobs/uploads/?digest=' + sha(data), data, 'POST')\n  File \"/workspace/repo/registry_publish.py\", line 22, in request\n    try: response = urllib.request.urlopen(req, timeout=20)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 216, in urlopen\n    return opener.open(url, data, timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 519, in open\n    response = self._open(req, data)\n               ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 536, in _open\n    result = self._call_chain(self.handle_open, protocol, protocol +\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 496, in _call_chain\n    result = func(*args)\n             ^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 1404, in https_open\n    return self.do_open(http.client.HTTPSConnection, req,\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/request.py\", line 1365, in do_open\n    r = h.getresponse()\n        ^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/http/client.py\", line 1403, in getresponse\n    response.begin()\n  File \"/usr/lib/python3.11/http/client.py\", line 323, in begin\n    version, status, reason = self._read_status()\n                              ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/http/client.py\", line 292, in _read_status\n    raise RemoteDisconnected(\"Remote end closed connection without\"\nhttp.client.RemoteDisconnected: Remote end closed connection without response\n\n----------------------------------------------------------------------\nRan 2 tests in 1.060s\n\nFAILED (errors=1)\n",
+        "finishedAt": 1791765629506
+      }
+    },
+    "cleanup": {
+      "test_tasks": "absent",
+      "managed_apps": "absent",
+      "preview_domain": "absent",
+      "control_domain": "absent",
+      "queue_consumer": "absent",
+      "workflow": "absent",
+      "registry_retired": "absent",
+      "preview_worker": "absent",
+      "worker": "absent",
+      "durable_object_namespaces": "absent",
+      "registry_resources": "absent",
+      "app_outbound": "absent",
+      "dispatch": "absent",
+      "test_applications": "absent",
+      "test_image": "absent",
+      "queue": "absent",
+      "gateway": "absent",
+      "bucket": "absent",
+      "preview_access": "absent",
+      "control_access": "absent",
+      "preview_service_token": "absent",
+      "namespace": "absent",
+      "database": "absent",
+      "secret_store": "absent",
+      "analytics_token": "absent",
+      "cleanup_token": "absent",
+      "management_token": "absent"
+    },
+    "source_sha256": {
+      "scripts/cloudflare-forge-smoke.py": "51876becb6484bd19a84ab252be65805b17218f29729cc2f61a59cefc3a1765a",
+      "scripts/cloudflare_hosted_check.py": "89ea16354369765ae14ccfa304f6b319f34d3a24194fed9f0cb9938e1df2513b",
+      "scripts/fixtures/registry_publish.py": "a9363abbeb6bf0af3b4130896c6e800d68a100bad2bc882dfb97b1c0f664a961",
+      "scripts/cloudflare_registry_check.py": "d54ec7b92af582fc68c7b25f66a8771acedb5401179495dd298a76cf092ae1bf",
+      "scripts/cloudflare_rehearsal.py": "20e09f334f5f6f371b8e08e139d9b2cf346d079eeff1999154d06f3b8e6614c0",
+      "scripts/cloudflare_demo.py": "bc6fdd054f153456a50e9fd888096d15735b5f7df5c2c82e2d8bcc1c53251f70",
+      "cloudflare/forge/schema.sql": "81b16fb29427f692a5081ffc1dfb291eb8a2023076a7da23900d705dd2d3b391",
+      "cloudflare/forge/prepare.mjs": "0adcc7dedeca3db7cb1ca9b8e77c7135fb06b4a3c86d6e130d335168fdac9980",
+      "internal/cli/cli.go": "aac0d7c341cacf951b60a1c853aa75814958678797a9e6efd5b7e8a4f400587d",
+      "internal/cli/writes.go": "cb3229c68b75d771364a3e6c7503fc708a0edbb9fb2b24c9ebf018909f5a8f3d",
+      "cmd/golfctl/main.go": "7ad93c0979a8d31e0d9b86a6f9006375cbb56e4163f015d1cf9f4f573133979a",
+      "go.mod": "361309076d02639d8db5a49c188d5335377786abc46644a3940ee15ca7510862",
+      "go.sum": "b11696d77385aad5633bb22aa3d0903e33f5cb05e9033d7f827034837a2b0ca3",
+      "cloudflare/forge/src/activity.mjs": "4c5419061b600e3dc2816c77c4e537efac8fdf472f4eea73738cbcdef8d8c0e5",
+      "cloudflare/forge/src/agent-entry.mjs": "7562ea36ea8cfb429d33243c56f237950896c9d3259da37d28c612fe7c07f79b",
+      "cloudflare/forge/src/agent-policy.mjs": "2b7c18a1afad142786d50239c4636f76b2cceaa342e8da8603379cb60d9e8a3a",
+      "cloudflare/forge/src/agent-worker.mjs": "bb412c3a4ca47bacc55c84ea83ce193c0b36b878e360631d85847de1cc961676",
+      "cloudflare/forge/src/agents.mjs": "d3647cdfb8852d1d119914a9c6c394e469e978df04face5e579ff7cc1bc6c312",
+      "cloudflare/forge/src/app-outbound.mjs": "4c5e52dbbdef305a874eca40f5a0241073b8a4bf919e94ab19694388ce6158fa",
+      "cloudflare/forge/src/app-policy.mjs": "f0345c91c5c1d65bbf488a28735f2dfa58de0804ddaf5cdd61834639621330ad",
+      "cloudflare/forge/src/apps.mjs": "79027310f5ab1ba9698d1f121d4e71796bdf38ec2b6ec1bc929f491d9aac842e",
+      "cloudflare/forge/src/codeowners.mjs": "73beed29804eef7de0075b7b12a1735de2500668b2a86c95e84f51ac3dbb3dec",
+      "cloudflare/forge/src/collaboration.mjs": "6fefccec22014ac77855e95f240d70214dda8cb4a7e1fb9f407b472f7d430bcb",
+      "cloudflare/forge/src/common.mjs": "0c2a91d6b2ef662b3f99e9588f3cac3c7d9db97cf00331ee7f4edfa1e986c9f6",
+      "cloudflare/forge/src/core.mjs": "eb500173f925a40681d3c441d4958aa8fbcf220dd05fb65e30f4ca4e2fa8d0e7",
+      "cloudflare/forge/src/delivery.mjs": "556be6fb3a03db07d33b9c5170a848bef3aea68c4670d3ded62fc7f1960f8587",
+      "cloudflare/forge/src/discussion-engagement.mjs": "1fba4cc851b823626cbcde9bed976bd1dbaf08f8ca4a75b92b2ab17cdec27bef",
+      "cloudflare/forge/src/discussion-resources.mjs": "3d5dff8639405bdf1fe8cf9a3a407506290d919b4e9c0b1175940988d9321020",
+      "cloudflare/forge/src/evidence.mjs": "cd4979de4463a339ae5e5639335ccb7d0377e35b76bd175e06f056859666d38e",
+      "cloudflare/forge/src/file-index.mjs": "1b43674f85d50027a8d7ebd312a31c37c2c2531e8c13a41954c9c45622e6fbc3",
+      "cloudflare/forge/src/git-credentials.mjs": "e577f50f41cf545001112aa64c81c963e5781bc9bc54985642837467d881d3bf",
+      "cloudflare/forge/src/git.mjs": "adc362829ae962993950f61592c0d60cbea446b85b9af48b0a0e1d4cb685c7c3",
+      "cloudflare/forge/src/invitations.mjs": "597e1ee88c4a6efceddcc65779093243ce32b108cfda4c4402d129ac68a9fcc0",
+      "cloudflare/forge/src/metadata-jobs.mjs": "7d776ff04decf5631b65b09fcd8efff6f58fc394f9e483183aec127457134ec1",
+      "cloudflare/forge/src/operations-provider.mjs": "68da854583e2672244b1cb785424aea742041c039237acc5f5642a19dc00db17",
+      "cloudflare/forge/src/operations.mjs": "88cbab66bf71659b5ead43e162e8d9b4be109ac63ad81df62c6b079cb738c328",
+      "cloudflare/forge/src/performance.mjs": "8ef58d78939b88fbc501fcc798e14678e47c8243fdea5d805f6b2e3c08b9d5f3",
+      "cloudflare/forge/src/preview-gateway.mjs": "a2070cc8be63ba93879c067f47099b25af857c7a73f5252ed852c0170e57a6af",
+      "cloudflare/forge/src/public.mjs": "95f5b62261469703b10d75deaa580d934992afcb238a19de6889917630fec183",
+      "cloudflare/forge/src/pull-reviews.mjs": "a5495901957b65610e0866217345f66b413fef20d1fe6f4d9a4ab71b2e01c577",
+      "cloudflare/forge/src/repository-cache.mjs": "21ffe71706f6cdadfad4856b0cd6c430470f6bc037d174e3b175dc0d3518f2dc",
+      "cloudflare/forge/src/repository-diff.mjs": "44e8667512b4364612cdc4f05eaf4e5ab24fca0fd54225c653317df8633aa273",
+      "cloudflare/forge/src/repository-images.mjs": "b255f1c680ca72a3983d84ab1d95d01834233b9359274fe1cae5473feca74347",
+      "cloudflare/forge/src/repository-indexes.mjs": "881c516870a37c9d2e5e52953efc7c9e6eb0dbe840f6a1b1e99b68bf9373e93d",
+      "cloudflare/forge/src/repository-metadata.mjs": "5846237933a598404f44e7ea8fa704b6f03f13e615ab58924df39af5b78f299b",
+      "cloudflare/forge/src/repository-reads.mjs": "968d257fbe1416c624af9f3f9a565c34b92df59eb8bb3ab62e383d18223b940e",
+      "cloudflare/forge/src/repository-rules.mjs": "76398882480c2761a0b509fed17fd9a8c1f9d750c8fd7280fa653d6bf2bf55dd",
+      "cloudflare/forge/src/repository-settings.mjs": "b15afd2812965f83424be110e319d074697f1d664bfe134d24a53642492d0a1c",
+      "cloudflare/forge/src/review-authoring.mjs": "ad18bff02fcc34faa56810df85f278d31c9fe33e3fca2da58e909dba4866e176",
+      "cloudflare/forge/src/telemetry.mjs": "8848543bc46c4b71e03c4991108e687e7afa3dcdfe85e1f57c398a0338533fbf",
+      "cloudflare/forge/src/test-entry.mjs": "fcf07f8bdca275806623843407a93005a2fad0a91056673133549d68016e55e7",
+      "cloudflare/forge/src/test-policy.mjs": "e73acebaaf483ba218e4206bb386d927ffe38dbb8330cece1a50642caed4c2d3",
+      "cloudflare/forge/src/test-worker.mjs": "3274af3f573b18698b0a628a2a16c780fe831f9c83d1b03f0c5aa3e028a7fadd",
+      "cloudflare/forge/src/webhooks.mjs": "c08c9156fb0ab18c20920afc8cb4e303148a52c96b2d5a81bc5f8ad99fb90e62",
+      "cloudflare/forge/src/worker.mjs": "683352f9ca7f14a698c6342039e90c97cca93997c81a78355d2893e404822710",
+      "cloudflare/forge/src/workspace-ui.mjs": "eed6e1ffe52e01e566e3aff1ad0f71fbca97f0d259c95be5d9e930dc42f59214",
+      "cloudflare/agents/Dockerfile": "1f6cb1042f14b28447fc763449ef259ee22dbedb3680bea5724118d624e0dab8",
+      "cloudflare/agents/package-lock.json": "00fb5e578b1a3172b40bdc73b4be32821faf4ab8b868df1265bd86c12dfe8e8d",
+      "cloudflare/agents/src/policy.mjs": "e77bb65adedfbfad6d404b57e419032e355387ff8e8bc101bc6ec9a07a8b259e",
+      "cloudflare/agents/src/worker.mjs": "1518dcaee4af9d9938d42a3c90bd3ca9ea84aa7b9c70ebda9d9b84b79e71bad4",
+      "cloudflare/forge/prepare-proof.mjs": "5774877356e10016210b7102547709381533577c5eb4ea1c0ca5a3e5cfb6893e",
+      "cfcr/src/protocol.mjs": "0e5a80e8666836cb2e6c8d5e909798e3f48ac6a26543deba5f315c3f4a4ac99c",
+      "cfcr/src/evidence.mjs": "e4e56a092306d0746d6200f6407758e3669815379b0b70feedde92bd87ac21cb",
+      "cfcr/src/trust.mjs": "b0679485762bd6e64fdbf5247b2644c857adb6f00277ac6b5e989809028f070b",
+      "cfcr/src/sbom.mjs": "1355de24dc0e7b77a30a0c459152ca99964925767bf635aa9b85bbd429ad58ca",
+      "cfcr/src/worker.mjs": "d58648c7b7214e96a1df9d4ba60e4ef98d255d49b68c33981c3d94493647a346",
+      "cfcr/src/limits.mjs": "ea31b12db68951b62a3879579488f49e3c51a89bdf5abc4054fc1e152b163342",
+      "cfcr/src/scanner.mjs": "5d37a3c2e9d23db75b763a24b55cb7da180292b40a0d96993567071150f088ef",
+      "cfcr/src/lifecycle.mjs": "0dab95afd9c89b03e01e39f2b492ef225e5b6f807f25da55980ae317171826a6",
+      "cfcr/src/jobs.mjs": "6b73198d4c073be9c6e8e7628ebe11546df3fb810448d03bf0e7b3299d13a52b",
+      "cfcr/src/policy.mjs": "35c332faf42db3d0a02007365f631c044ae8155ed596c837dae4916c05843f8b",
+      "cfcr/src/management.mjs": "27914aaaa4640ca5dbc4f3713eca066290cc5510930817c24795d39ce57fb127",
+      "cfcr/src/uploads.mjs": "d57b10c71da5e8bca87ba5702beea529314197b49d260ccdc66c7febac43bd48",
+      "cfcr/src/verification.mjs": "4d63a3b4706c91c07975579351e7fc7767898ff9bfc41a0354b8e34920f79c4e",
+      "cfcr/src/catalog.mjs": "ce8c566a351d242f0cbc7be3ca8938b74e32dd6eb98669bbf9e17458cb1ce846",
+      "cfcr/scripts/prepare.mjs": "bdd671719f575d41131b2dd0135e95f0744b4284e72b40e0cd07b3b05ece8cc4",
+      "cfcr/scripts/hosted-clients.mjs": "be89bcc1ea3a259de3dbafc95f50bb29262bb5377803f2bb5cd8265ca7e46b64"
+    },
+    "finished_at": "2026-10-12T00:42:43.957096+00:00"
+  },
+  {
+    "schema": "golf.cloudflare.native-evidence.v1",
+    "name": "golf-native-20261012-a2e1ce42",
+    "state": "failed",
+    "checks": {
+      "repository_id": "1",
+      "pipeline_execution_boundary": [
+        {
+          "path": ".github/workflows/lint.yml",
+          "sha256": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99",
+          "sourceCommit": "fb88cae1d1777db6e93666ca148593e85557d96b",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        },
+        {
+          "path": ".gitlab-ci.yml",
+          "sha256": "809a971b79a8eeccd150c9c167dd7c34cda9f80f9b309dfa102d70cfe0b7a46a",
+          "sourceCommit": "fb88cae1d1777db6e93666ca148593e85557d96b",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        }
+      ],
+      "evidence_operation_key": "1da2dca9-1934-4235-8d70-96da1394a798",
+      "evidence_job_id": "50984a12-98f7-4bb9-a928-6c8bfb09180d",
+      "container_test_failure": {
+        "jobId": "50984a12-98f7-4bb9-a928-6c8bfb09180d",
+        "commitId": "144f8423e7f3a687f34d9c0f3c19c78ee8cb4ee6",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "module": "test_calc",
+        "policySha256": "ea662395e22b3dac9a96b7348ef3d3c6b4e2da71f06e8f63d0cec73132c574c3",
+        "state": "LOST",
+        "cleanup": "destroyed",
+        "deniedRequests": 0,
+        "exitCode": null,
+        "stdout": "",
+        "stderr": "",
+        "finishedAt": 1791766085942,
+        "failureStage": "test",
+        "diagnostic": "internal error; reference = 7kgo4at05uorp82khb9l1e5t"
+      }
+    },
+    "cleanup": {
+      "test_tasks": "absent",
+      "managed_apps": "absent",
+      "preview_domain": "absent",
+      "control_domain": "absent",
+      "queue_consumer": "absent",
+      "workflow": "absent",
+      "registry_retired": "absent",
+      "preview_worker": "absent",
+      "worker": "absent",
+      "durable_object_namespaces": "absent",
+      "registry_resources": "absent",
+      "app_outbound": "absent",
+      "dispatch": "absent",
+      "test_applications": "absent",
+      "test_image": "absent",
+      "queue": "absent",
+      "gateway": "absent",
+      "bucket": "absent",
+      "preview_access": "absent",
+      "control_access": "absent",
+      "preview_service_token": "absent",
+      "namespace": "absent",
+      "database": "absent",
+      "secret_store": "absent",
+      "analytics_token": "absent",
+      "cleanup_token": "absent",
+      "management_token": "absent"
+    },
+    "finished_at": "2026-10-12T00:49:56.505712+00:00"
+  },
+  {
+    "schema": "golf.cloudflare.native-evidence.v1",
+    "name": "golf-native-20261012-6b5550f1",
+    "state": "failed",
+    "checks": {
+      "repository_id": "1",
+      "pipeline_execution_boundary": [
+        {
+          "path": ".github/workflows/lint.yml",
+          "sha256": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99",
+          "sourceCommit": "a6a138ab0e5c76ddc54a3883ed98058fdefb7449",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        },
+        {
+          "path": ".gitlab-ci.yml",
+          "sha256": "809a971b79a8eeccd150c9c167dd7c34cda9f80f9b309dfa102d70cfe0b7a46a",
+          "sourceCommit": "a6a138ab0e5c76ddc54a3883ed98058fdefb7449",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        }
+      ],
+      "evidence_operation_key": "69a375ce-615b-4589-a68a-19744f61504b",
+      "evidence_job_id": "704b2c51-4c27-4eae-9c6f-489a7e14b1b5",
+      "container_test_failure": {
+        "jobId": "704b2c51-4c27-4eae-9c6f-489a7e14b1b5",
+        "commitId": "fa0e8428b4d9c59883f1d2d652560fb8978cb3a5",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "module": "test_calc",
+        "policySha256": "ea662395e22b3dac9a96b7348ef3d3c6b4e2da71f06e8f63d0cec73132c574c3",
+        "state": "LOST",
+        "cleanup": "destroyed",
+        "deniedRequests": 0,
+        "exitCode": null,
+        "stdout": "",
+        "stderr": "",
+        "finishedAt": 1791766670915,
+        "failureStage": "test",
+        "diagnostic": "Registry management: internal error; reference = 9hoag6hvoacg89a2gfri9qhq"
+      }
+    },
+    "cleanup": {
+      "test_tasks": "absent",
+      "managed_apps": "absent",
+      "preview_domain": "absent",
+      "control_domain": "absent",
+      "queue_consumer": "absent",
+      "workflow": "absent",
+      "registry_retired": "absent",
+      "preview_worker": "absent",
+      "worker": "absent",
+      "durable_object_namespaces": "absent",
+      "registry_resources": "absent",
+      "app_outbound": "absent",
+      "dispatch": "absent",
+      "test_applications": "absent",
+      "test_image": "absent",
+      "queue": "absent",
+      "gateway": "absent",
+      "bucket": "absent",
+      "preview_access": "absent",
+      "control_access": "absent",
+      "preview_service_token": "absent",
+      "namespace": "absent",
+      "database": "absent",
+      "secret_store": "absent",
+      "analytics_token": "absent",
+      "cleanup_token": "absent",
+      "management_token": "absent"
+    },
+    "finished_at": "2026-10-12T00:59:46.841917+00:00"
+  },
+  {
+    "schema": "golf.cloudflare.native-evidence.v1",
+    "name": "golf-native-20261012-0428687c",
+    "state": "failed",
+    "checks": {},
+    "cleanup": {
+      "preview_access": "absent",
+      "preview_service_token": "absent",
+      "namespace": "absent",
+      "database": "absent",
+      "analytics_token": "absent",
+      "cleanup_token": "absent",
+      "management_token": "absent",
+      "secret_store": "absent"
+    },
+    "cleanup_recovery": {
+      "observedAt": "2026-10-12T01:01:41.471889+00:00",
+      "secretsStoreInventoryEmpty": true,
+      "stopTimerCancelled": true,
+      "reason": "Secrets Store creation returned 500; independent selected-account inventory confirmed no store exists."
+    },
+    "finished_at": "2026-10-12T01:00:48.784634+00:00"
+  },
+  {
+    "schema": "golf.cloudflare.native-evidence.v1",
+    "name": "golf-native-20261012-04ed4887",
+    "state": "failed",
+    "checks": {},
+    "cleanup": {
+      "test_tasks": "absent",
+      "managed_apps": "absent",
+      "control_domain": "absent",
+      "queue_consumer": "absent",
+      "workflow": "absent",
+      "registry_retired": "absent",
+      "worker": "absent",
+      "durable_object_namespaces": "absent",
+      "registry_resources": "absent",
+      "app_outbound": "absent",
+      "dispatch": "absent",
+      "test_applications": "absent",
+      "test_image": "absent",
+      "queue": "absent",
+      "gateway": "absent",
+      "bucket": "absent",
+      "preview_access": "absent",
+      "control_access": "absent",
+      "preview_service_token": "absent",
+      "namespace": "absent",
+      "database": "absent",
+      "secret_store": "absent",
+      "analytics_token": "absent",
+      "cleanup_token": "absent",
+      "management_token": "absent"
+    },
+    "finished_at": "2026-10-12T01:05:53.570261+00:00"
+  },
+  {
+    "schema": "golf.cloudflare.native-evidence.v1",
+    "name": "golf-native-20261012-80b5d8d9",
+    "state": "failed",
+    "checks": {
+      "repository_id": "1",
+      "pipeline_execution_boundary": [
+        {
+          "path": ".github/workflows/lint.yml",
+          "sha256": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99",
+          "sourceCommit": "584078315eaeb8bf234399df8a298b555ff610fc",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        },
+        {
+          "path": ".gitlab-ci.yml",
+          "sha256": "809a971b79a8eeccd150c9c167dd7c34cda9f80f9b309dfa102d70cfe0b7a46a",
+          "sourceCommit": "584078315eaeb8bf234399df8a298b555ff610fc",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        }
+      ],
+      "evidence_operation_key": "09fdfbc0-502b-4ac6-986b-8e8b63cf4b23",
+      "evidence_job_id": "35101ca0-86e8-4496-938d-c42d2f545608",
+      "container_test_failure": {
+        "jobId": "35101ca0-86e8-4496-938d-c42d2f545608",
+        "commitId": "531bfe8f9cf2f744a46ce82c0030f3d9e0fbad66",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "module": "test_calc",
+        "policySha256": "ea662395e22b3dac9a96b7348ef3d3c6b4e2da71f06e8f63d0cec73132c574c3",
+        "state": "LOST",
+        "cleanup": "destroyed",
+        "deniedRequests": 0,
+        "exitCode": null,
+        "stdout": "",
+        "stderr": "",
+        "finishedAt": 1791767484187,
+        "failureStage": "test",
+        "diagnostic": "Registry management: internal error; reference = cl9kak7t3q42og4lnur889ku"
+      }
+    },
+    "cleanup": {
+      "test_tasks": "absent",
+      "managed_apps": "absent",
+      "preview_domain": "absent",
+      "control_domain": "absent",
+      "queue_consumer": "absent",
+      "workflow": "absent",
+      "registry_retired": "absent",
+      "preview_worker": "absent",
+      "worker": "absent",
+      "durable_object_namespaces": "absent",
+      "registry_resources": "absent",
+      "app_outbound": "absent",
+      "dispatch": "absent",
+      "test_applications": "absent",
+      "test_image": "absent",
+      "queue": "absent",
+      "gateway": "absent",
+      "bucket": "absent",
+      "preview_access": "absent",
+      "control_access": "absent",
+      "preview_service_token": "absent",
+      "namespace": "absent",
+      "database": "absent",
+      "secret_store": "absent",
+      "analytics_token": "absent",
+      "cleanup_token": "absent",
+      "management_token": "absent"
+    },
+    "finished_at": "2026-10-12T01:13:15.481099+00:00"
+  },
+  {
+    "schema": "golf.cloudflare.native-evidence.v1",
+    "name": "golf-native-20261012-c57d077e",
+    "state": "failed",
+    "failure": "Registry GET /token returned 403; expected 200",
+    "checks": {
+      "repository_id": "1",
+      "pipeline_execution_boundary": [
+        {
+          "path": ".github/workflows/lint.yml",
+          "sha256": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99",
+          "sourceCommit": "c360ea43cba6db15e6e5217e120024edfb0b6491",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        },
+        {
+          "path": ".gitlab-ci.yml",
+          "sha256": "809a971b79a8eeccd150c9c167dd7c34cda9f80f9b309dfa102d70cfe0b7a46a",
+          "sourceCommit": "c360ea43cba6db15e6e5217e120024edfb0b6491",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        }
+      ],
+      "evidence_operation_key": "11048839-9394-411f-ab84-59e853b3e4a1",
+      "evidence_job_id": "01e870ca-d600-48c8-b1bf-70fa1d8fa8bf",
+      "native_container_tests": {
+        "jobId": "01e870ca-d600-48c8-b1bf-70fa1d8fa8bf",
+        "commitId": "1005ecf100af11101a99afe2f7fe4ca4cc90d8af",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "module": "test_calc",
+        "policySha256": "ea662395e22b3dac9a96b7348ef3d3c6b4e2da71f06e8f63d0cec73132c574c3",
+        "image": {
+          "registry": "https://qual-1012b-registry.mjtechguy.com",
+          "repository": "alice/canonical",
+          "tag": "ci-01e870ca-d600-48c8-b1bf-70fa1d8fa8bf",
+          "digest": "sha256:3985bfc2f4e9d0a4b2bd0800ce26de497b53cf9177d891489baff978f7aeb825",
+          "commitId": "1005ecf100af11101a99afe2f7fe4ca4cc90d8af"
+        },
+        "state": "PASSED",
+        "cleanup": "destroyed",
+        "deniedRequests": 1,
+        "exitCode": 0,
+        "stdout": "Published exact-source OCI image sha256:3985bfc2f4e9d0a4b2bd0800ce26de497b53cf9177d891489baff978f7aeb825\n",
+        "stderr": "test_add (test_calc.Math.test_add) ... ok\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 9.153s\n\nOK\n",
+        "finishedAt": 1791768265504
+      },
+      "queued_workflow_r2_evidence": true,
+      "evidence_object_key": "pr-evidence/alice/1/01e870ca-d600-48c8-b1bf-70fa1d8fa8bf/e1b8aca244a36e61ffe4a57410980fa55f1f86eecd86766bc926d86778e31cbe.json",
+      "evidence_sha256": "e1b8aca244a36e61ffe4a57410980fa55f1f86eecd86766bc926d86778e31cbe",
+      "clef_advisory": {
+        "state": "SUCCEEDED",
+        "model": "@cf/cloudflare/clef",
+        "advisoryOnly": true,
+        "answers": {
+          "next": {
+            "type": "choice",
+            "choice": "inspect_changes",
+            "probabilities": {
+              "inspect_changes": 0.9307,
+              "run_tests": 0.0581,
+              "resolve_feedback": 0.0112
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 343,
+          "output_tokens": 0
+        }
+      },
+      "evidence_reader_access": true,
+      "native_preview": {
+        "id": "25aeb6a6-693d-41d9-8ca0-c2a27733cbec",
+        "jobId": "01e870ca-d600-48c8-b1bf-70fa1d8fa8bf",
+        "state": "READY",
+        "commitId": "1005ecf100af11101a99afe2f7fe4ca4cc90d8af",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "kind": "STATIC",
+        "url": "https://qual-1012b-preview.mjtechguy.com/25aeb6a6-693d-41d9-8ca0-c2a27733cbec/",
+        "expiresAt": "2026-10-12T05:24:34.154Z",
+        "createdAt": "2026-10-12T01:24:34.154Z",
+        "sha256": "b765a176dca392e7f30be9f0572248f2d97cee39bba4ab3ae963b91d318eec95",
+        "bytes": 523,
+        "sourcePath": "public",
+        "purged": false,
+        "captureState": "NONE",
+        "captureSha256": "",
+        "captureBytes": 0,
+        "browserMs": null
+      },
+      "native_preview_rpc": true,
+      "preview_outer_access_denial": true,
+      "preview_grant_replay_denied": true,
+      "preview_reader_revocation": true,
+      "native_browser_capture": {
+        "id": "25aeb6a6-693d-41d9-8ca0-c2a27733cbec",
+        "jobId": "01e870ca-d600-48c8-b1bf-70fa1d8fa8bf",
+        "state": "READY",
+        "commitId": "1005ecf100af11101a99afe2f7fe4ca4cc90d8af",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "kind": "STATIC",
+        "url": "https://qual-1012b-preview.mjtechguy.com/25aeb6a6-693d-41d9-8ca0-c2a27733cbec/",
+        "expiresAt": "2026-10-12T05:24:34.154Z",
+        "createdAt": "2026-10-12T01:24:34.154Z",
+        "sha256": "b765a176dca392e7f30be9f0572248f2d97cee39bba4ab3ae963b91d318eec95",
+        "bytes": 523,
+        "sourcePath": "public",
+        "purged": false,
+        "captureState": "READY",
+        "captureSha256": "b9bd7b7af1b3bcce5def55ef360a2841bfa47c718c86532309056b3704ef72cc",
+        "captureBytes": 30697,
+        "browserMs": null
+      },
+      "actual_reviewer_access_login": false,
+      "managed_app": {
+        "id": "77520eb9-8894-4515-927f-73d3c7e530d3",
+        "jobId": "01e870ca-d600-48c8-b1bf-70fa1d8fa8bf",
+        "state": "READY",
+        "commitId": "1005ecf100af11101a99afe2f7fe4ca4cc90d8af",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "kind": "WORKER",
+        "url": "https://77520eb9-8894-4515-927f-73d3c7e530d3.qual-1012b-preview.mjtechguy.com/",
+        "expiresAt": "2026-10-12T05:24:35.275Z",
+        "createdAt": "2026-10-12T01:24:35.275Z",
+        "sha256": "75aec903334b38080cd725aa875f64fe386acac0d2c1db8ea2bb8e71475c007c",
+        "bytes": 4058,
+        "sourcePath": "worker.mjs",
+        "purged": false,
+        "captureState": "NONE",
+        "captureSha256": "",
+        "captureBytes": 0,
+        "browserMs": null
+      },
+      "isolated_app_d1_r2": true,
+      "hosted_secrets_store_signature": true,
+      "app_outbound_denied": true,
+      "app_grant_replay_denied": true,
+      "app_reader_revocation": true,
+      "agent_operation_keys": [
+        "78c40eae-f4a4-4bd7-9743-dd524facdc1d",
+        "a59ee60e-d2b5-4966-82e6-2d20e4511560"
+      ],
+      "agent_job_ids": [
+        "1bcaf735-8732-4c4f-90b7-886d8ee99acc",
+        "51ed0060-f1ea-4ff9-b34e-3d4e5e04bd1f"
+      ],
+      "native_agents": [
+        {
+          "jobId": "1bcaf735-8732-4c4f-90b7-886d8ee99acc",
+          "state": "succeeded",
+          "commitId": "1005ecf100af11101a99afe2f7fe4ca4cc90d8af",
+          "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+          "allowedPath": "calc.py",
+          "policySha256": "6160d681ef482e493b59c67d126efa288c9f49003535d01ff66e05e86625c0a5",
+          "cleanup": "destroyed",
+          "finishedAt": 1791768358207,
+          "calls": 4,
+          "deniedRequests": 1,
+          "harness": "opencode@1.18.34",
+          "model": "@cf/zai-org/glm-4.7-flash",
+          "proposalOnly": true,
+          "startedAt": 1791768322537,
+          "firstInferenceAt": 1791768332796,
+          "completedAt": 1791768350166,
+          "proposalCommitId": "860d1e1da6396a97ec39d43f40052f4797c8cd98",
+          "proposalTreeId": "41a6bd5d21c3bf11c4e51c0519a1d76b541da03e",
+          "patch": "diff --git a/calc.py b/calc.py\nindex 4693ad3..bad78b9 100644\n--- a/calc.py\n+++ b/calc.py\n@@ -1,2 +1,2 @@\n def add(a, b):\n-    return a + b\n+    return sum((a, b))",
+          "events": [
+            {
+              "kind": "assistant_message",
+              "text": "I'll first read calc.py to see its current state, then make the requested edit."
+            },
+            {
+              "kind": "tool",
+              "tool": "read",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 1605
+            },
+            {
+              "kind": "tool",
+              "tool": "edit",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 3414
+            },
+            {
+              "kind": "assistant_message",
+              "text": "Edit completed. I've changed the implementation of `add(a, b)` in calc.py from `return a + b` to `return sum((a, b))`, preserving the function signature as requested."
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 5322
+            }
+          ],
+          "tokens": 5322,
+          "tests": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "test_add (test_calc.Math.test_add) ... ok\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 0.868s\n\nOK\n"
+          }
+        },
+        {
+          "jobId": "51ed0060-f1ea-4ff9-b34e-3d4e5e04bd1f",
+          "state": "succeeded",
+          "commitId": "1005ecf100af11101a99afe2f7fe4ca4cc90d8af",
+          "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+          "allowedPath": "calc.py",
+          "policySha256": "6160d681ef482e493b59c67d126efa288c9f49003535d01ff66e05e86625c0a5",
+          "cleanup": "destroyed",
+          "finishedAt": 1791768361279,
+          "calls": 4,
+          "deniedRequests": 1,
+          "harness": "opencode@1.18.34",
+          "model": "@cf/zai-org/glm-4.7-flash",
+          "proposalOnly": true,
+          "startedAt": 1791768327362,
+          "firstInferenceAt": 1791768334295,
+          "completedAt": 1791768353363,
+          "proposalCommitId": "d6440e5f3a33c180d26415d601ad757444e69fbb",
+          "proposalTreeId": "09064f20b6417f584d7f8d529fb136ddb42597e1",
+          "patch": "diff --git a/calc.py b/calc.py\nindex 4693ad3..a3b52fc 100644\n--- a/calc.py\n+++ b/calc.py\n@@ -1,2 +1,2 @@\n def add(a, b):\n-    return a + b\n+    return b + a",
+          "events": [
+            {
+              "kind": "assistant_message",
+              "text": "I'll help you edit calc.py to implement the add(a, b) function. Let me first read the file to see its current structure."
+            },
+            {
+              "kind": "tool",
+              "tool": "read",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 1552
+            },
+            {
+              "kind": "tool",
+              "tool": "edit",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 3288
+            },
+            {
+              "kind": "assistant_message",
+              "text": "Done! I've successfully edited calc.py to implement the `add(a, b)` function that returns `b + a`, preserving the function signature."
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 5116
+            }
+          ],
+          "tokens": 5116,
+          "tests": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "test_add (test_calc.Math.test_add) ... ok\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 1.292s\n\nOK\n"
+          }
+        }
+      ],
+      "canonical_unchanged_after_agents": true
+    },
+    "cleanup": {
+      "test_tasks": "absent",
+      "managed_apps": "absent",
+      "preview_domain": "absent",
+      "control_domain": "absent",
+      "queue_consumer": "absent",
+      "workflow": "absent",
+      "registry_retired": "absent",
+      "preview_worker": "absent",
+      "worker": "absent",
+      "durable_object_namespaces": "absent",
+      "registry_resources": "absent",
+      "app_outbound": "absent",
+      "dispatch": "absent",
+      "test_applications": "absent",
+      "test_image": "absent",
+      "queue": "absent",
+      "gateway": "absent",
+      "bucket": "absent",
+      "preview_access": "absent",
+      "control_access": "absent",
+      "preview_service_token": "absent",
+      "namespace": "absent",
+      "database": "absent",
+      "secret_store": "absent",
+      "analytics_token": "absent",
+      "cleanup_token": "absent",
+      "management_token": "absent"
+    }
+  },
+  {
+    "schema": "golf.cloudflare.native-evidence.v1",
+    "name": "golf-native-20261012-a7b09d0d",
+    "state": "failed",
+    "failure": "Hosted native scanner did not produce five completed reports",
+    "checks": {
+      "repository_id": "1",
+      "pipeline_execution_boundary": [
+        {
+          "path": ".github/workflows/lint.yml",
+          "sha256": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99",
+          "sourceCommit": "e347504c8780164e89948d23796994f06b29c865",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        },
+        {
+          "path": ".gitlab-ci.yml",
+          "sha256": "809a971b79a8eeccd150c9c167dd7c34cda9f80f9b309dfa102d70cfe0b7a46a",
+          "sourceCommit": "e347504c8780164e89948d23796994f06b29c865",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        }
+      ],
+      "evidence_operation_key": "aa5ab913-87b1-456a-b32a-723303979cb8",
+      "evidence_job_id": "e1100f55-4a25-4cc7-a5ee-407be88b8b60",
+      "native_container_tests": {
+        "jobId": "e1100f55-4a25-4cc7-a5ee-407be88b8b60",
+        "commitId": "fd3b54c37d778fcb8993b916870fd00a6ae5a00d",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "module": "test_calc",
+        "policySha256": "ea662395e22b3dac9a96b7348ef3d3c6b4e2da71f06e8f63d0cec73132c574c3",
+        "image": {
+          "registry": "https://qual-1012b-registry.mjtechguy.com",
+          "repository": "alice/canonical",
+          "tag": "ci-e1100f55-4a25-4cc7-a5ee-407be88b8b60",
+          "digest": "sha256:4d37980a9b77039b97a5df0fbeaecf3c97b79c97767785d94f40b9a1c5478cd4",
+          "commitId": "fd3b54c37d778fcb8993b916870fd00a6ae5a00d"
+        },
+        "state": "PASSED",
+        "cleanup": "destroyed",
+        "deniedRequests": 1,
+        "exitCode": 0,
+        "stdout": "Published exact-source OCI image sha256:4d37980a9b77039b97a5df0fbeaecf3c97b79c97767785d94f40b9a1c5478cd4\n",
+        "stderr": "test_add (test_calc.Math.test_add) ... ok\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 12.543s\n\nOK\n",
+        "finishedAt": 1791768918546
+      },
+      "queued_workflow_r2_evidence": true,
+      "evidence_object_key": "pr-evidence/alice/1/e1100f55-4a25-4cc7-a5ee-407be88b8b60/403537b2175833248d68241734921f3189acda01ad3e1d0a6ac3b9418ea68757.json",
+      "evidence_sha256": "403537b2175833248d68241734921f3189acda01ad3e1d0a6ac3b9418ea68757",
+      "clef_advisory": {
+        "state": "SUCCEEDED",
+        "model": "@cf/cloudflare/clef",
+        "advisoryOnly": true,
+        "answers": {
+          "next": {
+            "type": "choice",
+            "choice": "inspect_changes",
+            "probabilities": {
+              "inspect_changes": 0.9123,
+              "run_tests": 0.0763,
+              "resolve_feedback": 0.0114
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 351,
+          "output_tokens": 0
+        }
+      },
+      "evidence_reader_access": true,
+      "native_preview": {
+        "id": "ad2a6927-74fc-40d8-ad46-f75d53b84d43",
+        "jobId": "e1100f55-4a25-4cc7-a5ee-407be88b8b60",
+        "state": "READY",
+        "commitId": "fd3b54c37d778fcb8993b916870fd00a6ae5a00d",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "kind": "STATIC",
+        "url": "https://qual-1012b-preview.mjtechguy.com/ad2a6927-74fc-40d8-ad46-f75d53b84d43/",
+        "expiresAt": "2026-10-12T05:35:26.329Z",
+        "createdAt": "2026-10-12T01:35:26.329Z",
+        "sha256": "05fd5ff8d4be7c30b60779a1eb650f31cf8fba39dd535e3085075f0f11568eee",
+        "bytes": 523,
+        "sourcePath": "public",
+        "purged": false,
+        "captureState": "NONE",
+        "captureSha256": "",
+        "captureBytes": 0,
+        "browserMs": null
+      },
+      "native_preview_rpc": true,
+      "preview_outer_access_denial": true,
+      "preview_grant_replay_denied": true,
+      "preview_reader_revocation": true,
+      "native_browser_capture": {
+        "id": "ad2a6927-74fc-40d8-ad46-f75d53b84d43",
+        "jobId": "e1100f55-4a25-4cc7-a5ee-407be88b8b60",
+        "state": "READY",
+        "commitId": "fd3b54c37d778fcb8993b916870fd00a6ae5a00d",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "kind": "STATIC",
+        "url": "https://qual-1012b-preview.mjtechguy.com/ad2a6927-74fc-40d8-ad46-f75d53b84d43/",
+        "expiresAt": "2026-10-12T05:35:26.329Z",
+        "createdAt": "2026-10-12T01:35:26.329Z",
+        "sha256": "05fd5ff8d4be7c30b60779a1eb650f31cf8fba39dd535e3085075f0f11568eee",
+        "bytes": 523,
+        "sourcePath": "public",
+        "purged": false,
+        "captureState": "READY",
+        "captureSha256": "b9bd7b7af1b3bcce5def55ef360a2841bfa47c718c86532309056b3704ef72cc",
+        "captureBytes": 30697,
+        "browserMs": null
+      },
+      "actual_reviewer_access_login": false,
+      "managed_app": {
+        "id": "348a6e5c-6099-46a1-8d0d-6ec67078cedf",
+        "jobId": "e1100f55-4a25-4cc7-a5ee-407be88b8b60",
+        "state": "READY",
+        "commitId": "fd3b54c37d778fcb8993b916870fd00a6ae5a00d",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "kind": "WORKER",
+        "url": "https://348a6e5c-6099-46a1-8d0d-6ec67078cedf.qual-1012b-preview.mjtechguy.com/",
+        "expiresAt": "2026-10-12T05:35:27.556Z",
+        "createdAt": "2026-10-12T01:35:27.556Z",
+        "sha256": "241383ce077527967cbad5535809dbf9135969d592c18fc42447b0894523f1d7",
+        "bytes": 4058,
+        "sourcePath": "worker.mjs",
+        "purged": false,
+        "captureState": "NONE",
+        "captureSha256": "",
+        "captureBytes": 0,
+        "browserMs": null
+      },
+      "isolated_app_d1_r2": true,
+      "hosted_secrets_store_signature": true,
+      "app_outbound_denied": true,
+      "app_grant_replay_denied": true,
+      "app_reader_revocation": true,
+      "agent_operation_keys": [
+        "d999c00a-0a2e-49fc-87bd-5a14413e739f",
+        "2aa680ff-4a5f-4d31-a560-0f5355f220fd"
+      ],
+      "agent_job_ids": [
+        "b1ad7ed7-70ed-4efd-a999-99cae4ef2ceb",
+        "08b6a3f7-a4ca-4aa6-a76a-78aca4ad5080"
+      ],
+      "native_agents": [
+        {
+          "jobId": "b1ad7ed7-70ed-4efd-a999-99cae4ef2ceb",
+          "state": "succeeded",
+          "commitId": "fd3b54c37d778fcb8993b916870fd00a6ae5a00d",
+          "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+          "allowedPath": "calc.py",
+          "policySha256": "6160d681ef482e493b59c67d126efa288c9f49003535d01ff66e05e86625c0a5",
+          "cleanup": "destroyed",
+          "finishedAt": 1791769019785,
+          "calls": 4,
+          "deniedRequests": 1,
+          "harness": "opencode@1.18.34",
+          "model": "@cf/zai-org/glm-4.7-flash",
+          "proposalOnly": true,
+          "startedAt": 1791768988215,
+          "firstInferenceAt": 1791768997297,
+          "completedAt": 1791769009596,
+          "proposalCommitId": "7e82feed57add87e6b22bd3bc6d790cb60d814dc",
+          "proposalTreeId": "41a6bd5d21c3bf11c4e51c0519a1d76b541da03e",
+          "patch": "diff --git a/calc.py b/calc.py\nindex 4693ad3..bad78b9 100644\n--- a/calc.py\n+++ b/calc.py\n@@ -1,2 +1,2 @@\n def add(a, b):\n-    return a + b\n+    return sum((a, b))",
+          "events": [
+            {
+              "kind": "assistant_message",
+              "text": "{\"start\": true}"
+            },
+            {
+              "kind": "tool",
+              "tool": "read",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 1630
+            },
+            {
+              "kind": "tool",
+              "tool": "edit",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 3471
+            },
+            {
+              "kind": "assistant_message",
+              "text": "The edit has been completed successfully. The `add(a, b)` function in `calc.py` now returns `sum((a, b))` while preserving the original function signature."
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 5419
+            }
+          ],
+          "tokens": 5419,
+          "tests": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "test_add (test_calc.Math.test_add) ... ok\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 1.032s\n\nOK\n"
+          }
+        },
+        {
+          "jobId": "08b6a3f7-a4ca-4aa6-a76a-78aca4ad5080",
+          "state": "succeeded",
+          "commitId": "fd3b54c37d778fcb8993b916870fd00a6ae5a00d",
+          "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+          "allowedPath": "calc.py",
+          "policySha256": "6160d681ef482e493b59c67d126efa288c9f49003535d01ff66e05e86625c0a5",
+          "cleanup": "destroyed",
+          "finishedAt": 1791769020948,
+          "calls": 4,
+          "deniedRequests": 1,
+          "harness": "opencode@1.18.34",
+          "model": "@cf/zai-org/glm-4.7-flash",
+          "proposalOnly": true,
+          "startedAt": 1791768986875,
+          "firstInferenceAt": 1791768996148,
+          "completedAt": 1791769010286,
+          "proposalCommitId": "0b69993958dcfa7d13e1ce5f09b38a2cc1c8f8d1",
+          "proposalTreeId": "09064f20b6417f584d7f8d529fb136ddb42597e1",
+          "patch": "diff --git a/calc.py b/calc.py\nindex 4693ad3..a3b52fc 100644\n--- a/calc.py\n+++ b/calc.py\n@@ -1,2 +1,2 @@\n def add(a, b):\n-    return a + b\n+    return b + a",
+          "events": [
+            {
+              "kind": "assistant_message",
+              "text": "I'll help you implement the `add(a, b)` function in calc.py. Let me first read the file to see its current content."
+            },
+            {
+              "kind": "tool",
+              "tool": "read",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 1552
+            },
+            {
+              "kind": "tool",
+              "tool": "edit",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 3320
+            },
+            {
+              "kind": "assistant_message",
+              "text": "Done. I've implemented `add(a, b)` in calc.py with `return b + a` (preserving the function signature)."
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 5183
+            }
+          ],
+          "tokens": 5183,
+          "tests": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "test_add (test_calc.Math.test_add) ... ok\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 1.060s\n\nOK\n"
+          }
+        }
+      ],
+      "canonical_unchanged_after_agents": true,
+      "registry_ci": {
+        "image": {
+          "registry": "https://qual-1012b-registry.mjtechguy.com",
+          "repository": "alice/canonical",
+          "tag": "ci-e1100f55-4a25-4cc7-a5ee-407be88b8b60",
+          "digest": "sha256:4d37980a9b77039b97a5df0fbeaecf3c97b79c97767785d94f40b9a1c5478cd4",
+          "commitId": "fd3b54c37d778fcb8993b916870fd00a6ae5a00d"
+        },
+        "manifestBytes": 401,
+        "independentDigestVerified": true,
+        "containerCleanup": "destroyed"
+      },
+      "registry_scanner": {
+        "id": "54459ec5a605b8838804282fa969e73d2177f01331e76174a413c95ce66e65ac",
+        "subject": "sha256:4d37980a9b77039b97a5df0fbeaecf3c97b79c97767785d94f40b9a1c5478cd4",
+        "actorId": "1",
+        "state": "failed",
+        "attempt": 1,
+        "recipeHash": "sha256:362a597d9e26a78866f2bf158b5117b49bc99cb9e4b9388c6a91a61dce24140d",
+        "imageId": "sha256:352b572e6da1614deca10425b5617bbe0347383a539e770a1163c294ef376705",
+        "createdAt": "2026-10-12T01:37:15.546Z",
+        "reports": {},
+        "deadline": 1791770294853,
+        "finishedAt": "2026-10-12T01:38:17.545Z",
+        "error": "Scanner preparation or execution failed."
+      }
+    },
+    "cleanup": {
+      "test_tasks": "absent",
+      "managed_apps": "absent",
+      "preview_domain": "absent",
+      "control_domain": "absent",
+      "queue_consumer": "absent",
+      "workflow": "absent",
+      "registry_retired": "absent",
+      "preview_worker": "absent",
+      "worker": "absent",
+      "durable_object_namespaces": "absent",
+      "registry_resources": "absent",
+      "app_outbound": "absent",
+      "dispatch": "absent",
+      "test_applications": "absent",
+      "test_image": "absent",
+      "queue": "absent",
+      "gateway": "absent",
+      "bucket": "absent",
+      "preview_access": "absent",
+      "control_access": "absent",
+      "preview_service_token": "absent",
+      "namespace": "absent",
+      "database": "absent",
+      "secret_store": "absent",
+      "analytics_token": "absent",
+      "cleanup_token": "absent",
+      "management_token": "absent"
+    }
+  },
+  {
+    "schema": "golf.cloudflare.native-evidence.v1",
+    "name": "golf-native-20261012-a205a6ae",
+    "state": "failed",
+    "failure": "guarded release rollback failed",
+    "checks": {
+      "repository_id": "1",
+      "pipeline_execution_boundary": [
+        {
+          "path": ".github/workflows/lint.yml",
+          "sha256": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99",
+          "sourceCommit": "902a653d1466e29f6fa5836d81f40025593dd4fe",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        },
+        {
+          "path": ".gitlab-ci.yml",
+          "sha256": "809a971b79a8eeccd150c9c167dd7c34cda9f80f9b309dfa102d70cfe0b7a46a",
+          "sourceCommit": "902a653d1466e29f6fa5836d81f40025593dd4fe",
+          "storedInArtifacts": true,
+          "execution": "unsupported",
+          "admissionStatus": 501
+        }
+      ],
+      "evidence_operation_key": "19ce0a87-98be-4141-801d-c3204c0b2042",
+      "evidence_job_id": "8fa2e49f-ccd4-473d-a0cf-32e6c46c8599",
+      "native_container_tests": {
+        "jobId": "8fa2e49f-ccd4-473d-a0cf-32e6c46c8599",
+        "commitId": "99fed29e05e7783748f2c2269131032d95cfe8be",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "module": "test_calc",
+        "policySha256": "ea662395e22b3dac9a96b7348ef3d3c6b4e2da71f06e8f63d0cec73132c574c3",
+        "image": {
+          "registry": "https://qual-1012b-registry.mjtechguy.com",
+          "repository": "alice/canonical",
+          "tag": "ci-8fa2e49f-ccd4-473d-a0cf-32e6c46c8599",
+          "digest": "sha256:cf6234a7bd7ed0741a5997c55957659d7092ed49a050952f17bf8d95e1c65929",
+          "commitId": "99fed29e05e7783748f2c2269131032d95cfe8be"
+        },
+        "state": "PASSED",
+        "cleanup": "destroyed",
+        "deniedRequests": 1,
+        "exitCode": 0,
+        "stdout": "Published exact-source OCI image sha256:cf6234a7bd7ed0741a5997c55957659d7092ed49a050952f17bf8d95e1c65929\n",
+        "stderr": "test_add (test_calc.Math.test_add) ... ok\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 11.638s\n\nOK\n",
+        "finishedAt": 1791769504538
+      },
+      "queued_workflow_r2_evidence": true,
+      "evidence_object_key": "pr-evidence/alice/1/8fa2e49f-ccd4-473d-a0cf-32e6c46c8599/a922330a192dfbba1d301ecc63b6f23d2ad326bf70e3a3f65a59bb0b5a347dff.json",
+      "evidence_sha256": "a922330a192dfbba1d301ecc63b6f23d2ad326bf70e3a3f65a59bb0b5a347dff",
+      "clef_advisory": {
+        "state": "SUCCEEDED",
+        "model": "@cf/cloudflare/clef",
+        "advisoryOnly": true,
+        "answers": {
+          "next": {
+            "type": "choice",
+            "choice": "inspect_changes",
+            "probabilities": {
+              "inspect_changes": 0.9317,
+              "run_tests": 0.0593,
+              "resolve_feedback": 0.009
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 351,
+          "output_tokens": 0
+        }
+      },
+      "evidence_reader_access": true,
+      "native_preview": {
+        "id": "91a746e7-f0f9-4f3a-b6a7-62bf51f3b5d3",
+        "jobId": "8fa2e49f-ccd4-473d-a0cf-32e6c46c8599",
+        "state": "READY",
+        "commitId": "99fed29e05e7783748f2c2269131032d95cfe8be",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "kind": "STATIC",
+        "url": "https://qual-1012b-preview.mjtechguy.com/91a746e7-f0f9-4f3a-b6a7-62bf51f3b5d3/",
+        "expiresAt": "2026-10-12T05:45:11.686Z",
+        "createdAt": "2026-10-12T01:45:11.686Z",
+        "sha256": "9e40457cc5a8e447e5fb77fb2602a6ae808276fd62b4824e0042c152f339d49e",
+        "bytes": 523,
+        "sourcePath": "public",
+        "purged": false,
+        "captureState": "NONE",
+        "captureSha256": "",
+        "captureBytes": 0,
+        "browserMs": null
+      },
+      "native_preview_rpc": true,
+      "preview_outer_access_denial": true,
+      "preview_grant_replay_denied": true,
+      "preview_reader_revocation": true,
+      "native_browser_capture": {
+        "id": "91a746e7-f0f9-4f3a-b6a7-62bf51f3b5d3",
+        "jobId": "8fa2e49f-ccd4-473d-a0cf-32e6c46c8599",
+        "state": "READY",
+        "commitId": "99fed29e05e7783748f2c2269131032d95cfe8be",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "kind": "STATIC",
+        "url": "https://qual-1012b-preview.mjtechguy.com/91a746e7-f0f9-4f3a-b6a7-62bf51f3b5d3/",
+        "expiresAt": "2026-10-12T05:45:11.686Z",
+        "createdAt": "2026-10-12T01:45:11.686Z",
+        "sha256": "9e40457cc5a8e447e5fb77fb2602a6ae808276fd62b4824e0042c152f339d49e",
+        "bytes": 523,
+        "sourcePath": "public",
+        "purged": false,
+        "captureState": "READY",
+        "captureSha256": "b9bd7b7af1b3bcce5def55ef360a2841bfa47c718c86532309056b3704ef72cc",
+        "captureBytes": 30697,
+        "browserMs": null
+      },
+      "actual_reviewer_access_login": false,
+      "managed_app": {
+        "id": "4b1a5b0c-4aa2-42ba-be6f-f705ba949bed",
+        "jobId": "8fa2e49f-ccd4-473d-a0cf-32e6c46c8599",
+        "state": "READY",
+        "commitId": "99fed29e05e7783748f2c2269131032d95cfe8be",
+        "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+        "kind": "WORKER",
+        "url": "https://4b1a5b0c-4aa2-42ba-be6f-f705ba949bed.qual-1012b-preview.mjtechguy.com/",
+        "expiresAt": "2026-10-12T05:45:12.920Z",
+        "createdAt": "2026-10-12T01:45:12.920Z",
+        "sha256": "9ee4394441bfc08c43065b25fae9d3f1a5b60ea1d63f9fe61099ea5b16d66e6a",
+        "bytes": 4058,
+        "sourcePath": "worker.mjs",
+        "purged": false,
+        "captureState": "NONE",
+        "captureSha256": "",
+        "captureBytes": 0,
+        "browserMs": null
+      },
+      "isolated_app_d1_r2": true,
+      "hosted_secrets_store_signature": true,
+      "app_outbound_denied": true,
+      "app_grant_replay_denied": true,
+      "app_reader_revocation": true,
+      "agent_operation_keys": [
+        "e61c53be-67f5-4a37-b135-021941ccba1f",
+        "07cdff55-d4bb-4330-bc81-6a898fff7bfb"
+      ],
+      "agent_job_ids": [
+        "16177f55-d4e0-45fb-96c8-9d776ab17440",
+        "a637431b-135b-447c-9e28-39047fab4bc8"
+      ],
+      "native_agents": [
+        {
+          "jobId": "16177f55-d4e0-45fb-96c8-9d776ab17440",
+          "state": "succeeded",
+          "commitId": "99fed29e05e7783748f2c2269131032d95cfe8be",
+          "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+          "allowedPath": "calc.py",
+          "policySha256": "6160d681ef482e493b59c67d126efa288c9f49003535d01ff66e05e86625c0a5",
+          "cleanup": "destroyed",
+          "finishedAt": 1791769606796,
+          "calls": 4,
+          "deniedRequests": 1,
+          "harness": "opencode@1.18.34",
+          "model": "@cf/zai-org/glm-4.7-flash",
+          "proposalOnly": true,
+          "startedAt": 1791769573637,
+          "firstInferenceAt": 1791769583777,
+          "completedAt": 1791769598036,
+          "proposalCommitId": "00a4ad8762eee372724a1eeecb65156ed8179e7a",
+          "proposalTreeId": "41a6bd5d21c3bf11c4e51c0519a1d76b541da03e",
+          "patch": "diff --git a/calc.py b/calc.py\nindex 4693ad3..bad78b9 100644\n--- a/calc.py\n+++ b/calc.py\n@@ -1,2 +1,2 @@\n def add(a, b):\n-    return a + b\n+    return sum((a, b))",
+          "events": [
+            {
+              "kind": "assistant_message",
+              "text": "I'll help you implement the `add(a, b)` function in calc.py. Let me first read the file to see its current state."
+            },
+            {
+              "kind": "tool",
+              "tool": "read",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 1598
+            },
+            {
+              "kind": "tool",
+              "tool": "edit",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 3395
+            },
+            {
+              "kind": "assistant_message",
+              "text": "Perfect! I've successfully edited calc.py to implement the `add(a, b)` function with the exact return statement `sum((a, b))`, preserving the function signature. The change has been applied."
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 5301
+            }
+          ],
+          "tokens": 5301,
+          "tests": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "test_add (test_calc.Math.test_add) ... ok\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 1.118s\n\nOK\n"
+          }
+        },
+        {
+          "jobId": "a637431b-135b-447c-9e28-39047fab4bc8",
+          "state": "succeeded",
+          "commitId": "99fed29e05e7783748f2c2269131032d95cfe8be",
+          "treeId": "3524e87ef7687318bb489fcae7dbaec7f71f2b4f",
+          "allowedPath": "calc.py",
+          "policySha256": "6160d681ef482e493b59c67d126efa288c9f49003535d01ff66e05e86625c0a5",
+          "cleanup": "destroyed",
+          "finishedAt": 1791769601690,
+          "calls": 4,
+          "deniedRequests": 1,
+          "harness": "opencode@1.18.34",
+          "model": "@cf/zai-org/glm-4.7-flash",
+          "proposalOnly": true,
+          "startedAt": 1791769571369,
+          "firstInferenceAt": 1791769580091,
+          "completedAt": 1791769592840,
+          "proposalCommitId": "5ed468348eba6a1c1955cb8a73ca1d369ceda13e",
+          "proposalTreeId": "09064f20b6417f584d7f8d529fb136ddb42597e1",
+          "patch": "diff --git a/calc.py b/calc.py\nindex 4693ad3..a3b52fc 100644\n--- a/calc.py\n+++ b/calc.py\n@@ -1,2 +1,2 @@\n def add(a, b):\n-    return a + b\n+    return b + a",
+          "events": [
+            {
+              "kind": "assistant_message",
+              "text": "I'll read the calc.py file first to understand its structure, then implement the add() function with the requested behavior."
+            },
+            {
+              "kind": "tool",
+              "tool": "read",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 1556
+            },
+            {
+              "kind": "tool",
+              "tool": "edit",
+              "status": "completed"
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 3277
+            },
+            {
+              "kind": "assistant_message",
+              "text": "Done! I've successfully edited calc.py to implement `add(a, b)` with `return b + a`, preserving the function signature."
+            },
+            {
+              "kind": "step_completed",
+              "tokens": 5082
+            }
+          ],
+          "tokens": 5082,
+          "tests": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "test_add (test_calc.Math.test_add) ... ok\ntest_network_denied (test_calc.Math.test_network_denied) ... ok\n\n----------------------------------------------------------------------\nRan 2 tests in 1.013s\n\nOK\n"
+          }
+        }
+      ],
+      "canonical_unchanged_after_agents": true,
+      "registry_ci": {
+        "image": {
+          "registry": "https://qual-1012b-registry.mjtechguy.com",
+          "repository": "alice/canonical",
+          "tag": "ci-8fa2e49f-ccd4-473d-a0cf-32e6c46c8599",
+          "digest": "sha256:cf6234a7bd7ed0741a5997c55957659d7092ed49a050952f17bf8d95e1c65929",
+          "commitId": "99fed29e05e7783748f2c2269131032d95cfe8be"
+        },
+        "manifestBytes": 401,
+        "independentDigestVerified": true,
+        "containerCleanup": "destroyed"
+      },
+      "registry_clients": {
+        "scriptSha256": "4155f9315c32a52d497906dafbb2002a14d35361c2a9fb63e539cb6a52a2b503",
+        "passed": true,
+        "origin": "https://qual-1012b-registry.mjtechguy.com",
+        "name": "alice/registry-clients",
+        "checks": {
+          "nativeCIPull": {
+            "image": "qual-1012b-registry.mjtechguy.com/alice/canonical@sha256:cf6234a7bd7ed0741a5997c55957659d7092ed49a050952f17bf8d95e1c65929",
+            "sourceCommit": "99fed29e05e7783748f2c2269131032d95cfe8be",
+            "imageId": "sha256:cf6234a7bd7ed0741a5997c55957659d7092ed49a050952f17bf8d95e1c65929"
+          },
+          "docker": {
+            "bytes": 7340032,
+            "imageId": "sha256:0881ea44448d7e29ccb1d6596b2574de7267320c1479417028439ef650b0c9e7",
+            "roundTrip": true
+          },
+          "chunked": {
+            "bytes": 134217728,
+            "imageId": "sha256:139265cd22c101f27661fed4d645ca949d7b0a8a416bd7918aa208bbe1a50a10",
+            "roundTrip": true
+          },
+          "signing": {
+            "subject": "sha256:0881ea44448d7e29ccb1d6596b2574de7267320c1479417028439ef650b0c9e7",
+            "state": "verified",
+            "attestations": 1
+          },
+          "policy": {
+            "immutableTags": true,
+            "promotion": true,
+            "heldDeleteDenied": true,
+            "readOnlyPushDenied": true,
+            "readStillWorks": true,
+            "crossRepositoryDenied": true
+          },
+          "oci": {
+            "specification": "v1.1.1",
+            "sourceCommit": "a139cc423184af6078077b9b7ee336eddbd03f8f",
+            "binarySha256": "d6050dd29cf4032422e4667d73d7649365325ac3cb12db0df7b66cd3964944ae",
+            "passed": true,
+            "summary": "71 Passed | 0 Failed | 0 Pending | 8 Skipped",
+            "crossRepositoryMount": "Not exercised: Golf issues one-repository credentials"
+          }
+        },
+        "cleanup": true,
+        "remainingImages": []
+      },
+      "registry_live_authority": {
+        "downgradeDeniesPush": true,
+        "downgradePreservesPull": true,
+        "revocationDeniesExistingToken": true,
+        "revocationDeniesExchange": true,
+        "grantRestored": true
+      },
+      "registry_credential_revocation": true,
+      "hosted_schema18": {
+        "schema": 18,
+        "machine_denials": [
+          "GetRepositoryRules",
+          "MutateRepositoryRules",
+          "GetRepositoryRuleMutation",
+          "GetGitTransport",
+          "CreateGitCredential",
+          "ListGitCredentials",
+          "RevokeGitCredential",
+          "GetPullReviewRequests",
+          "GetPullReviewTeamCandidates",
+          "SubmitPullReviewRequest",
+          "GetPullReviewRequestOperation",
+          "GetPullReviewLifecycleState",
+          "SubmitPullReviewLifecycle",
+          "GetPullReviewLifecycleOperation",
+          "GetPullReviewAuthoringState",
+          "SubmitPullReviewAuthoringOperation",
+          "GetPullReviewAuthoringOperation"
+        ],
+        "latency_ms": [
+          971,
+          429,
+          268,
+          449,
+          253
+        ],
+        "file_finder": {
+          "files": 13,
+          "exact_commit": "99fed29e05e7783748f2c2269131032d95cfe8be",
+          "warm_ms": 125
+        },
+        "merge_diagnostics_without_publication": true,
+        "deep_history_comparison": {
+          "additional_commits": 1000,
+          "selected_commits": 1,
+          "milliseconds": [
+            2533,
+            694
+          ],
+          "scope": "Real Artifacts synthetic history; small unchanged tree, one service principal."
+        },
+        "codeowners": {
+          "path": ".github/CODEOWNERS",
+          "matches": [
+            {
+              "path": "hello.txt",
+              "owners": [
+                "@bob"
+              ]
+            }
+          ],
+          "stale_denied": true
+        },
+        "fixture_branch_lock": true,
+        "fixture_scoped_git_read_write_api_and_revocation": true,
+        "fixture_pending_review_privacy": true,
+        "default_branch_git_head_and_stale_write": true
+      }
+    },
+    "cleanup": {
+      "test_tasks": "absent",
+      "managed_apps": "absent",
+      "preview_domain": "absent",
+      "control_domain": "absent",
+      "queue_consumer": "absent",
+      "workflow": "absent",
+      "registry_retired": "absent",
+      "preview_worker": "absent",
+      "worker": "absent",
+      "durable_object_namespaces": "absent",
+      "registry_resources": "absent",
+      "app_outbound": "absent",
+      "dispatch": "absent",
+      "test_applications": "absent",
+      "test_image": "absent",
+      "queue": "absent",
+      "gateway": "absent",
+      "bucket": "absent",
+      "preview_access": "absent",
+      "control_access": "absent",
+      "preview_service_token": "absent",
+      "namespace": "absent",
+      "database": "absent",
+      "secret_store": "absent",
+      "analytics_token": "absent",
+      "cleanup_token": "absent",
+      "management_token": "absent"
+    },
+    "source_sha256": {
+      "scripts/cloudflare-forge-smoke.py": "51876becb6484bd19a84ab252be65805b17218f29729cc2f61a59cefc3a1765a",
+      "scripts/cloudflare_hosted_check.py": "89ea16354369765ae14ccfa304f6b319f34d3a24194fed9f0cb9938e1df2513b",
+      "scripts/fixtures/registry_publish.py": "a9363abbeb6bf0af3b4130896c6e800d68a100bad2bc882dfb97b1c0f664a961",
+      "scripts/cloudflare_registry_check.py": "ad00c430e49633e34feb8a25b80862c8774f827193a699f013ecba3cf6b05ccc",
+      "scripts/cloudflare_rehearsal.py": "20e09f334f5f6f371b8e08e139d9b2cf346d079eeff1999154d06f3b8e6614c0",
+      "scripts/cloudflare_demo.py": "bc6fdd054f153456a50e9fd888096d15735b5f7df5c2c82e2d8bcc1c53251f70",
+      "cloudflare/forge/schema.sql": "81b16fb29427f692a5081ffc1dfb291eb8a2023076a7da23900d705dd2d3b391",
+      "cloudflare/forge/prepare.mjs": "5ccf854b649f93b3677ee8dd916520d5974929b976b064c96afbc9ae521d4c4e",
+      "internal/cli/cli.go": "aac0d7c341cacf951b60a1c853aa75814958678797a9e6efd5b7e8a4f400587d",
+      "internal/cli/writes.go": "cb3229c68b75d771364a3e6c7503fc708a0edbb9fb2b24c9ebf018909f5a8f3d",
+      "cmd/golfctl/main.go": "7ad93c0979a8d31e0d9b86a6f9006375cbb56e4163f015d1cf9f4f573133979a",
+      "go.mod": "361309076d02639d8db5a49c188d5335377786abc46644a3940ee15ca7510862",
+      "go.sum": "b11696d77385aad5633bb22aa3d0903e33f5cb05e9033d7f827034837a2b0ca3",
+      "cloudflare/forge/src/activity.mjs": "4c5419061b600e3dc2816c77c4e537efac8fdf472f4eea73738cbcdef8d8c0e5",
+      "cloudflare/forge/src/agent-entry.mjs": "d42514ce3cc23df297fe513543c4e7a9012d79eabd0e5982f83f55fe4c411103",
+      "cloudflare/forge/src/agent-policy.mjs": "2b7c18a1afad142786d50239c4636f76b2cceaa342e8da8603379cb60d9e8a3a",
+      "cloudflare/forge/src/agent-worker.mjs": "bb412c3a4ca47bacc55c84ea83ce193c0b36b878e360631d85847de1cc961676",
+      "cloudflare/forge/src/agents.mjs": "d3647cdfb8852d1d119914a9c6c394e469e978df04face5e579ff7cc1bc6c312",
+      "cloudflare/forge/src/app-outbound.mjs": "4c5e52dbbdef305a874eca40f5a0241073b8a4bf919e94ab19694388ce6158fa",
+      "cloudflare/forge/src/app-policy.mjs": "f0345c91c5c1d65bbf488a28735f2dfa58de0804ddaf5cdd61834639621330ad",
+      "cloudflare/forge/src/apps.mjs": "79027310f5ab1ba9698d1f121d4e71796bdf38ec2b6ec1bc929f491d9aac842e",
+      "cloudflare/forge/src/codeowners.mjs": "73beed29804eef7de0075b7b12a1735de2500668b2a86c95e84f51ac3dbb3dec",
+      "cloudflare/forge/src/collaboration.mjs": "6fefccec22014ac77855e95f240d70214dda8cb4a7e1fb9f407b472f7d430bcb",
+      "cloudflare/forge/src/common.mjs": "0c2a91d6b2ef662b3f99e9588f3cac3c7d9db97cf00331ee7f4edfa1e986c9f6",
+      "cloudflare/forge/src/core.mjs": "118124b68087d0c90c8505bef3ab2e7264f2ca22f6549ce2a63ab3341286f2ea",
+      "cloudflare/forge/src/delivery.mjs": "556be6fb3a03db07d33b9c5170a848bef3aea68c4670d3ded62fc7f1960f8587",
+      "cloudflare/forge/src/discussion-engagement.mjs": "1fba4cc851b823626cbcde9bed976bd1dbaf08f8ca4a75b92b2ab17cdec27bef",
+      "cloudflare/forge/src/discussion-resources.mjs": "3d5dff8639405bdf1fe8cf9a3a407506290d919b4e9c0b1175940988d9321020",
+      "cloudflare/forge/src/evidence.mjs": "cd4979de4463a339ae5e5639335ccb7d0377e35b76bd175e06f056859666d38e",
+      "cloudflare/forge/src/file-index.mjs": "1b43674f85d50027a8d7ebd312a31c37c2c2531e8c13a41954c9c45622e6fbc3",
+      "cloudflare/forge/src/git-credentials.mjs": "e577f50f41cf545001112aa64c81c963e5781bc9bc54985642837467d881d3bf",
+      "cloudflare/forge/src/git.mjs": "adc362829ae962993950f61592c0d60cbea446b85b9af48b0a0e1d4cb685c7c3",
+      "cloudflare/forge/src/invitations.mjs": "597e1ee88c4a6efceddcc65779093243ce32b108cfda4c4402d129ac68a9fcc0",
+      "cloudflare/forge/src/metadata-jobs.mjs": "7d776ff04decf5631b65b09fcd8efff6f58fc394f9e483183aec127457134ec1",
+      "cloudflare/forge/src/operations-provider.mjs": "68da854583e2672244b1cb785424aea742041c039237acc5f5642a19dc00db17",
+      "cloudflare/forge/src/operations.mjs": "88cbab66bf71659b5ead43e162e8d9b4be109ac63ad81df62c6b079cb738c328",
+      "cloudflare/forge/src/performance.mjs": "9f0ac4b5bfbd2247fe50c20d5150726a9233e74a937164842ae00bf7ef1c1692",
+      "cloudflare/forge/src/preview-gateway.mjs": "a2070cc8be63ba93879c067f47099b25af857c7a73f5252ed852c0170e57a6af",
+      "cloudflare/forge/src/public.mjs": "95f5b62261469703b10d75deaa580d934992afcb238a19de6889917630fec183",
+      "cloudflare/forge/src/pull-reviews.mjs": "a5495901957b65610e0866217345f66b413fef20d1fe6f4d9a4ab71b2e01c577",
+      "cloudflare/forge/src/repository-cache.mjs": "21ffe71706f6cdadfad4856b0cd6c430470f6bc037d174e3b175dc0d3518f2dc",
+      "cloudflare/forge/src/repository-diff.mjs": "44e8667512b4364612cdc4f05eaf4e5ab24fca0fd54225c653317df8633aa273",
+      "cloudflare/forge/src/repository-images.mjs": "b255f1c680ca72a3983d84ab1d95d01834233b9359274fe1cae5473feca74347",
+      "cloudflare/forge/src/repository-indexes.mjs": "881c516870a37c9d2e5e52953efc7c9e6eb0dbe840f6a1b1e99b68bf9373e93d",
+      "cloudflare/forge/src/repository-metadata.mjs": "5846237933a598404f44e7ea8fa704b6f03f13e615ab58924df39af5b78f299b",
+      "cloudflare/forge/src/repository-reads.mjs": "968d257fbe1416c624af9f3f9a565c34b92df59eb8bb3ab62e383d18223b940e",
+      "cloudflare/forge/src/repository-rules.mjs": "76398882480c2761a0b509fed17fd9a8c1f9d750c8fd7280fa653d6bf2bf55dd",
+      "cloudflare/forge/src/repository-settings.mjs": "b15afd2812965f83424be110e319d074697f1d664bfe134d24a53642492d0a1c",
+      "cloudflare/forge/src/review-authoring.mjs": "ad18bff02fcc34faa56810df85f278d31c9fe33e3fca2da58e909dba4866e176",
+      "cloudflare/forge/src/telemetry.mjs": "d907519cde930c823e94c233c5f7bd7f8141e36aad65bc96463909297f8726e7",
+      "cloudflare/forge/src/test-entry.mjs": "f732342f6e766db2979fcc1b2c53e68e47da06b9391def7234c926579693eb83",
+      "cloudflare/forge/src/test-policy.mjs": "f3516d6a10d1176e8664f15fef817ba932278e71e4a8222ac1a91af80b7edf4b",
+      "cloudflare/forge/src/test-worker.mjs": "bc5c40766c10d446207f89ffb8d61cd3b90d4f2d257b2cd5daf8411b91388325",
+      "cloudflare/forge/src/webhooks.mjs": "c08c9156fb0ab18c20920afc8cb4e303148a52c96b2d5a81bc5f8ad99fb90e62",
+      "cloudflare/forge/src/worker.mjs": "71dc1a94b97cd39ab8ce0e6a1378f8b1e309a21ad15814d92f9e590717fd2d48",
+      "cloudflare/forge/src/workspace-ui.mjs": "eed6e1ffe52e01e566e3aff1ad0f71fbca97f0d259c95be5d9e930dc42f59214",
+      "cloudflare/agents/Dockerfile": "1f6cb1042f14b28447fc763449ef259ee22dbedb3680bea5724118d624e0dab8",
+      "cloudflare/agents/package-lock.json": "00fb5e578b1a3172b40bdc73b4be32821faf4ab8b868df1265bd86c12dfe8e8d",
+      "cloudflare/agents/src/policy.mjs": "e77bb65adedfbfad6d404b57e419032e355387ff8e8bc101bc6ec9a07a8b259e",
+      "cloudflare/agents/src/worker.mjs": "1518dcaee4af9d9938d42a3c90bd3ca9ea84aa7b9c70ebda9d9b84b79e71bad4",
+      "cloudflare/forge/prepare-proof.mjs": "5774877356e10016210b7102547709381533577c5eb4ea1c0ca5a3e5cfb6893e",
+      "cfcr/src/protocol.mjs": "0e5a80e8666836cb2e6c8d5e909798e3f48ac6a26543deba5f315c3f4a4ac99c",
+      "cfcr/src/evidence.mjs": "e4e56a092306d0746d6200f6407758e3669815379b0b70feedde92bd87ac21cb",
+      "cfcr/src/trust.mjs": "b0679485762bd6e64fdbf5247b2644c857adb6f00277ac6b5e989809028f070b",
+      "cfcr/src/sbom.mjs": "1355de24dc0e7b77a30a0c459152ca99964925767bf635aa9b85bbd429ad58ca",
+      "cfcr/src/worker.mjs": "62a6e7114a58ae2737e15601c55f0099d27b06edece0720637f7e09d07f02ba9",
+      "cfcr/src/limits.mjs": "ea31b12db68951b62a3879579488f49e3c51a89bdf5abc4054fc1e152b163342",
+      "cfcr/src/scanner.mjs": "1616edbcb7f6a94fb2b8bc262aa73fbf0b02716a6d91ca4789e360cecaeb3644",
+      "cfcr/src/lifecycle.mjs": "0dab95afd9c89b03e01e39f2b492ef225e5b6f807f25da55980ae317171826a6",
+      "cfcr/src/jobs.mjs": "6b73198d4c073be9c6e8e7628ebe11546df3fb810448d03bf0e7b3299d13a52b",
+      "cfcr/src/policy.mjs": "35c332faf42db3d0a02007365f631c044ae8155ed596c837dae4916c05843f8b",
+      "cfcr/src/management.mjs": "2bf8e8db7945101291842bde4e2847f52719bb8bf501c7a36708ca4d58d25dec",
+      "cfcr/src/uploads.mjs": "d57b10c71da5e8bca87ba5702beea529314197b49d260ccdc66c7febac43bd48",
+      "cfcr/src/verification.mjs": "4d63a3b4706c91c07975579351e7fc7767898ff9bfc41a0354b8e34920f79c4e",
+      "cfcr/src/catalog.mjs": "ce8c566a351d242f0cbc7be3ca8938b74e32dd6eb98669bbf9e17458cb1ce846",
+      "cfcr/scripts/prepare.mjs": "bdd671719f575d41131b2dd0135e95f0744b4284e72b40e0cd07b3b05ece8cc4",
+      "cfcr/scripts/hosted-clients.mjs": "4155f9315c32a52d497906dafbb2002a14d35361c2a9fb63e539cb6a52a2b503"
+    },
+    "finished_at": "2026-10-12T02:11:23.791245+00:00"
+  }
+]

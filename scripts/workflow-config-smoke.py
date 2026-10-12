@@ -29,8 +29,12 @@ def stage(value):
 
 def main():
     ready()
-    assert command('docker', 'compose', 'exec', '-T', 'gitea', 'printenv', 'GITEA__actions__ENABLED').lower() == 'false'
-    assert provider('', 'GET', 'version')['version'] == '1.27.3'
+    if container := os.environ.get('GOLF_SMOKE_FORGE_CONTAINER'):
+        assert command('docker', 'exec', container, 'printenv', 'FORGEJO__actions__ENABLED').lower() == 'false'
+        assert provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'
+    else:
+        assert command('docker', 'compose', 'exec', '-T', 'gitea', 'printenv', 'GITEA__actions__ENABLED').lower() == 'false'
+        assert provider('', 'GET', 'version')['version'] == '1.27.3'
     capabilities = rpc(client(), 'CapabilityService/ListCapabilities')['capabilities']
     assert next(item for item in capabilities if item['id'] == 'pipelines')['state'] == 'CAPABILITY_STATE_DISABLED'
     prefix = 'golf-workflows-' + secrets.token_hex(4)
@@ -100,7 +104,7 @@ def main():
             stage('actual pinned source discovery, blob identity and three inspection outcomes')
             result = inspect()
             assert result['commitId'] == original and result['repositoryId'] == created['repository']['id']
-            assert result['catalogVersion'] == 'golf.workflow.inspect.v2'
+            assert result['catalogVersion'] == 'golf.workflow.inspect.v3'
             rows = {row['path']: row for row in result['configurations']}
             expected = {
                 '.github/workflows/manual.yml': 'VALIDATED_SUBSET', '.gitlab-ci.yml': 'VALIDATED_SUBSET',

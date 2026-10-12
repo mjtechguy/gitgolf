@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -20,7 +21,7 @@ async function backend(page: Page) {
     if (procedure === 'GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user }) : reject(route, 'unauthenticated', 'Sign in required.');
     if (procedure === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session expired.');
-    if (procedure === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (procedure === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     const first = state.posts.at(-1);
     const repository = create(RepositorySchema, { id: '73', name: first?.name || 'project', fullName: `alex/${first?.name || 'project'}`, private: first?.private ?? true, description: first?.description || '', updatedAt: '2026-10-02T00:00:00Z' });
     if (procedure === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: state.listed ? [repository] : [] });

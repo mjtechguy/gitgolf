@@ -28,6 +28,15 @@ CATEGORIES = {'authority', 'repository', 'branch_protections', 'tag_protections'
 FAILURES = {prefix + kind for prefix in ('preheaders_', 'response_', 'downstream_') for kind in ('timeout', 'cancelled', 'disconnected', 'transport')} | {'response_bound', 'drop_hijack'}
 
 
+def binary_architecture(path):
+    with path.open('rb') as file:
+        header = file.read(64)
+    assert len(header) == 64 and header[:6] == b'\x7fELF\x02\x01', 'Compiled 64-bit little-endian ELF proxy required'
+    architecture = {62: 'amd64', 183: 'arm64'}.get(int.from_bytes(header[18:20], 'little'))
+    assert architecture, 'Only Linux AMD64/ARM64 proxy binaries are qualified'
+    return architecture
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, fp, code, message, headers, newurl):
         return None

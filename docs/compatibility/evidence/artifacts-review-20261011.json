@@ -1,0 +1,84 @@
+{
+  "complete": true,
+  "passed": true,
+  "proofKind": "gitlab-shell-artifacts064-rustfs",
+  "sourceRevision": "6e35c3d30f317e11fe00f9dadf4578436bb27e29",
+  "images": {
+    "golf": "sha256:c9fdf0b365d587c655c78ca5e6164d4883644e88c38dfd5b3ef08ec31ea50f60",
+    "runner": "sha256:6e207f295ab5761818b232bef8a215b4746e42ea5329a7de2d2c31e16e3b5f0d",
+    "native": "sha256:1c17ecaead42eb3b5391553d8708103a4beb0e86edf5b9ebc1eb269c318845f2",
+    "postgres": "sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15",
+    "daemon": "sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0",
+    "rustfs": "sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff"
+  },
+  "binarySha256": {
+    "golf/golf": "dca39c027ad78df63c2730c47b581028301fd308fb934beed04beebf7b59cf55",
+    "runner/golf-runner": "49ef9e74dc3895cb56ec85bd81ce8271ec363a6a698fc41e121ae85c003d4312",
+    "golf/golf-actions-engine": "c98a509cf33a1fa227572556c3d3f72465ba39bf6a2153e3c834b1f0045d69e5",
+    "runner/golf-actions-engine": "c98a509cf33a1fa227572556c3d3f72465ba39bf6a2153e3c834b1f0045d69e5"
+  },
+  "proxyBinarySha256": "2ca0729bd1890ed10646e8d58cbede861f093f435e1482cedc34fcd813cf3988",
+  "tls": {
+    "version": "TLSv1.3",
+    "serverAuthenticationOnly": true,
+    "wrongHostnameDenied": true,
+    "untrustedCADenied": true,
+    "tls12Denied": true
+  },
+  "oldAndHTTPWorkerExcluded": {
+    "authenticatedProtocolOnly": true,
+    "missingArtifactCapability204": true,
+    "httpCapability204": true,
+    "realOldBinaryNotExercised": true
+  },
+  "retainedArtifactCount": 1,
+  "archiveVerification": {
+    "archiveSha256": "69c87fde67f396edd0517ff5779097a2df52688a9666c54a45e9370576e3cb90",
+    "fileCount": 2,
+    "fileBytes": "47",
+    "exactOwnedContent": true,
+    "attachmentNotPreview": true
+  },
+  "actualDockerCleanup": {
+    "attemptContainersAbsent": true,
+    "attemptVolumesAbsent": true
+  },
+  "restart": {
+    "sameMetadataAndHash": true,
+    "originalDispatchNoReplay": true,
+    "runCount": 1,
+    "artifactCount": 1
+  },
+  "readerReadThenRevocationDenied": true,
+  "foreignOriginAndBearerDenied": true,
+  "foreignIdentityUnchanged": true,
+  "cleanupPassed": true,
+  "limitations": [
+    "One secretless successful legacy GitLab shell job only; no Actions artifact service, preview or deployment.",
+    "One private operator env_s3 RustFS profile; retained20/repository and200/instance caps; no profile activation, scale or latest-schema recovery proof.",
+    "Current native before/after read authority is not an atomic native CAS."
+  ],
+  "date": "2026-10-11",
+  "profile": "portable-gitea",
+  "sourceSha256": {
+    "scripts/workflow-artifacts-smoke.py": "9052b1be5ee607afc47e9eb533a44c6ade13babca869e659e3ba78013424a2eb",
+    "scripts/repository-rule-mutations-smoke.py": "e965a227609ef6a2ca7db318e12a6ba4a58d0694a7a1dacdf6b70f18419a28c8",
+    "scripts/native_qualification_proxy.py": "808bd7c8535cc47ff345e3cc39b6a6742d289f16444e57eb925486284be46a4c",
+    "scripts/native-qualification-proxy.go": "6dfe802c39eb8cf54539b596a448c887960d9798f9adc0f13342b76f1889fe63"
+  },
+  "objectProof": {
+    "sourceStorage": "env_s3",
+    "artifactStorage": "env_s3",
+    "postgresSourceAndArtifactBytesAbsent": true,
+    "exactOriginalAddress": true,
+    "fullObjectKey": "golf/ci-artifacts/6d9275ee-311e-44c5-9fcc-f21e3e8e1155/145823782c19a97c2dc712099fde3c34/69c87fde67f396edd0517ff5779097a2df52688a9666c54a45e9370576e3cb90.tar",
+    "independentSignedRead": {
+      "bytes": 3072,
+      "sha256": "69c87fde67f396edd0517ff5779097a2df52688a9666c54a45e9370576e3cb90",
+      "exactAttachmentMatch": true
+    },
+    "workerCredentialsAbsent": true,
+    "providerUnavailableNoFallback": true,
+    "rustfsRestartExactBytes": true
+  }
+}

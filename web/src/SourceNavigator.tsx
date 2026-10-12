@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { ChevronDown, ChevronRight, File, Folder, FolderOpen, GitCommitHorizontal, Link2, ListTree } from 'lucide-react';
+import { sourceNavigationOptions, prefetchSource } from './sourceNavigation';
 import { readExactSource, sourcePath } from './sourceReads';
 import { SourceEntryType } from './gen/golf/v1/golf_pb';
 import type { SourceEntry } from './gen/golf/v1/golf_pb';
 import { isCommitID, sourceOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
-import { Loading, PanelError, privateQuery } from './RepositoryUI';
+import { Loading, PanelError, privateNavigationQuery } from './RepositoryUI';
 
 const maxFolders = 64;
 const maxDepth = 32;
@@ -35,6 +36,8 @@ function Navigator({ location, commitId, repositoryId, userId }: Props) {
 }
 
 function Folders({ location, commitId, repositoryId, userId }: Props) {
+  const cache = useQueryClient();
+  const scope = ['repository', userId, location.owner, location.name];
   const [expanded, setExpanded] = useState(() => new Set(['', ...ancestors(location.path)]));
   const [filter, setFilter] = useState('');
   const [notice, setNotice] = useState('');
@@ -42,10 +45,11 @@ function Folders({ location, commitId, repositoryId, userId }: Props) {
     setExpanded(previous => new Set([...previous, ...ancestors(location.path)].slice(0, maxFolders)));
   }, [location.path]);
   const paths = [...expanded];
-  const queries = useQueries({ queries: paths.map(path => ({ ...privateQuery,
+  const queries = useQueries({ queries: paths.map(path => ({ ...privateNavigationQuery,
     queryKey: ['repository', userId, location.owner, location.name, 'source-navigator', repositoryId, commitId, path],
     queryFn: async ({ signal }: { signal: AbortSignal }) => {
-      const response = await readExactSource({ owner: location.owner, name: location.name }, repositoryId, commitId, path, signal);
+      const retained = cache.getQueryData<{ pages: Awaited<ReturnType<typeof readExactSource>>[] }>(sourceNavigationOptions(scope, repositoryId, commitId, path).queryKey);
+      const response = retained?.pages[0] || await readExactSource({ owner: location.owner, name: location.name }, repositoryId, commitId, path, signal);
       if (response.commitId !== commitId || response.path !== path || response.kind !== SourceEntryType.DIRECTORY || response.entries.length > 1000) throw new ConnectError('The returned folder does not match this source snapshot.', Code.FailedPrecondition);
       return response;
     },
@@ -67,7 +71,7 @@ function Folders({ location, commitId, repositoryId, userId }: Props) {
   }
   function entryLink(entry: SourceEntry, fullPath = false) {
     const Icon = entry.type === SourceEntryType.DIRECTORY ? expanded.has(entry.path) ? FolderOpen : Folder : entry.type === SourceEntryType.FILE ? File : entry.type === SourceEntryType.SYMLINK ? Link2 : GitCommitHorizontal;
-    return <Link {...sourceOptions(location, commitId, entry.path, entry.type !== SourceEntryType.DIRECTORY)} aria-current={location.path === entry.path ? 'page' : undefined} title={entry.path}><Icon size={15} aria-hidden="true"/><span>{fullPath ? entry.path : entry.name}</span></Link>;
+    return <Link {...sourceOptions(location, commitId, entry.path, entry.type !== SourceEntryType.DIRECTORY)} aria-current={location.path === entry.path ? 'page' : undefined} title={entry.path} onPointerEnter={() => prefetchSource(cache, scope, repositoryId, commitId, entry)} onFocus={() => prefetchSource(cache, scope, repositoryId, commitId, entry)}><Icon size={15} aria-hidden="true"/><span>{fullPath ? entry.path : entry.name}</span></Link>;
   }
   function directory(path: string, depth: number) {
     const query = folders.get(path);
@@ -77,7 +81,7 @@ function Folders({ location, commitId, repositoryId, userId }: Props) {
     return query.data.entries.length ? <ul className={depth >= 8 ? 'source-navigator-deep' : undefined}>{sorted(query.data.entries).map(entry => <li key={entry.path}>
       <div className="source-navigator-row">{entry.type === SourceEntryType.DIRECTORY ? <button type="button" className="icon-button" aria-label={`${expanded.has(entry.path) ? 'Collapse' : 'Expand'} ${entry.path}`} aria-expanded={expanded.has(entry.path)} onClick={() => toggle(entry.path)}>{expanded.has(entry.path) ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}</button> : <span className="source-navigator-spacer"/>}{entryLink(entry)}</div>
       {entry.type === SourceEntryType.DIRECTORY && expanded.has(entry.path) && depth < maxDepth ? directory(entry.path, depth + 1) : null}
-    </li>)}</ul> : <p className="field-help">This folder is empty.</p>;
+    </li>)}{query.data.page?.nextPage ? <li><Link {...sourceOptions(location, commitId, path)}>Open folder for more entries</Link></li> : null}</ul> : <p className="field-help">This folder is empty.</p>;
   }
   return <nav aria-label="Repository files">
     <Link className="source-navigator-root" {...sourceOptions(location, commitId, '')} aria-current={!location.path ? 'page' : undefined}><Folder size={15} aria-hidden="true"/>{location.name}</Link>

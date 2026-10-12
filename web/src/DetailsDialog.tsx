@@ -5,10 +5,12 @@ export function DetailsDialog({ title, children, onClose }: { title: string; chi
   const dialog = useRef<HTMLDialogElement>(null);
   const close = useRef<HTMLButtonElement>(null);
   const titleId = useId();
+  const previous = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Keep the original trigger through React StrictMode effect replay.
+    previous.current ||= document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.current?.showModal(); close.current?.focus();
-    return () => { if (previous?.isConnected) previous.focus(); };
+    return () => { if (previous.current?.isConnected) previous.current.focus(); };
   }, []);
   return <dialog ref={dialog} className="create-dialog details-dialog" aria-labelledby={titleId} onClose={onClose}>
     <div className="dialog-header"><h2 id={titleId}>{title}</h2><button ref={close} className="icon-button" aria-label="Close details" title="Close details" onClick={onClose}><X size={20} aria-hidden="true" /></button></div>

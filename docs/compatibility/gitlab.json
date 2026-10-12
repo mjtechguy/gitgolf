@@ -1,0 +1,360 @@
+{
+  "format": "golf.compatibility.catalog.v1",
+  "profile": "gitlab-runner-unselected",
+  "reference": "profile.json#gitlab",
+  "features": [
+    {
+      "id": "shell.one_job",
+      "packet": "L2",
+      "state": "runtime-tested",
+      "tests": [
+        "internal/server/workflow_execution_test.go",
+        "scripts/ci-compose-smoke.py"
+      ],
+      "limitations": [
+        "Golf one-job shell catalog with literal job before_script and script in one sh -e process; at most 50 combined commands. Actual Forgejo/Docker success and pure-shell setup failure tests. No native GitLab Runner/coordinator, after_script, includes/rules or multi-job compatibility claim."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/ci-review-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "runner.registration",
+      "packet": "L0",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "No unmodified pinned GitLab Runner exchange against Golf has been proved."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "runner.jobs",
+      "packet": "L0",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "No unmodified pinned GitLab Runner exchange against Golf has been proved."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "runner.trace",
+      "packet": "L0",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "No unmodified pinned GitLab Runner exchange against Golf has been proved."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "runner.state_cancel",
+      "packet": "L0",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "No unmodified pinned GitLab Runner exchange against Golf has been proved."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "runner.artifacts",
+      "packet": "L0",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "No unmodified pinned GitLab Runner exchange against Golf has been proved."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "runner.fault_recovery",
+      "packet": "L0",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "No unmodified pinned GitLab Runner exchange against Golf has been proved."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "config.includes",
+      "packet": "L1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "GitLab server-side configuration resolver and real reference comparison are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "config.anchors_extends_defaults",
+      "packet": "L1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "GitLab server-side configuration resolver and real reference comparison are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "config.inputs_custom_paths",
+      "packet": "L1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "GitLab server-side configuration resolver and real reference comparison are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "config.workflow_rules",
+      "packet": "L1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "GitLab server-side configuration resolver and real reference comparison are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "config.job_rules",
+      "packet": "L1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "GitLab server-side configuration resolver and real reference comparison are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "config.immutable_dependencies",
+      "packet": "L1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "GitLab server-side configuration resolver and real reference comparison are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "config.reference_differential",
+      "packet": "L1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "GitLab server-side configuration resolver and real reference comparison are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "graph.stages_needs_matrix",
+      "packet": "L2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Actual Runner-backed multi-job GitLab lifecycle semantics are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "variables.precedence_file_dotenv",
+      "packet": "L2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Actual Runner-backed multi-job GitLab lifecycle semantics are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "shell.before_after_script",
+      "packet": "L2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Actual Runner-backed multi-job GitLab lifecycle semantics are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "jobs.manual_delayed_retry",
+      "packet": "L2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Actual Runner-backed multi-job GitLab lifecycle semantics are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "jobs.allow_failure_interruptible_resource_group",
+      "packet": "L2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Actual Runner-backed multi-job GitLab lifecycle semantics are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "pipeline.two_stage_unchanged",
+      "packet": "L2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Actual Runner-backed multi-job GitLab lifecycle semantics are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "objects.artifacts_reports",
+      "packet": "L3",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Native Runner service/object/auth/deployment protocols remain missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "objects.cache",
+      "packet": "L3",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Native Runner service/object/auth/deployment protocols remain missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "services.registry",
+      "packet": "L3",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Native Runner service/object/auth/deployment protocols remain missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "tokens.job_api",
+      "packet": "L3",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Native Runner service/object/auth/deployment protocols remain missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "delivery.environments_oidc",
+      "packet": "L3",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Native Runner service/object/auth/deployment protocols remain missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "pipelines.child_dynamic_downstream",
+      "packet": "L4",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Broader pipeline/version/tier/platform behavior has not been implemented or qualified."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "pipelines.merge_train",
+      "packet": "L4",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Broader pipeline/version/tier/platform behavior has not been implemented or qualified."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "features.pages_releases_security_secrets",
+      "packet": "L4",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Broader pipeline/version/tier/platform behavior has not been implemented or qualified."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "platform.self_managed_executor_os",
+      "packet": "L4",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Broader pipeline/version/tier/platform behavior has not been implemented or qualified."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    }
+  ]
+}

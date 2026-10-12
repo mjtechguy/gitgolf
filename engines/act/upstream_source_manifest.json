@@ -8,18 +8,42 @@
     "goModSum": "h1:9djXFAZR+ltqh1k/8I0G2/3ypi2UrcuFlrC25L6WoCA=",
     "goModuleZipSHA256": "b4e568212d680a32076455b84ab572d17fe65eb83a6fd6dce6a05164bd68fcc9"
   },
-  "scope": "Complete pkg runtime subset, excluding upstream tests/testdata; exact module files, license and embeds retained. Manual declared numbers receive finite numeric context; already-resolved inherited composite INPUT_ strings do not recursively evaluate. Product activation requires explicit versioned v2 schema/value binding; v1 remains unchanged.",
+  "scope": "Complete pkg runtime subset, excluding upstream tests/testdata; exact module files, license and embeds retained. Manual declared numbers receive finite numeric context; already-resolved inherited composite INPUT_ strings do not recursively evaluate. Product activation requires explicit versioned v2 schema/value binding; v1 remains unchanged. The closed mounted-copy patch also provides optional before-step job credential renewal; legacy execution has no hook.",
   "patchSha256": "1df7c201fdc776159c458a0185b5777e09f08b6790a29968444992b5fa695e3e",
   "files": [
+    {
+      "path": ".golf-upstream/container_types.go.txt",
+      "sha256": "b6a3d8f82ee5954ad07666772530f1e1b1bdbc8bf0cb59da52abd18ce58ab698"
+    },
+    {
+      "path": ".golf-upstream/docker_run.go.txt",
+      "sha256": "8e7b08c3180f28f362767c1b283d38e6c3ab160f58214f3cd8b4694fe5a4038d"
+    },
     {
       "path": ".golf-upstream/expression.go.txt",
       "upstreamSha256": null,
       "sha256": "9c6dc1a44612b291e5c1a22208bd500c06567b6fadfdf36733d953160c2a47fb"
     },
     {
+      "path": ".golf-upstream/job_executor.go.txt",
+      "sha256": "68336e0d05df1ab15e972726f64f6f0e35d535bd7f8ad7fe870523b6de40b375"
+    },
+    {
       "path": ".golf-upstream/manual-inputs.patch",
       "upstreamSha256": null,
       "sha256": "1df7c201fdc776159c458a0185b5777e09f08b6790a29968444992b5fa695e3e"
+    },
+    {
+      "path": ".golf-upstream/readonly-copy.patch",
+      "sha256": "fab694a362e1c4d8d405cb7d60f53756382e1e97468a4e6d31b7c4ce666dfbf8"
+    },
+    {
+      "path": ".golf-upstream/run_context.go.txt",
+      "sha256": "01fb255cb1fedbbb56639e918b50b78f5e320bf87ec62cae0d4c68a62ef33b8d"
+    },
+    {
+      "path": ".golf-upstream/runner.go.txt",
+      "sha256": "03198fc2ed5aa8aeae3c39e146b458531eda172a20844faf0ca36f89a0553962"
     },
     {
       "path": ".golf-upstream/step.go.txt",
@@ -144,7 +168,7 @@
     {
       "path": "pkg/container/container_types.go",
       "upstreamSha256": "b6a3d8f82ee5954ad07666772530f1e1b1bdbc8bf0cb59da52abd18ce58ab698",
-      "sha256": "b6a3d8f82ee5954ad07666772530f1e1b1bdbc8bf0cb59da52abd18ce58ab698"
+      "sha256": "5dbb9d70d65319c6222ffde9b593fdefa632decb9064bc821b1bce5247578509"
     },
     {
       "path": "pkg/container/docker_auth.go",
@@ -184,7 +208,7 @@
     {
       "path": "pkg/container/docker_run.go",
       "upstreamSha256": "8e7b08c3180f28f362767c1b283d38e6c3ab160f58214f3cd8b4694fe5a4038d",
-      "sha256": "8e7b08c3180f28f362767c1b283d38e6c3ab160f58214f3cd8b4694fe5a4038d"
+      "sha256": "d3ea61c651937383336be5ee934b43e3be25784735c13e1dada67943f71612ac"
     },
     {
       "path": "pkg/container/docker_socket.go",
@@ -374,7 +398,7 @@
     {
       "path": "pkg/runner/job_executor.go",
       "upstreamSha256": "68336e0d05df1ab15e972726f64f6f0e35d535bd7f8ad7fe870523b6de40b375",
-      "sha256": "68336e0d05df1ab15e972726f64f6f0e35d535bd7f8ad7fe870523b6de40b375"
+      "sha256": "ee53475cb50793cb9766d099e8b3fdef4185a6acf5c299e9417967ce85a9ecd1"
     },
     {
       "path": "pkg/runner/local_repository_cache.go",
@@ -399,12 +423,12 @@
     {
       "path": "pkg/runner/run_context.go",
       "upstreamSha256": "01fb255cb1fedbbb56639e918b50b78f5e320bf87ec62cae0d4c68a62ef33b8d",
-      "sha256": "01fb255cb1fedbbb56639e918b50b78f5e320bf87ec62cae0d4c68a62ef33b8d"
+      "sha256": "25aae0834d7baf937c4926785fdf247d18ef4c41a86f24a52f55cab5a8341dd7"
     },
     {
       "path": "pkg/runner/runner.go",
       "upstreamSha256": "03198fc2ed5aa8aeae3c39e146b458531eda172a20844faf0ca36f89a0553962",
-      "sha256": "03198fc2ed5aa8aeae3c39e146b458531eda172a20844faf0ca36f89a0553962"
+      "sha256": "21820ae06eb2bbf5baa8990825e0a209223c26b18e84f188cc7bf3b5b1298753"
     },
     {
       "path": "pkg/runner/step.go",
@@ -461,5 +485,6 @@
       "upstreamSha256": "4d9de563e673a644cbbd2662ce8badacc966e182a40064887ecdff1b1c31fcc0",
       "sha256": "4d9de563e673a644cbbd2662ce8badacc966e182a40064887ecdff1b1c31fcc0"
     }
-  ]
+  ],
+  "readonlyCopyPatchSHA256": "fab694a362e1c4d8d405cb7d60f53756382e1e97468a4e6d31b7c4ce666dfbf8"
 }

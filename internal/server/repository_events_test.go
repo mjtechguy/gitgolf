@@ -362,3 +362,73 @@ func TestRepositoryEventFailureBeforeAcknowledgmentPostgres(t *testing.T) {
 		})
 	}
 }
+
+func TestForgejoRepositoryEventHeaders(t *testing.T) {
+	connection := eventFixtureConnection()
+	config := eventFixtureConfig(connection)
+	config.ForgeKind = "forgejo"
+	config.ForgeInstanceID = uuid.NewString()
+	s, err := New(config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		edit   func(*http.Request)
+		status int
+	}{
+		{"pinned Forgejo headers", func(r *http.Request) {}, 503},
+		{"explicit repository scope", func(r *http.Request) { r.Header.Set("X-Gitea-Hook-Installation-Target-Type", "repository") }, 503},
+		{"organization scope", func(r *http.Request) { r.Header.Set("X-Gitea-Hook-Installation-Target-Type", "organization") }, 400},
+		{"duplicate scope", func(r *http.Request) {
+			r.Header.Add("X-Gitea-Hook-Installation-Target-Type", "repository")
+			r.Header.Add("X-Gitea-Hook-Installation-Target-Type", "repository")
+		}, 400},
+		{"missing native signature", func(r *http.Request) { r.Header.Del("X-Forgejo-Signature") }, 400},
+		{"mixed delivery", func(r *http.Request) { r.Header.Set("X-Forgejo-Delivery", uuid.NewString()) }, 400},
+		{"duplicate native event", func(r *http.Request) { r.Header.Add("X-Forgejo-Event", "push") }, 400},
+		{"mismatched signature", func(r *http.Request) { r.Header.Set("X-Forgejo-Signature", strings.Repeat("0", 64)) }, 400},
+		{"invalid matching signatures", func(r *http.Request) {
+			r.Header.Set("X-Forgejo-Signature", strings.Repeat("0", 64))
+			r.Header.Set("X-Gitea-Signature", strings.Repeat("0", 64))
+		}, 401},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := eventRequest(connection, uuid.NewString(), eventFixtureBody())
+			r.Header.Del("X-Gitea-Hook-Installation-Target-Type")
+			for _, suffix := range []string{"Delivery", "Event", "Event-Type", "Signature"} {
+				r.Header.Set("X-Forgejo-"+suffix, r.Header.Get("X-Gitea-"+suffix))
+			}
+			tc.edit(r)
+			if response := eventResponse(s, r); response.Code != tc.status {
+				t.Fatalf("status %d, want %d", response.Code, tc.status)
+			}
+		})
+	}
+	for _, field := range []string{"id", "full_name"} {
+		payload := eventFixturePayload()
+		if field == "id" {
+			payload["repository"].(map[string]any)[field] = 102
+		} else {
+			payload["repository"].(map[string]any)[field] = "other/project"
+		}
+		body, _ := json.Marshal(payload)
+		r := eventRequest(connection, uuid.NewString(), body)
+		r.Header.Del("X-Gitea-Hook-Installation-Target-Type")
+		for _, suffix := range []string{"Delivery", "Event", "Event-Type", "Signature"} {
+			r.Header.Set("X-Forgejo-"+suffix, r.Header.Get("X-Gitea-"+suffix))
+		}
+		if response := eventResponse(s, r); response.Code != 400 {
+			t.Fatal("signed Forgejo payload escaped repository binding", field, response.Code)
+		}
+	}
+	legacy, err := New(eventFixtureConfig(connection), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := eventRequest(connection, uuid.NewString(), eventFixtureBody())
+	r.Header.Del("X-Gitea-Hook-Installation-Target-Type")
+	if response := eventResponse(legacy, r); response.Code != 400 {
+		t.Fatal("Gitea scope requirement relaxed", response.Code)
+	}
+}

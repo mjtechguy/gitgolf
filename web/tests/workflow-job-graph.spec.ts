@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import {expect,test,type Locator,type Page,type Route} from '@playwright/test';
 
 // Read xterm's own screen-reader rows, excluding only blank viewport padding.
@@ -37,7 +38,7 @@ async function fixture(page:Page){
   if(method==='InspectWorkflows')return respond(route,InspectWorkflowsResponseSchema,{repositoryId:'11',commitId:commit,catalogVersion:'fixture'});
   if(method==='ListActionRuns'){const input=request(route,ListActionRunsRequestSchema);state.inventories.push({repositoryId:input.repositoryId,kindFilter:input.kindFilter,workflowPath:input.workflowPath});return respond(route,ListActionRunsResponseSchema,{repositoryId:'11',runs:[{ref:{kind:ActionRunKind.WORKFLOW,id:runId},repositoryId:'11',ownerId:'42',title:'.github/workflows/graph.yml',workflowPath:'.github/workflows/graph.yml',state:'running',commitId:commit,trigger:'workflow_dispatch',createdAt:'2026-10-04T00:00:00Z'}]});}
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'42',login:'alex'}});
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:'11',name:'demo',fullName:'alex/demo',defaultBranch:'main',private:true}});
   if(method==='ListAgentTasks')return disabledAgentTasks(route);

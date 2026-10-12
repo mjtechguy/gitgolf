@@ -1,6 +1,8 @@
 package server
 
 import (
+	"archive/tar"
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"net/http"
@@ -10,6 +12,31 @@ import (
 	"sync/atomic"
 	"testing"
 )
+
+func TestWorkflowSourceRemoteContainedLinks(t *testing.T) {
+	for _, target := range []string{"../ordinary/", "/outside", "../../outside", "../missing"} {
+		var archive bytes.Buffer
+		writer := tar.NewWriter(&archive)
+		for _, header := range []*tar.Header{
+			{Name: "repo/", Typeflag: tar.TypeDir, Mode: 0755},
+			{Name: "repo/ordinary/", Typeflag: tar.TypeDir, Mode: 0755},
+			{Name: "repo/certs/", Typeflag: tar.TypeDir, Mode: 0755},
+			{Name: "repo/certs/ca", Typeflag: tar.TypeSymlink, Mode: 0777, Linkname: target},
+		} {
+			if writer.WriteHeader(header) != nil {
+				t.Fatal("tar header")
+			}
+		}
+		writer.Close()
+		if _, err := normalizeWorkflowSource(bytes.NewReader(archive.Bytes()), strings.Repeat("a", 40), "", "", nil); err == nil {
+			t.Fatal("legacy source profile silently widened")
+		}
+		_, err := normalizeWorkflowSourceProfile(bytes.NewReader(archive.Bytes()), strings.Repeat("a", 40), "", "", nil, true)
+		if (err == nil) != (target == "../ordinary/") {
+			t.Fatal("contained remote source link differs", target, err)
+		}
+	}
+}
 
 // Stable pages are important here: each request recreates an immutable fixture
 // from a map, and native direct-tree paging must not reorder it between reads.

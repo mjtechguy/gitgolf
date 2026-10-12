@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -28,7 +29,7 @@ async function backend(page: Page) {
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Sign in required.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user });
     if (method === 'GetRepositoryStar') return reject(route, 'unimplemented', 'Stars are outside this commit fixture.');
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return state.repositoryDenied ? reject(route, 'not_found', 'Repository not found or inaccessible.') : respond(route, GetRepositoryResponseSchema, { repository });
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, { branches: [{ name: 'feature/UI', commitId: head }] });

@@ -10,11 +10,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"net/netip"
 
@@ -92,7 +94,7 @@ func (cr *containerReference) Start(attach bool) common.Executor {
 				cr.tryReadGID(),
 				func(ctx context.Context) error {
 					// If this fails, then folders have wrong permissions on non root container
-					if cr.UID != 0 || cr.GID != 0 {
+					if !cr.input.CopyViaExec && (cr.UID != 0 || cr.GID != 0) {
 						_ = cr.Exec([]string{"chown", "-R", fmt.Sprintf("%d:%d", cr.UID, cr.GID), cr.input.WorkingDir}, nil, "0", "")(ctx)
 					}
 					return nil
@@ -129,7 +131,7 @@ func (cr *containerReference) CopyDir(destPath string, srcPath string, useGitIgn
 		cr.copyDir(destPath, srcPath, useGitIgnore),
 		func(ctx context.Context) error {
 			// If this fails, then folders have wrong permissions on non root container
-			if cr.UID != 0 || cr.GID != 0 {
+			if !cr.input.CopyViaExec && (cr.UID != 0 || cr.GID != 0) {
 				_ = cr.Exec([]string{"chown", "-R", fmt.Sprintf("%d:%d", cr.UID, cr.GID), destPath}, nil, "0", "")(ctx)
 			}
 			return nil
@@ -437,10 +439,16 @@ func (cr *containerReference) create(capAdd []string, capDrop []string) common.E
 
 		mounts := make([]mount.Mount, 0)
 		for mountSource, mountTarget := range input.Mounts {
+			if options := input.VolumeOptions[mountTarget]; options != nil {
+				if _, err := cr.cli.VolumeCreate(ctx, client.VolumeCreateOptions{Name: mountSource, Driver: "local", DriverOpts: options}); err != nil {
+					return err
+				}
+			}
 			mounts = append(mounts, mount.Mount{
-				Type:   mount.TypeVolume,
-				Source: mountSource,
-				Target: mountTarget,
+				Type:          mount.TypeVolume,
+				Source:        mountSource,
+				Target:        mountTarget,
+				VolumeOptions: &mount.VolumeOptions{NoCopy: input.CopyViaExec},
 			})
 		}
 
@@ -706,6 +714,24 @@ func (cr *containerReference) waitForCommand(ctx context.Context, isTerminal boo
 	}
 }
 
+// Golf's read-only-root profile cannot use Docker's archive writes, which
+// reject the root filesystem and can miss tmpfs mounts on rootless daemons.
+// Source bytes stay stdin; a fixed argv writes through the running mount.
+func (cr *containerReference) copyArchive(ctx context.Context, destination string, content io.Reader) error {
+	if !cr.input.CopyViaExec {
+		_, err := cr.cli.CopyToContainer(ctx, cr.id, client.CopyToContainerOptions{DestinationPath: destination, Content: content})
+		return err
+	}
+	cmd := exec.CommandContext(ctx, "docker", "exec", "-i", cr.id, "/bin/tar", "-xf", "-", "-C", destination)
+	cmd.Stdin = content
+	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+	cmd.WaitDelay = 2 * time.Second
+	if cmd.Run() != nil {
+		return errors.New("Golf mounted archive transfer failed")
+	}
+	return nil
+}
+
 func (cr *containerReference) CopyTarStream(ctx context.Context, destPath string, tarStream io.Reader) error {
 	if common.Dryrun(ctx) {
 		return nil
@@ -719,17 +745,24 @@ func (cr *containerReference) CopyTarStream(ctx context.Context, destPath string
 		Typeflag: tar.TypeDir,
 	})
 	tw.Close()
-	_, err := cr.cli.CopyToContainer(ctx, cr.id, client.CopyToContainerOptions{DestinationPath: "/", Content: buf})
+	var err error
+	if cr.input.CopyViaExec {
+		// GNU tar cannot traverse a read-only root into a writable mount.
+		// Native argv creates the directory directly inside that mount.
+		err = cr.Exec([]string{"/bin/mkdir", "-p", destPath}, nil, "", "")(ctx)
+	} else {
+		err = cr.copyArchive(ctx, "/", buf)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to mkdir to copy content to container: %w", err)
 	}
 	// Copy Content
-	_, err = cr.cli.CopyToContainer(ctx, cr.id, client.CopyToContainerOptions{DestinationPath: destPath, Content: tarStream})
+	err = cr.copyArchive(ctx, destPath, tarStream)
 	if err != nil {
 		return fmt.Errorf("failed to copy content to container: %w", err)
 	}
 	// If this fails, then folders have wrong permissions on non root container
-	if cr.UID != 0 || cr.GID != 0 {
+	if !cr.input.CopyViaExec && (cr.UID != 0 || cr.GID != 0) {
 		_ = cr.Exec([]string{"chown", "-R", fmt.Sprintf("%d:%d", cr.UID, cr.GID), destPath}, nil, "0", "")(ctx)
 	}
 	return nil
@@ -798,7 +831,7 @@ func (cr *containerReference) copyDir(dstPath string, srcPath string, useGitIgno
 		if err != nil {
 			return fmt.Errorf("failed to seek tar archive: %w", err)
 		}
-		_, err = cr.cli.CopyToContainer(ctx, cr.id, client.CopyToContainerOptions{DestinationPath: "/", Content: tarFile})
+		err = cr.copyArchive(ctx, "/", tarFile)
 		if err != nil {
 			return fmt.Errorf("failed to copy content to container: %w", err)
 		}
@@ -832,7 +865,7 @@ func (cr *containerReference) copyContent(dstPath string, files ...*FileEntry) c
 		}
 
 		logger.Debugf("Extracting content to '%s'", dstPath)
-		_, err := cr.cli.CopyToContainer(ctx, cr.id, client.CopyToContainerOptions{DestinationPath: dstPath, Content: &buf})
+		err := cr.copyArchive(ctx, dstPath, &buf)
 		if err != nil {
 			return fmt.Errorf("failed to copy content to container: %w", err)
 		}

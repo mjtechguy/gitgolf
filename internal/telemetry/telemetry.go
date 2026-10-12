@@ -41,6 +41,8 @@ type Config struct {
 }
 
 type Runtime struct {
+	started   time.Time
+	version   string
 	logger    zerolog.Logger
 	tracer    trace.Tracer
 	provider  *sdktrace.TracerProvider
@@ -65,7 +67,7 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	if len(config.ServiceVersion) > 64 || strings.ContainsAny(config.ServiceVersion, "\r\n\t") {
 		return nil, errors.New("invalid telemetry service version")
 	}
-	r := &Runtime{logger: config.Logger, registry: prometheus.NewRegistry(), routes: map[string]struct{}{
+	r := &Runtime{started: time.Now(), version: config.ServiceVersion, logger: config.Logger, registry: prometheus.NewRegistry(), routes: map[string]struct{}{
 		"/healthz": {}, "/readyz": {}, "/auth/gitea/callback": {}, "web": {}, "not_found": {},
 	}}
 	services := golfv1.File_golf_v1_golf_proto.Services()

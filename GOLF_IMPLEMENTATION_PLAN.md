@@ -1,5 +1,75 @@
 # Golf implementation plan
 
+Portable backend direction (2026-10-11): the user selected **Forgejo** to replace
+Gitea. [ADR 0009](docs/decisions/0009-forgejo-portable-backend.md) and the
+[Forgejo transition plan](docs/FORGEJO_MIGRATION_PLAN.md) supersede the earlier
+Gitea-default direction. Existing deployments remain unchanged until their fresh
+target, identity/data migration and rollback gates pass. Cloudflare-native remains
+Artifacts/D1/Workers. The [Forgejo foundation](docs/FORGEJO_SETUP.md) is now
+implemented and locally qualified in bounded profiles; full migration and Gitea
+retirement remain open. The importer lost a private pending review in rehearsal,
+so no retained installation has been cut over.
+
+Native source progress (2026-10-11): schema18 adds reviewer requests/cancellation,
+private pending summaries, publication/discard, review dismissal/restoration and
+bounded exact-base CODEOWNERS suggestions. Native General now edits the existing
+default branch; Golf Git advertisements use the same HEAD. Current inventory is
+91/298 bounded shared adapters, with207 still missing, including file inventory
+and merge observations (protected native publication remains disabled). Local browser, Git client,
+workerd/D1/Access and build checks pass. Hosted schema18 service-account rollout,
+rollback/promotion, CI/previews and permission tests now pass; all temporary cloud
+resources are removed. Positive human-only hosted coverage, scale qualification
+and full parity remain open. See [the status ledger](docs/IMPLEMENTATION_STATUS.md)
+and [the parity plan](docs/REPOSITORY_PARITY_PLAN.md).
+
+
+Native webhook delivery (2026-10-10): schema15 release `42fe30e0331a…` adds all
+five shared Webhooks RPCs, encrypted subscriptions, transactional event delivery,
+sponsor revocation checks and Operations queue/maintenance observations. Hosted
+signature verification, automatic issue delivery, replay and UI redelivery passed;
+the temporary receiver is deleted and its subscription disabled. Native inventory
+is71/297 bounded adapters;226 and the remaining parity gates are still required.
+See docs/IMPLEMENTATION_STATUS.md and docs/CLOUDFLARE_NATIVE_SETUP.md.
+
+
+Shared settings navigation correction (2026-10-10): hosted release `f187dea82c56…`
+retains all nine existing repository settings destinations across runtimes and
+explains unavailable adapters. Signed-in browser and Worker/API convergence are
+verified; no additional native adapters or full functional parity are claimed.
+See docs/IMPLEMENTATION_STATUS.md.
+
+
+Latest native delivery (2026-10-10): schema14 release `feb2122ac0f7…` is served on
+`gitgolf.mjtechguy.com`, including direct collaborators/invitations, labels/milestones,
+comment editing, reactions, subscriptions, inbox/activity and collaboration write
+hardening. Actual hosted mutation/read/revocation tests passed.66/297 shared RPCs
+have bounded native adapters; the remaining231 and the full parity gates are still
+required. See docs/REPOSITORY_PARITY_PLAN.md and docs/IMPLEMENTATION_STATUS.md for
+source/runtime/hosted evidence and limitations. The bounded hosted window ends at
+09:37:55 UTC; the two prior preview leases were not renewed.
+
+The user authorized the full [repository parity execution plan](docs/REPOSITORY_PARITY_PLAN.md)
+on 2026-10-10, including native repository administration, protected merging,
+collaboration, CI/CD, Golf Apps, security/insights, Projects and Discussions.
+This supersedes earlier references to Golf Apps as discussion-only scope. The
+implementation now includes locally qualified native collaborators, invitations,
+repository labels/milestones, issue/PR metadata and comment editing. Hosted rollout
+and remaining items retain explicit implementation and qualification gates in that plan.
+
+The [robustness and Operations execution plan](docs/CLOUDFLARE_ROBUSTNESS_OPERATIONS_PLAN.md) records detailed tasks and qualification gates. The integrated [Operations dashboard](docs/OPERATIONS.md) at `/admin/operations` now uses the shared UI and runtime-specific metrics/service observations. Cloudflare needs no Grafana or collector deployment. This source increment does not complete native forge parity or global scale.
+
+Shared native frontend increment (2026-10-09): the Cloudflare entry now uses the portable application's full shared route/component/style/font tree, with bounded native Artifacts history/diffs/comparisons and D1 workspace/stars/profile adapters. Human repository/PR browsing, mobile themes and protected Worker app storage pass; [current status](docs/IMPLEMENTATION_STATUS.md#shared-native-frontend-2026-10-09-bounded-hosted-human-qualification) retains exact evidence and remaining native consumers. Full capability parity, protected merge, migration/recovery and scale remain open. Golf Apps, email, optional PlanetScale/Hyperdrive, Access branding and optional repository monetization stay follow-up discussion items.
+
+Native managed-app increment (2026-10-09): [bounded hosted application qualification](docs/IMPLEMENTATION_STATUS.md#managed-worker-apps-2026-10-09-bounded-hosted-api-qualified) now passes Workers for Platforms dispatch, private per-preview D1/R2, Secrets Store signing, dedicated protected hostnames, Internet egress denial and owned-resource retirement. Runtime/settings capabilities distinguish local, Docker, Kubernetes, Cloudflare bridge and native Workers. A separate populated-demo supervisor seeds actual repositories/CI/agents and exposes private begin/stop commands with a four-hour window; consult its live receipt for readiness. Human native UI acceptance, protected canonical merge, full portable feature parity, recovery and global SaaS scale remain required.
+
+Native reviewer/delivery increment (2026-10-09): the [separate Cloudflare setup](docs/CLOUDFLARE_NATIVE_SETUP.md#access-login-and-native-reviewer-ui) now includes a native reviewer UI with Access as its default login, current D1 identity/repository authority, concurrent agent controls and source-bound proposal comparison. Passing approved canonical tests can publish a bounded static Artifacts directory into private R2, with a dedicated Access-gated preview Worker, short-lived reviewer grants, expiry/purge and optional single-dispatch Browser Run snapshots. Source/local qualification and actual hosted outcomes are recorded separately in the [status ledger](docs/IMPLEMENTATION_STATUS.md). This does not close human native login, integration/canonical merge, per-preview hostnames, arbitrary app/data provisioning, automatic PR-push CI, portable feature parity or SaaS-scale acceptance.
+
+Native Cloudflare increment (2026-10-09): [Authorized concurrent PR agents](docs/IMPLEMENTATION_STATUS.md#native-pr-agent-execution-2026-10-09-bounded-hosted-api-qualified) now reuse the maintained controller through native D1/DO authority, independent Artifacts forks, bounded Workers AI/Gateway execution and private R2 context/results. Two real agents, unchanged canonical Git, stale/revoked-reader behavior and complete owned teardown are qualified. This is an opt-in API/single-file profile; native agent UI/comparison, automatic protected previews and complete forge/scale acceptance remain open.
+
+Native Cloudflare increment (2026-10-08): [PR container execution and optional Analytics Engine metrics](docs/IMPLEMENTATION_STATUS.md#native-pr-container-execution-and-metrics-2026-10-08-bounded-hosted-api-qualified) extend the native evidence pipeline. Hosted passing/failing exact-commit tests, real network denial, private R2 results, Clef, source staleness and reader revocation pass; all owned resources are removed. The separate setup path approves an image/module policy and bounds workspace execution. Analytics writes remain source-qualified; native agent editing, general Actions, automatic previews, managed app hosting and global scale remain subsequent gates.
+
+Source094 adds the optional Golf/Access identity bridge and one operator-configured Cloudflare static preview. PostgreSQL/race, Worker boundaries/build, native TLS/D1/R2 and actual Access email-code browser admission/content/repository revocation pass. All owned test resources are removed. Golf-issued alias admission remains seat-limited; the existing Google provider has a deleted OAuth client. See the [094 evidence boundary](docs/IMPLEMENTATION_STATUS.md#cloudflare-protected-preview094-2026-10-08-bounded-native-browser-qualified). Automatic PR delivery/native SaaS scale remain subsequent gates.
+
 Status: product direction and implementation roadmap; shared Gitea first-release decision incorporated on 2026-10-01, latest scoped implementation review 2026-10-06. Provider proofs and implementation evidence remain required. Explicit defaults are engineering decisions that can be revisited through ADRs.
 
 Current local deployment (2026-10-06): the 087–091 bounded batch is deployed on clean frozen `f548567` at schema 091. [Matching source/native/browser/rollout/running/served evidence](docs/IMPLEMENTATION_STATUS.md#portable-priorities087091-deployed-bounded-consumers-2026-10-06) binds exact runtime identities, preserved authentication/configuration/resources, 134 controlled browser cases and latest-schema Golf-only restore. New consumers include exact-head protected-review observations, managed private ACP controls/once-only commands, pending saved-inline append, batch/rename, discussion attachments and opt-in verified-email recovery. Actual served batch/body/comment upload/download and MFA/restart proofs pass. File-tool permission grants and the new agent Actions catalog remain disabled pending their own runtime acceptance; protected publication, private migration fidelity, retained recovery email delivery and coordinated whole-stack restore remain open. Neither track, full forge parity nor an entire phase becomes Ready from these consumers.
@@ -13,9 +83,19 @@ Current local deployment (2026-10-06): the 087–091 bounded batch is deployed o
 
 The [local completion queue](docs/LOCAL_COMPLETION_NEXT.md) now tracks remaining contracts after the verified 091 rollout. Existing portable Go/PostgreSQL/native API/keyring/shared UI/SSE consumers are reused. No Cloudflare allocation, new Docker capacity, paid model call or execution job is attributed to this batch.
 
+The [Gitea API and CI compatibility plan](docs/GITEA_CI_COMPATIBILITY_PLAN.md) expands the 2026-10-07 review into an ordered backlog for complete supported Gitea API coverage, GitHub Actions/GitLab execution, native connected CI, and protected publication. It defines dependencies and acceptance gates beyond the initial bounded v1 catalogs; it is a plan, not new implementation or deployment evidence.
+
+The [Cloudflare build and scale plan](docs/CLOUDFLARE_BUILD_PLAN.md) refines P5/P6/P7/P8 into provider discovery, concurrent Artifacts agents, real D1/R2/AI application provisioning, DNS/Access-protected PR previews, competition rehearsal and global SaaS work. On 2026-10-07 the user selected fully Cloudflare-native managed SaaS as the destination, with the current Gitea/PostgreSQL core serving as a migration bridge. Current ownership remains until native authority/forge cutover qualifies; portable hosting stays independent. The status ledger records bounded live foundation/concurrent-agent proofs and source-ahead encrypted Cloudflare profiles with a qualified operator D1/R2 storage consumer at migration093. Golf agent integration, complete application provisioning, protected previews and global SaaS gates remain open.
+
+Native asynchronous evidence increment (2026-10-08): [Queues, Workflows, private R2 and advisory Clef through AI Gateway](docs/IMPLEMENTATION_STATUS.md#native-queued-pr-evidence-2026-10-08-bounded-live-api-qualified) now have a bounded native PR consumer and final live acceptance, with every owned resource removed. Exact commit/metadata binding, current reader/writer grants, durable inference reservations, job limits and expiry remain explicit. Browser/CLI job controls, actual CI/agent execution, automatic protected previews and global SaaS routing remain subsequent work.
+
+Native collaboration increment (2026-10-08): [D1 issues/comments, same-repository PRs, overall reviews and reported checks](docs/IMPLEMENTATION_STATUS.md#native-d1-collaboration-2026-10-08-bounded-api-and-cli-qualified) now pass bounded live acceptance through Artifacts-backed Git and the existing generated CLI contracts. A real later push invalidates earlier review/check selections, and current repository revocation denies collaboration reads. All owned resources are removed. Native UI, cross-repository proposals, history/diffs, inline reviews, protected merge and actual Actions/agent integration remain open.
+
+Native repository increment (2026-10-08): the [separate native setup](docs/CLOUDFLARE_NATIVE_SETUP.md) now qualifies actual Artifacts-backed canonical push/clone, D1 repository permissions and immutable source reads through a Worker/Durable Object, with all disposable resources removed. This does not migrate existing repositories or complete native collaboration, protected merge, Actions/agents, browser/account workflows or global scale; the [ledger](docs/IMPLEMENTATION_STATUS.md#native-artifacts-repositories-2026-10-08-bounded-live-git-qualified) records the exact proof and remaining gates.
+
 Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including bounded repository/source/history/commit-diff, issue and PR/native-review reads, member-scoped organization browsing, own-account session activity, the JSON CLI and initial local MCP adapter, durable own-account repository creation and coordinated encrypted backup/fresh restore for the canonical Docker profile. Own-account SSH key management and real local HTTP/SSH Git transport qualification are recorded in the [Git access contract](docs/GIT_ACCESS_CONTRACT.md). Each adapter's protocol/native qualification is recorded separately. The [next local completion packets](docs/LOCAL_COMPLETION_NEXT.md) track remaining consumers after the deployed fork-merge, private RustFS artifact, release-browsing/private-download, bounded existing-tag publication and own-Star increments, with maintained multi-job Actions execution qualified and deployed. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
 
-Current acceptance gaps (2026-10-06): unchanged pinned Express CI was refused with zero runs; real Express/Flask imports do not establish upstream workflow compatibility. First target remains unchanged Requests lint.yml. [Trusted Git preparation](docs/RUNNER_GIT_PREPARATION_CONTRACT.md) now has exact-H/depth1 opaque TLS PACK transport and native SHA-1/SHA-256 root/child preparation in four actual network-none Docker containers, observed resource profiles, original admitted fixture archive/tree equality and safe Git metadata export. Preparation is unadvertised and undeployed: adversarial resource-exhaustion/lost-create recovery, actual job materialization/worker integration, actual enrolled Golf/Gitea historical-H checkout, separate job token/origin, pinned remote Node24 actions and dependency egress remain gates. The credential-free metadata envelope/native engine consumer, explicit fixed-file staging and shared worker validator now have source checks; approved digest-pinned Git job-image and actual engine/coordinator qualification remain required. Current workers still use source archives.
+Current local Actions acceptance (2026-10-07): [unchanged Requests push proof](docs/compatibility/evidence/requests-local.json) now passes with original commit/tree/workflow bytes, genuine private checkout, pinned public Node24 actions, CPython3.14.8 and all nine pre-commit checks. Actual denied/direct egress, failed command, job timeout, running cancellation and exact-owned cleanup pass. [Operator setup](docs/ACTIONS_REMOTE.md) documents the separate opt-in profile. [Source and PostgreSQL authority/race checks](docs/compatibility/evidence/m2-checks.json) are distinct from native execution. PR/fork contexts, private actions, broader checkout/runtime semantics, long-step credential refresh and full compatibility remain open. The retained installation remains schema091; this source-ahead qualification does not upgrade it. Historical Git/image/worker-death receipts remain in the register.
 
 The historical 076 deployed baseline was schema076/frozen `fffb28a`. It includes ordinary contributor file editing, individual reviewer requests, reactions/subscriptions/activity/own issue and PR notifications, Markdown templates and inherited label selection, release/asset administration, public GitHub/GitLab code imports and pull mirrors, wiki reads, and repository-bound collaboration delegation. The [076 ledger](docs/IMPLEMENTATION_STATUS.md#portable-completion076-four-parallel-streams-2026-10-05) separates190 controlled browser cases, native/PostgreSQL checks and actual served/runtime receipts. Source qualification alone does not advance the retained localhost image or schema; matching deployment and independently served evidence belong in that ledger.
 
@@ -33,7 +113,7 @@ Integrated081 adds targeted global-admin MFA recovery with the administrator's o
 
 The real xterm console retains running-job/newline, automatic-history and page-wheel qualification. Ordinary native merge/squash and these review consumers do not satisfy P0.8: trusted checks, exact candidate/base/source binding, native atomic mutation fencing or a qualified equivalent, and every relevant write ingress remain release gates. Managed READ Git uses genuine local direct TLS; native web/API/SSH remain independent ingress. File writes are capped at256 KiB, ref administration remains bounded and native atomic expected-HEAD CAS is not claimed. The [071 receipts](docs/IMPLEMENTATION_STATUS.md#portable-collaboration-source-changes-and-access-control071-2026-10-05) retain their historical administrator-only source-write and then-current runtime scopes;076 and later source contracts supersede only the explicitly widened consumers.
 
-Recorded agent activity still needs a real growing Codex journal; interactive ACP/all-five harness acceptance remains open. Unsupported positive monetary caps fail closed; zero allows supported subscription tasks without a Golf monetary cap, while paid API billing remains unavailable. Trusted worker Git preparation/job credentials remain unadvertised and undeployed until the separate checkout/engine/security gates above pass under the unchanged2-GiB Docker reserve. Static-preview067 runtime/TLS acceptance, unchanged upstream CI, full delivery/Settings, latest-schema coordinated recovery, Kubernetes and the Cloudflare track remain open. Neither full GitHub/Gitea parity nor either infrastructure track is marked complete.
+Recorded agent activity still needs a real growing Codex journal; interactive ACP/all-five harness acceptance remains open. Unsupported positive monetary caps fail closed; zero allows supported subscription tasks without a Golf monetary cap, while paid API billing remains unavailable. Trusted worker Git preparation now has the explicitly negotiated bounded source profile above; bounded scoped job credentials are locally qualified in the separate remote profile and remain undeployed. Complete checkout/security gates remain open under the unchanged2-GiB Docker reserve. Static-preview067 runtime/TLS acceptance, broader upstream CI compatibility, full delivery/Settings, latest-schema coordinated recovery, Kubernetes and the Cloudflare track remain open. Neither full GitHub/Gitea parity nor either infrastructure track is marked complete.
 
 
 Prepared: 2026-10-01. Provider-neutral capability administration and next execution sequence reviewed: 2026-10-02. Provider documentation and limits must be rechecked when implementing each integration.
@@ -282,6 +362,8 @@ Schedule bounded repository maintenance, commit-graph/multi-pack optimization, i
 Qualify current Workers bindings, repository fork/import/token operations, repository event subscriptions, jurisdiction options and metrics for eligible task repositories. Preserve one authoritative repository/event owner; deduplicate provider events with Golf mutation observations. Workers Builds can own an eligible task preview build, but production branch auto-deploy must never circumvent Golf's approved candidate/promotion boundary. Use separate preview/production credentials and explicitly configured build ownership. Section 21 tracks the new announcement; canonical Artifacts remains conditional on section 2.5's integrity and protection gates.
 
 ### 2.8 Accepted first-release forge decision
+
+Long-term managed SaaS direction selected on 2026-10-07: fully Cloudflare-native hosting, using the existing shared core as a migration bridge. This is the firm all-Cloudflare requirement that triggers the native ownership/migration ADR described below. The first-release bridge decision and current native owners remain in force until a qualified cutover; they are not the permanent SaaS target. See the [Cloudflare build and scale plan](docs/CLOUDFLARE_BUILD_PLAN.md).
 
 Use Gitea as the shared forge foundation for both infrastructure tracks. Golf owns the developer interface, task/evidence system, CI orchestration, agent integrations and deployment experience. The Cloudflare track remains hybrid; Artifacts serves eligible task repositories and approved handoffs. P0.8 verifies the supported API inventory, identity mapping and policy boundary before the dependent implementation tasks proceed. This decision replaces the earlier dual-forge v1 proposal.
 

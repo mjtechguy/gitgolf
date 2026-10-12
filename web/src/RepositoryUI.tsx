@@ -9,6 +9,14 @@ export const privateQuery = { staleTime: 0, gcTime: 0 };
 // Exact immutable observations remain in memory only while mounted. The enclosing
 // repository/session gate still revalidates authority and hides on denial.
 export const privateSnapshotQuery = { ...privateQuery, staleTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false };
+// Retained immutable source is mounted only after a fresh repository access receipt.
+export const privateNavigationQuery = { ...privateSnapshotQuery, gcTime: 600_000, meta: { privateNavigation: true } };
+export function usePageVisible() {
+  return useSyncExternalStore(update => {
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, () => document.visibilityState !== 'hidden', () => false);
+}
 export const nextPage = (response: { page?: PageResponse }) => response.page?.nextPage || undefined;
 export const shortSHA = (value: string) => value.slice(0, 12);
 
@@ -27,7 +35,11 @@ export function downloadText(text:string,name:string) {
 export function fitDisclosure(menu:HTMLDetailsElement,selector:string) {
  menu.classList.remove('opens-up');
  const popup=menu.querySelector<HTMLElement>(selector);
- if(menu.open&&popup&&popup.getBoundingClientRect().bottom>innerHeight&&menu.getBoundingClientRect().top>=popup.offsetHeight)menu.classList.add('opens-up');
+  if(!menu.open||!popup)return;
+  popup.style.removeProperty('--disclosure-shift');
+  const bounds=popup.getBoundingClientRect();
+  popup.style.setProperty('--disclosure-shift',`${Math.max(8-bounds.left,Math.min(0,innerWidth-8-bounds.right))}px`);
+  if(bounds.bottom>innerHeight&&menu.getBoundingClientRect().top>=popup.offsetHeight)menu.classList.add('opens-up');
 }
 
 export function CopyButton({ text, label }: { text: string; label: string }) {

@@ -1,0 +1,7350 @@
+{
+  "format": "golf.forgejo.inventory.v1",
+  "sourceSHA256": "5a95a50cf527825dfb251071f1dea4634d1ec28adca93f408d1cbc2380779215",
+  "targetSHA256": "657cfc907353f1182b2a85c906d0ad2e48e71367454411685246a387a3fbfc1e",
+  "operations": [
+    {
+      "method": "DELETE",
+      "path": "/admin/actions/runners/{runner_id}",
+      "sourceOperation": "deleteAdminRunner",
+      "targetOperation": "deleteAdminRunner",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/hooks/{id}",
+      "sourceOperation": "adminDeleteHook",
+      "targetOperation": "adminDeleteHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/quota/groups/{quotagroup}",
+      "sourceOperation": null,
+      "targetOperation": "adminDeleteQuotaGroup",
+      "state": "target-only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/quota/groups/{quotagroup}/rules/{quotarule}",
+      "sourceOperation": null,
+      "targetOperation": "adminRemoveRuleFromQuotaGroup",
+      "state": "target-only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/quota/groups/{quotagroup}/users/{username}",
+      "sourceOperation": null,
+      "targetOperation": "adminRemoveUserFromQuotaGroup",
+      "state": "target-only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/quota/rules/{quotarule}",
+      "sourceOperation": null,
+      "targetOperation": "adminDeleteQuotaRule",
+      "state": "target-only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/unadopted/{owner}/{repo}",
+      "sourceOperation": "adminDeleteUnadoptedRepository",
+      "targetOperation": "adminDeleteUnadoptedRepository",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/users/{username}",
+      "sourceOperation": "adminDeleteUser",
+      "targetOperation": "adminDeleteUser",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/users/{username}/badges",
+      "sourceOperation": "adminDeleteUserBadges",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/users/{username}/emails",
+      "sourceOperation": null,
+      "targetOperation": "adminDeleteUserEmails",
+      "state": "target-only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/users/{username}/keys/{id}",
+      "sourceOperation": "adminDeleteUserPublicKey",
+      "targetOperation": "adminDeleteUserPublicKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}",
+      "sourceOperation": "orgDelete",
+      "targetOperation": "orgDelete",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}/actions/runners/{runner_id}",
+      "sourceOperation": "deleteOrgRunner",
+      "targetOperation": "deleteOrgRunner",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}/actions/secrets/{secretname}",
+      "sourceOperation": "deleteOrgSecret",
+      "targetOperation": "deleteOrgSecret",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}/actions/variables/{variablename}",
+      "sourceOperation": "deleteOrgVariable",
+      "targetOperation": "deleteOrgVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}/avatar",
+      "sourceOperation": "orgDeleteAvatar",
+      "targetOperation": "orgDeleteAvatar",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}/blocks/{username}",
+      "sourceOperation": "organizationUnblockUser",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}/hooks/{id}",
+      "sourceOperation": "orgDeleteHook",
+      "targetOperation": "orgDeleteHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}/labels/{id}",
+      "sourceOperation": "orgDeleteLabel",
+      "targetOperation": "orgDeleteLabel",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}/members/{username}",
+      "sourceOperation": "orgDeleteMember",
+      "targetOperation": "orgDeleteMember",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}/public_members/{username}",
+      "sourceOperation": "orgConcealMember",
+      "targetOperation": "orgConcealMember",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orgs/{org}/repos",
+      "sourceOperation": "orgDeleteRepos",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/packages/{owner}/{type}/{name}",
+      "sourceOperation": "deletePackage",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/packages/{owner}/{type}/{name}/{version}",
+      "sourceOperation": "deletePackageVersion",
+      "targetOperation": "deletePackage",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}",
+      "sourceOperation": "repoDelete",
+      "targetOperation": "repoDelete",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/actions/artifacts/{artifact_id}",
+      "sourceOperation": "deleteArtifact",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/actions/runners/{runner_id}",
+      "sourceOperation": "deleteRepoRunner",
+      "targetOperation": "deleteRepoRunner",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/actions/runs/{run}",
+      "sourceOperation": "deleteActionRun",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/actions/secrets/{secretname}",
+      "sourceOperation": "deleteRepoSecret",
+      "targetOperation": "deleteRepoSecret",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/actions/variables/{variablename}",
+      "sourceOperation": "deleteRepoVariable",
+      "targetOperation": "deleteRepoVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/avatar",
+      "sourceOperation": "repoDeleteAvatar",
+      "targetOperation": "repoDeleteAvatar",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/branch_protections/{name}",
+      "sourceOperation": "repoDeleteBranchProtection",
+      "targetOperation": "repoDeleteBranchProtection",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/branches/{branch}",
+      "sourceOperation": "repoDeleteBranch",
+      "targetOperation": "repoDeleteBranch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/collaborators/{collaborator}",
+      "sourceOperation": "repoDeleteCollaborator",
+      "targetOperation": "repoDeleteCollaborator",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/contents/{filepath}",
+      "sourceOperation": "repoDeleteFile",
+      "targetOperation": "repoDeleteFile",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/flags",
+      "sourceOperation": null,
+      "targetOperation": "repoDeleteAllFlags",
+      "state": "target-only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/flags/{flag}",
+      "sourceOperation": null,
+      "targetOperation": "repoDeleteFlag",
+      "state": "target-only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/git/notes/{sha}",
+      "sourceOperation": null,
+      "targetOperation": "repoRemoveNote",
+      "state": "target-only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/hooks/git/{id}",
+      "sourceOperation": "repoDeleteGitHook",
+      "targetOperation": "repoDeleteGitHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/hooks/{id}",
+      "sourceOperation": "repoDeleteHook",
+      "targetOperation": "repoDeleteHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}",
+      "sourceOperation": "issueDeleteComment",
+      "targetOperation": "issueDeleteComment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}",
+      "sourceOperation": "issueDeleteIssueCommentAttachment",
+      "targetOperation": "issueDeleteIssueCommentAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}/reactions",
+      "sourceOperation": "issueDeleteCommentReaction",
+      "targetOperation": "issueDeleteCommentReaction",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}",
+      "sourceOperation": "issueDelete",
+      "targetOperation": "issueDelete",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}",
+      "sourceOperation": "issueDeleteIssueAttachment",
+      "targetOperation": "issueDeleteIssueAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/assignees",
+      "sourceOperation": "issueRemoveAssignees",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/blocks",
+      "sourceOperation": "issueRemoveIssueBlocking",
+      "targetOperation": "issueRemoveIssueBlocking",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/comments/{id}",
+      "sourceOperation": "issueDeleteCommentDeprecated",
+      "targetOperation": "issueDeleteCommentDeprecated",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/dependencies",
+      "sourceOperation": "issueRemoveIssueDependencies",
+      "targetOperation": "issueRemoveIssueDependencies",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/labels",
+      "sourceOperation": "issueClearLabels",
+      "targetOperation": "issueClearLabels",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/labels/{identifier}",
+      "sourceOperation": null,
+      "targetOperation": "issueRemoveLabel",
+      "state": "target-only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/labels/{id}",
+      "sourceOperation": "issueRemoveLabel",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/lock",
+      "sourceOperation": "issueUnlockIssue",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/pin",
+      "sourceOperation": "unpinIssue",
+      "targetOperation": "unpinIssue",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/reactions",
+      "sourceOperation": "issueDeleteIssueReaction",
+      "targetOperation": "issueDeleteIssueReaction",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/stopwatch/delete",
+      "sourceOperation": "issueDeleteStopWatch",
+      "targetOperation": "issueDeleteStopWatch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/subscriptions/{user}",
+      "sourceOperation": "issueDeleteSubscription",
+      "targetOperation": "issueDeleteSubscription",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/times",
+      "sourceOperation": "issueResetTime",
+      "targetOperation": "issueResetTime",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/issues/{index}/times/{id}",
+      "sourceOperation": "issueDeleteTime",
+      "targetOperation": "issueDeleteTime",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/keys/{id}",
+      "sourceOperation": "repoDeleteKey",
+      "targetOperation": "repoDeleteKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/labels/{id}",
+      "sourceOperation": "issueDeleteLabel",
+      "targetOperation": "issueDeleteLabel",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/milestones/{id}",
+      "sourceOperation": "issueDeleteMilestone",
+      "targetOperation": "issueDeleteMilestone",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/merge",
+      "sourceOperation": "repoCancelScheduledAutoMerge",
+      "targetOperation": "repoCancelScheduledAutoMerge",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/requested_reviewers",
+      "sourceOperation": "repoDeletePullReviewRequests",
+      "targetOperation": "repoDeletePullReviewRequests",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}",
+      "sourceOperation": "repoDeletePullReview",
+      "targetOperation": "repoDeletePullReview",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/comments/{comment}",
+      "sourceOperation": null,
+      "targetOperation": "repoDeletePullReviewComment",
+      "state": "target-only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/push_mirrors/{name}",
+      "sourceOperation": "repoDeletePushMirror",
+      "targetOperation": "repoDeletePushMirror",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/releases/tags/{tag}",
+      "sourceOperation": "repoDeleteReleaseByTag",
+      "targetOperation": "repoDeleteReleaseByTag",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/releases/{id}",
+      "sourceOperation": "repoDeleteRelease",
+      "targetOperation": "repoDeleteRelease",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}",
+      "sourceOperation": "repoDeleteReleaseAttachment",
+      "targetOperation": "repoDeleteReleaseAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/subscription",
+      "sourceOperation": "userCurrentDeleteSubscription",
+      "targetOperation": "userCurrentDeleteSubscription",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/tag_protections/{id}",
+      "sourceOperation": "repoDeleteTagProtection",
+      "targetOperation": "repoDeleteTagProtection",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/tags/{tag}",
+      "sourceOperation": "repoDeleteTag",
+      "targetOperation": "repoDeleteTag",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/teams/{team}",
+      "sourceOperation": "repoDeleteTeam",
+      "targetOperation": "repoDeleteTeam",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/topics/{topic}",
+      "sourceOperation": "repoDeleteTopic",
+      "targetOperation": "repoDeleteTopic",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/repos/{owner}/{repo}/wiki/page/{pageName}",
+      "sourceOperation": "repoDeleteWikiPage",
+      "targetOperation": "repoDeleteWikiPage",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/teams/{id}",
+      "sourceOperation": "orgDeleteTeam",
+      "targetOperation": "orgDeleteTeam",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/teams/{id}/members/{username}",
+      "sourceOperation": "orgRemoveTeamMember",
+      "targetOperation": "orgRemoveTeamMember",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/teams/{id}/repos/{org}/{repo}",
+      "sourceOperation": "orgRemoveTeamRepository",
+      "targetOperation": "orgRemoveTeamRepository",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/token",
+      "sourceOperation": "deleteCurrentToken",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/actions/runners/{runner_id}",
+      "sourceOperation": "deleteUserRunner",
+      "targetOperation": "deleteUserRunner",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/actions/secrets/{secretname}",
+      "sourceOperation": "deleteUserSecret",
+      "targetOperation": "deleteUserSecret",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/actions/variables/{variablename}",
+      "sourceOperation": "deleteUserVariable",
+      "targetOperation": "deleteUserVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/applications/oauth2/{id}",
+      "sourceOperation": "userDeleteOAuth2Application",
+      "targetOperation": "userDeleteOAuth2Application",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/avatar",
+      "sourceOperation": "userDeleteAvatar",
+      "targetOperation": "userDeleteAvatar",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/blocks/{username}",
+      "sourceOperation": "userUnblockUser",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/emails",
+      "sourceOperation": "userDeleteEmail",
+      "targetOperation": "userDeleteEmail",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/following/{username}",
+      "sourceOperation": "userCurrentDeleteFollow",
+      "targetOperation": "userCurrentDeleteFollow",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/gpg_keys/{id}",
+      "sourceOperation": "userCurrentDeleteGPGKey",
+      "targetOperation": "userCurrentDeleteGPGKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/hooks/{id}",
+      "sourceOperation": "userDeleteHook",
+      "targetOperation": "userDeleteHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/keys/{id}",
+      "sourceOperation": "userCurrentDeleteKey",
+      "targetOperation": "userCurrentDeleteKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/user/starred/{owner}/{repo}",
+      "sourceOperation": "userCurrentDeleteStar",
+      "targetOperation": "userCurrentDeleteStar",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "DELETE",
+      "path": "/users/{username}/tokens/{token}",
+      "sourceOperation": "userDeleteAccessToken",
+      "targetOperation": "userDeleteAccessToken",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/activitypub/actor",
+      "sourceOperation": null,
+      "targetOperation": "activitypubInstanceActor",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/activitypub/repository-id/{repository-id}",
+      "sourceOperation": null,
+      "targetOperation": "activitypubRepository",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/activitypub/user-id/{user-id}",
+      "sourceOperation": null,
+      "targetOperation": "activitypubPerson",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/activitypub/user-id/{user-id}/activities/{activity-id}",
+      "sourceOperation": null,
+      "targetOperation": "activitypubPersonActivityNote",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/activitypub/user-id/{user-id}/activities/{activity-id}/activity",
+      "sourceOperation": null,
+      "targetOperation": "activitypubPersonActivity",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/activitypub/user-id/{user-id}/outbox",
+      "sourceOperation": null,
+      "targetOperation": "activitypubPersonFeed",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/actions/jobs",
+      "sourceOperation": "listAdminWorkflowJobs",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/actions/runners",
+      "sourceOperation": "getAdminRunners",
+      "targetOperation": "getAdminRunners",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/actions/runners/jobs",
+      "sourceOperation": null,
+      "targetOperation": "adminGetActionRunJobs",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/actions/runners/registration-token",
+      "sourceOperation": null,
+      "targetOperation": "adminGetRunnerRegistrationToken",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/actions/runners/{runner_id}",
+      "sourceOperation": "getAdminRunner",
+      "targetOperation": "getAdminRunner",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/actions/runs",
+      "sourceOperation": "listAdminWorkflowRuns",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/cron",
+      "sourceOperation": "adminCronList",
+      "targetOperation": "adminCronList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/emails",
+      "sourceOperation": "adminGetAllEmails",
+      "targetOperation": "adminGetAllEmails",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/emails/search",
+      "sourceOperation": "adminSearchEmails",
+      "targetOperation": "adminSearchEmails",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/hooks",
+      "sourceOperation": "adminListHooks",
+      "targetOperation": "adminListHooks",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/hooks/{id}",
+      "sourceOperation": "adminGetHook",
+      "targetOperation": "adminGetHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/orgs",
+      "sourceOperation": "adminGetAllOrgs",
+      "targetOperation": "adminGetAllOrgs",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/quota/groups",
+      "sourceOperation": null,
+      "targetOperation": "adminListQuotaGroups",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/quota/groups/{quotagroup}",
+      "sourceOperation": null,
+      "targetOperation": "adminGetQuotaGroup",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/quota/groups/{quotagroup}/users",
+      "sourceOperation": null,
+      "targetOperation": "adminListUsersInQuotaGroup",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/quota/rules",
+      "sourceOperation": null,
+      "targetOperation": "adminListQuotaRules",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/quota/rules/{quotarule}",
+      "sourceOperation": null,
+      "targetOperation": "adminGetQuotaRule",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/runners/jobs",
+      "sourceOperation": null,
+      "targetOperation": "adminSearchRunJobs",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/runners/registration-token",
+      "sourceOperation": null,
+      "targetOperation": "adminGetRegistrationToken",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/unadopted",
+      "sourceOperation": "adminUnadoptedList",
+      "targetOperation": "adminUnadoptedList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users",
+      "sourceOperation": "adminSearchUsers",
+      "targetOperation": "adminSearchUsers",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users/{username}/badges",
+      "sourceOperation": "adminListUserBadges",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users/{username}/emails",
+      "sourceOperation": null,
+      "targetOperation": "adminListUserEmails",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users/{username}/quota",
+      "sourceOperation": null,
+      "targetOperation": "adminGetUserQuota",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/gitignore/templates",
+      "sourceOperation": "listGitignoresTemplates",
+      "targetOperation": "listGitignoresTemplates",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/gitignore/templates/{name}",
+      "sourceOperation": "getGitignoreTemplateInfo",
+      "targetOperation": "getGitignoreTemplateInfo",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/label/templates",
+      "sourceOperation": "listLabelTemplates",
+      "targetOperation": "listLabelTemplates",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/label/templates/{name}",
+      "sourceOperation": "getLabelTemplateInfo",
+      "targetOperation": "getLabelTemplateInfo",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/licenses",
+      "sourceOperation": "listLicenseTemplates",
+      "targetOperation": "listLicenseTemplates",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/licenses/{name}",
+      "sourceOperation": "getLicenseTemplateInfo",
+      "targetOperation": "getLicenseTemplateInfo",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/nodeinfo",
+      "sourceOperation": null,
+      "targetOperation": "getNodeInfo",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/notifications",
+      "sourceOperation": "notifyGetList",
+      "targetOperation": "notifyGetList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/notifications/new",
+      "sourceOperation": "notifyNewAvailable",
+      "targetOperation": "notifyNewAvailable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/notifications/threads/{id}",
+      "sourceOperation": "notifyGetThread",
+      "targetOperation": "notifyGetThread",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs",
+      "sourceOperation": "orgGetAll",
+      "targetOperation": "orgGetAll",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}",
+      "sourceOperation": "orgGet",
+      "targetOperation": "orgGet",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/actions/jobs",
+      "sourceOperation": "getOrgWorkflowJobs",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/actions/runners",
+      "sourceOperation": "getOrgRunners",
+      "targetOperation": "getOrgRunners",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/actions/runners/jobs",
+      "sourceOperation": null,
+      "targetOperation": "orgSearchRunJobs",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/actions/runners/registration-token",
+      "sourceOperation": null,
+      "targetOperation": "orgGetRunnerRegistrationToken",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/actions/runners/{runner_id}",
+      "sourceOperation": "getOrgRunner",
+      "targetOperation": "getOrgRunner",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/actions/runs",
+      "sourceOperation": "getOrgWorkflowRuns",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/actions/secrets",
+      "sourceOperation": "orgListActionsSecrets",
+      "targetOperation": "orgListActionsSecrets",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/actions/variables",
+      "sourceOperation": "getOrgVariablesList",
+      "targetOperation": "getOrgVariablesList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/actions/variables/{variablename}",
+      "sourceOperation": "getOrgVariable",
+      "targetOperation": "getOrgVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/activities/feeds",
+      "sourceOperation": "orgListActivityFeeds",
+      "targetOperation": "orgListActivityFeeds",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/blocks",
+      "sourceOperation": "organizationListBlocks",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/blocks/{username}",
+      "sourceOperation": "organizationCheckUserBlock",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/hooks",
+      "sourceOperation": "orgListHooks",
+      "targetOperation": "orgListHooks",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/hooks/{id}",
+      "sourceOperation": "orgGetHook",
+      "targetOperation": "orgGetHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/labels",
+      "sourceOperation": "orgListLabels",
+      "targetOperation": "orgListLabels",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/labels/{id}",
+      "sourceOperation": "orgGetLabel",
+      "targetOperation": "orgGetLabel",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/list_blocked",
+      "sourceOperation": null,
+      "targetOperation": "orgListBlockedUsers",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/members",
+      "sourceOperation": "orgListMembers",
+      "targetOperation": "orgListMembers",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/members/{username}",
+      "sourceOperation": "orgIsMember",
+      "targetOperation": "orgIsMember",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/public_members",
+      "sourceOperation": "orgListPublicMembers",
+      "targetOperation": "orgListPublicMembers",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/public_members/{username}",
+      "sourceOperation": "orgIsPublicMember",
+      "targetOperation": "orgIsPublicMember",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/quota",
+      "sourceOperation": null,
+      "targetOperation": "orgGetQuota",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/quota/artifacts",
+      "sourceOperation": null,
+      "targetOperation": "orgListQuotaArtifacts",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/quota/attachments",
+      "sourceOperation": null,
+      "targetOperation": "orgListQuotaAttachments",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/quota/check",
+      "sourceOperation": null,
+      "targetOperation": "orgCheckQuota",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/quota/packages",
+      "sourceOperation": null,
+      "targetOperation": "orgListQuotaPackages",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/repos",
+      "sourceOperation": "orgListRepos",
+      "targetOperation": "orgListRepos",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/teams",
+      "sourceOperation": "orgListTeams",
+      "targetOperation": "orgListTeams",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/{org}/teams/search",
+      "sourceOperation": "teamSearch",
+      "targetOperation": "teamSearch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/packages/{owner}",
+      "sourceOperation": "listPackages",
+      "targetOperation": "listPackages",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/packages/{owner}/{type}/{name}",
+      "sourceOperation": "listPackageVersions",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/packages/{owner}/{type}/{name}/-/latest",
+      "sourceOperation": "getLatestPackageVersion",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/packages/{owner}/{type}/{name}/{version}",
+      "sourceOperation": "getPackage",
+      "targetOperation": "getPackage",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/packages/{owner}/{type}/{name}/{version}/files",
+      "sourceOperation": "listPackageFiles",
+      "targetOperation": "listPackageFiles",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/issues/search",
+      "sourceOperation": "issueSearchIssues",
+      "targetOperation": "issueSearchIssues",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/search",
+      "sourceOperation": "repoSearch",
+      "targetOperation": "repoSearch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}",
+      "sourceOperation": "repoGet",
+      "targetOperation": "repoGet",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/artifacts",
+      "sourceOperation": "getArtifacts",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/artifacts/{artifact_id}",
+      "sourceOperation": "getArtifact",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/artifacts/{artifact_id}/zip",
+      "sourceOperation": "downloadArtifact",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/jobs",
+      "sourceOperation": "listWorkflowJobs",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/jobs/{job_id}",
+      "sourceOperation": "getWorkflowJob",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
+      "sourceOperation": "downloadActionsRunJobLogs",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runners",
+      "sourceOperation": "getRepoRunners",
+      "targetOperation": "getRepoRunners",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runners/jobs",
+      "sourceOperation": null,
+      "targetOperation": "repoSearchRunJobs",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runners/registration-token",
+      "sourceOperation": null,
+      "targetOperation": "repoGetRunnerRegistrationToken",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runners/{runner_id}",
+      "sourceOperation": "getRepoRunner",
+      "targetOperation": "getRepoRunner",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runs",
+      "sourceOperation": "getWorkflowRuns",
+      "targetOperation": "ListActionRuns",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runs/{run_id}",
+      "sourceOperation": null,
+      "targetOperation": "ActionRun",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runs/{run}",
+      "sourceOperation": "GetWorkflowRun",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runs/{run}/artifacts",
+      "sourceOperation": "getArtifactsOfRun",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runs/{run}/attempts/{attempt}",
+      "sourceOperation": "getWorkflowRunAttempt",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runs/{run}/attempts/{attempt}/jobs",
+      "sourceOperation": "listWorkflowRunAttemptJobs",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/runs/{run}/jobs",
+      "sourceOperation": "listWorkflowRunJobs",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/secrets",
+      "sourceOperation": "repoListActionsSecrets",
+      "targetOperation": "repoListActionsSecrets",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/tasks",
+      "sourceOperation": "ListActionTasks",
+      "targetOperation": "ListActionTasks",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/variables",
+      "sourceOperation": "getRepoVariablesList",
+      "targetOperation": "getRepoVariablesList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/variables/{variablename}",
+      "sourceOperation": "getRepoVariable",
+      "targetOperation": "getRepoVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/workflows",
+      "sourceOperation": "ActionsListRepositoryWorkflows",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/workflows/{workflow_id}",
+      "sourceOperation": "ActionsGetWorkflow",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs",
+      "sourceOperation": "ActionsListWorkflowRuns",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/activities/feeds",
+      "sourceOperation": "repoListActivityFeeds",
+      "targetOperation": "repoListActivityFeeds",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/archive/{archive}",
+      "sourceOperation": "repoGetArchive",
+      "targetOperation": "repoGetArchive",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/assignees",
+      "sourceOperation": "repoGetAssignees",
+      "targetOperation": "repoGetAssignees",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/assignees/{assignee}",
+      "sourceOperation": "repoCheckAssignee",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/branch_protections",
+      "sourceOperation": "repoListBranchProtection",
+      "targetOperation": "repoListBranchProtection",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/branch_protections/{name}",
+      "sourceOperation": "repoGetBranchProtection",
+      "targetOperation": "repoGetBranchProtection",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/branches",
+      "sourceOperation": "repoListBranches",
+      "targetOperation": "repoListBranches",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/branches/{branch}",
+      "sourceOperation": "repoGetBranch",
+      "targetOperation": "repoGetBranch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/collaborators",
+      "sourceOperation": "repoListCollaborators",
+      "targetOperation": "repoListCollaborators",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/collaborators/{collaborator}",
+      "sourceOperation": "repoCheckCollaborator",
+      "targetOperation": "repoCheckCollaborator",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/collaborators/{collaborator}/permission",
+      "sourceOperation": "repoGetRepoPermissions",
+      "targetOperation": "repoGetRepoPermissions",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/commits",
+      "sourceOperation": "repoGetAllCommits",
+      "targetOperation": "repoGetAllCommits",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/commits/{ref}/status",
+      "sourceOperation": "repoGetCombinedStatusByRef",
+      "targetOperation": "repoGetCombinedStatusByRef",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/commits/{ref}/statuses",
+      "sourceOperation": "repoListStatusesByRef",
+      "targetOperation": "repoListStatusesByRef",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/commits/{sha}/pull",
+      "sourceOperation": "repoGetCommitPullRequest",
+      "targetOperation": "repoGetCommitPullRequest",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/compare/{basehead}",
+      "sourceOperation": "repoCompareDiff",
+      "targetOperation": "repoCompareDiff",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/contents",
+      "sourceOperation": "repoGetContentsList",
+      "targetOperation": "repoGetContentsList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/contents-ext/{filepath}",
+      "sourceOperation": "repoGetContentsExt",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/contents/{filepath}",
+      "sourceOperation": "repoGetContents",
+      "targetOperation": "repoGetContents",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/editorconfig/{filepath}",
+      "sourceOperation": "repoGetEditorConfig",
+      "targetOperation": "repoGetEditorConfig",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/file-contents",
+      "sourceOperation": "repoGetFileContents",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/flags",
+      "sourceOperation": null,
+      "targetOperation": "repoListFlags",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/flags/{flag}",
+      "sourceOperation": null,
+      "targetOperation": "repoCheckFlag",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/forks",
+      "sourceOperation": "listForks",
+      "targetOperation": "listForks",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/git/blobs",
+      "sourceOperation": null,
+      "targetOperation": "GetBlobs",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/git/blobs/{sha}",
+      "sourceOperation": "GetBlob",
+      "targetOperation": "GetBlob",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/git/commits/{sha}",
+      "sourceOperation": "repoGetSingleCommit",
+      "targetOperation": "repoGetSingleCommit",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/git/commits/{sha}.{diffType}",
+      "sourceOperation": "repoDownloadCommitDiffOrPatch",
+      "targetOperation": "repoDownloadCommitDiffOrPatch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/git/notes/{sha}",
+      "sourceOperation": "repoGetNote",
+      "targetOperation": "repoGetNote",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/git/refs",
+      "sourceOperation": "repoListAllGitRefs",
+      "targetOperation": "repoListAllGitRefs",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/git/refs/{ref}",
+      "sourceOperation": "repoListGitRefs",
+      "targetOperation": "repoListGitRefs",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/git/tags/{sha}",
+      "sourceOperation": "GetAnnotatedTag",
+      "targetOperation": "GetAnnotatedTag",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/git/trees/{sha}",
+      "sourceOperation": "GetTree",
+      "targetOperation": "GetTree",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/hooks",
+      "sourceOperation": "repoListHooks",
+      "targetOperation": "repoListHooks",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/hooks/git",
+      "sourceOperation": "repoListGitHooks",
+      "targetOperation": "repoListGitHooks",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/hooks/git/{id}",
+      "sourceOperation": "repoGetGitHook",
+      "targetOperation": "repoGetGitHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/hooks/{id}",
+      "sourceOperation": "repoGetHook",
+      "targetOperation": "repoGetHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issue_config",
+      "sourceOperation": "repoGetIssueConfig",
+      "targetOperation": "repoGetIssueConfig",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issue_config/validate",
+      "sourceOperation": "repoValidateIssueConfig",
+      "targetOperation": "repoValidateIssueConfig",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issue_templates",
+      "sourceOperation": "repoGetIssueTemplates",
+      "targetOperation": "repoGetIssueTemplates",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues",
+      "sourceOperation": "issueListIssues",
+      "targetOperation": "issueListIssues",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/comments",
+      "sourceOperation": "issueGetRepoComments",
+      "targetOperation": "issueGetRepoComments",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}",
+      "sourceOperation": "issueGetComment",
+      "targetOperation": "issueGetComment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}/assets",
+      "sourceOperation": "issueListIssueCommentAttachments",
+      "targetOperation": "issueListIssueCommentAttachments",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}",
+      "sourceOperation": "issueGetIssueCommentAttachment",
+      "targetOperation": "issueGetIssueCommentAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}/reactions",
+      "sourceOperation": "issueGetCommentReactions",
+      "targetOperation": "issueGetCommentReactions",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/pinned",
+      "sourceOperation": "repoListPinnedIssues",
+      "targetOperation": "repoListPinnedIssues",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}",
+      "sourceOperation": "issueGetIssue",
+      "targetOperation": "issueGetIssue",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/assets",
+      "sourceOperation": "issueListIssueAttachments",
+      "targetOperation": "issueListIssueAttachments",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}",
+      "sourceOperation": "issueGetIssueAttachment",
+      "targetOperation": "issueGetIssueAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/assignees/{assignee}",
+      "sourceOperation": "issueCheckAssignee",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/blocks",
+      "sourceOperation": "issueListBlocks",
+      "targetOperation": "issueListBlocks",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/comments",
+      "sourceOperation": "issueGetComments",
+      "targetOperation": "issueGetComments",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/dependencies",
+      "sourceOperation": "issueListIssueDependencies",
+      "targetOperation": "issueListIssueDependencies",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/labels",
+      "sourceOperation": "issueGetLabels",
+      "targetOperation": "issueGetLabels",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/reactions",
+      "sourceOperation": "issueGetIssueReactions",
+      "targetOperation": "issueGetIssueReactions",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/subscriptions",
+      "sourceOperation": "issueSubscriptions",
+      "targetOperation": "issueSubscriptions",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/subscriptions/check",
+      "sourceOperation": "issueCheckSubscription",
+      "targetOperation": "issueCheckSubscription",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/timeline",
+      "sourceOperation": "issueGetCommentsAndTimeline",
+      "targetOperation": "issueGetCommentsAndTimeline",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues/{index}/times",
+      "sourceOperation": "issueTrackedTimes",
+      "targetOperation": "issueTrackedTimes",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/keys",
+      "sourceOperation": "repoListKeys",
+      "targetOperation": "repoListKeys",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/keys/{id}",
+      "sourceOperation": "repoGetKey",
+      "targetOperation": "repoGetKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/labels",
+      "sourceOperation": "issueListLabels",
+      "targetOperation": "issueListLabels",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/labels/{id}",
+      "sourceOperation": "issueGetLabel",
+      "targetOperation": "issueGetLabel",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/languages",
+      "sourceOperation": "repoGetLanguages",
+      "targetOperation": "repoGetLanguages",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/licenses",
+      "sourceOperation": "repoGetLicenses",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/media/{filepath}",
+      "sourceOperation": "repoGetRawFileOrLFS",
+      "targetOperation": "repoGetRawFileOrLFS",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/milestones",
+      "sourceOperation": "issueGetMilestonesList",
+      "targetOperation": "issueGetMilestonesList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/milestones/{id}",
+      "sourceOperation": "issueGetMilestone",
+      "targetOperation": "issueGetMilestone",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/new_pin_allowed",
+      "sourceOperation": "repoNewPinAllowed",
+      "targetOperation": "repoNewPinAllowed",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/notifications",
+      "sourceOperation": "notifyGetRepoList",
+      "targetOperation": "notifyGetRepoList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls",
+      "sourceOperation": "repoListPullRequests",
+      "targetOperation": "repoListPullRequests",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/pinned",
+      "sourceOperation": "repoListPinnedPullRequests",
+      "targetOperation": "repoListPinnedPullRequests",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{base}/{head}",
+      "sourceOperation": "repoGetPullRequestByBaseHead",
+      "targetOperation": "repoGetPullRequestByBaseHead",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{index}",
+      "sourceOperation": "repoGetPullRequest",
+      "targetOperation": "repoGetPullRequest",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{index}.{diffType}",
+      "sourceOperation": "repoDownloadPullDiffOrPatch",
+      "targetOperation": "repoDownloadPullDiffOrPatch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/commits",
+      "sourceOperation": "repoGetPullRequestCommits",
+      "targetOperation": "repoGetPullRequestCommits",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/files",
+      "sourceOperation": "repoGetPullRequestFiles",
+      "targetOperation": "repoGetPullRequestFiles",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/merge",
+      "sourceOperation": "repoPullRequestIsMerged",
+      "targetOperation": "repoPullRequestIsMerged",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews",
+      "sourceOperation": "repoListPullReviews",
+      "targetOperation": "repoListPullReviews",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}",
+      "sourceOperation": "repoGetPullReview",
+      "targetOperation": "repoGetPullReview",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/comments",
+      "sourceOperation": "repoGetPullReviewComments",
+      "targetOperation": "repoGetPullReviewComments",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/comments/{comment}",
+      "sourceOperation": null,
+      "targetOperation": "repoGetPullReviewComment",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/push_mirrors",
+      "sourceOperation": "repoListPushMirrors",
+      "targetOperation": "repoListPushMirrors",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/push_mirrors/{name}",
+      "sourceOperation": "repoGetPushMirrorByRemoteName",
+      "targetOperation": "repoGetPushMirrorByRemoteName",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/raw/{filepath}",
+      "sourceOperation": "repoGetRawFile",
+      "targetOperation": "repoGetRawFile",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/releases",
+      "sourceOperation": "repoListReleases",
+      "targetOperation": "repoListReleases",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/releases/latest",
+      "sourceOperation": "repoGetLatestRelease",
+      "targetOperation": "repoGetLatestRelease",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/releases/tags/{tag}",
+      "sourceOperation": "repoGetReleaseByTag",
+      "targetOperation": "repoGetReleaseByTag",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/releases/{id}",
+      "sourceOperation": "repoGetRelease",
+      "targetOperation": "repoGetRelease",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/releases/{id}/assets",
+      "sourceOperation": "repoListReleaseAttachments",
+      "targetOperation": "repoListReleaseAttachments",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}",
+      "sourceOperation": "repoGetReleaseAttachment",
+      "targetOperation": "repoGetReleaseAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/reviewers",
+      "sourceOperation": "repoGetReviewers",
+      "targetOperation": "repoGetReviewers",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/signing-key.gpg",
+      "sourceOperation": "repoSigningKey",
+      "targetOperation": "repoSigningKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/signing-key.pub",
+      "sourceOperation": "repoSigningKeySSH",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/stargazers",
+      "sourceOperation": "repoListStargazers",
+      "targetOperation": "repoListStargazers",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/statuses/{sha}",
+      "sourceOperation": "repoListStatuses",
+      "targetOperation": "repoListStatuses",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/subscribers",
+      "sourceOperation": "repoListSubscribers",
+      "targetOperation": "repoListSubscribers",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/subscription",
+      "sourceOperation": "userCurrentCheckSubscription",
+      "targetOperation": "userCurrentCheckSubscription",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/sync_fork",
+      "sourceOperation": null,
+      "targetOperation": "repoSyncForkDefaultInfo",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/sync_fork/{branch}",
+      "sourceOperation": null,
+      "targetOperation": "repoSyncForkBranchInfo",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/tag_protections",
+      "sourceOperation": "repoListTagProtection",
+      "targetOperation": "repoListTagProtection",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/tag_protections/{id}",
+      "sourceOperation": "repoGetTagProtection",
+      "targetOperation": "repoGetTagProtection",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/tags",
+      "sourceOperation": "repoListTags",
+      "targetOperation": "repoListTags",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/tags/{tag}",
+      "sourceOperation": "repoGetTag",
+      "targetOperation": "repoGetTag",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/teams",
+      "sourceOperation": "repoListTeams",
+      "targetOperation": "repoListTeams",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/teams/{team}",
+      "sourceOperation": "repoCheckTeam",
+      "targetOperation": "repoCheckTeam",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/times",
+      "sourceOperation": "repoTrackedTimes",
+      "targetOperation": "repoTrackedTimes",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/times/{user}",
+      "sourceOperation": "userTrackedTimes",
+      "targetOperation": "userTrackedTimes",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/topics",
+      "sourceOperation": "repoListTopics",
+      "targetOperation": "repoListTopics",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/wiki/page/{pageName}",
+      "sourceOperation": "repoGetWikiPage",
+      "targetOperation": "repoGetWikiPage",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/wiki/pages",
+      "sourceOperation": "repoGetWikiPages",
+      "targetOperation": "repoGetWikiPages",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/wiki/revisions/{pageName}",
+      "sourceOperation": "repoGetWikiPageRevisions",
+      "targetOperation": "repoGetWikiPageRevisions",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/repositories/{id}",
+      "sourceOperation": "repoGetByID",
+      "targetOperation": "repoGetByID",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/settings/api",
+      "sourceOperation": "getGeneralAPISettings",
+      "targetOperation": "getGeneralAPISettings",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/settings/attachment",
+      "sourceOperation": "getGeneralAttachmentSettings",
+      "targetOperation": "getGeneralAttachmentSettings",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/settings/repository",
+      "sourceOperation": "getGeneralRepositorySettings",
+      "targetOperation": "getGeneralRepositorySettings",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/settings/ui",
+      "sourceOperation": "getGeneralUISettings",
+      "targetOperation": "getGeneralUISettings",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/signing-key.gpg",
+      "sourceOperation": "getSigningKey",
+      "targetOperation": "getSigningKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/signing-key.pub",
+      "sourceOperation": "getSigningKeySSH",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/signing-key.ssh",
+      "sourceOperation": null,
+      "targetOperation": "getSSHSigningKey",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/teams/{id}",
+      "sourceOperation": "orgGetTeam",
+      "targetOperation": "orgGetTeam",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/teams/{id}/activities/feeds",
+      "sourceOperation": "orgListTeamActivityFeeds",
+      "targetOperation": "orgListTeamActivityFeeds",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/teams/{id}/members",
+      "sourceOperation": "orgListTeamMembers",
+      "targetOperation": "orgListTeamMembers",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/teams/{id}/members/{username}",
+      "sourceOperation": "orgListTeamMember",
+      "targetOperation": "orgListTeamMember",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/teams/{id}/repos",
+      "sourceOperation": "orgListTeamRepos",
+      "targetOperation": "orgListTeamRepos",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/teams/{id}/repos/{org}/{repo}",
+      "sourceOperation": "orgListTeamRepo",
+      "targetOperation": "orgListTeamRepo",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/token",
+      "sourceOperation": "getCurrentToken",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/topics/search",
+      "sourceOperation": "topicSearch",
+      "targetOperation": "topicSearch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user",
+      "sourceOperation": "userGetCurrent",
+      "targetOperation": "userGetCurrent",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/actions/jobs",
+      "sourceOperation": "getUserWorkflowJobs",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/user/actions/runners",
+      "sourceOperation": "getUserRunners",
+      "targetOperation": "getUserRunners",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/actions/runners/jobs",
+      "sourceOperation": null,
+      "targetOperation": "userSearchRunJobs",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/user/actions/runners/registration-token",
+      "sourceOperation": null,
+      "targetOperation": "userGetRunnerRegistrationToken",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/user/actions/runners/{runner_id}",
+      "sourceOperation": "getUserRunner",
+      "targetOperation": "getUserRunner",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/actions/runs",
+      "sourceOperation": "getUserWorkflowRuns",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/user/actions/variables",
+      "sourceOperation": "getUserVariablesList",
+      "targetOperation": "getUserVariablesList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/actions/variables/{variablename}",
+      "sourceOperation": "getUserVariable",
+      "targetOperation": "getUserVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/applications/oauth2",
+      "sourceOperation": "userGetOauth2Application",
+      "targetOperation": "userGetOAuth2Applications",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/applications/oauth2/{id}",
+      "sourceOperation": "userGetOAuth2Application",
+      "targetOperation": "userGetOAuth2Application",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/blocks",
+      "sourceOperation": "userListBlocks",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/user/blocks/{username}",
+      "sourceOperation": "userCheckUserBlock",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "GET",
+      "path": "/user/emails",
+      "sourceOperation": "userListEmails",
+      "targetOperation": "userListEmails",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/followers",
+      "sourceOperation": "userCurrentListFollowers",
+      "targetOperation": "userCurrentListFollowers",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/following",
+      "sourceOperation": "userCurrentListFollowing",
+      "targetOperation": "userCurrentListFollowing",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/following/{username}",
+      "sourceOperation": "userCurrentCheckFollowing",
+      "targetOperation": "userCurrentCheckFollowing",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/gpg_key_token",
+      "sourceOperation": "getVerificationToken",
+      "targetOperation": "getVerificationToken",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/gpg_keys",
+      "sourceOperation": "userCurrentListGPGKeys",
+      "targetOperation": "userCurrentListGPGKeys",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/gpg_keys/{id}",
+      "sourceOperation": "userCurrentGetGPGKey",
+      "targetOperation": "userCurrentGetGPGKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/hooks",
+      "sourceOperation": "userListHooks",
+      "targetOperation": "userListHooks",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/hooks/{id}",
+      "sourceOperation": "userGetHook",
+      "targetOperation": "userGetHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/keys",
+      "sourceOperation": "userCurrentListKeys",
+      "targetOperation": "userCurrentListKeys",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/keys/{id}",
+      "sourceOperation": "userCurrentGetKey",
+      "targetOperation": "userCurrentGetKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/list_blocked",
+      "sourceOperation": null,
+      "targetOperation": "userListBlockedUsers",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/user/orgs",
+      "sourceOperation": "orgListCurrentUserOrgs",
+      "targetOperation": "orgListCurrentUserOrgs",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/quota",
+      "sourceOperation": null,
+      "targetOperation": "userGetQuota",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/user/quota/artifacts",
+      "sourceOperation": null,
+      "targetOperation": "userListQuotaArtifacts",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/user/quota/attachments",
+      "sourceOperation": null,
+      "targetOperation": "userListQuotaAttachments",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/user/quota/check",
+      "sourceOperation": null,
+      "targetOperation": "userCheckQuota",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/user/quota/packages",
+      "sourceOperation": null,
+      "targetOperation": "userListQuotaPackages",
+      "state": "target-only"
+    },
+    {
+      "method": "GET",
+      "path": "/user/repos",
+      "sourceOperation": "userCurrentListRepos",
+      "targetOperation": "userCurrentListRepos",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/settings",
+      "sourceOperation": "getUserSettings",
+      "targetOperation": "getUserSettings",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/starred",
+      "sourceOperation": "userCurrentListStarred",
+      "targetOperation": "userCurrentListStarred",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/starred/{owner}/{repo}",
+      "sourceOperation": "userCurrentCheckStarring",
+      "targetOperation": "userCurrentCheckStarring",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/stopwatches",
+      "sourceOperation": "userGetStopWatches",
+      "targetOperation": "userGetStopWatches",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/subscriptions",
+      "sourceOperation": "userCurrentListSubscriptions",
+      "targetOperation": "userCurrentListSubscriptions",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/teams",
+      "sourceOperation": "userListTeams",
+      "targetOperation": "userListTeams",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/user/times",
+      "sourceOperation": "userCurrentTrackedTimes",
+      "targetOperation": "userCurrentTrackedTimes",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/search",
+      "sourceOperation": "userSearch",
+      "targetOperation": "userSearch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}",
+      "sourceOperation": "userGet",
+      "targetOperation": "userGet",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/activities/feeds",
+      "sourceOperation": "userListActivityFeeds",
+      "targetOperation": "userListActivityFeeds",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/followers",
+      "sourceOperation": "userListFollowers",
+      "targetOperation": "userListFollowers",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/following",
+      "sourceOperation": "userListFollowing",
+      "targetOperation": "userListFollowing",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/following/{target}",
+      "sourceOperation": "userCheckFollowing",
+      "targetOperation": "userCheckFollowing",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/gpg_keys",
+      "sourceOperation": "userListGPGKeys",
+      "targetOperation": "userListGPGKeys",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/heatmap",
+      "sourceOperation": "userGetHeatmapData",
+      "targetOperation": "userGetHeatmapData",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/keys",
+      "sourceOperation": "userListKeys",
+      "targetOperation": "userListKeys",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/orgs",
+      "sourceOperation": "orgListUserOrgs",
+      "targetOperation": "orgListUserOrgs",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/orgs/{org}/permissions",
+      "sourceOperation": "orgGetUserPermissions",
+      "targetOperation": "orgGetUserPermissions",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/repos",
+      "sourceOperation": "userListRepos",
+      "targetOperation": "userListRepos",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/starred",
+      "sourceOperation": "userListStarred",
+      "targetOperation": "userListStarred",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/subscriptions",
+      "sourceOperation": "userListSubscriptions",
+      "targetOperation": "userListSubscriptions",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/users/{username}/tokens",
+      "sourceOperation": "userGetTokens",
+      "targetOperation": "userGetTokens",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "GET",
+      "path": "/version",
+      "sourceOperation": "getVersion",
+      "targetOperation": "getVersion",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/actions/runners/{runner_id}",
+      "sourceOperation": "updateAdminRunner",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/hooks/{id}",
+      "sourceOperation": "adminEditHook",
+      "targetOperation": "adminEditHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/quota/rules/{quotarule}",
+      "sourceOperation": null,
+      "targetOperation": "adminEditQuotaRule",
+      "state": "target-only"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/users/{username}",
+      "sourceOperation": "adminEditUser",
+      "targetOperation": "adminEditUser",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/notifications/threads/{id}",
+      "sourceOperation": "notifyReadThread",
+      "targetOperation": "notifyReadThread",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/orgs/{org}",
+      "sourceOperation": "orgEdit",
+      "targetOperation": "orgEdit",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/orgs/{org}/actions/runners/{runner_id}",
+      "sourceOperation": "updateOrgRunner",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "PATCH",
+      "path": "/orgs/{org}/hooks/{id}",
+      "sourceOperation": "orgEditHook",
+      "targetOperation": "orgEditHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/orgs/{org}/labels/{id}",
+      "sourceOperation": "orgEditLabel",
+      "targetOperation": "orgEditLabel",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}",
+      "sourceOperation": "repoEdit",
+      "targetOperation": "repoEdit",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/actions/runners/{runner_id}",
+      "sourceOperation": "updateRepoRunner",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/branch_protections/{name}",
+      "sourceOperation": "repoEditBranchProtection",
+      "targetOperation": "repoEditBranchProtection",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/branches/{branch}",
+      "sourceOperation": "repoRenameBranch",
+      "targetOperation": "repoUpdateBranch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/hooks/git/{id}",
+      "sourceOperation": "repoEditGitHook",
+      "targetOperation": "repoEditGitHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/hooks/{id}",
+      "sourceOperation": "repoEditHook",
+      "targetOperation": "repoEditHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}",
+      "sourceOperation": "issueEditComment",
+      "targetOperation": "issueEditComment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}",
+      "sourceOperation": "issueEditIssueCommentAttachment",
+      "targetOperation": "issueEditIssueCommentAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/issues/{index}",
+      "sourceOperation": "issueEditIssue",
+      "targetOperation": "issueEditIssue",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}",
+      "sourceOperation": "issueEditIssueAttachment",
+      "targetOperation": "issueEditIssueAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/issues/{index}/comments/{id}",
+      "sourceOperation": "issueEditCommentDeprecated",
+      "targetOperation": "issueEditCommentDeprecated",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/issues/{index}/pin/{position}",
+      "sourceOperation": "moveIssuePin",
+      "targetOperation": "moveIssuePin",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/labels/{id}",
+      "sourceOperation": "issueEditLabel",
+      "targetOperation": "issueEditLabel",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/milestones/{id}",
+      "sourceOperation": "issueEditMilestone",
+      "targetOperation": "issueEditMilestone",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/pulls/{index}",
+      "sourceOperation": "repoEditPullRequest",
+      "targetOperation": "repoEditPullRequest",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/releases/{id}",
+      "sourceOperation": "repoEditRelease",
+      "targetOperation": "repoEditRelease",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}",
+      "sourceOperation": "repoEditReleaseAttachment",
+      "targetOperation": "repoEditReleaseAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/tag_protections/{id}",
+      "sourceOperation": "repoEditTagProtection",
+      "targetOperation": "repoEditTagProtection",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/repos/{owner}/{repo}/wiki/page/{pageName}",
+      "sourceOperation": "repoEditWikiPage",
+      "targetOperation": "repoEditWikiPage",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/teams/{id}",
+      "sourceOperation": "orgEditTeam",
+      "targetOperation": "orgEditTeam",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/user/actions/runners/{runner_id}",
+      "sourceOperation": "updateUserRunner",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "PATCH",
+      "path": "/user/applications/oauth2/{id}",
+      "sourceOperation": "userUpdateOAuth2Application",
+      "targetOperation": "userUpdateOAuth2Application",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/user/hooks/{id}",
+      "sourceOperation": "userEditHook",
+      "targetOperation": "userEditHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PATCH",
+      "path": "/user/settings",
+      "sourceOperation": "updateUserSettings",
+      "targetOperation": "updateUserSettings",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/activitypub/actor/inbox",
+      "sourceOperation": null,
+      "targetOperation": "activitypubInstanceActorInbox",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/activitypub/actor/outbox",
+      "sourceOperation": null,
+      "targetOperation": "activitypubInstanceActorOutbox",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/activitypub/repository-id/{repository-id}/inbox",
+      "sourceOperation": null,
+      "targetOperation": "activitypubRepositoryInbox",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/activitypub/repository-id/{repository-id}/outbox",
+      "sourceOperation": null,
+      "targetOperation": "activitypubRepositoryOutbox",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/activitypub/user-id/{user-id}/inbox",
+      "sourceOperation": null,
+      "targetOperation": "activitypubPersonInbox",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/actions/runners",
+      "sourceOperation": null,
+      "targetOperation": "registerAdminRunner",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/actions/runners/registration-token",
+      "sourceOperation": "adminCreateRunnerRegistrationToken",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/cron/{task}",
+      "sourceOperation": "adminCronRun",
+      "targetOperation": "adminCronRun",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/hooks",
+      "sourceOperation": "adminCreateHook",
+      "targetOperation": "adminCreateHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/quota/groups",
+      "sourceOperation": null,
+      "targetOperation": "adminCreateQuotaGroup",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/quota/rules",
+      "sourceOperation": null,
+      "targetOperation": "adminCreateQuotaRule",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/unadopted/{owner}/{repo}",
+      "sourceOperation": "adminAdoptRepository",
+      "targetOperation": "adminAdoptRepository",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users",
+      "sourceOperation": "adminCreateUser",
+      "targetOperation": "adminCreateUser",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/badges",
+      "sourceOperation": "adminAddUserBadges",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/keys",
+      "sourceOperation": "adminCreatePublicKey",
+      "targetOperation": "adminCreatePublicKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/orgs",
+      "sourceOperation": "adminCreateOrg",
+      "targetOperation": "adminCreateOrg",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/quota/groups",
+      "sourceOperation": null,
+      "targetOperation": "adminSetUserQuotaGroups",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/rename",
+      "sourceOperation": "adminRenameUser",
+      "targetOperation": "adminRenameUser",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/repos",
+      "sourceOperation": "adminCreateRepo",
+      "targetOperation": "adminCreateRepo",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/markdown",
+      "sourceOperation": "renderMarkdown",
+      "targetOperation": "renderMarkdown",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/markdown/raw",
+      "sourceOperation": "renderMarkdownRaw",
+      "targetOperation": "renderMarkdownRaw",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/markup",
+      "sourceOperation": "renderMarkup",
+      "targetOperation": "renderMarkup",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/org/{org}/repos",
+      "sourceOperation": "createOrgRepoDeprecated",
+      "targetOperation": "createOrgRepoDeprecated",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/orgs",
+      "sourceOperation": "orgCreate",
+      "targetOperation": "orgCreate",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/orgs/{org}/actions/runners",
+      "sourceOperation": null,
+      "targetOperation": "registerOrgRunner",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/orgs/{org}/actions/runners/registration-token",
+      "sourceOperation": "orgCreateRunnerRegistrationToken",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/orgs/{org}/actions/variables/{variablename}",
+      "sourceOperation": "createOrgVariable",
+      "targetOperation": "createOrgVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/orgs/{org}/avatar",
+      "sourceOperation": "orgUpdateAvatar",
+      "targetOperation": "orgUpdateAvatar",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/orgs/{org}/hooks",
+      "sourceOperation": "orgCreateHook",
+      "targetOperation": "orgCreateHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/orgs/{org}/labels",
+      "sourceOperation": "orgCreateLabel",
+      "targetOperation": "orgCreateLabel",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/orgs/{org}/rename",
+      "sourceOperation": "renameOrg",
+      "targetOperation": "renameOrg",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/orgs/{org}/repos",
+      "sourceOperation": "createOrgRepo",
+      "targetOperation": "createOrgRepo",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/orgs/{org}/teams",
+      "sourceOperation": "orgCreateTeam",
+      "targetOperation": "orgCreateTeam",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/packages/{owner}/{type}/{name}/-/link/{repo_name}",
+      "sourceOperation": "linkPackage",
+      "targetOperation": "linkPackage",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/packages/{owner}/{type}/{name}/-/unlink",
+      "sourceOperation": "unlinkPackage",
+      "targetOperation": "unlinkPackage",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/migrate",
+      "sourceOperation": "repoMigrate",
+      "targetOperation": "repoMigrate",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/actions/runners",
+      "sourceOperation": null,
+      "targetOperation": "registerRepoRunner",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/actions/runners/registration-token",
+      "sourceOperation": "repoCreateRunnerRegistrationToken",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/actions/runs/{run}/jobs/{job_id}/rerun",
+      "sourceOperation": "rerunWorkflowJob",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/actions/runs/{run}/rerun",
+      "sourceOperation": "rerunWorkflowRun",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/actions/runs/{run}/rerun-failed-jobs",
+      "sourceOperation": "rerunFailedWorkflowRun",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/actions/variables/{variablename}",
+      "sourceOperation": "createRepoVariable",
+      "targetOperation": "createRepoVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches",
+      "sourceOperation": "ActionsDispatchWorkflow",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/actions/workflows/{workflowfilename}/dispatches",
+      "sourceOperation": null,
+      "targetOperation": "DispatchWorkflow",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/avatar",
+      "sourceOperation": "repoUpdateAvatar",
+      "targetOperation": "repoUpdateAvatar",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/branch_protections",
+      "sourceOperation": "repoCreateBranchProtection",
+      "targetOperation": "repoCreateBranchProtection",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/branch_protections/priority",
+      "sourceOperation": "repoUpdateBranchProtectionPriories",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/branches",
+      "sourceOperation": "repoCreateBranch",
+      "targetOperation": "repoCreateBranch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/contents",
+      "sourceOperation": "repoChangeFiles",
+      "targetOperation": "repoChangeFiles",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/contents/{filepath}",
+      "sourceOperation": "repoCreateFile",
+      "targetOperation": "repoCreateFile",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/convert",
+      "sourceOperation": null,
+      "targetOperation": "repoConvert",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/diffpatch",
+      "sourceOperation": "repoApplyDiffPatch",
+      "targetOperation": "repoApplyDiffPatch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/file-contents",
+      "sourceOperation": "repoGetFileContentsPost",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/forks",
+      "sourceOperation": "createFork",
+      "targetOperation": "createFork",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/git/notes/{sha}",
+      "sourceOperation": null,
+      "targetOperation": "repoSetNote",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/hooks",
+      "sourceOperation": "repoCreateHook",
+      "targetOperation": "repoCreateHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/hooks/{id}/tests",
+      "sourceOperation": "repoTestHook",
+      "targetOperation": "repoTestHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues",
+      "sourceOperation": "issueCreateIssue",
+      "targetOperation": "issueCreateIssue",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}/assets",
+      "sourceOperation": "issueCreateIssueCommentAttachment",
+      "targetOperation": "issueCreateIssueCommentAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/comments/{id}/reactions",
+      "sourceOperation": "issuePostCommentReaction",
+      "targetOperation": "issuePostCommentReaction",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/assets",
+      "sourceOperation": "issueCreateIssueAttachment",
+      "targetOperation": "issueCreateIssueAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/assignees",
+      "sourceOperation": "issueAddAssignees",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/blocks",
+      "sourceOperation": "issueCreateIssueBlocking",
+      "targetOperation": "issueCreateIssueBlocking",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/comments",
+      "sourceOperation": "issueCreateComment",
+      "targetOperation": "issueCreateComment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/deadline",
+      "sourceOperation": "issueEditIssueDeadline",
+      "targetOperation": "issueEditIssueDeadline",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/dependencies",
+      "sourceOperation": "issueCreateIssueDependencies",
+      "targetOperation": "issueCreateIssueDependencies",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/labels",
+      "sourceOperation": "issueAddLabel",
+      "targetOperation": "issueAddLabel",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/pin",
+      "sourceOperation": "pinIssue",
+      "targetOperation": "pinIssue",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/reactions",
+      "sourceOperation": "issuePostIssueReaction",
+      "targetOperation": "issuePostIssueReaction",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/stopwatch/start",
+      "sourceOperation": "issueStartStopWatch",
+      "targetOperation": "issueStartStopWatch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/stopwatch/stop",
+      "sourceOperation": "issueStopStopWatch",
+      "targetOperation": "issueStopStopWatch",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{index}/times",
+      "sourceOperation": "issueAddTime",
+      "targetOperation": "issueAddTime",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/keys",
+      "sourceOperation": "repoCreateKey",
+      "targetOperation": "repoCreateKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/labels",
+      "sourceOperation": "issueCreateLabel",
+      "targetOperation": "issueCreateLabel",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/merge-upstream",
+      "sourceOperation": "repoMergeUpstream",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/milestones",
+      "sourceOperation": "issueCreateMilestone",
+      "targetOperation": "issueCreateMilestone",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/mirror-sync",
+      "sourceOperation": "repoMirrorSync",
+      "targetOperation": "repoMirrorSync",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls",
+      "sourceOperation": "repoCreatePullRequest",
+      "targetOperation": "repoCreatePullRequest",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/comments/{id}/resolve",
+      "sourceOperation": "repoResolvePullReviewComment",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/comments/{id}/unresolve",
+      "sourceOperation": "repoUnresolvePullReviewComment",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/comments/{id}/replies",
+      "sourceOperation": "repoCreatePullReviewCommentReply",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/merge",
+      "sourceOperation": "repoMergePullRequest",
+      "targetOperation": "repoMergePullRequest",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/requested_reviewers",
+      "sourceOperation": "repoCreatePullReviewRequests",
+      "targetOperation": "repoCreatePullReviewRequests",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews",
+      "sourceOperation": "repoCreatePullReview",
+      "targetOperation": "repoCreatePullReview",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}",
+      "sourceOperation": "repoSubmitPullReview",
+      "targetOperation": "repoSubmitPullReview",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/comments",
+      "sourceOperation": null,
+      "targetOperation": "repoCreatePullReviewComment",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/dismissals",
+      "sourceOperation": "repoDismissPullReview",
+      "targetOperation": "repoDismissPullReview",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/undismissals",
+      "sourceOperation": "repoUnDismissPullReview",
+      "targetOperation": "repoUnDismissPullReview",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/pulls/{index}/update",
+      "sourceOperation": "repoUpdatePullRequest",
+      "targetOperation": "repoUpdatePullRequest",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/push_mirrors",
+      "sourceOperation": "repoAddPushMirror",
+      "targetOperation": "repoAddPushMirror",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/push_mirrors-sync",
+      "sourceOperation": "repoPushMirrorSync",
+      "targetOperation": "repoPushMirrorSync",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/releases",
+      "sourceOperation": "repoCreateRelease",
+      "targetOperation": "repoCreateRelease",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/releases/{id}/assets",
+      "sourceOperation": "repoCreateReleaseAttachment",
+      "targetOperation": "repoCreateReleaseAttachment",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/statuses/{sha}",
+      "sourceOperation": "repoCreateStatus",
+      "targetOperation": "repoCreateStatus",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/sync_fork",
+      "sourceOperation": null,
+      "targetOperation": "repoSyncForkDefault",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/sync_fork/{branch}",
+      "sourceOperation": null,
+      "targetOperation": "repoSyncForkBranch",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/tag_protections",
+      "sourceOperation": "repoCreateTagProtection",
+      "targetOperation": "repoCreateTagProtection",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/tags",
+      "sourceOperation": "repoCreateTag",
+      "targetOperation": "repoCreateTag",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/transfer",
+      "sourceOperation": "repoTransfer",
+      "targetOperation": "repoTransfer",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/transfer/accept",
+      "sourceOperation": "acceptRepoTransfer",
+      "targetOperation": "acceptRepoTransfer",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/transfer/reject",
+      "sourceOperation": "rejectRepoTransfer",
+      "targetOperation": "rejectRepoTransfer",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/wiki/new",
+      "sourceOperation": "repoCreateWikiPage",
+      "targetOperation": "repoCreateWikiPage",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/{template_owner}/{template_repo}/generate",
+      "sourceOperation": "generateRepo",
+      "targetOperation": "generateRepo",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/user/actions/runners",
+      "sourceOperation": null,
+      "targetOperation": "registerUserRunner",
+      "state": "target-only"
+    },
+    {
+      "method": "POST",
+      "path": "/user/actions/runners/registration-token",
+      "sourceOperation": "userCreateRunnerRegistrationToken",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "POST",
+      "path": "/user/actions/variables/{variablename}",
+      "sourceOperation": "createUserVariable",
+      "targetOperation": "createUserVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/user/applications/oauth2",
+      "sourceOperation": "userCreateOAuth2Application",
+      "targetOperation": "userCreateOAuth2Application",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/user/avatar",
+      "sourceOperation": "userUpdateAvatar",
+      "targetOperation": "userUpdateAvatar",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/user/emails",
+      "sourceOperation": "userAddEmail",
+      "targetOperation": "userAddEmail",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/user/gpg_key_verify",
+      "sourceOperation": "userVerifyGPGKey",
+      "targetOperation": "userVerifyGPGKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/user/gpg_keys",
+      "sourceOperation": "userCurrentPostGPGKey",
+      "targetOperation": "userCurrentPostGPGKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/user/hooks",
+      "sourceOperation": "userCreateHook",
+      "targetOperation": "userCreateHook",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/user/keys",
+      "sourceOperation": "userCurrentPostKey",
+      "targetOperation": "userCurrentPostKey",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/user/repos",
+      "sourceOperation": "createCurrentUserRepo",
+      "targetOperation": "createCurrentUserRepo",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "POST",
+      "path": "/users/{username}/tokens",
+      "sourceOperation": "userCreateToken",
+      "targetOperation": "userCreateToken",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/quota/groups/{quotagroup}/rules/{quotarule}",
+      "sourceOperation": null,
+      "targetOperation": "adminAddRuleToQuotaGroup",
+      "state": "target-only"
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/quota/groups/{quotagroup}/users/{username}",
+      "sourceOperation": null,
+      "targetOperation": "adminAddUserToQuotaGroup",
+      "state": "target-only"
+    },
+    {
+      "method": "PUT",
+      "path": "/notifications",
+      "sourceOperation": "notifyReadList",
+      "targetOperation": "notifyReadList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/orgs/{org}/actions/secrets/{secretname}",
+      "sourceOperation": "updateOrgSecret",
+      "targetOperation": "updateOrgSecret",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/orgs/{org}/actions/variables/{variablename}",
+      "sourceOperation": "updateOrgVariable",
+      "targetOperation": "updateOrgVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/orgs/{org}/block/{username}",
+      "sourceOperation": null,
+      "targetOperation": "orgBlockUser",
+      "state": "target-only"
+    },
+    {
+      "method": "PUT",
+      "path": "/orgs/{org}/blocks/{username}",
+      "sourceOperation": "organizationBlockUser",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "PUT",
+      "path": "/orgs/{org}/public_members/{username}",
+      "sourceOperation": "orgPublicizeMember",
+      "targetOperation": "orgPublicizeMember",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/orgs/{org}/unblock/{username}",
+      "sourceOperation": null,
+      "targetOperation": "orgUnblockUser",
+      "state": "target-only"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/actions/secrets/{secretname}",
+      "sourceOperation": "updateRepoSecret",
+      "targetOperation": "updateRepoSecret",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/actions/variables/{variablename}",
+      "sourceOperation": "updateRepoVariable",
+      "targetOperation": "updateRepoVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/actions/workflows/{workflow_id}/disable",
+      "sourceOperation": "ActionsDisableWorkflow",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/actions/workflows/{workflow_id}/enable",
+      "sourceOperation": "ActionsEnableWorkflow",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/branches/{branch}",
+      "sourceOperation": "repoUpdateBranch",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/collaborators/{collaborator}",
+      "sourceOperation": "repoAddCollaborator",
+      "targetOperation": "repoAddCollaborator",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/contents/{filepath}",
+      "sourceOperation": "repoUpdateFile",
+      "targetOperation": "repoUpdateFile",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/flags",
+      "sourceOperation": null,
+      "targetOperation": "repoReplaceAllFlags",
+      "state": "target-only"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/flags/{flag}",
+      "sourceOperation": null,
+      "targetOperation": "repoAddFlag",
+      "state": "target-only"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/issues/{index}/labels",
+      "sourceOperation": "issueReplaceLabels",
+      "targetOperation": "issueReplaceLabels",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/issues/{index}/lock",
+      "sourceOperation": "issueLockIssue",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/issues/{index}/subscriptions/{user}",
+      "sourceOperation": "issueAddSubscription",
+      "targetOperation": "issueAddSubscription",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/notifications",
+      "sourceOperation": "notifyReadRepoList",
+      "targetOperation": "notifyReadRepoList",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/subscription",
+      "sourceOperation": "userCurrentPutSubscription",
+      "targetOperation": "userCurrentPutSubscription",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/teams/{team}",
+      "sourceOperation": "repoAddTeam",
+      "targetOperation": "repoAddTeam",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/topics",
+      "sourceOperation": "repoUpdateTopics",
+      "targetOperation": "repoUpdateTopics",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/repos/{owner}/{repo}/topics/{topic}",
+      "sourceOperation": "repoAddTopic",
+      "targetOperation": "repoAddTopic",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/teams/{id}/members/{username}",
+      "sourceOperation": "orgAddTeamMember",
+      "targetOperation": "orgAddTeamMember",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/teams/{id}/repos/{org}/{repo}",
+      "sourceOperation": "orgAddTeamRepository",
+      "targetOperation": "orgAddTeamRepository",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/user/actions/secrets/{secretname}",
+      "sourceOperation": "updateUserSecret",
+      "targetOperation": "updateUserSecret",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/user/actions/variables/{variablename}",
+      "sourceOperation": "updateUserVariable",
+      "targetOperation": "updateUserVariable",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/user/block/{username}",
+      "sourceOperation": null,
+      "targetOperation": "userBlockUser",
+      "state": "target-only"
+    },
+    {
+      "method": "PUT",
+      "path": "/user/blocks/{username}",
+      "sourceOperation": "userBlockUser",
+      "targetOperation": null,
+      "state": "absent-from-target"
+    },
+    {
+      "method": "PUT",
+      "path": "/user/following/{username}",
+      "sourceOperation": "userCurrentPutFollow",
+      "targetOperation": "userCurrentPutFollow",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/user/starred/{owner}/{repo}",
+      "sourceOperation": "userCurrentPutStar",
+      "targetOperation": "userCurrentPutStar",
+      "state": "needs-behavioral-proof"
+    },
+    {
+      "method": "PUT",
+      "path": "/user/unblock/{username}",
+      "sourceOperation": null,
+      "targetOperation": "userUnblockUser",
+      "state": "target-only"
+    }
+  ],
+  "dependencies": [
+    {
+      "file": "cmd/golf/local_auth.go",
+      "lines": [
+        205
+      ]
+    },
+    {
+      "file": "cmd/golf/main.go",
+      "lines": [
+        104,
+        106
+      ]
+    },
+    {
+      "file": "cmd/golf-runner/git_snapshot_test.go",
+      "lines": [
+        180
+      ]
+    },
+    {
+      "file": "internal/cli/api_token_test.go",
+      "lines": [
+        34,
+        36,
+        40
+      ]
+    },
+    {
+      "file": "internal/cli/cli.go",
+      "lines": [
+        88,
+        104,
+        173
+      ]
+    },
+    {
+      "file": "internal/cli/cli_test.go",
+      "lines": [
+        447,
+        491
+      ]
+    },
+    {
+      "file": "internal/cli/forge_token_test.go",
+      "lines": [
+        12
+      ]
+    },
+    {
+      "file": "internal/cli/native_test.go",
+      "lines": [
+        48
+      ]
+    },
+    {
+      "file": "internal/server/account_security.go",
+      "lines": [
+        34,
+        86,
+        156,
+        173,
+        180
+      ]
+    },
+    {
+      "file": "internal/server/account_security_test.go",
+      "lines": [
+        72,
+        75,
+        148
+      ]
+    },
+    {
+      "file": "internal/server/action_runs.go",
+      "lines": [
+        26,
+        30,
+        34,
+        37,
+        199,
+        263,
+        265,
+        279,
+        317
+      ]
+    },
+    {
+      "file": "internal/server/action_runs_test.go",
+      "lines": [
+        64,
+        76,
+        79,
+        82,
+        89,
+        90,
+        98,
+        99
+      ]
+    },
+    {
+      "file": "internal/server/admin_mfa_recovery_native_test.go",
+      "lines": [
+        171
+      ]
+    },
+    {
+      "file": "internal/server/agent_acp_worker.go",
+      "lines": [
+        20,
+        241
+      ]
+    },
+    {
+      "file": "internal/server/agent_controls.go",
+      "lines": [
+        45,
+        245,
+        251
+      ]
+    },
+    {
+      "file": "internal/server/agent_controls_test.go",
+      "lines": [
+        127,
+        261
+      ]
+    },
+    {
+      "file": "internal/server/agent_conversations.go",
+      "lines": [
+        223,
+        251,
+        268,
+        293,
+        421
+      ]
+    },
+    {
+      "file": "internal/server/agent_conversations_test.go",
+      "lines": [
+        341,
+        602,
+        607,
+        610,
+        622
+      ]
+    },
+    {
+      "file": "internal/server/agent_tasks.go",
+      "lines": [
+        58,
+        65,
+        95,
+        207,
+        271,
+        276,
+        313,
+        325,
+        347
+      ]
+    },
+    {
+      "file": "internal/server/agent_tasks_test.go",
+      "lines": [
+        53,
+        58,
+        105,
+        109,
+        123,
+        128,
+        185,
+        212,
+        224
+      ]
+    },
+    {
+      "file": "internal/server/agent_usage.go",
+      "lines": [
+        61,
+        334,
+        339,
+        347,
+        350,
+        358
+      ]
+    },
+    {
+      "file": "internal/server/agent_worker.go",
+      "lines": [
+        31,
+        66,
+        106,
+        112,
+        121,
+        154,
+        199,
+        206,
+        279
+      ]
+    },
+    {
+      "file": "internal/server/api_credentials.go",
+      "lines": [
+        96,
+        240,
+        286,
+        322,
+        331
+      ]
+    },
+    {
+      "file": "internal/server/api_credentials_test.go",
+      "lines": [
+        434,
+        435
+      ]
+    },
+    {
+      "file": "internal/server/audit.go",
+      "lines": [
+        72,
+        82,
+        87
+      ]
+    },
+    {
+      "file": "internal/server/audit_test.go",
+      "lines": [
+        199,
+        275,
+        416,
+        422
+      ]
+    },
+    {
+      "file": "internal/server/automation_grants.go",
+      "lines": [
+        36,
+        183,
+        228,
+        292,
+        307,
+        313,
+        356
+      ]
+    },
+    {
+      "file": "internal/server/automation_grants_test.go",
+      "lines": [
+        309
+      ]
+    },
+    {
+      "file": "internal/server/cloudflare_preview_test.go",
+      "lines": [
+        95
+      ]
+    },
+    {
+      "file": "internal/server/cloudflare_resources.go",
+      "lines": [
+        43,
+        86,
+        147,
+        190,
+        257,
+        270,
+        275,
+        286,
+        290,
+        303,
+        465
+      ]
+    },
+    {
+      "file": "internal/server/cloudflare_resources_test.go",
+      "lines": [
+        223,
+        228
+      ]
+    },
+    {
+      "file": "internal/server/codex_accounts.go",
+      "lines": [
+        148,
+        155,
+        326,
+        335,
+        574,
+        874
+      ]
+    },
+    {
+      "file": "internal/server/codex_accounts_test.go",
+      "lines": [
+        394
+      ]
+    },
+    {
+      "file": "internal/server/codex_shared.go",
+      "lines": [
+        65,
+        158,
+        159,
+        216,
+        222,
+        296,
+        307
+      ]
+    },
+    {
+      "file": "internal/server/codex_shared_test.go",
+      "lines": [
+        105,
+        108,
+        155,
+        171,
+        206
+      ]
+    },
+    {
+      "file": "internal/server/database/account_security.sql.go",
+      "lines": [
+        50,
+        53
+      ]
+    },
+    {
+      "file": "internal/server/database/api_credentials.sql.go",
+      "lines": [
+        41,
+        122,
+        132,
+        183,
+        242,
+        311
+      ]
+    },
+    {
+      "file": "internal/server/database/audit.sql.go",
+      "lines": [
+        84,
+        109,
+        111,
+        140,
+        164,
+        237,
+        239,
+        240,
+        285,
+        308
+      ]
+    },
+    {
+      "file": "internal/server/database/database_test.go",
+      "lines": [
+        80
+      ]
+    },
+    {
+      "file": "internal/server/database/execution_policy.sql.go",
+      "lines": [
+        13,
+        36,
+        57,
+        97,
+        112,
+        127,
+        149,
+        178,
+        216,
+        249,
+        279,
+        280
+      ]
+    },
+    {
+      "file": "internal/server/database/inline_reviews.sql.go",
+      "lines": [
+        16,
+        95,
+        156,
+        158
+      ]
+    },
+    {
+      "file": "internal/server/database/instance_account_disable.sql.go",
+      "lines": [
+        59,
+        61,
+        102
+      ]
+    },
+    {
+      "file": "internal/server/database/instance_account_lifecycle.sql.go",
+      "lines": [
+        94
+      ]
+    },
+    {
+      "file": "internal/server/database/instance_admin.sql.go",
+      "lines": [
+        15,
+        18
+      ]
+    },
+    {
+      "file": "internal/server/database/issue_mutations.sql.go",
+      "lines": [
+        38,
+        40,
+        96,
+        97,
+        137,
+        139,
+        186,
+        187,
+        188,
+        189
+      ]
+    },
+    {
+      "file": "internal/server/database/local_auth.sql.go",
+      "lines": [
+        299,
+        301,
+        349,
+        351,
+        399,
+        403,
+        467
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/00001_sessions.sql",
+      "lines": [
+        4,
+        5,
+        9
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610020006_issue_mutations.sql",
+      "lines": [
+        7,
+        41
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610020010_execution_policy.sql",
+      "lines": [
+        3,
+        13,
+        18,
+        20,
+        21,
+        24,
+        26,
+        27,
+        31,
+        41,
+        42
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610020011_workflow_runs.sql",
+      "lines": [
+        4,
+        37,
+        39,
+        40
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610020012_organization_creation_policy.sql",
+      "lines": [
+        3,
+        9,
+        11,
+        15,
+        22
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610020015_runner_presence.sql",
+      "lines": [
+        3,
+        6
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610020017_repository_events.sql",
+      "lines": [
+        6
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610020019_automation_grants.sql",
+      "lines": [
+        4,
+        19,
+        24
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610020020_workflow_automation_origin.sql",
+      "lines": [
+        14,
+        15,
+        22,
+        23,
+        32,
+        34,
+        54,
+        55
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610020023_codex_shared_connections.sql",
+      "lines": [
+        5,
+        6,
+        7,
+        11,
+        16,
+        44
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610020024_agent_harnesses.sql",
+      "lines": [
+        10,
+        18
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030025_agent_usage.sql",
+      "lines": [
+        5,
+        8,
+        11
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030026_agent_tasks.sql",
+      "lines": [
+        4,
+        32,
+        34,
+        37,
+        41
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030027_reviewers.sql",
+      "lines": [
+        4,
+        18
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030030_repository_activity.sql",
+      "lines": [
+        6,
+        12,
+        20,
+        29,
+        33,
+        36,
+        37,
+        40,
+        41,
+        45,
+        46
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030032_issue_updates.sql",
+      "lines": [
+        21
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030033_pull_mutations.sql",
+      "lines": [
+        33
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030034_pull_review_mutations.sql",
+      "lines": [
+        5
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030035_reviewer_publication.sql",
+      "lines": [
+        15,
+        27,
+        29,
+        42,
+        43
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030036_private_review_drafts.sql",
+      "lines": [
+        5,
+        10,
+        11,
+        16,
+        27,
+        36,
+        45,
+        46,
+        49,
+        53,
+        66,
+        67,
+        76,
+        81,
+        82,
+        90,
+        97,
+        104
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030037_inline_review_publication.sql",
+      "lines": [
+        7,
+        34,
+        46,
+        65,
+        66,
+        67,
+        68,
+        101,
+        102,
+        104,
+        107,
+        110,
+        111,
+        112,
+        113,
+        128,
+        132
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610030038_agent_conversations.sql",
+      "lines": [
+        6,
+        20,
+        26,
+        34,
+        57,
+        61,
+        74
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040039_actions_engine_graph.sql",
+      "lines": [
+        57
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040040_repository_webhooks.sql",
+      "lines": [
+        3,
+        12,
+        41,
+        78
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040041_repository_lifecycle.sql",
+      "lines": [
+        6,
+        25,
+        26,
+        43,
+        44,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        63,
+        64,
+        65,
+        67,
+        76,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040042_repository_execution_values.sql",
+      "lines": [
+        5,
+        6,
+        9,
+        13,
+        24,
+        27,
+        39,
+        43,
+        52,
+        64,
+        69
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040043_email_notifications.sql",
+      "lines": [
+        34,
+        40,
+        42,
+        76,
+        108
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040044_repository_invitations.sql",
+      "lines": [
+        6,
+        22,
+        23,
+        50,
+        53,
+        57,
+        67,
+        70,
+        85,
+        103
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040047_runner_controls.sql",
+      "lines": [
+        3,
+        8,
+        11,
+        14,
+        15,
+        20
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040048_repository_access_intents.sql",
+      "lines": [
+        5,
+        20,
+        26,
+        28,
+        32,
+        46,
+        47,
+        49,
+        59,
+        60,
+        64,
+        69,
+        72,
+        82
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040049_repository_rule_mutations.sql",
+      "lines": [
+        6,
+        26,
+        44,
+        47,
+        48,
+        57,
+        67
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040050_runner_pools.sql",
+      "lines": [
+        3,
+        11,
+        14,
+        15,
+        18,
+        21,
+        25,
+        28,
+        29,
+        32,
+        34,
+        40,
+        46,
+        51,
+        60,
+        62,
+        68,
+        69,
+        75,
+        76,
+        85,
+        86,
+        94,
+        95,
+        96,
+        97,
+        99,
+        102,
+        104,
+        105,
+        107
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040051_managed_http_git.sql",
+      "lines": [
+        5,
+        12,
+        17,
+        26,
+        28,
+        39,
+        62,
+        66,
+        74,
+        75,
+        77,
+        86
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040052_organization_execution_values.sql",
+      "lines": [
+        6,
+        7,
+        10,
+        14,
+        15,
+        30,
+        34,
+        40
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040053_runner_job_limits.sql",
+      "lines": [
+        3,
+        11,
+        13,
+        24,
+        32,
+        37,
+        41,
+        53
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040054_repository_deletion.sql",
+      "lines": [
+        24,
+        29,
+        30
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040055_repository_environments.sql",
+      "lines": [
+        4,
+        6,
+        8,
+        10,
+        17,
+        19,
+        21,
+        25,
+        28,
+        40,
+        41,
+        45,
+        52,
+        54,
+        55,
+        60
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040056_workflow_notifications.sql",
+      "lines": [
+        12,
+        28,
+        38,
+        47,
+        48,
+        57,
+        63
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040057_workflow_dispatch_inputs.sql",
+      "lines": [
+        8,
+        33,
+        34
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040059_workflow_dispatch_typed_runs.sql",
+      "lines": [
+        44,
+        55,
+        56,
+        69
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040061_standard_pull_merges.sql",
+      "lines": [
+        6,
+        21,
+        25,
+        40,
+        42,
+        43,
+        44,
+        54,
+        55,
+        66
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040062_workflow_artifacts.sql",
+      "lines": [
+        6,
+        17,
+        21
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040063_standard_pull_merge_sources.sql",
+      "lines": [
+        12,
+        17,
+        19,
+        27
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040064_workflow_artifact_objects.sql",
+      "lines": [
+        27
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040066_repository_release_publications.sql",
+      "lines": [
+        5,
+        22,
+        28,
+        44,
+        46,
+        47,
+        48,
+        60,
+        62
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610040067_repository_deployments.sql",
+      "lines": [
+        4,
+        11,
+        15,
+        42,
+        44,
+        45,
+        56,
+        58,
+        70,
+        81
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050068_repository_ref_mutations.sql",
+      "lines": [
+        4,
+        17,
+        19,
+        33,
+        35,
+        36,
+        37,
+        48,
+        50
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050070_discussion_resource_operations.sql",
+      "lines": [
+        4,
+        15,
+        20,
+        34,
+        36,
+        37,
+        38,
+        49,
+        51
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050071_repository_file_mutations.sql",
+      "lines": [
+        4,
+        22,
+        24,
+        38,
+        40,
+        41,
+        42,
+        54,
+        56
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050072_pull_review_requests.sql",
+      "lines": [
+        4,
+        11,
+        13,
+        27,
+        29,
+        30,
+        31,
+        42,
+        44
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050074_repository_release_operations.sql",
+      "lines": [
+        4,
+        17,
+        21,
+        35,
+        37,
+        38,
+        39,
+        50,
+        52
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050077_pull_review_comment_resolutions.sql",
+      "lines": [
+        4,
+        12,
+        14,
+        28,
+        30,
+        31,
+        32,
+        43,
+        45
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050078_repository_wiki_operations.sql",
+      "lines": [
+        4,
+        13,
+        17,
+        29,
+        31,
+        32,
+        33,
+        43,
+        45,
+        50,
+        55,
+        58,
+        64,
+        66,
+        76,
+        79,
+        81,
+        87,
+        89,
+        90,
+        97,
+        99
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050082_pull_review_lifecycle.sql",
+      "lines": [
+        4,
+        11,
+        13,
+        27,
+        29,
+        30,
+        31,
+        42,
+        44
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050084_pull_review_authoring.sql",
+      "lines": [
+        4,
+        12,
+        14,
+        28,
+        30,
+        31,
+        32,
+        43,
+        45
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050086_provider_imports_and_packages.sql",
+      "lines": [
+        3,
+        6,
+        8,
+        15,
+        32,
+        36,
+        38,
+        45,
+        46,
+        47,
+        57,
+        61,
+        63,
+        69,
+        71,
+        72,
+        77,
+        79,
+        81
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050088_agent_controls.sql",
+      "lines": [
+        108
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610050089_forge_consumers.sql",
+      "lines": [
+        20,
+        26,
+        35,
+        38,
+        52,
+        54,
+        55,
+        56,
+        67,
+        69
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610070092_remote_actions.sql",
+      "lines": [
+        31
+      ]
+    },
+    {
+      "file": "internal/server/database/migrations/202610080093_cloudflare_resources.sql",
+      "lines": [
+        3,
+        11,
+        16,
+        27
+      ]
+    },
+    {
+      "file": "internal/server/database/organization_creation_policy.sql.go",
+      "lines": [
+        13,
+        27,
+        54,
+        63,
+        72,
+        88,
+        104,
+        131,
+        147
+      ]
+    },
+    {
+      "file": "internal/server/database/pull_review_mutations.sql.go",
+      "lines": [
+        37,
+        83,
+        84,
+        123,
+        167,
+        168,
+        169,
+        170
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/account_security.sql",
+      "lines": [
+        4,
+        7
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/api_credentials.sql",
+      "lines": [
+        14,
+        24,
+        33,
+        48,
+        62,
+        68
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/audit.sql",
+      "lines": [
+        4,
+        6,
+        9,
+        11,
+        12,
+        23,
+        32,
+        46,
+        56,
+        70
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/execution_policy.sql",
+      "lines": [
+        2,
+        4,
+        7,
+        10,
+        13,
+        15,
+        17,
+        19,
+        21,
+        23,
+        25
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/inline_reviews.sql",
+      "lines": [
+        5
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/instance_account_disable.sql",
+      "lines": [
+        6,
+        11,
+        13
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/instance_account_lifecycle.sql",
+      "lines": [
+        4
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/instance_admin.sql",
+      "lines": [
+        4,
+        7
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/issue_mutations.sql",
+      "lines": [
+        3,
+        4,
+        5,
+        10,
+        17,
+        25
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/local_auth.sql",
+      "lines": [
+        2,
+        4,
+        7,
+        9,
+        17,
+        48,
+        52
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/organization_creation_policy.sql",
+      "lines": [
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        18
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/pull_review_mutations.sql",
+      "lines": [
+        2,
+        3,
+        4,
+        8,
+        11,
+        14
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/repository_creation.sql",
+      "lines": [
+        6,
+        13,
+        24
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/repository_deployments.sql",
+      "lines": [
+        2
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/repository_environments.sql",
+      "lines": [
+        2,
+        4,
+        5,
+        7,
+        9,
+        10,
+        12,
+        14,
+        16,
+        18,
+        20,
+        22,
+        25
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/repository_invitations.sql",
+      "lines": [
+        2,
+        4,
+        6,
+        12,
+        14
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/repository_lifecycle.sql",
+      "lines": [
+        2,
+        4,
+        6,
+        8,
+        11,
+        13,
+        15,
+        18
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/repository_rule_mutations.sql",
+      "lines": [
+        2,
+        4,
+        7,
+        9
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/review_drafts.sql",
+      "lines": [
+        2,
+        7,
+        11,
+        14,
+        17,
+        20,
+        27,
+        31,
+        34,
+        58
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/session_management.sql",
+      "lines": [
+        4,
+        9,
+        20,
+        33,
+        45,
+        56
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/sessions.sql",
+      "lines": [
+        2,
+        4,
+        21,
+        24,
+        28,
+        31
+      ]
+    },
+    {
+      "file": "internal/server/database/queries/webhooks.sql",
+      "lines": [
+        4,
+        6,
+        7,
+        9,
+        11,
+        15
+      ]
+    },
+    {
+      "file": "internal/server/database/repository_creation.sql.go",
+      "lines": [
+        33,
+        81,
+        114
+      ]
+    },
+    {
+      "file": "internal/server/database/repository_environments.sql.go",
+      "lines": [
+        16,
+        46,
+        62,
+        79,
+        108,
+        109,
+        150,
+        193,
+        216,
+        217,
+        266,
+        267,
+        334,
+        335
+      ]
+    },
+    {
+      "file": "internal/server/database/repository_invitations.sql.go",
+      "lines": [
+        44,
+        86,
+        125,
+        195,
+        233
+      ]
+    },
+    {
+      "file": "internal/server/database/repository_lifecycle.sql.go",
+      "lines": [
+        13,
+        74,
+        141,
+        157,
+        158,
+        217,
+        218
+      ]
+    },
+    {
+      "file": "internal/server/database/repository_rule_mutations.sql.go",
+      "lines": [
+        13,
+        59,
+        109,
+        110
+      ]
+    },
+    {
+      "file": "internal/server/database/review_drafts.sql.go",
+      "lines": [
+        30,
+        85,
+        109,
+        144,
+        184,
+        221,
+        231,
+        232,
+        233,
+        237,
+        268,
+        296,
+        327,
+        363,
+        391
+      ]
+    },
+    {
+      "file": "internal/server/database/session_management.sql.go",
+      "lines": [
+        23,
+        86,
+        117,
+        122,
+        153,
+        185
+      ]
+    },
+    {
+      "file": "internal/server/database/sessions.sql.go",
+      "lines": [
+        87,
+        90,
+        121,
+        124,
+        156,
+        158
+      ]
+    },
+    {
+      "file": "internal/server/database/webhooks.sql.go",
+      "lines": [
+        26,
+        105,
+        237,
+        238,
+        314,
+        393
+      ]
+    },
+    {
+      "file": "internal/server/deployment_approvals.go",
+      "lines": [
+        84,
+        176,
+        186,
+        196,
+        247,
+        289,
+        379,
+        442,
+        464,
+        610
+      ]
+    },
+    {
+      "file": "internal/server/deployment_cleanup.go",
+      "lines": [
+        20
+      ]
+    },
+    {
+      "file": "internal/server/deployment_review_test.go",
+      "lines": [
+        22,
+        74,
+        81
+      ]
+    },
+    {
+      "file": "internal/server/discussion_attachment_upload.go",
+      "lines": [
+        29,
+        87,
+        93,
+        251,
+        256,
+        343,
+        386,
+        445,
+        458
+      ]
+    },
+    {
+      "file": "internal/server/discussion_attachment_upload_test.go",
+      "lines": [
+        183
+      ]
+    },
+    {
+      "file": "internal/server/discussion_attachments.go",
+      "lines": [
+        78
+      ]
+    },
+    {
+      "file": "internal/server/discussion_attachments_test.go",
+      "lines": [
+        117
+      ]
+    },
+    {
+      "file": "internal/server/discussion_resource_operations.go",
+      "lines": [
+        194,
+        214,
+        217,
+        395,
+        400,
+        430,
+        458,
+        497,
+        503,
+        553,
+        564
+      ]
+    },
+    {
+      "file": "internal/server/execution_bindings.go",
+      "lines": [
+        125,
+        272,
+        280,
+        303,
+        319,
+        332,
+        340,
+        348
+      ]
+    },
+    {
+      "file": "internal/server/execution_policy.go",
+      "lines": [
+        254,
+        256,
+        272,
+        279,
+        420,
+        427,
+        437,
+        441,
+        444,
+        448,
+        453,
+        457
+      ]
+    },
+    {
+      "file": "internal/server/execution_policy_test.go",
+      "lines": [
+        313,
+        370
+      ]
+    },
+    {
+      "file": "internal/server/execution_typed_binding_test.go",
+      "lines": [
+        429
+      ]
+    },
+    {
+      "file": "internal/server/execution_value_consumer.go",
+      "lines": [
+        33,
+        74,
+        129,
+        148,
+        183,
+        187,
+        252,
+        265,
+        309
+      ]
+    },
+    {
+      "file": "internal/server/execution_value_keys.go",
+      "lines": [
+        24,
+        31
+      ]
+    },
+    {
+      "file": "internal/server/execution_values.go",
+      "lines": [
+        137,
+        142,
+        185,
+        198,
+        225,
+        229,
+        234,
+        238,
+        255,
+        260,
+        304,
+        319,
+        332,
+        340,
+        371,
+        374,
+        405,
+        416,
+        423,
+        430,
+        437,
+        445,
+        448,
+        462,
+        470,
+        478,
+        529
+      ]
+    },
+    {
+      "file": "internal/server/execution_values_postgres_test.go",
+      "lines": [
+        559,
+        590,
+        593,
+        597
+      ]
+    },
+    {
+      "file": "internal/server/forge.go",
+      "lines": [
+        66
+      ]
+    },
+    {
+      "file": "internal/server/forge086_test.go",
+      "lines": [
+        275
+      ]
+    },
+    {
+      "file": "internal/server/forge089_native_test.go",
+      "lines": [
+        87
+      ]
+    },
+    {
+      "file": "internal/server/forge_binding.go",
+      "lines": [
+        41,
+        42
+      ]
+    },
+    {
+      "file": "internal/server/forge_binding_test.go",
+      "lines": [
+        19,
+        36
+      ]
+    },
+    {
+      "file": "internal/server/forge_config.go",
+      "lines": [
+        23,
+        36,
+        37
+      ]
+    },
+    {
+      "file": "internal/server/forge_config_test.go",
+      "lines": [
+        18,
+        24,
+        39
+      ]
+    },
+    {
+      "file": "internal/server/git_transport.go",
+      "lines": [
+        33,
+        55,
+        68,
+        79,
+        329,
+        400,
+        443
+      ]
+    },
+    {
+      "file": "internal/server/git_transport_credentials.go",
+      "lines": [
+        188,
+        264,
+        294,
+        360,
+        383,
+        428,
+        480
+      ]
+    },
+    {
+      "file": "internal/server/git_transport_encoding_test.go",
+      "lines": [
+        60
+      ]
+    },
+    {
+      "file": "internal/server/git_transport_test.go",
+      "lines": [
+        269,
+        279,
+        309
+      ]
+    },
+    {
+      "file": "internal/server/golf_user_suspensions.go",
+      "lines": [
+        26,
+        39,
+        44,
+        53,
+        69,
+        84,
+        217,
+        245,
+        248,
+        277,
+        327
+      ]
+    },
+    {
+      "file": "internal/server/golf_user_suspensions_background_test.go",
+      "lines": [
+        19
+      ]
+    },
+    {
+      "file": "internal/server/golf_user_suspensions_test.go",
+      "lines": [
+        93,
+        237,
+        310,
+        324,
+        494
+      ]
+    },
+    {
+      "file": "internal/server/infrastructure_connections.go",
+      "lines": [
+        169,
+        199,
+        216,
+        220
+      ]
+    },
+    {
+      "file": "internal/server/instance_account_disable.go",
+      "lines": [
+        45,
+        63,
+        94,
+        101,
+        122,
+        135
+      ]
+    },
+    {
+      "file": "internal/server/instance_account_lifecycle.go",
+      "lines": [
+        99,
+        147,
+        150,
+        193,
+        200,
+        254
+      ]
+    },
+    {
+      "file": "internal/server/instance_account_lifecycle_test.go",
+      "lines": [
+        81,
+        132,
+        237,
+        256,
+        324
+      ]
+    },
+    {
+      "file": "internal/server/instance_admin.go",
+      "lines": [
+        51,
+        89
+      ]
+    },
+    {
+      "file": "internal/server/instance_admin_test.go",
+      "lines": [
+        75,
+        78,
+        172
+      ]
+    },
+    {
+      "file": "internal/server/instance_mfa_recovery.go",
+      "lines": [
+        60,
+        114,
+        118,
+        122
+      ]
+    },
+    {
+      "file": "internal/server/issue_mutations.go",
+      "lines": [
+        175,
+        199,
+        229,
+        231,
+        394
+      ]
+    },
+    {
+      "file": "internal/server/job_git_capability.go",
+      "lines": [
+        55,
+        255,
+        311
+      ]
+    },
+    {
+      "file": "internal/server/job_git_capability_test.go",
+      "lines": [
+        31,
+        551
+      ]
+    },
+    {
+      "file": "internal/server/key_operations_test.go",
+      "lines": [
+        302,
+        512,
+        526,
+        600,
+        601
+      ]
+    },
+    {
+      "file": "internal/server/local_auth.go",
+      "lines": [
+        175,
+        179,
+        246,
+        325
+      ]
+    },
+    {
+      "file": "internal/server/local_auth_test.go",
+      "lines": [
+        25,
+        86,
+        111,
+        121,
+        125,
+        132,
+        135,
+        181,
+        212,
+        244,
+        264,
+        267,
+        289,
+        297,
+        343,
+        361,
+        374,
+        429,
+        440,
+        443
+      ]
+    },
+    {
+      "file": "internal/server/local_mfa.go",
+      "lines": [
+        163,
+        231,
+        330,
+        338,
+        341
+      ]
+    },
+    {
+      "file": "internal/server/mirror_observation086.go",
+      "lines": [
+        159
+      ]
+    },
+    {
+      "file": "internal/server/notification_delivery.go",
+      "lines": [
+        66,
+        67,
+        68,
+        104,
+        105,
+        149,
+        151,
+        158,
+        162,
+        167,
+        428
+      ]
+    },
+    {
+      "file": "internal/server/notification_postgres_test.go",
+      "lines": [
+        120,
+        190,
+        198,
+        645,
+        646,
+        647,
+        654,
+        664,
+        665
+      ]
+    },
+    {
+      "file": "internal/server/notification_settings.go",
+      "lines": [
+        185,
+        195,
+        794,
+        841,
+        859,
+        886
+      ]
+    },
+    {
+      "file": "internal/server/oauth.go",
+      "lines": [
+        62,
+        238
+      ]
+    },
+    {
+      "file": "internal/server/oauth_test.go",
+      "lines": [
+        436,
+        507,
+        532
+      ]
+    },
+    {
+      "file": "internal/server/operator_mfa_recovery.go",
+      "lines": [
+        70,
+        132
+      ]
+    },
+    {
+      "file": "internal/server/operator_mfa_recovery_test.go",
+      "lines": [
+        19,
+        27,
+        32,
+        36,
+        55,
+        64,
+        75
+      ]
+    },
+    {
+      "file": "internal/server/organization_creation_policy.go",
+      "lines": [
+        58,
+        61,
+        67,
+        74,
+        140,
+        146,
+        149,
+        157,
+        164,
+        168,
+        172,
+        176
+      ]
+    },
+    {
+      "file": "internal/server/organization_creation_policy_test.go",
+      "lines": [
+        167,
+        170,
+        200
+      ]
+    },
+    {
+      "file": "internal/server/organization_execution_consumer.go",
+      "lines": [
+        38,
+        205,
+        233,
+        253,
+        272,
+        283
+      ]
+    },
+    {
+      "file": "internal/server/organization_execution_consumer_postgres_test.go",
+      "lines": [
+        38,
+        42,
+        45,
+        240,
+        325,
+        328
+      ]
+    },
+    {
+      "file": "internal/server/organization_execution_value_keys.go",
+      "lines": [
+        35
+      ]
+    },
+    {
+      "file": "internal/server/organization_execution_values.go",
+      "lines": [
+        169,
+        174,
+        186,
+        193,
+        209,
+        214,
+        275,
+        294,
+        298,
+        309,
+        337,
+        360,
+        363,
+        417,
+        426,
+        447,
+        454,
+        461,
+        470,
+        483,
+        491,
+        552
+      ]
+    },
+    {
+      "file": "internal/server/organization_execution_values_postgres_test.go",
+      "lines": [
+        91,
+        259
+      ]
+    },
+    {
+      "file": "internal/server/organization_labels.go",
+      "lines": [
+        159,
+        220,
+        268,
+        272,
+        282
+      ]
+    },
+    {
+      "file": "internal/server/organizations.go",
+      "lines": [
+        107,
+        139
+      ]
+    },
+    {
+      "file": "internal/server/package_operations086.go",
+      "lines": [
+        111,
+        171,
+        310,
+        358,
+        361,
+        371,
+        419,
+        431
+      ]
+    },
+    {
+      "file": "internal/server/password_recovery090.go",
+      "lines": [
+        30,
+        73,
+        74,
+        75,
+        76,
+        108,
+        239
+      ]
+    },
+    {
+      "file": "internal/server/preview_authority_regression_test.go",
+      "lines": [
+        96
+      ]
+    },
+    {
+      "file": "internal/server/protected_review_observation087_test.go",
+      "lines": [
+        96
+      ]
+    },
+    {
+      "file": "internal/server/protection_dispatch_fence.go",
+      "lines": [
+        29,
+        37
+      ]
+    },
+    {
+      "file": "internal/server/protection_dispatch_fence_test.go",
+      "lines": [
+        98
+      ]
+    },
+    {
+      "file": "internal/server/provider_import086.go",
+      "lines": [
+        105,
+        159,
+        186,
+        248,
+        255,
+        260,
+        294,
+        428,
+        489,
+        551,
+        562,
+        566,
+        642
+      ]
+    },
+    {
+      "file": "internal/server/pull_inline_reviews.go",
+      "lines": [
+        146,
+        151,
+        184,
+        190,
+        199,
+        206,
+        232
+      ]
+    },
+    {
+      "file": "internal/server/pull_inline_reviews_native_test.go",
+      "lines": [
+        199
+      ]
+    },
+    {
+      "file": "internal/server/pull_inline_reviews_test.go",
+      "lines": [
+        44,
+        670,
+        709,
+        714,
+        743,
+        759,
+        780,
+        808,
+        912,
+        1088,
+        1101,
+        1125,
+        1140,
+        1144,
+        1148,
+        1154,
+        1194
+      ]
+    },
+    {
+      "file": "internal/server/pull_merge_observation_test.go",
+      "lines": [
+        62
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_authoring.go",
+      "lines": [
+        111,
+        136,
+        142,
+        162,
+        212,
+        217,
+        324,
+        384,
+        400
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_authoring_state.go",
+      "lines": [
+        276,
+        280
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_authoring_test.go",
+      "lines": [
+        33,
+        147
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_comment_resolutions.go",
+      "lines": [
+        185,
+        215,
+        218,
+        238,
+        270,
+        275,
+        300,
+        363,
+        373
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_comment_resolutions_test.go",
+      "lines": [
+        31,
+        107
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_drafts.go",
+      "lines": [
+        340,
+        351,
+        353,
+        431,
+        434,
+        567,
+        603,
+        606,
+        613,
+        615,
+        724,
+        731
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_lifecycle.go",
+      "lines": [
+        176,
+        197,
+        200,
+        220,
+        256,
+        261,
+        286,
+        349,
+        359
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_lifecycle_test.go",
+      "lines": [
+        30,
+        67
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_mutations.go",
+      "lines": [
+        128,
+        130,
+        151,
+        234,
+        236
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_reply_parents.go",
+      "lines": [
+        26
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_requests.go",
+      "lines": [
+        240,
+        261,
+        264,
+        284,
+        312,
+        317,
+        342,
+        402,
+        412
+      ]
+    },
+    {
+      "file": "internal/server/pull_review_requests_test.go",
+      "lines": [
+        32,
+        114
+      ]
+    },
+    {
+      "file": "internal/server/push_materializer.go",
+      "lines": [
+        68,
+        173,
+        273,
+        305
+      ]
+    },
+    {
+      "file": "internal/server/recovery_quarantine_test.go",
+      "lines": [
+        93,
+        99,
+        113,
+        140
+      ]
+    },
+    {
+      "file": "internal/server/repository_access_operations.go",
+      "lines": [
+        30,
+        51,
+        90,
+        98,
+        100,
+        243,
+        247,
+        363
+      ]
+    },
+    {
+      "file": "internal/server/repository_access_operations_test.go",
+      "lines": [
+        267,
+        420
+      ]
+    },
+    {
+      "file": "internal/server/repository_access_ownership_test.go",
+      "lines": [
+        191
+      ]
+    },
+    {
+      "file": "internal/server/repository_activity.go",
+      "lines": [
+        84,
+        93,
+        99
+      ]
+    },
+    {
+      "file": "internal/server/repository_activity_test.go",
+      "lines": [
+        55,
+        59,
+        143,
+        152,
+        174
+      ]
+    },
+    {
+      "file": "internal/server/repository_creation.go",
+      "lines": [
+        80,
+        84,
+        175,
+        200
+      ]
+    },
+    {
+      "file": "internal/server/repository_creation_test.go",
+      "lines": [
+        621
+      ]
+    },
+    {
+      "file": "internal/server/repository_deletion.go",
+      "lines": [
+        30,
+        74,
+        261,
+        265,
+        268,
+        279,
+        283,
+        290,
+        292,
+        305,
+        337,
+        341,
+        358,
+        369,
+        373
+      ]
+    },
+    {
+      "file": "internal/server/repository_deletion_test.go",
+      "lines": [
+        226,
+        317,
+        402,
+        403,
+        410
+      ]
+    },
+    {
+      "file": "internal/server/repository_deployments.go",
+      "lines": [
+        141,
+        257,
+        260,
+        264,
+        270,
+        301,
+        308
+      ]
+    },
+    {
+      "file": "internal/server/repository_deployments_test.go",
+      "lines": [
+        208,
+        216,
+        315
+      ]
+    },
+    {
+      "file": "internal/server/repository_environments.go",
+      "lines": [
+        192,
+        199,
+        255,
+        259,
+        263,
+        369,
+        381,
+        401,
+        415,
+        419,
+        425,
+        457,
+        469,
+        476,
+        481,
+        498,
+        506,
+        518
+      ]
+    },
+    {
+      "file": "internal/server/repository_environments_test.go",
+      "lines": [
+        347,
+        388,
+        508,
+        555,
+        560,
+        574,
+        582,
+        585,
+        593,
+        625,
+        686,
+        689
+      ]
+    },
+    {
+      "file": "internal/server/repository_events.go",
+      "lines": [
+        107,
+        113,
+        116
+      ]
+    },
+    {
+      "file": "internal/server/repository_events_test.go",
+      "lines": [
+        304
+      ]
+    },
+    {
+      "file": "internal/server/repository_file_batch.go",
+      "lines": [
+        155,
+        160,
+        252,
+        289,
+        306
+      ]
+    },
+    {
+      "file": "internal/server/repository_file_batch_test.go",
+      "lines": [
+        54,
+        123
+      ]
+    },
+    {
+      "file": "internal/server/repository_file_mutations.go",
+      "lines": [
+        70,
+        80,
+        86,
+        305,
+        318,
+        348,
+        378,
+        424,
+        434
+      ]
+    },
+    {
+      "file": "internal/server/repository_file_mutations_test.go",
+      "lines": [
+        109,
+        275
+      ]
+    },
+    {
+      "file": "internal/server/repository_invitations.go",
+      "lines": [
+        140,
+        150,
+        169,
+        204,
+        305,
+        318,
+        334,
+        337,
+        341,
+        349,
+        364,
+        421,
+        428,
+        468,
+        546,
+        559,
+        569,
+        576,
+        626,
+        644,
+        689,
+        729,
+        778,
+        790,
+        819,
+        906,
+        910
+      ]
+    },
+    {
+      "file": "internal/server/repository_invitations_test.go",
+      "lines": [
+        207,
+        327,
+        349,
+        450,
+        468,
+        599,
+        600,
+        631,
+        725
+      ]
+    },
+    {
+      "file": "internal/server/repository_lifecycle.go",
+      "lines": [
+        134,
+        138,
+        147,
+        175,
+        188,
+        194,
+        202,
+        211,
+        290,
+        310,
+        372,
+        377,
+        381,
+        468,
+        515,
+        594,
+        598,
+        601,
+        605,
+        607,
+        624
+      ]
+    },
+    {
+      "file": "internal/server/repository_lifecycle_test.go",
+      "lines": [
+        249,
+        330,
+        398,
+        401,
+        409,
+        412,
+        413,
+        443,
+        456,
+        457,
+        566,
+        582
+      ]
+    },
+    {
+      "file": "internal/server/repository_mirror_operations.go",
+      "lines": [
+        92,
+        140,
+        145,
+        176,
+        221,
+        231
+      ]
+    },
+    {
+      "file": "internal/server/repository_ref_mutations.go",
+      "lines": [
+        62,
+        72,
+        78,
+        306,
+        319,
+        349,
+        382,
+        428,
+        438
+      ]
+    },
+    {
+      "file": "internal/server/repository_ref_mutations_test.go",
+      "lines": [
+        88,
+        203
+      ]
+    },
+    {
+      "file": "internal/server/repository_release_assets.go",
+      "lines": [
+        54
+      ]
+    },
+    {
+      "file": "internal/server/repository_release_operations.go",
+      "lines": [
+        106,
+        123,
+        126,
+        241,
+        246,
+        273,
+        391,
+        421,
+        471,
+        481
+      ]
+    },
+    {
+      "file": "internal/server/repository_release_publication.go",
+      "lines": [
+        71,
+        110,
+        236,
+        239,
+        263,
+        290,
+        314,
+        383,
+        393
+      ]
+    },
+    {
+      "file": "internal/server/repository_release_publication_test.go",
+      "lines": [
+        563,
+        677
+      ]
+    },
+    {
+      "file": "internal/server/repository_wiki_operations.go",
+      "lines": [
+        106,
+        116,
+        119,
+        177,
+        182,
+        237,
+        282,
+        292
+      ]
+    },
+    {
+      "file": "internal/server/repository_wiki_operations_test.go",
+      "lines": [
+        210,
+        254
+      ]
+    },
+    {
+      "file": "internal/server/repository_wiki_test.go",
+      "lines": [
+        50,
+        93
+      ]
+    },
+    {
+      "file": "internal/server/reviewer_publication.go",
+      "lines": [
+        59,
+        76,
+        81,
+        104
+      ]
+    },
+    {
+      "file": "internal/server/reviewer_publication_native_test.go",
+      "lines": [
+        64
+      ]
+    },
+    {
+      "file": "internal/server/reviewer_publication_test.go",
+      "lines": [
+        61,
+        69,
+        535,
+        554
+      ]
+    },
+    {
+      "file": "internal/server/reviewer_worker.go",
+      "lines": [
+        57,
+        193,
+        223,
+        352,
+        364,
+        378,
+        503
+      ]
+    },
+    {
+      "file": "internal/server/reviewer_worker_publication_test.go",
+      "lines": [
+        115,
+        133
+      ]
+    },
+    {
+      "file": "internal/server/reviewers.go",
+      "lines": [
+        40,
+        170,
+        175,
+        189,
+        248
+      ]
+    },
+    {
+      "file": "internal/server/reviewers_test.go",
+      "lines": [
+        45
+      ]
+    },
+    {
+      "file": "internal/server/rpc.go",
+      "lines": [
+        721
+      ]
+    },
+    {
+      "file": "internal/server/rule_mutations.go",
+      "lines": [
+        348,
+        402,
+        431,
+        589,
+        591,
+        687
+      ]
+    },
+    {
+      "file": "internal/server/rule_mutations_revocation_test.go",
+      "lines": [
+        176,
+        179
+      ]
+    },
+    {
+      "file": "internal/server/runner_controls.go",
+      "lines": [
+        60,
+        69,
+        92,
+        172,
+        179,
+        184
+      ]
+    },
+    {
+      "file": "internal/server/runner_controls_test.go",
+      "lines": [
+        136,
+        246,
+        282
+      ]
+    },
+    {
+      "file": "internal/server/runner_git_source.go",
+      "lines": [
+        120
+      ]
+    },
+    {
+      "file": "internal/server/runner_git_source_test.go",
+      "lines": [
+        343
+      ]
+    },
+    {
+      "file": "internal/server/runner_job_limits.go",
+      "lines": [
+        45,
+        58,
+        62,
+        117,
+        125,
+        169,
+        187,
+        229,
+        237
+      ]
+    },
+    {
+      "file": "internal/server/runner_pool_policy.go",
+      "lines": [
+        24,
+        30,
+        44,
+        62,
+        75,
+        116,
+        125,
+        143,
+        154,
+        165,
+        174
+      ]
+    },
+    {
+      "file": "internal/server/runner_pool_policy_test.go",
+      "lines": [
+        38,
+        94,
+        98,
+        251,
+        299
+      ]
+    },
+    {
+      "file": "internal/server/runner_pools.go",
+      "lines": [
+        96,
+        119,
+        146,
+        211,
+        214,
+        260,
+        269,
+        280,
+        289,
+        297,
+        321,
+        327,
+        338,
+        343,
+        364,
+        384,
+        497,
+        536,
+        566,
+        569
+      ]
+    },
+    {
+      "file": "internal/server/runner_pools_test.go",
+      "lines": [
+        125
+      ]
+    },
+    {
+      "file": "internal/server/runner_transport.go",
+      "lines": [
+        139,
+        188,
+        198,
+        313,
+        319,
+        324,
+        462,
+        486,
+        587,
+        595,
+        619,
+        816,
+        1059,
+        1087,
+        1091
+      ]
+    },
+    {
+      "file": "internal/server/server.go",
+      "lines": [
+        37,
+        131,
+        151
+      ]
+    },
+    {
+      "file": "internal/server/server_test.go",
+      "lines": [
+        32,
+        47
+      ]
+    },
+    {
+      "file": "internal/server/session.go",
+      "lines": [
+        78,
+        82,
+        86,
+        128,
+        232,
+        239
+      ]
+    },
+    {
+      "file": "internal/server/session_management.go",
+      "lines": [
+        41,
+        54,
+        94,
+        124,
+        143
+      ]
+    },
+    {
+      "file": "internal/server/session_management_test.go",
+      "lines": [
+        257,
+        273
+      ]
+    },
+    {
+      "file": "internal/server/standard_pull_merge.go",
+      "lines": [
+        97,
+        136,
+        290,
+        376,
+        379,
+        389,
+        433
+      ]
+    },
+    {
+      "file": "internal/server/standard_pull_merge_fork.go",
+      "lines": [
+        46,
+        51,
+        59
+      ]
+    },
+    {
+      "file": "internal/server/standard_pull_merge_fork_test.go",
+      "lines": [
+        184
+      ]
+    },
+    {
+      "file": "internal/server/standard_pull_merge_test.go",
+      "lines": [
+        355
+      ]
+    },
+    {
+      "file": "internal/server/webhook_delivery.go",
+      "lines": [
+        27,
+        86,
+        89,
+        93,
+        94,
+        98
+      ]
+    },
+    {
+      "file": "internal/server/webhook_postgres_test.go",
+      "lines": [
+        117,
+        180,
+        190,
+        352,
+        579,
+        594
+      ]
+    },
+    {
+      "file": "internal/server/webhook_subscriptions.go",
+      "lines": [
+        128,
+        147,
+        191,
+        205,
+        245,
+        252,
+        281,
+        315,
+        374,
+        402
+      ]
+    },
+    {
+      "file": "internal/server/workflow_agent088.go",
+      "lines": [
+        171
+      ]
+    },
+    {
+      "file": "internal/server/workflow_agent088_test.go",
+      "lines": [
+        44,
+        55,
+        59,
+        64,
+        67,
+        70,
+        94,
+        164,
+        167,
+        239
+      ]
+    },
+    {
+      "file": "internal/server/workflow_artifacts.go",
+      "lines": [
+        92,
+        98,
+        152
+      ]
+    },
+    {
+      "file": "internal/server/workflow_automation.go",
+      "lines": [
+        18,
+        62,
+        79
+      ]
+    },
+    {
+      "file": "internal/server/workflow_automation_test.go",
+      "lines": [
+        45,
+        52,
+        53,
+        233,
+        237
+      ]
+    },
+    {
+      "file": "internal/server/workflow_directories_test.go",
+      "lines": [
+        29,
+        30,
+        31,
+        32,
+        33,
+        37,
+        38,
+        39,
+        40,
+        125,
+        150
+      ]
+    },
+    {
+      "file": "internal/server/workflow_dispatch.go",
+      "lines": [
+        71,
+        73
+      ]
+    },
+    {
+      "file": "internal/server/workflow_dispatch_input_content_test.go",
+      "lines": [
+        184
+      ]
+    },
+    {
+      "file": "internal/server/workflow_dispatch_input_keys.go",
+      "lines": [
+        18,
+        19
+      ]
+    },
+    {
+      "file": "internal/server/workflow_dispatch_release.go",
+      "lines": [
+        117,
+        128
+      ]
+    },
+    {
+      "file": "internal/server/workflow_dispatch_release_test.go",
+      "lines": [
+        294,
+        296
+      ]
+    },
+    {
+      "file": "internal/server/workflow_dispatch_test.go",
+      "lines": [
+        204,
+        226
+      ]
+    },
+    {
+      "file": "internal/server/workflow_dispatch_typed.go",
+      "lines": [
+        99,
+        140
+      ]
+    },
+    {
+      "file": "internal/server/workflow_notifications.go",
+      "lines": [
+        58,
+        60,
+        62
+      ]
+    },
+    {
+      "file": "internal/server/workflow_notifications_test.go",
+      "lines": [
+        61,
+        62
+      ]
+    },
+    {
+      "file": "internal/server/workflow_objects.go",
+      "lines": [
+        66
+      ]
+    },
+    {
+      "file": "internal/server/workflow_objects_test.go",
+      "lines": [
+        492
+      ]
+    },
+    {
+      "file": "internal/server/workflow_policy_observations_test.go",
+      "lines": [
+        46,
+        47,
+        48,
+        50,
+        191
+      ]
+    },
+    {
+      "file": "internal/server/workflow_progress.go",
+      "lines": [
+        105
+      ]
+    },
+    {
+      "file": "internal/server/workflow_runs.go",
+      "lines": [
+        80,
+        96,
+        234,
+        246,
+        259,
+        621,
+        700,
+        719,
+        739,
+        743,
+        829,
+        883
+      ]
+    },
+    {
+      "file": "internal/server/workflow_runs_test.go",
+      "lines": [
+        275
+      ]
+    },
+    {
+      "file": "internal/workflowpath/path.go",
+      "lines": [
+        9,
+        11,
+        23,
+        24
+      ]
+    },
+    {
+      "file": "internal/workflowpath/path_test.go",
+      "lines": [
+        10,
+        29,
+        30,
+        31,
+        32,
+        40
+      ]
+    },
+    {
+      "file": "deploy/helm/golf/templates/golf.yaml",
+      "lines": [
+        72,
+        76
+      ]
+    },
+    {
+      "file": "deploy/helm/golf/templates/webhook-worker.yaml",
+      "lines": [
+        48,
+        49
+      ]
+    },
+    {
+      "file": "deploy/helm/golf/values-forgejo.yaml",
+      "lines": [
+        7
+      ]
+    },
+    {
+      "file": "deploy/helm/golf/values.yaml",
+      "lines": [
+        42
+      ]
+    },
+    {
+      "file": "web/src/AutomationGrantPanel.tsx",
+      "lines": [
+        29
+      ]
+    },
+    {
+      "file": "web/src/ExecutionPolicyPanel.tsx",
+      "lines": [
+        26
+      ]
+    }
+  ],
+  "complete": false,
+  "reason": "Static route inventory; native role/field/fidelity qualification remains required.",
+  "counts": {
+    "needs-behavioral-proof": 410,
+    "absent-from-target": 72,
+    "target-only": 81
+  }
+}

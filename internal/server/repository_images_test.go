@@ -12,6 +12,11 @@ import (
 )
 
 func TestRepositoryImageBoundaries(t *testing.T) {
+	for _, reference := range []string{"https://vite.dev/vite-dark.svg", "https://sponsors.vite.dev/sponsors.svg", "https://github.com/vitejs/vite/actions/workflows/ci.yml/badge.svg?branch=main"} {
+		if _, e := externalImageURL(reference); e != nil {
+			t.Errorf("rejected supported image %q: %v", reference, e)
+		}
+	}
 	for _, reference := range []string{"https://localhost/x", "https://127.0.0.1/x", "https://raw.githubusercontent.com:443/x", "https://user:pass@raw.githubusercontent.com/x", "https://raw.githubusercontent.com.evil.test/x", "http://raw.githubusercontent.com/x", "data:image/svg+xml,x"} {
 		if _, e := externalImageURL(reference); e == nil {
 			t.Errorf("accepted %q", reference)

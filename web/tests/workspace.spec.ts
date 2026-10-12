@@ -40,7 +40,8 @@ async function backend(page: Page, signedIn = true) {
     if (path === '/rpc/golf.v1.ProfileService/GetProfile') return state.signedIn ? respond(route, GetProfileResponseSchema, { profile: { userId: user.id, login: user.login, fullName: user.fullName, revision: 'a'.repeat(64), canEdit: true } }) : reject(route, 'unauthenticated', 'Sign in required.');
     if (path === '/rpc/golf.v1.SessionService/GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user: { ...user, isInstanceAdmin: state.passwordAdmin } }) : reject(route, 'unauthenticated', 'Sign in required.');
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session expired.');
-    if (path === '/rpc/golf.v1.CapabilityService/ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { capabilities: [
+    if (path === '/rpc/golf.v1.CapabilityService/ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { runtimeProfile: 'local', capabilities: [
+      { id: 'settings.local-auth', label: 'Local sign-in settings', state: CapabilityState.READY, reason: 'Available in this fixture.' },
       { id: 'repositories', label: 'Repositories', state: CapabilityState.READY, reason: 'Browse and create repositories on your connected Gitea instance. Check readiness for live dependency health.' },
       { id: 'agents', label: 'Agent workflows', state: CapabilityState.DISABLED, reason: 'Agent execution is planned and is not available in this build.' },
     ] });
@@ -57,6 +58,19 @@ async function backend(page: Page, signedIn = true) {
   });
   return state;
 }
+
+test('Access installations offer the enrolled sign-in path and no disabled password form', async ({ page }) => {
+  const state = await backend(page, false);
+  state.oauthOptions = create(GetAuthenticationOptionsResponseSchema, { providerLabel: 'Cloudflare Access' });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Continue with Cloudflare Access' })).toBeVisible();
+  await expect(page.getByRole('form', { name: 'Golf account sign-in' })).toHaveCount(0);
+  await expect(page.getByText('Contact your installation administrator to enable sign-in.')).toHaveCount(0);
+  state.signedIn = true;
+  await page.getByRole('button', { name: 'Continue with Cloudflare Access' }).click();
+  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 2 })).toBeVisible();
+  expect(state.passwordCalls).toBe(0); expect(state.beginCalls).toBe(0);
+});
 
 test('ordinary sign-in offers Golf credentials without provider token authentication', async ({ page }) => {
   const state = await backend(page, false);
@@ -432,4 +446,13 @@ test('account icon contains settings and sign-out, with keyboard dismissal and r
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await settings.getByRole('link', { name:'Profile', exact:true }).focus();
   await expect(settings.getByRole('link', { name:'Profile', exact:true })).toBeFocused();
+});
+
+test('native sign-in keeps the Access path when expired authentication discovery fails', async ({ page }) => {
+  const state = await backend(page, false); state.optionsError = true;
+  await page.goto('/native.html');
+  await expect(page.getByRole('button', { name: 'Continue with Cloudflare Access' })).toBeVisible();
+  await expect(page.getByRole('form', { name: 'Golf account sign-in' })).toHaveCount(0);
+  await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0);
+  expect(state.passwordCalls).toBe(0);
 });

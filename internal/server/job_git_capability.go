@@ -25,7 +25,7 @@ const jobGitDomain = "runner_job_git_read"
 const jobGitPrefix = "golf_job_git_"
 
 // This capsule grants native ref metadata discovery of its bound repository
-// and exact-H/depth1 Git v0 object fetches. It is neither a human
+// and exact-H/depth1 Git v0/v2 object fetches. It is neither a human
 // credential, worker control token, GitHub API token nor checkout compatibility.
 // Revocation follows the current job/attempt/authority lifecycle; there is no
 // independent per-capsule nonce revocation inventory in this initial slice.
@@ -36,15 +36,7 @@ type jobGitClaims struct {
 	Issued, Expires                                            int64
 }
 
-type jobGitCredentialResponse struct {
-	GitToken       string `json:"gitToken"`
-	Origin         string `json:"origin"`
-	RepositoryURL  string `json:"repositoryUrl"`
-	ExpiresAt      string `json:"expiresAt"`
-	CommitID       string `json:"commitId"`
-	WorkflowBlobID string `json:"workflowBlobId"`
-	JobInstanceID  string `json:"jobInstanceId"`
-}
+type jobGitCredentialResponse = runner.JobGitCredential
 
 func (s *Server) jobGitOrigin() (string, error) {
 	u, err := url.Parse(s.config.PublicURL)
@@ -87,9 +79,6 @@ func (s *Server) mintJobGitCredential(run workflowRunRecord, job string, now tim
 		return empty, errUnauthenticated
 	}
 	expires := now.Add(5 * time.Minute).Unix()
-	if run.LeaseExpiresAt.Valid && run.LeaseExpiresAt.Time.Unix() < expires {
-		expires = run.LeaseExpiresAt.Time.Unix()
-	}
 	c := jobGitClaims{Run: run.ID, Attempt: run.AttemptID, Worker: run.RunnerID, WorkerHash: base64.RawURLEncoding.EncodeToString(worker[:]), LeaseHash: base64.RawURLEncoding.EncodeToString(run.LeaseTokenHash), RepositoryID: run.RepositoryID, OwnerID: run.OwnerID, Owner: run.RepositoryOwner, Name: run.RepositoryName, Commit: run.CommitID, Workflow: run.WorkflowPath, Blob: run.BlobID, Archive: run.SourceSHA256, Catalog: run.EngineCatalog, Job: job, Issued: now.Unix(), Expires: expires}
 	if s.jobGitCurrentClaims(c, run, now) != nil {
 		return empty, errUnauthenticated
@@ -175,8 +164,8 @@ func jobGitRunningJob(ctx context.Context, tx *sql.Tx, run workflowRunRecord, jo
 
 func (s *Server) jobGitIssuerRoute(r *http.Request, attempt string) bool {
 	origin, err := s.jobGitOrigin()
-	u, _ := url.Parse(origin)
-	if err != nil || r.Method != http.MethodPost || r.TLS == nil || r.TLS.Version < tls.VersionTLS13 || r.Host != u.Host || r.URL.Host != "" && r.URL.Host != u.Host || r.URL.Scheme != "" && r.URL.Scheme != "https" || r.URL.Path != "/internal/ci/attempt/"+attempt+"/job-git-credential" || r.URL.RawPath != "" || r.URL.RawQuery != "" || r.URL.Fragment != "" || r.URL.ForceQuery || r.URL.User != nil || r.URL.Opaque != "" {
+	_ = origin
+	if err != nil || r.Method != http.MethodPost || r.TLS == nil || r.TLS.Version < tls.VersionTLS13 || r.Host == "" || r.URL.Host != "" && r.URL.Host != r.Host || r.URL.Scheme != "" && r.URL.Scheme != "https" || r.URL.Path != "/internal/ci/attempt/"+attempt+"/job-git-credential" || r.URL.RawPath != "" || r.URL.RawQuery != "" || r.URL.Fragment != "" || r.URL.ForceQuery || r.URL.User != nil || r.URL.Opaque != "" {
 		return false
 	}
 	for _, name := range []string{"Cookie", "Origin", "Git-Protocol", "Content-Encoding"} {
@@ -194,10 +183,13 @@ func (s *Server) jobGitRoute(r *http.Request, claims jobGitClaims) (gitTransport
 	if err != nil || r.TLS == nil || r.TLS.Version < tls.VersionTLS13 || r.Host != u.Host || r.URL.Host != "" && r.URL.Host != u.Host || r.URL.Scheme != "" && r.URL.Scheme != "https" || r.URL.RawPath != "" || r.URL.Fragment != "" || r.URL.ForceQuery || r.URL.User != nil || r.URL.Opaque != "" || strings.ContainsAny(r.URL.Path, "%\\") {
 		return empty, errUnauthenticated
 	}
-	for _, name := range []string{"Cookie", "Origin", "Golf-Runner-ID", "Golf-Attempt-Token", "Git-Protocol", "Content-Encoding"} {
+	for _, name := range []string{"Cookie", "Origin", "Golf-Runner-ID", "Golf-Attempt-Token", "Content-Encoding"} {
 		if len(r.Header.Values(name)) != 0 {
 			return empty, errUnauthenticated
 		}
+	}
+	if values := r.Header.Values("Git-Protocol"); len(values) > 1 || len(values) == 1 && values[0] != "version=2" {
+		return empty, errGitProtocol
 	}
 	if len(r.Header.Values("Authorization")) != 1 || len(r.Header.Values("Content-Type")) > 1 {
 		return empty, errUnauthenticated

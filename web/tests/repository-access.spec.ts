@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -11,7 +12,7 @@ const candidate = create(UserSchema, { id: '9007199254740997', login: 'new-colla
 const path = '/repositories/alex/project/settings/access';
 async function backend(page: Page) {
   const operations=new Map<string,ReturnType<typeof create<typeof RepositoryAccessOperationSchema>>>();
-  const state = { operations, operationReads:[] as string[], operationDenied:false, malformedOperation:false, dropUnknown:false, signedIn: true, user: create(UserSchema, { id: '17', login: 'maintainer', isInstanceAdmin: true }), access: create(RepositoryAccessSchema, { owner, ownerId: owner.id, repositoryId: '9007199254740998', currentPermission: 'admin', canManage: true, revision: rev('2') }), collaborators: [first, create(RepositoryCollaboratorSchema, { user: { id: '17', login: 'maintainer' }, permission: 'admin', isDirect: true, revision: rev('3'), generation:'0' }), create(RepositoryCollaboratorSchema, { user: { id: '9007199254740995', login: '<literal-account>' }, permission: 'write', isDirect: true, revision: rev('4'), generation:'0' })], denied: false, listDenied: false, malformed: false, pages: [] as number[], resolves: [] as unknown[], requests: [] as unknown[], writes: [] as unknown[], drop: false, inherited: '' as string, barrier: undefined as Promise<void> | undefined, resolveBarrier: undefined as Promise<void> | undefined };
+  const state = { operations, operationReads:[] as string[], operationDenied:false, malformedOperation:false, dropUnknown:false, native:false, unsupportedReads:[] as string[], signedIn: true, user: create(UserSchema, { id: '17', login: 'maintainer', isInstanceAdmin: true }), access: create(RepositoryAccessSchema, { owner, ownerId: owner.id, repositoryId: '9007199254740998', currentPermission: 'admin', canManage: true, revision: rev('2') }), collaborators: [first, create(RepositoryCollaboratorSchema, { user: { id: '17', login: 'maintainer' }, permission: 'admin', isDirect: true, revision: rev('3'), generation:'0' }), create(RepositoryCollaboratorSchema, { user: { id: '9007199254740995', login: '<literal-account>' }, permission: 'write', isDirect: true, revision: rev('4'), generation:'0' })], denied: false, listDenied: false, malformed: false, pages: [] as number[], resolves: [] as unknown[], requests: [] as unknown[], writes: [] as unknown[], drop: false, inherited: '' as string, barrier: undefined as Promise<void> | undefined, resolveBarrier: undefined as Promise<void> | undefined };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
@@ -19,8 +20,9 @@ async function backend(page: Page) {
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, state.native ? {runtimeProfile:'cloudflare-native',capabilities:[{id:'settings.repository-access',state:3}]} : portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
+    if (state.native && ['ListRepositoryDeployKeys','ListRepositoryTeamAccess','ListRepositoryInvitations'].includes(method || '')) { state.unsupportedReads.push(method!); return reject(route, 'unimplemented', 'Unsupported native subpanel'); }
     if (method === 'ListRepositoryDeployKeys') return respond(route, ListRepositoryDeployKeysResponseSchema, { repositoryId: state.access.repositoryId, ownerId: state.access.ownerId, accessRevision: state.access.revision, keys: [], page: { nextPage: 0 } });
     if (method === 'ListRepositoryTeamAccess') return respond(route, ListRepositoryTeamAccessResponseSchema, { repositoryId: state.access.repositoryId, ownerId: state.access.ownerId, accessRevision: state.access.revision, canManage: false, teams: [], page: {} });
     if (method === 'ListRepositoryInvitations') return emptyRepositoryInvitations(route);
@@ -42,7 +44,7 @@ async function backend(page: Page) {
     if (method === 'SetRepositoryCollaborator' || method === 'RemoveRepositoryCollaborator') {
       const input = method === 'SetRepositoryCollaborator' ? request(route, SetRepositoryCollaboratorRequestSchema) : request(route, RemoveRepositoryCollaboratorRequestSchema);
       state.requests.push(input);
-      if (!state.access.canManage || input.userId === owner.id || input.userId === state.user.id) return reject(route, 'permission_denied', 'Collaborator administration denied.');
+      if (!state.access.canManage || (!state.access.organizationOwned && input.userId === owner.id) || input.userId === state.user.id) return reject(route, 'permission_denied', 'Collaborator administration denied.');
       if (input.expectedRevision !== state.access.revision) return route.fulfill({status:400,headers:{'Golf-Access-Effect':'none'},contentType:'application/json',json:{code:'failed_precondition',message:'Repository authority changed.'}});
       const known = state.collaborators.find((collaborator) => collaborator.user?.id === input.userId);
       if (input.expectedCollaboratorRevision !== (known?.revision || rev('5'))) return reject(route, 'failed_precondition', 'Collaborator grant changed.');
@@ -132,7 +134,7 @@ test('owner identities cannot become reviewed collaborator mutations', async ({ 
 
 test('pending resolve cancellation and late write navigation cannot restore discarded previews or receipts', async ({ page }) => {
   const state = await backend(page); await open(page); let releaseResolve!: () => void; state.resolveBarrier = new Promise<void>((resolve) => { releaseResolve = resolve; }); await page.getByRole('button', { name: 'Add collaborator', exact: true }).click(); await page.getByLabel('Account username', { exact: true }).fill(candidate.login); await page.getByRole('button', { name: 'Resolve and review access', exact: true }).click(); await expect.poll(() => state.resolves.length).toBe(1); await page.getByRole('button', { name: 'Cancel', exact: true }).click(); state.resolveBarrier = undefined; releaseResolve();
-  await reviewNew(page); let releaseWrite!: () => void; state.barrier = new Promise<void>((resolve) => { releaseWrite = resolve; }); await page.getByRole('button', { name: 'Apply reviewed access', exact: true }).click(); await expect.poll(() => state.writes.length).toBe(1); await page.getByRole('navigation', { name: 'Workspace', exact: true }).getByRole('link', { name: 'Repositories', exact: false }).click(); releaseWrite(); await page.goto(path);
+  await reviewNew(page); let releaseWrite!: () => void; state.barrier = new Promise<void>((resolve) => { releaseWrite = resolve; }); await page.getByRole('button', { name: 'Apply reviewed access', exact: true }).click(); await expect.poll(() => state.writes.length).toBe(1); await page.getByLabel('Open workspace navigation',{exact:true}).click(); await page.getByRole('navigation', { name: 'Workspace', exact: true }).getByRole('link', { name: 'Repositories', exact: false }).click(); releaseWrite(); await page.goto(path);
   await expect(page.getByRole('table', { name: 'Repository collaborators', exact: true }).getByText(candidate.login, { exact: true })).toBeVisible(); await expect(page.getByRole('heading', { name: 'Review collaborator access', exact: true })).toHaveCount(0); await expect(page.getByText(/^Requested direct permission acknowledged:/)).toHaveCount(0); expect(state.writes).toHaveLength(1);
 });
 
@@ -219,4 +221,31 @@ for (const ownership of [false, true, undefined]) test(`organization effective o
  const change=page.getByRole('button',{name:'Change access for first-reader',exact:true});
  if(ownership!==false){await expect(change).toHaveCount(0);await expect(page.getByRole('button',{name:'Remove collaborator first-reader',exact:true})).toHaveCount(0);expect(state.writes).toHaveLength(0);return;}
  await change.click();await page.getByLabel('Requested permission',{exact:true}).selectOption('read');await page.getByRole('button',{name:'Resolve and review access',exact:true}).click();await expect(page.getByRole('heading',{name:'Review collaborator access',exact:true})).toBeVisible();expect(state.writes).toHaveLength(0);
+});
+
+
+test('native collaborators share the editor without calling unavailable invitation, team or SSH APIs', async ({ page }) => {
+  const state = await backend(page); state.native = true; state.access.organizationOwned = true;
+  await open(page); await reviewNew(page, 'write');
+  await page.getByRole('button', { name: 'Apply reviewed access', exact: true }).click();
+  await expect(page.getByText(/^Requested direct permission acknowledged:/)).toBeVisible();
+  expect(state.writes).toHaveLength(1); expect(state.unsupportedReads).toEqual([]);
+  await expect(page.getByRole('heading', { name: 'Invitations', exact: true })).toHaveCount(0);
+  await page.setViewportSize({ width: 320, height: 800 });
+  await expect(page.getByLabel('Settings section', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('organization and user ID namespaces do not lock an unrelated collaborator', async ({ page }) => {
+  const state = await backend(page); state.native = true; state.access.organizationOwned = true;
+  state.collaborators[0] = create(RepositoryCollaboratorSchema, { ...first, user: owner, actualOrganizationOwner: false });
+  await open(page);
+  const change = page.getByRole('button', { name: 'Change access for alex', exact: true });
+  await expect(change).toBeEnabled(); await change.click();
+  await page.getByLabel('Requested permission', { exact: true }).selectOption('write');
+  await page.getByRole('button', { name: 'Resolve and review access', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Review collaborator access', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Apply reviewed access', exact: true }).click();
+  await expect(page.getByText(/^Requested direct permission acknowledged:/)).toBeVisible();
+  expect(state.writes).toHaveLength(1);
 });

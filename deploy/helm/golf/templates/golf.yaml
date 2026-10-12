@@ -64,10 +64,15 @@ spec:
           env:
             - {name: GOLF_LISTEN_ADDR, value: ":8080"}
             - {name: GOLF_WEB_DIR, value: /app/web/dist}
+            - {name: GOLF_DEPLOYMENT_RUNTIME, value: "kubernetes"}
             - name: GOLF_PUBLIC_URL
               value: {{ trimSuffix "/" .Values.publicURL | quote }}
             - name: GOLF_ALLOW_INSECURE_COOKIES
               value: {{ .Values.allowInsecureCookies | quote }}
+            - name: GOLF_GITEA_WORKFLOW_DIRS
+              value: {{ .Values.gitea.workflowDirs | quote }}
+            - {name: GOLF_FORGE_KIND, value: {{ .Values.forge.kind | quote }}}
+            - {name: GOLF_FORGE_INSTANCE_ID, value: {{ .Values.forge.instanceID | quote }}}
             - name: GITEA_URL
               value: {{ include "golf.giteaURL" . | quote }}
             {{- range $key := list "DATABASE_URL" }}

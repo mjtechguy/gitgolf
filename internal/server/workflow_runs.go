@@ -24,6 +24,7 @@ import (
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/internal/runner"
 	"github.com/mjtechguy/golf-git/internal/server/database"
+	"github.com/mjtechguy/golf-git/internal/workflowpath"
 )
 
 const maxWorkflowSource = 16 << 20
@@ -305,6 +306,9 @@ func validWorkflowSnapshotPath(name string) bool {
 
 // Never extracts native paths on the server. Rewrites a fresh, metadata-free tar.
 func normalizeWorkflowSource(reader io.Reader, commit, file, blob string, workflow []byte) ([]byte, error) {
+	return normalizeWorkflowSourceProfile(reader, commit, file, blob, workflow, false)
+}
+func normalizeWorkflowSourceProfile(reader io.Reader, commit, file, blob string, workflow []byte, links bool) ([]byte, error) {
 	tr := tar.NewReader(reader)
 	var out bytes.Buffer
 	tw := tar.NewWriter(&out)
@@ -360,7 +364,8 @@ func normalizeWorkflowSource(reader io.Reader, commit, file, blob string, workfl
 			return nil, errWorkflowSource
 		}
 		entries++
-		if entries > maxWorkflowSourceEntries || h.Size < 0 || h.Size > maxWorkflowSourceFile || h.Linkname != "" || h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA && h.Typeflag != tar.TypeDir {
+		link := links && h.Typeflag == tar.TypeSymlink && h.Size == 0 && runner.ValidGitSourceLink(name, h.Linkname)
+		if entries > maxWorkflowSourceEntries || h.Size < 0 || h.Size > maxWorkflowSourceFile || h.Linkname != "" && !link || h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA && h.Typeflag != tar.TypeDir && !link {
 			return nil, errWorkflowSource
 		}
 		if _, ok := seen[name]; ok {
@@ -404,7 +409,11 @@ func normalizeWorkflowSource(reader io.Reader, commit, file, blob string, workfl
 		} else if h.Mode&0111 != 0 {
 			mode = 0755
 		}
-		if err = tw.WriteHeader(&tar.Header{Name: name, Typeflag: kind, Mode: mode, Size: h.Size, Format: tar.FormatPAX}); err != nil {
+		linkname := ""
+		if link {
+			kind, mode, linkname = tar.TypeSymlink, 0777, h.Linkname
+		}
+		if err = tw.WriteHeader(&tar.Header{Name: name, Typeflag: kind, Mode: mode, Size: h.Size, Linkname: linkname, Format: tar.FormatPAX}); err != nil {
 			return nil, errWorkflowSource
 		}
 		if _, err = tw.Write(data); err != nil || out.Len() > maxWorkflowSource {
@@ -434,6 +443,9 @@ func normalizeWorkflowSource(reader io.Reader, commit, file, blob string, workfl
 	if err := tw.Close(); err != nil || out.Len() > maxWorkflowSource {
 		return nil, errWorkflowSource
 	}
+	if links && runner.ValidateGitSourceArchive(out.Bytes()) != nil {
+		return nil, errWorkflowSource
+	}
 	return out.Bytes(), nil
 }
 func (s *Server) workflowSource(ctx context.Context, credential forgeCredential, base, commit, file, blob string, workflow []byte) ([]byte, error) {
@@ -449,7 +461,7 @@ func (s *Server) workflowSource(ctx context.Context, credential forgeCredential,
 	}
 	defer gz.Close()
 	decoded := &io.LimitedReader{R: gz, N: 2*maxWorkflowSource + 1}
-	data, err := normalizeWorkflowSource(decoded, commit, file, blob, workflow)
+	data, err := normalizeWorkflowSourceProfile(decoded, commit, file, blob, workflow, s.config.ActionsEngineCatalog == runner.ActionsRemoteCatalog)
 	if err != nil {
 		return nil, err
 	}
@@ -468,6 +480,9 @@ func (s *Server) prepareWorkflowRun(ctx context.Context, credential forgeCredent
 // readWorkflowDefinition verifies the exact native commit/tree/blob and bounds
 // before exposing declaration metadata. It never fetches an archive or plans jobs.
 func (s *Server) readWorkflowDefinition(ctx context.Context, credential forgeCredential, key repositoryKey, ref, file string) (string, string, []byte, error) {
+	if !executionWorkflowPath(file) {
+		return "", "", nil, errWorkflowExecutionUnsupported
+	}
 	base, _ := repositoryPath(key)
 	commits, _, err := s.readCommits(ctx, base, credential, ref, 1, 1)
 	if err != nil {
@@ -480,6 +495,15 @@ func (s *Server) readWorkflowDefinition(ctx context.Context, credential forgeCre
 		return "", "", nil, errInvalidForgeResponse
 	}
 	commit := commits[0].SHA
+	if workflowpath.Actions(file) {
+		directory, _, _, err := s.actionsWorkflowDirectory(ctx, credential, base, commit)
+		if err != nil {
+			return "", "", nil, err
+		}
+		if directory == "" || !strings.HasPrefix(file, directory+"/") {
+			return "", "", nil, errWorkflowExecutionUnsupported
+		}
+	}
 	metadata, err := s.workflowContents(ctx, credential, base, commit, file, false)
 	if err != nil {
 		return "", "", nil, err

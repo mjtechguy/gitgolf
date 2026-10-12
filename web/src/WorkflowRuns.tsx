@@ -65,7 +65,7 @@ function StepState({step}:{step:Pick<WorkflowStepProgress,'state'>}){
 const actionsCatalog='golf.workflow.act.v0.2.89.linux.v1';
 const actionsInputsCatalog='golf.workflow.act.v0.2.89.linux.v2';
 const manualInputsContract='golf.workflow.dispatch.inputs.v1';
-const isActionsCatalog=(catalog:string)=>catalog===actionsCatalog||catalog===actionsInputsCatalog;
+const isActionsCatalog=(catalog:string)=>catalog===actionsCatalog||catalog===actionsInputsCatalog||catalog==='golf.workflow.act.v0.2.89.linux.remote-node24.v1';
 const actionsEngineCommit='4f411281417e88660bea1c1a1749aa71ae0bd60f';
 const graphFailure=():never=>{throw new ConnectError('The recorded job graph does not match this run and source receipt.',Code.FailedPrecondition)};
 const graphText=(value:string,max=255)=>Boolean(value)&&new TextEncoder().encode(value).length<=max&&!/[\p{Cc}\uD800-\uDFFF]/u.test(value);

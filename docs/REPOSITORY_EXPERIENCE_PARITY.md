@@ -1,5 +1,71 @@
 # Repository experience parity workstream
 
+## 2026-10-11 review: shared UI and CI execution
+
+This is a focused review of repository navigation, mobile layout, private caching,
+workflow inspection and execution after the Forgejo foundation. It is not a whole
+repository security certification or a full GitHub/GitLab compatibility claim.
+
+Corrected findings:
+
+- Fresh portable source responses already pass `getBoundContents` / repository
+  authorization and exact identity validation. The shared browser unnecessarily
+  requested full repository metadata again before displaying each cold source
+  read. Both profiles now use the fresh source receipt; returning to cached or
+  prefetched bytes still requires a new access receipt. The regression checks both
+  request counts and revoked access on a cached return. Cache retention remains
+  memory-only, ten minutes, 64 retained observations / 8 MiB (inactive entries
+  are evicted; active observations may exceed the cap), with logout/denial
+  eviction. This removes a request; it is not a hosted latency measurement.
+- Source actions overflowed the left edge on a 390px viewport. The shared
+  disclosure helper now measures and shifts source, diff and PR menus inside the
+  viewport when opened. Existing keyboard/Escape behavior remains tested.
+- At 320px, the source toolbar squeezed the latest commit title to zero width.
+  On small screens the commit summary now occupies its own row above actions.
+- The shell inspector could accept command counts that its executor rejected.
+  Inspection now enforces the same 50-entry bound. GitLab job-level
+  `before_script` and `script` are compiled together, preserving shell state and
+  stopping on setup failure. Global/default inheritance, nested command lists and
+  `after_script` remain explicitly unsupported. The latter needs its own shell
+  and completion/cancellation lifecycle, per the
+  [GitLab contract](https://docs.gitlab.com/ci/yaml/#after_script).
+
+The portable and native entrypoints still share the same repository shell,
+settings sidebar, fonts, source viewer and responsive styles. Browser fixtures
+cover local, Docker, Kubernetes and Cloudflare-native manifests in both themes;
+they do not establish that every native API exists or qualify real Kubernetes.
+The actual Forgejo/Docker CI receipt is
+[recorded separately](compatibility/evidence/ci-review-20261011.json).
+
+Remaining release priorities, in order:
+
+1. **Migration fidelity and provider identity.** Retained Forgejo cutover stays
+   blocked by the lost pending review, identity/current-state transfer and remote
+   installation replacement detection. Follow the [migration gates](FORGEJO_MIGRATION_PLAN.md).
+2. **Native collaboration correctness.** The current ledger is 91/298 bounded
+   shared adapters. Finish protected merge/write fencing, required checks and
+   missing collaboration/settings adapters before claiming equivalent operation
+   on Cloudflare. Follow the [repository parity plan](REPOSITORY_PARITY_PLAN.md).
+3. **CI engine compatibility.** The Actions catalog still has 13 missing feature
+   groups; GitLab has 28. Prioritize full checkout/history, upstream artifacts and
+   cache protocols, services, PR/fork authority, reusable workflows and schedules.
+   GitLab requires the pinned Runner/coordinator qualification in L0, then
+   configuration resolution and real multi-job stage/needs semantics in L1/L2.
+   A Golf shell job passing is not a passing GitLab Runner pipeline. Keep each
+   protocol's credentials, cancellation, retries and result fencing explicit.
+   Use the [existing CI execution plan](GITEA_CI_COMPATIBILITY_PLAN.md), retaining
+   the newer Forgejo direction and independent CFCR registry integration.
+4. **Measured performance and interaction continuity.** Run cold/warm large-repo
+   navigation with real hosted service credentials, regional latency and concurrent
+   users, including revoked permissions. Track request counts, p50/p95 latency,
+   long browser tasks and layout shift separately. Current browser builds still
+   warn about a >500 KiB entry chunk. Preserve unsubmitted workflow input drafts
+   across unchanged authority rechecks without enabling dispatch while authority
+   is pending; currently a new inspection observation closes that editor.
+
+Current validation results and exclusions are in the latest
+[implementation status](IMPLEMENTATION_STATUS.md).
+
 This workstream preserves the full GitHub-like collaboration objective in Golf's own brand. The previous goal turn made verified progress: managed advisory PR reviews are implemented and live-qualified. It did not complete repository UI parity.
 
 ## Evidence and product boundaries
@@ -13,7 +79,7 @@ Source/history and native review browsing coexist with journaled issue create/co
 | Surface | Required experience and behavior | Current evidence / remaining implementation |
 |---|---|---|
 | Repository shell | Code, Issues, Pull requests, Actions, Projects, Security, Insights, settings; permission-aware counts; clone dropdown; branch/tag selector; compact about sidebar; consistent contextual navigation | Source/commits/issues/PR/Actions tabs exist; Actions is now a work tab. Other operational tabs need real backend capabilities, not placeholder success. |
-| Code | Ordered directory/file table; latest commit per file; branch/tag selection/search; file finder; permalink and line selection; rendered README; source/raw/blame/history; binary/image/LFS/submodule explanations; file add/edit/delete with proper write outcomes | Immutable bounded source reads, safe shared Markdown/highlighting, README discovery/outline and relative assets exist. Integrated contextual Files navigation, visible-row latest changes, numbered line/range selection, path/permalink copy, preview-text download and pinned literal file/directory history are implemented; final combined served qualification is recorded in the implementation ledger. Blame, tags, full-repository finder, source mutations and generic raw/binary/LFS downloads remain. README location priority, anchors/outline and relative assets must be explicit. |
+| Code | Ordered directory/file table; latest commit per file; branch/tag selection/search; file finder; permalink and line selection; rendered README; source/raw/blame/history; binary/image/LFS/submodule explanations; file add/edit/delete with proper write outcomes | Immutable bounded source reads, safe shared Markdown/highlighting, README discovery/outline and relative assets exist. Integrated contextual Files navigation, visible-row latest changes, numbered line/range selection, path/permalink copy, preview-text download and pinned literal file/directory history are implemented; final combined served qualification is recorded in the implementation ledger. The shared Go to file dialog searches a complete bounded path inventory at an exact commit on portable and native backends; it fetches no blobs, rejects partial inventories and never persists filenames in browser storage. Blame, full-text code search, larger background file indexes, source mutations and generic raw/binary/LFS downloads remain. README location priority, anchors/outline and relative assets must be explicit. |
 | Commits / compare | Linked commit title/SHA, author and verification; parent navigation; changed-file tree, additions/deletions, unified/split hunks, whitespace toggle, binary/rename handling; two/three-dot comparisons | Compact author-date history groups preserve native order across pagination, with title/SHA diff links, full-SHA copy, source icons and literal message disclosures. Native bounded root/first-parent diffs and a shared unified/split file/hunk viewer exist. PR diff reads now require exact native repository/PR IDs and separately echo the actual merge base, branch-tip base and head with retained-head/identity observations before/after the provider wait. Local 443-test browser qualification passes; the new served exact-ID private-fork proof passes; responsive-toolbar local qualification passes 443 browsers; replacement-image served proof passes on the final image recorded in the ledger. A generated general named-branch compare read and canonical full-page New PR flow now bind separately authorized target/source IDs and displayed exact commits, including renamed private forks. Its native merge-base preview is bounded to500 returned commits/512KiB; tags/arbitrary ranges and larger comparisons remain. Never mistake merge-base output for two-dot branch comparison. |
 | Issues | Markdown and preview composer; list search/filter/labels/assignees/milestones; full-page New/Edit; lifecycle/reopen/close; timeline; reactions; linked PRs; subscriptions; templates and attachment boundaries | Read/create/comment and single-field edit/close/reopen journals exist with actor-bound receipts/readback. New issue now has a full-page canonical editor with Write/Preview and dirty-draft departure confirmation, reusing the durable journal; final combined served qualification is recorded in the implementation ledger. Metadata and richer timeline mutations remain. |
 | PR conversation | Create/compare PR, draft/ready, edit title/body, reviewers/teams/CODEOWNERS, assignees/labels/milestones, subscriptions, linked issues; unified timeline | Read/durable comments, same-repository or renamed-private-fork compare/create, ready/draft and title/description/close/reopen exist through explicit shared editors. Managed bot reviews exist; initial human overall-review API/journal and explicit Markdown editor are locally native/served-qualified. Metadata, requested reviewers/teams/CODEOWNERS and richer timeline remain. |

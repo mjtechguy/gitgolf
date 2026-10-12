@@ -57,6 +57,11 @@ render(BASE, lint=True)
 core = render(BASE)
 assert "kind: Secret\n" not in core, "chart must only reference precreated Secrets"
 golf = find(core, "Deployment", "check-golf")
+assert 'name: GOLF_GITEA_WORKFLOW_DIRS' in golf
+assert 'name: GITEA__actions__WORKFLOW_DIRS, value: ".gitea/workflows,.github/workflows"' in find(core, "StatefulSet", "check-golf-gitea")
+reversed_dirs = render(merge(BASE, {"gitea": {"workflowDirs": ".github/workflows,.gitea/workflows"}}))
+assert reversed_dirs.count('value: ".github/workflows,.gitea/workflows"') == 2
+render(merge(BASE, {"gitea": {"workflowDirs": "custom/workflows"}}), expected=False)
 for key in ["GOLF_ENCRYPTION_KEY", "GOLF_ENCRYPTION_KEYS", "GOLF_ACTIVE_ENCRYPTION_KEY"]:
     assert re.search(r"key: " + key + r", optional: true", golf), "keyring settings must reference optional existing Secret keys"
 assert re.search(r"key: DATABASE_URL\}", golf), "database credential must remain required"
@@ -148,3 +153,14 @@ negative = [
 for case in negative:
     render(case, expected=False)
 print(f"Helm lint + bundled/external/OAuth/ingress/replica/optional-webhook profiles passed; {len(negative)} invalid configurations rejected; canonical init script matches")
+
+forgejo = merge(BASE, {"forge": {"kind": "forgejo", "instanceID": "ba09ae45-092f-4b4d-9e17-c6b848e5d95c"}, "gitea": {"qualifiedVersion": "15.0.9", "workflowDirs": ".forgejo/workflows,.gitea/workflows,.github/workflows", "image": {"repository": "codeberg.org/forgejo/forgejo", "tag": "", "digest": "sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413"}}})
+fj = render(forgejo)
+assert 'name: GOLF_FORGE_KIND, value: "forgejo"' in fj
+assert 'name: FORGEJO__actions__ENABLED, value: "false"' in fj
+assert 'name: GITEA_APP_INI, value: /etc/gitea/app.ini' in fj
+assert 'whenDeleted: Retain' in fj
+render(forgejo, lint=True)
+render(merge(forgejo, {"forge": {"instanceID": ""}}), expected=False)
+render(merge(forgejo, {"gitea": {"image": {"digest": "sha256:" + "a"*64}}}), expected=False)
+print("Forgejo fresh-destination rendering, exact image/identity gates and native Actions isolation passed")

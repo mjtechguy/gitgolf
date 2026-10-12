@@ -168,6 +168,10 @@ runs:
 `
 
 func testInput(t *testing.T, source string, files map[string]string) protocol.ActionPlanInput {
+	return testInputAtPath(t, testWorkflowPath, source, files)
+}
+
+func testInputAtPath(t *testing.T, workflowPath, source string, files map[string]string) protocol.ActionPlanInput {
 	t.Helper()
 	var archive bytes.Buffer
 	tw := tar.NewWriter(&archive)
@@ -180,7 +184,7 @@ func testInput(t *testing.T, source string, files map[string]string) protocol.Ac
 			t.Fatal("fixture tar body")
 		}
 	}
-	put(testWorkflowPath, source)
+	put(workflowPath, source)
 	for name, body := range files {
 		put(name, body)
 	}
@@ -188,7 +192,7 @@ func testInput(t *testing.T, source string, files map[string]string) protocol.Ac
 		t.Fatal("fixture tar close")
 	}
 	h := sha1.Sum([]byte(fmt.Sprintf("blob %d\x00%s", len(source), source)))
-	return protocol.ActionPlanInput{Catalog: protocol.ActionsCatalog, WorkflowPath: testWorkflowPath, WorkflowBlobID: hex.EncodeToString(h[:]), Archive: archive.Bytes(), Event: "workflow_dispatch", Ref: strings.Repeat("a", 40), Images: map[string]string{"linux": "alpine@sha256:" + strings.Repeat("b", 64)}}
+	return protocol.ActionPlanInput{Catalog: protocol.ActionsCatalog, WorkflowPath: workflowPath, WorkflowBlobID: hex.EncodeToString(h[:]), Archive: archive.Bytes(), Event: "workflow_dispatch", Ref: strings.Repeat("a", 40), Images: map[string]string{"linux": "alpine@sha256:" + strings.Repeat("b", 64)}}
 }
 func TestActualPinnedGraphMatrixAndLocalCompositeAdmission(t *testing.T) {
 	input := testInput(t, testWorkflow, map[string]string{"actions/owned/action.yml": testComposite})

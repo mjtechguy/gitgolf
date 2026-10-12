@@ -1,12 +1,15 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { unconfiguredOwnEmail,emptyOwnEmailHistory,disabledAgentUsage } from './rpc';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetRepositoryLifecycleResponseSchema, GetRepositoryResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetProfileResponseSchema, GetRepositorySettingsResponseSchema, UpdateRepositorySettingsRequestSchema, UpdateRepositorySettingsResponseSchema, GetOrganizationResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, RepositorySettingsSchema, RepositoryFeatureMode, UpdateRepositoryTopicsRequestSchema, UpdateRepositoryTopicsResponseSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetRepositoryMirrorStatusResponseSchema, GetRepositoryLifecycleResponseSchema, GetRepositoryResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetProfileResponseSchema, GetRepositorySettingsResponseSchema, UpdateRepositorySettingsRequestSchema, UpdateRepositorySettingsResponseSchema, GetOrganizationResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, RepositorySettingsSchema, RepositoryFeatureMode, UpdateRepositoryTopicsRequestSchema, UpdateRepositoryTopicsResponseSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
+async function openDiagnostics(page:Page) { const panel=page.locator('.settings-diagnostics'); if(await panel.getAttribute('open')===null)await panel.locator('summary').first().click(); }
+
 async function backend(page: Page, admin = true) {
-  const state = { user: create(UserSchema, { id: '9007199254740993', login: 'alex', fullName: 'Alex', isInstanceAdmin: admin }), settings: create(RepositorySettingsSchema, { repositoryId: '9007199254740997', ownerId: '9007199254740993', description: 'Original description', defaultBranch: 'main', hasIssues: true, hasWiki: false, hasPullRequests: true, canEdit: admin, revision: 'a'.repeat(64), website: 'https://example.test', topics: ['golf'], issuesMode: RepositoryFeatureMode.INTERNAL, wikiMode: RepositoryFeatureMode.DISABLED, generalEditImplemented: true }), writes: [] as unknown[], dropped: false, denied: false, barrier: undefined as Promise<void> | undefined };
+  const state = { native:false, user: create(UserSchema, { id: '9007199254740993', login: 'alex', fullName: 'Alex', isInstanceAdmin: admin }), settings: create(RepositorySettingsSchema, { repositoryId: '9007199254740997', ownerId: '9007199254740993', description: 'Original description', defaultBranch: 'main', hasIssues: true, hasWiki: false, hasPullRequests: true, canEdit: admin, revision: 'a'.repeat(64), website: 'https://example.test', topics: ['golf'], issuesMode: RepositoryFeatureMode.INTERNAL, wikiMode: RepositoryFeatureMode.DISABLED, generalEditImplemented: true }), writes: [] as unknown[], dropped: false, denied: false, barrier: undefined as Promise<void> | undefined };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
  if(method === 'GetAgentUsage') return disabledAgentUsage(route);
@@ -15,10 +18,11 @@ async function backend(page: Page, admin = true) {
     if(method==='GetOwnEmailNotifications')return unconfiguredOwnEmail(route,state.user.id);
     if(method==='ListOwnEmailDeliveries')return emptyOwnEmailHistory(route,state.user.id);
     if (method === 'GetProfile') return respond(route, GetProfileResponseSchema, { profile: { userId: state.user.id, login: state.user.login, fullName: state.user.fullName, revision: 'profile-revision', canEdit: true } });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, state.native?{runtimeProfile:'cloudflare-native',capabilities:[{id:'settings.repository-general',label:'General',state:3,reason:'Native metadata and default branch'}]}:portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'GetOrganization') return state.denied ? reject(route, 'not_found', 'Organization unavailable.') : respond(route, GetOrganizationResponseSchema, { organization: { id: '21', name: 'team', fullName: 'Team' } });
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { id: state.settings.repositoryId, name: 'demo', fullName: 'alex/demo', defaultBranch: 'main' } });
+    if(method==='GetRepositoryMirrorStatus')return respond(route,GetRepositoryMirrorStatusResponseSchema,{repository:{owner:'alex',name:'demo'},repositoryId:state.settings.repositoryId});
     if (method === 'GetRepositoryLifecycle') return state.denied ? reject(route, 'permission_denied', 'Repository lifecycle access denied.') : respond(route, GetRepositoryLifecycleResponseSchema, { lifecycle: { repository: { owner: 'alex', name: 'demo' }, repositoryId: state.settings.repositoryId, ownerId: state.settings.ownerId, revision: state.settings.revision, canManage: false, blockedReason: 'ownership_required' } });
     if (method === 'GetRepositorySettings') return state.denied ? reject(route, 'permission_denied', 'Repository settings access denied.') : respond(route, GetRepositorySettingsResponseSchema, { settings: state.settings });
     if (method === 'UpdateRepositorySettings') {
@@ -47,14 +51,15 @@ test('personal coverage distinguishes supported settings from missing enforcemen
   await page.goto('/account/settings');
   await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
   await expect(page.locator('input:not([type=search]),textarea,select:not(.data-table-page-size)')).toHaveCount(0);
+  await openDiagnostics(page);
   const table = page.getByRole('table', { name: 'Personal settings', exact: true });
-  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(11);
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(12);
   await page.getByRole('searchbox', { name: 'Search loaded Personal settings', exact: true }).fill('MFA');
   await expect(table.getByText('Passwords, recovery and MFA', { exact: true })).toBeVisible();
   await expect(table.getByText('Partial', { exact: true })).toBeVisible();
-  await expect(table.getByText(/MFA, passkeys, verified email and recovery remain planned/)).toBeHidden();
+  await expect(table.getByText(/Passkeys and verified-email password recovery remain planned/)).toBeHidden();
   await table.getByLabel('Scope and limitations for Passwords, recovery and MFA', { exact: true }).click();
-  await expect(table.getByText(/MFA, passkeys, verified email and recovery remain planned/)).toBeVisible();
+  await expect(table.getByText(/Passkeys and verified-email password recovery remain planned/)).toBeVisible();
   await expect(table.getByRole('link', { name: 'Open', exact: true })).toHaveAttribute('href', '/account/security');
   await expect(table.getByRole('button', { name: 'Section and availability', exact: true })).toHaveCount(1);
 });
@@ -63,6 +68,7 @@ test('repository general editor cancels drafts and sends exact IDs/revision with
   const state = await backend(page);
   await page.goto('/repositories/alex/demo/settings');
   await expect(page.getByText('Original description', { exact: true })).toBeVisible();
+  await openDiagnostics(page);
   await expect(page.locator('tr[data-row-id="general"]').getByText('Ready', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open Collaborators and deploy keys', exact: true })).toHaveAttribute('href', '/alex/demo/settings/access');
   await expect(page.getByRole('link', { name: 'Open CI engines and workflow controls', exact: true })).toHaveAttribute('href', '/alex/demo/settings/workflows');
@@ -103,6 +109,7 @@ test('duplicate settings submissions dispatch once and navigation discards a lat
   });
   await expect.poll(() => state.writes.length).toBe(1);
   await expect(page.getByRole('button', { name: 'Saving…', exact: true })).toBeDisabled();
+  await page.getByLabel('Open workspace navigation', {exact:true}).click();
   await page.getByRole('navigation', { name: 'Workspace', exact: true }).getByRole('link', { name: 'Repositories', exact: false }).click();
   release();
   await page.goto('/repositories/alex/demo/settings');
@@ -129,7 +136,9 @@ test('lost settings response blocks retry until current values are inspected and
   await page.getByRole('button', { name: 'Refresh repository settings', exact: true }).click();
   await expect(page.getByRole('region', { name: 'General', exact: true }).getByRole('alert')).toHaveText('Repository settings access denied.');
   await expect(page.getByText('Applied without receipt', { exact: true })).toHaveCount(0);
+  await openDiagnostics(page);
   await expect(page.locator('tr[data-row-id="general"]').getByText('Ready', { exact: true })).toHaveCount(0);
+  await openDiagnostics(page);
   await expect(page.locator('tr[data-row-id="general"]').getByText('Partial', { exact: true })).toBeVisible();
 });
 
@@ -138,6 +147,7 @@ test('read-only repository users get no edit action and non-admin instance setti
   await page.goto('/repositories/alex/demo/settings');
   await expect(page.getByText('Original description', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Edit general settings', exact: true })).toHaveCount(0);
+  await openDiagnostics(page);
   await expect(page.locator('tr[data-row-id="general"]').getByText('Ready', { exact: true })).toBeVisible();
   await page.goto('/admin/settings');
   await expect(page.getByRole('heading', { name: 'Instance settings', exact: true })).toHaveCount(0);
@@ -149,6 +159,7 @@ test('organization settings require membership, distinguish planned policy and f
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/organizations/team/settings');
   await expect(page.getByRole('heading', { name: 'Organization settings', exact: true })).toBeVisible();
+  await openDiagnostics(page);
   const table = page.getByRole('table', { name: 'Organization settings', exact: true });
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(10);
   await expect(table.getByText('CI, workflows and fork trust', { exact: true })).toBeVisible();
@@ -193,13 +204,14 @@ test('private dirty form is hidden and inert during revalidation then restored w
 });
 
 test('authority downgrade clears the editor without claiming unsupported configuration',async({page})=>{
- const state=await backend(page);await page.goto('/alex/demo/settings');await page.getByRole('button',{name:'Edit topics',exact:true}).click();await page.getByRole('textbox',{name:'Topics',exact:true}).fill('private-draft');state.settings.canEdit=false;await page.getByRole('button',{name:'Refresh repository settings',exact:true}).click();await expect(page.getByRole('textbox',{name:'Topics',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Edit topics',exact:true})).toHaveCount(0);await expect(page.getByText('View only',{exact:true})).toBeVisible();await page.getByLabel('Scope and limitations for General and features',{exact:true}).click();await expect(page.getByText(/Website, topics, default branch and tracker\/wiki configuration editors are qualified/)).toBeVisible();expect(state.writes).toHaveLength(0);
+ const state=await backend(page);await page.goto('/alex/demo/settings');await page.getByRole('button',{name:'Edit topics',exact:true}).click();await page.getByRole('textbox',{name:'Topics',exact:true}).fill('private-draft');state.settings.canEdit=false;await page.getByRole('button',{name:'Refresh repository settings',exact:true}).click();await expect(page.getByRole('textbox',{name:'Topics',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Edit topics',exact:true})).toHaveCount(0);await expect(page.getByText('View only',{exact:true})).toBeVisible();await openDiagnostics(page);await page.getByLabel('Scope and limitations for General and features',{exact:true}).click();await expect(page.getByText(/Website, topics, default branch and tracker\/wiki configuration editors are qualified/)).toBeVisible();expect(state.writes).toHaveLength(0);
 });
 
 
 test('settings coverage keeps names, availability and actions together without expanding all explanations', async ({ page }) => {
   const state = await backend(page);
   await page.goto('/alex/demo/settings');
+  await openDiagnostics(page);
   const table = page.getByRole('table', { name: 'Repository settings', exact: true });
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(10);
   await page.evaluate(async () => { await document.fonts.ready; });
@@ -242,3 +254,5 @@ test('settings coverage keeps names, availability and actions together without e
   await expect(table.locator('tbody tr[data-row-id]').first()).toHaveAttribute('data-row-id', 'agents');
   expect(state.writes).toHaveLength(0);
 });
+
+test('Cloudflare general settings edits the existing default branch without offering unsupported feature switches',async({page})=>{const state=await backend(page);state.native=true;await page.goto('/alex/demo/settings');await page.getByRole('button',{name:'Edit general settings',exact:true}).click();await expect(page.getByLabel('Default branch',{exact:true})).toHaveValue('main');await expect(page.getByLabel('Issues',{exact:true})).toHaveCount(0);await expect(page.getByLabel('Wiki',{exact:true})).toHaveCount(0);await page.getByLabel('Default branch',{exact:true}).fill('develop');await page.getByRole('button',{name:'Save repository settings',exact:true}).click();await expect(page.getByText('Repository settings saved.',{exact:true})).toBeVisible();expect(state.writes).toMatchObject([{defaultBranch:'develop',expectedRevision:'a'.repeat(64)}]);expect((state.writes[0] as Record<string,unknown>).issuesMode).toBeUndefined();});

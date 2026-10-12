@@ -1,0 +1,46 @@
+"""Real OCI publication from the approved test process, using only brokered HTTP."""
+import gzip
+import hashlib
+import io
+import json
+import os
+import tarfile
+import urllib.error
+import urllib.request
+
+
+def publish():
+    origin = os.environ.get('GOLF_REGISTRY')
+    if not origin:
+        return  # Agent proposal tests do not acquire canonical publishing authority.
+    image, tag = os.environ['GOLF_IMAGE'].rsplit(':', 1)
+    assert not any(key in os.environ for key in ['CFCR_CREDENTIAL', 'CLOUDFLARE_API_TOKEN'])
+    def sha(data): return 'sha256:' + hashlib.sha256(data).hexdigest()
+    def encoded(value): return json.dumps(value, separators=(',', ':')).encode()
+    def request(path, data, method, content_type='application/octet-stream', expected=201):
+        req = urllib.request.Request(origin + path, data=data, method=method, headers={'Content-Type': content_type})
+        try: response = urllib.request.urlopen(req, timeout=20)
+        except urllib.error.HTTPError as error: response = error
+        with response:
+            assert response.status == expected, (path, response.status)
+            return response.read(65536), response.headers
+    layer = io.BytesIO()
+    with tarfile.open(fileobj=layer, mode='w') as archive:
+        files = {'payload': 'Golf CI source ' + os.environ['GOLF_COMMIT'] + '\n',
+                 'etc/os-release': 'ID=alpine\nVERSION_ID=3.16.0\n',
+                 'lib/apk/db/installed': 'P:openssl\nV:1.1.1o-r0\nA:x86_64\nS:100\nI:100\nT:TLS\nU:https://openssl.org\nL:OpenSSL\no:openssl\nm:Fixture\nt:1650000000\nc:1234567890\n\n'}
+        for name, value in files.items():
+            data = value.encode(); entry = tarfile.TarInfo(name); entry.size = len(data)
+            archive.addfile(entry, io.BytesIO(data))
+    compressed = gzip.compress(layer.getvalue(), mtime=0)
+    config = encoded({'architecture': 'amd64', 'os': 'linux', 'config': {'Labels': {'org.opencontainers.image.revision': os.environ['GOLF_COMMIT']}},
+                      'rootfs': {'type': 'layers', 'diff_ids': [sha(layer.getvalue())]}})
+    descriptors = []
+    for data, media in [(config, 'application/vnd.oci.image.config.v1+json'), (compressed, 'application/vnd.oci.image.layer.v1.tar+gzip')]:
+        request('/v2/' + image + '/blobs/uploads/?digest=' + sha(data), data, 'POST')
+        descriptors.append({'digest': sha(data), 'size': len(data), 'mediaType': media})
+    manifest = encoded({'schemaVersion': 2, 'mediaType': 'application/vnd.oci.image.manifest.v1+json', 'config': descriptors[0], 'layers': descriptors[1:]})
+    _, headers = request('/v2/' + image + '/manifests/' + tag, manifest, 'PUT', 'application/vnd.oci.image.manifest.v1+json')
+    assert headers['Docker-Content-Digest'] == sha(manifest)
+    request('/v2/' + image + '/manifests/unauthorized', manifest, 'PUT', 'application/vnd.oci.image.manifest.v1+json', 403)
+    print('Published exact-source OCI image', sha(manifest))

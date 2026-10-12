@@ -132,6 +132,9 @@ elif a[0]=='exec':
  pos=a.index('c'*64)+1
  command=a[pos:]
  if c['mode']=='nogit' and '/usr/bin/git' in command: sys.exit(127)
+ if '/bin/tar' in command and '-xf' in command:
+  if c['mode']=='copyfail': sys.exit(1)
+  command[command.index('-C')+1]=c['job']
  with open(c['log']+'.stderr','ab') as errors:
   sys.exit(subprocess.call(command,cwd=c['job'],stdin=sys.stdin.buffer,stdout=sys.stdout.buffer,stderr=errors))
 else: sys.exit(3)
@@ -313,9 +316,27 @@ func TestGitSourceEngineTransferFailureWithholdsSetupAck(t *testing.T) {
 	in, metadata, _ := nativeGitEnvelope(t, "sha1")
 	s := readGitFixture(t, in, metadata)
 	directory := t.TempDir()
-	receipt := diagnosticJobReceipt(t, "")
+	var rows []inspected
+	if json.Unmarshal([]byte(diagnosticJobReceipt(t, "")), &rows) != nil {
+		t.Fatal("fixture")
+	}
+	rows[0].HostConfig.ReadonlyRootfs = true
+	rows[0].HostConfig.Tmpfs = map[string]string{"/tmp": jobTemporaryTmpfs}
+	raw, _ := json.Marshal(rows)
+	receipt := string(raw)
+	volumes := map[string]any{}
+	for _, mount := range rows[0].Mounts {
+		name := filepath.Base(filepath.Dir(mount.Source))
+		volumes[name] = []map[string]any{{"Name": name, "Driver": "local", "Scope": "local", "Mountpoint": mount.Source, "Options": jobVolumeOptions(mount.Destination), "Labels": map[string]string{"io.golf.actions.job-disk": jobDiskProfile}}}
+	}
 	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'" }
 	script := "#!/bin/sh\ncase \"$1\" in ps) printf '%s' '" + strings.Repeat("a", 64) + "';; inspect) printf '%s' " + quote(receipt) + ";; exec) exit 0;; cp) if [ \"$2\" = '-' ]; then exit 9; fi;; *) exit 9;; esac\n"
+	volumeScript := ""
+	for name, row := range volumes {
+		value, _ := json.Marshal(row)
+		volumeScript += name + ") printf '%s' " + quote(string(value)) + ";;"
+	}
+	script = strings.Replace(script, "case \"$1\" in ", "case \"$1\" in volume) case \"$3\" in "+volumeScript+" *) exit 9;; esac;; ", 1)
 	os.WriteFile(filepath.Join(directory, "docker"), []byte(script), 0700)
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
 	o := testObserver(t, func(protocol.ActionFrame) error { t.Fatal("metadata failure authorized progress"); return nil })

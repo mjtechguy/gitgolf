@@ -1,5 +1,5 @@
 Golf public origin: {{ .Values.publicURL }}
-Configured Gitea public origin: {{ .Values.gitea.publicURL }}
+Configured {{ .Values.forge.kind }} public origin: {{ .Values.gitea.publicURL }}
 
 This chart installs the current portable core. It creates no Secrets, runners,
 Cloudflare resources or load balancers. Secret {{ .Values.existingSecret }} must
@@ -28,3 +28,6 @@ Service: {{ include "golf.fullname" . }} port 8080.
 NetworkPolicy requires an enforcing CNI. Public ingress is denied unless explicit
 ingressFrom peers are configured; kubectl port-forward is not a policy test.
 {{- end }}
+
+Forge profile: {{ .Values.forge.kind }}. Existing gitea value/resource names are storage compatibility names.
+Forgejo requires a fresh release/database; never attach existing Gitea PVCs.

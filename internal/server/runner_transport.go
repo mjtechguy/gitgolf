@@ -50,7 +50,7 @@ func (s *Server) configureRunners() error {
 		s.runnerKeys[id] = sha256.Sum256([]byte(key))
 	}
 	for label, image := range s.runnerImages {
-		if !runnerIdentifier.MatchString(label) || !workflowImage.MatchString(image) || len(image) > 255 {
+		if !regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$`).MatchString(label) || !workflowImage.MatchString(image) || len(image) > 255 {
 			return errors.New("runner images require valid labels and exact repository@sha256 digests")
 		}
 	}
@@ -229,11 +229,11 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		Catalogs     []string `json:"catalogs"`
 		Capabilities []string `json:"capabilities"`
 	}
-	if !runnerDecode(w, r, &input, 512) {
+	if !runnerDecode(w, r, &input, 1024) {
 		return
 	}
-	secureBroker, resourceConsumer, manualConsumer, artifactConsumer := false, false, false, false
-	if len(input.Capabilities) > 4 {
+	secureBroker, resourceConsumer, manualConsumer, artifactConsumer, gitConsumer := false, false, false, false, false
+	if len(input.Capabilities) > 6 {
 		runnerFail(w, 400)
 		return
 	}
@@ -251,6 +251,13 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 			secureBroker = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
 		case runner.ManualInputsCapability:
 			manualConsumer = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
+		case runner.GitSourceProfile:
+			gitConsumer = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
+		case runner.JobGitCapability:
+			if r.TLS == nil || r.TLS.Version < tls.VersionTLS13 {
+				runnerFail(w, 400)
+				return
+			}
 		case runner.ArtifactCapability:
 			artifactConsumer = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
 		default:
@@ -259,12 +266,22 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Enrollment alone never authorizes an old executor to adopt new limits.
+	if seenCaps[runner.JobGitCapability] && !gitConsumer {
+		runnerFail(w, 400)
+		return
+	}
+	if seenCaps[runner.JobGitCapability] {
+		if _, e := s.jobGitOrigin(); e != nil {
+			runnerFail(w, 403)
+			return
+		}
+	}
 	if !resourceConsumer {
 		w.WriteHeader(204)
 		return
 	}
 	catalogs := []string{workflowExecutionCatalog}
-	if len(input.Catalogs) > 3 {
+	if len(input.Catalogs) > 4 {
 		runnerFail(w, 400)
 		return
 	}
@@ -275,6 +292,15 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		seenCatalogs[catalog] = true
+		if catalog == runner.ActionsRemoteCatalog {
+			if !gitConsumer || !seenCaps[runner.JobGitCapability] {
+				runnerFail(w, 400)
+				return
+			}
+			if s.actionsEngineConfigured() && s.config.ActionsEngineCatalog == catalog {
+				catalogs = append(catalogs, catalog)
+			}
+		}
 		if catalog == runner.ActionsCatalog && s.actionsEngineConfigured() || catalog == runner.ActionsInputsCatalog && s.actionsEngineConfigured() && s.config.ActionsEngineCatalog == runner.ActionsInputsCatalog && manualConsumer || catalog == runner.ActionsAgentCatalog && s.actionsEngineConfigured() && s.config.ActionsEngineCatalog == runner.ActionsAgentCatalog && s.agentACPAvailable(r.Context()) && manualConsumer {
 			catalogs = append(catalogs, catalog)
 		}
@@ -516,6 +542,18 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 	}
 	if plan.Actions != nil {
 		assignment := map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "timeoutSeconds": run.Resources.TimeoutSeconds, "jobResources": resourceBinding(run), "leaseSeconds": runnerLeaseSeconds, "engineCatalog": plan.Actions.Catalog, "actionsPlan": plan.Actions, "eventJson": eventJSON}
+		if gitConsumer {
+			assignment["gitSourceProfile"] = runner.GitSourceProfile
+		}
+		if seenCaps[runner.JobGitCapability] {
+			origin, e := s.jobGitOrigin()
+			binding := &runner.JobGitContext{Origin: origin, Repository: run.RepositoryOwner + "/" + run.RepositoryName, Actor: "unavailable"}
+			if e != nil || !gitConsumer || binding.Validate() != nil {
+				runnerFail(w, 403)
+				return
+			}
+			assignment["jobGit"] = binding
+		}
 		if environment != nil {
 			assignment["executionEnvironment"] = environment
 		}

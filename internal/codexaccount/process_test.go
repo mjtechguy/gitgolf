@@ -183,6 +183,10 @@ func TestTransportAndCredentialBoundaries(t *testing.T) {
 	}
 	os.Remove(auth)
 	os.WriteFile(auth, []byte(`{}`), 0644)
+	// Creation permissions are narrowed by the caller's umask.
+	if err := os.Chmod(auth, 0644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := p.Snapshot(); !errors.Is(err, ErrUnavailable) {
 		t.Fatal("Public snapshot accepted")
 	}

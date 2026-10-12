@@ -29,12 +29,14 @@ export function validateSource(response: GetContentsResponse, repositoryId: stri
   return response;
 }
 
-export async function readExactSource(repository: Repository, repositoryId: string, commitId: string, path: string, signal: AbortSignal, includeLatestChanges = false) {
+export async function readExactSource(repository: Repository, repositoryId: string, commitId: string, path: string, signal: AbortSignal, includeLatestChanges = false, page = 1) {
   if (!sourceRepositoryID(repositoryId) || !isCommitID(commitId) || !sourcePath(path)) failure('Select a valid repository identity, full commit and literal source path.');
   signal.throwIfAborted();
-  const response = await repositoryClient.getContents({ repository, repositoryId, ref: commitId, path, includeLatestChanges }, { signal, timeoutMs: 8000 });
+  const response = await repositoryClient.getContents({ repository, repositoryId, ref: commitId, path, includeLatestChanges, page: { page, limit: 100 } }, { signal, timeoutMs: 8000 });
   signal.throwIfAborted();
-  return validateSource(response, repositoryId, commitId, path);
+  validateSource(response, repositoryId, commitId, path);
+  if (response.page?.nextPage && response.page.nextPage !== page + 1) failure('The directory cursor does not follow this snapshot page.');
+  return response;
 }
 
 export function validateSourceImage(response: GetRepositoryImageResponse, repositoryId: string, commitId: string, documentPath: string, imageUrl: string) {

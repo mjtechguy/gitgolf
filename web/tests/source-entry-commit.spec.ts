@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -23,7 +24,7 @@ async function fixture(page: Page, count = 1) {
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (method === 'GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user: state.user }) : reject(route, 'unauthenticated', 'Signed out.');
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository });
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, { branches: [{ name: 'main', commitId: ref }] });

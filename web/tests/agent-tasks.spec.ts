@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { GetAgentControlResponseSchema } from '../src/gen/golf/v1/agent_control088_pb';
 import { expect, test } from '@playwright/test';
 import { GetRepositoryStarResponseSchema, AgentEventBodyState, ListAgentTaskEventsRequestSchema, ListAgentTaskEventsResponseSchema, ActionRunKind, ListActionRunsResponseSchema, GetActionRunResponseSchema, GetRepositoryResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, ListCapabilitiesResponseSchema, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, InspectWorkflowsResponseSchema, ListAgentTasksResponseSchema, GetAgentUsageResponseSchema, ListCodexConnectionsResponseSchema, ListAgentModelsResponseSchema, GetCodexConnectionResponseSchema, CreateAgentTaskRequestSchema, CreateAgentTaskResponseSchema,  CancelAgentTaskRequestSchema, CancelAgentTaskResponseSchema, AgentUsageScope, CodexConnectionState, CodexLoginMethod } from '../src/gen/golf/v1/golf_pb';
@@ -11,7 +12,7 @@ test('manual tasks bind current account and policy, cancel only after confirmati
   const method=new URL(route.request().url()).pathname.split('/').at(-1);
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'42',login:'alex'}});
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='GetRepositoryStar')return respond(route,GetRepositoryStarResponseSchema,{preference:{repository,repositoryId:'12',ownerId:'42',nativeUserId:'42',starred:false,starsCount:'0'}});
   if(method==='GetRepositoryAccess')return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:'12',ownerId:'42',currentPermission:'owner'}});
   if(method==='GetRepositorySettings')return respond(route,GetRepositorySettingsResponseSchema,{settings:{repositoryId:'12',ownerId:'42',canEdit:true}});

@@ -39,12 +39,17 @@ def stage(value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--forge-kind', choices=('gitea','forgejo'), default='gitea')
     parser.add_argument('--image', required=True)
     parser.add_argument('--runner-image', required=True)
     parser.add_argument('--objects', action='store_true', help='qualify private RustFS-backed CI sources using the storage overlay')
     parser.add_argument('--ui-screenshots', type=Path, help='owner-only output directory for optional actual Actions browser proof (requires local Playwright)')
     args = parser.parse_args()
-    environment = {key:value for key,value in os.environ.items() if not key.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','RUSTFS_','AWS_')) and key!='DATABASE_URL'}
+    forge = args.forge_kind
+    workflow_dir = ".forgejo/workflows" if forge == "forgejo" else ".github/workflows"
+    def action_path(name): return workflow_dir + "/" + name
+
+    environment = {key:value for key,value in os.environ.items() if not key.startswith(('GOLF_','GITEA_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','RUSTFS_','AWS_')) and key!='DATABASE_URL'}
     def run(*command, payload=None, timeout=180):
         result = subprocess.run(command, input=None if payload is None else json.dumps(payload).encode(), cwd=ROOT, env=environment, capture_output=True, timeout=timeout)
         assert result.returncode == 0, 'Private subprocess failed; diagnostics withheld'
@@ -72,9 +77,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory = Path(temporary); directory.chmod(0o700)
         key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
-        values = {name:secrets.token_hex(24) for name in ['POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD']}
+        values = {name:secrets.token_hex(24) for name in ['POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD','FORGEJO_DB_PASSWORD']}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(), GOLF_PUBLIC_URL=smoke.GOLF,
             GOLF_RUNNER_KEY=key,GOLF_RUNNER_KEYS=json.dumps({'local-docker':key}),GOLF_RUNNER_IMAGES=json.dumps({'linux':IMAGE}),GOLF_RUNNER_JOB_IMAGE=IMAGE,GOLF_RUNNER_APPROVED_IMAGES=json.dumps([IMAGE]))
+        if forge == 'forgejo': values['GOLF_FORGE_INSTANCE_ID'] = str(uuid.uuid4())
         if args.objects:
             values.update(RUSTFS_ACCESS_KEY='golf-proof-'+secrets.token_hex(12), RUSTFS_SECRET_KEY=secrets.token_hex(32))
         env_file, override = directory/'core.env',directory/'proof.yaml'
@@ -84,15 +90,15 @@ def main():
     image: {core}
     pull_policy: never
     ports: !override ["127.0.0.1:{golf_port}:8080"]
-  gitea:
+  {forge}:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
+      {forge.upper()}__server__ROOT_URL: {smoke.GITEA}/
     ports: !override ["127.0.0.1:{native_port}:3000"]
   runner:
     image: {worker}
     pull_policy: never
 ''')
-        compose = ['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/'compose.yaml'),'-f',str(ROOT/'compose.ci.yaml')]
+        compose = ['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/('compose.forgejo.yaml' if forge == 'forgejo' else 'compose.yaml')),'-f',str(ROOT/'compose.ci.yaml')]
         if args.objects:
             compose += ['-f',str(ROOT/'compose.storage.yaml')]
         compose += ['-f',str(override)]
@@ -104,7 +110,7 @@ def main():
             return {'containerImageReference':observed['Image'], 'resolvedLocalImageId':core,
                     'composeConfigHash':observed['Config']['Labels']['com.docker.compose.config-hash'],
                     'suppliedImageReference':args.image}
-        def admin(*arguments): return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*arguments).strip()
+        def admin(*arguments): return command('exec','-T',forge,forge,'--config','/var/lib/gitea/custom/conf/app.ini' if forge == 'forgejo' else '/etc/gitea/app.ini','admin','user',*arguments).strip()
         def rpc(method,body=None,expected=200,code=None): return smoke.rpc(session,method,body,expected=expected,code=code)
         def wait_run(identifier,state=None):
             deadline=time.monotonic()+90
@@ -153,7 +159,7 @@ def main():
         try:
             stage('fresh portable core and enrolled worker configuration; policies default deny')
             started=True
-            command('up','-d','--no-build','--wait','--wait-timeout','120','postgres','gitea','golf')
+            command('up','-d','--no-build','--wait','--wait-timeout','120','postgres',forge,'golf')
             smoke.ready()
             if args.objects:
                 stage('private RustFS health and explicit bucket provisioning')
@@ -171,14 +177,14 @@ def main():
             repository={'owner':name,'name':'pipeline-proof'}
             base='repos/'+name+'/pipeline-proof'
             files={
-              '.github/workflows/actions.yml': 'name: Actions proof\non:\n  workflow_dispatch: {}\n  push: {}\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - name: Read source\n        run: |\n          test "$(id -u)" = 1000\n          test -f README.md\n          export STEP_PRIVATE=first\n          printf "actions proof\\n"\n      - name: Verify workspace\n        run: |\n          test -z "${STEP_PRIVATE:-}"\n          test -f README.md\n          printf "second step proof\\n"\n',
-              '.gitlab-ci.yml': 'proof:\n  image: '+IMAGE+'\n  script:\n    - value=shared\n    - test "$value" = shared\n    - test -f README.md\n    - printf "gitlab proof\\n"\n',
-              '.github/workflows/failure.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: exit 7\n      - run: printf "must not execute\\n"\n',
-              '.github/workflows/slow.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: sleep 60\n',
-              '.github/workflows/logs.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: |\n          i=0\n          while [ "$i" -lt 24 ]; do\n            printf "%8192s\\n" "bounded log page"\n            i=$((i + 1))\n          done\n          printf "GOLF_LOG_FINAL\\n"\n',
+              action_path('actions.yml'): 'name: Actions proof\non:\n  workflow_dispatch: {}\n  push: {}\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - name: Read source\n        run: |\n          test "$(id -u)" = 1000\n          test -f README.md\n          export STEP_PRIVATE=first\n          printf "actions proof\\n"\n      - name: Verify workspace\n        run: |\n          test -z "${STEP_PRIVATE:-}"\n          test -f README.md\n          printf "second step proof\\n"\n',
+              '.gitlab-ci.yml': (ROOT/'docs/compatibility/fixtures/gitlab-shell.yml').read_text(),
+              action_path('failure.yml'): 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: exit 7\n      - run: printf "must not execute\\n"\n',
+              action_path('slow.yml'): 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: sleep 60\n',
+              action_path('logs.yml'): 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: |\n          i=0\n          while [ "$i" -lt 24 ]; do\n            printf "%8192s\\n" "bounded log page"\n            i=$((i + 1))\n          done\n          printf "GOLF_LOG_FINAL\\n"\n',
             }
             for file,content in files.items():smoke.provider(token,'POST',base+'/contents/'+file,{'content':base64.b64encode(content.encode()).decode(),'message':'Add controlled pipeline fixture'},expected=201)
-            rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':'.github/workflows/actions.yml','idempotencyKey':str(uuid.uuid4())},expected=403)
+            rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':action_path('actions.yml'),'idempotencyKey':str(uuid.uuid4())},expected=403)
             stage('known default deny and independent manual/push ceilings on actual inspection')
             default_revision=observe_policy(False,False)
             instance=update('INSTANCE',policy('INSTANCE'),True,push=True)
@@ -188,12 +194,12 @@ def main():
             repo_policy=update('REPOSITORY',repo_policy,True,repository,manual=False,push=True)
             push_revision=observe_policy(False,True)
             assert push_revision!=both_revision
-            rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':'.github/workflows/actions.yml','idempotencyKey':str(uuid.uuid4())},expected=403)
+            rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':action_path('actions.yml'),'idempotencyKey':str(uuid.uuid4())},expected=403)
             repo_policy=update('REPOSITORY',repo_policy,True,repository,push=False)
             manual_revision=observe_policy(True,False)
             assert manual_revision!=push_revision
             stage('durable exact-commit queues survive core restart; idempotency retains original run')
-            intent=str(uuid.uuid4());actions=dispatch('.github/workflows/actions.yml',intent)
+            intent=str(uuid.uuid4());actions=dispatch(action_path('actions.yml'),intent)
             assert actions['state']=='WORKFLOW_RUN_STATE_QUEUED'
             if args.objects:
                 original_source = object_source(actions['id'])
@@ -203,7 +209,7 @@ def main():
             command('restart','golf');smoke.ready()
             if args.objects:
                 assert object_source(actions['id']) == original_source, 'Restart changed the source storage binding'
-            assert dispatch('.github/workflows/actions.yml',intent)['id']==actions['id']
+            assert dispatch(action_path('actions.yml'),intent)['id']==actions['id']
             stage('dedicated TLS Docker daemon executes Actions and GitLab source snapshots')
             command('up','-d','--no-build','runner',timeout=240)
             action_result=wait_run(actions['id'])
@@ -260,11 +266,11 @@ def main():
             gitlab=dispatch('.gitlab-ci.yml');assert wait_run(gitlab['id'])['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
             assert 'gitlab proof' in ''.join(row['text'] for row in rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':gitlab['id']}).get('logs',[]))
             gitlab_result=rpc('WorkflowRunService/GetWorkflowRun',{'runId':gitlab['id']})['run'];assert len(gitlab_result['progress']['steps'])==1 and gitlab_result['progress']['steps'][0]['state']=='WORKFLOW_STEP_STATE_SUCCEEDED'
-            failure=dispatch('.github/workflows/failure.yml');failed=wait_run(failure['id']);assert failed['state']=='WORKFLOW_RUN_STATE_FAILED' and failed['exitCode']==7
+            failure=dispatch(action_path('failure.yml'));failed=wait_run(failure['id']);assert failed['state']=='WORKFLOW_RUN_STATE_FAILED' and failed['exitCode']==7
             assert 'must not execute' not in ''.join(row['text'] for row in rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':failure['id']}).get('logs',[]))
             assert [step['state'] for step in failed['progress']['steps']]==['WORKFLOW_STEP_STATE_FAILED','WORKFLOW_STEP_STATE_SKIPPED']
             stage('actual worker output continues through every bounded log page')
-            paged_run=dispatch('.github/workflows/logs.yml');assert wait_run(paged_run['id'])['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
+            paged_run=dispatch(action_path('logs.yml'));assert wait_run(paged_run['id'])['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
             after=0;chunks=[];pages=0
             while True:
                 page=rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':paged_run['id'],'afterSequence':str(after)})
@@ -279,11 +285,11 @@ def main():
             assert pages>1 and 'GOLF_LOG_FINAL' in ''.join(chunks), 'Final output was inaccessible beyond the first page'
             print('PASS: real ordered log continuation across '+str(pages)+' pages / '+str(after)+' chunks.',flush=True)
             stage('running cancellation and policy revocation fence worker results')
-            slow=dispatch('.github/workflows/slow.yml');running=wait_run(slow['id'],'WORKFLOW_RUN_STATE_RUNNING')
+            slow=dispatch(action_path('slow.yml'));running=wait_run(slow['id'],'WORKFLOW_RUN_STATE_RUNNING')
             cancelled=rpc('WorkflowRunService/CancelWorkflowRun',{'runId':slow['id'],'expectedVersion':running['version']})['run'];assert cancelled['state']=='WORKFLOW_RUN_STATE_CANCELLED'
             cancelled_detail=rpc('WorkflowRunService/GetWorkflowRun',{'runId':slow['id']})['run'];assert cancelled_detail['progress']['steps'][0]['state']=='WORKFLOW_STEP_STATE_INTERRUPTED'
             time.sleep(11)
-            revoked=dispatch('.github/workflows/slow.yml');wait_run(revoked['id'],'WORKFLOW_RUN_STATE_RUNNING')
+            revoked=dispatch(action_path('slow.yml'));wait_run(revoked['id'],'WORKFLOW_RUN_STATE_RUNNING')
             repo_policy=update('REPOSITORY',repo_policy,False,repository)
             assert wait_run(revoked['id'])['state']=='WORKFLOW_RUN_STATE_CANCELLED'
             rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':'.gitlab-ci.yml','idempotencyKey':str(uuid.uuid4())},expected=403)
@@ -302,7 +308,7 @@ def main():
                 rpc('ActionRunService/ListActionRuns',{**selection,'limit':2,'cursor':next_cursor,'kindFilter':'ACTION_RUN_KIND_REVIEW'},expected=400)
                 cursor=next_cursor
             assert set(seen)=={item['id'] for item in [actions,gitlab,failure,paged_run,slow,revoked]}, 'Unified history skipped or invented a run'
-            filtered=rpc('ActionRunService/ListActionRuns',{**selection,'kindFilter':'ACTION_RUN_KIND_WORKFLOW','workflowPath':'.github/workflows/actions.yml'})
+            filtered=rpc('ActionRunService/ListActionRuns',{**selection,'kindFilter':'ACTION_RUN_KIND_WORKFLOW','workflowPath':action_path('actions.yml')})
             assert [item['ref'] for item in filtered.get('runs',[])]==[typed], 'Server workflow filter differs'
             assert not rpc('ActionRunService/ListActionRuns',{**selection,'kindFilter':'ACTION_RUN_KIND_REVIEW'}).get('runs'), 'Invented a review without execution'
             print('PASS: real bounded unified-history continuation without duplicates/skips and cursor-bound server filters.',flush=True)

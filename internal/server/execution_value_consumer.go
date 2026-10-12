@@ -321,71 +321,18 @@ func (s *Server) appendQuarantinedOutput(ctx context.Context, tx *sql.Tx, run wo
 // then preserves each original receipt/coordinate boundary. Arbitrarily encoded
 // or transformed secrets are outside this source-trusted profile's guarantee.
 func redactExecutionOutput(chunks []string, secrets map[string]string) ([]string, error) {
-	var combined []byte
 	for _, text := range chunks {
 		if !runnerLogText(text) {
 			return nil, errCredentialUnavailable
 		}
-		combined = append(combined, []byte(text)...)
-		if len(combined) > runnerMaxLogBytes {
-			return nil, errCredentialUnavailable
-		}
 	}
-	marks := make([]int32, len(combined)+1)
-	seen := map[string]bool{}
-	for _, secret := range secrets {
-		if !runner.ExecutionValueBody(secret, true) {
-			return nil, errCredentialUnavailable
-		}
-		if seen[secret] {
-			continue
-		}
-		seen[secret] = true
-		// KMP retains overlapping matches without quadratic repeated-byte marking.
-		pattern := []byte(secret)
-		failure := make([]int, len(pattern))
-		for i, j := 1, 0; i < len(pattern); i++ {
-			for j > 0 && pattern[i] != pattern[j] {
-				j = failure[j-1]
-			}
-			if pattern[i] == pattern[j] {
-				j++
-			}
-			failure[i] = j
-		}
-		for i, j := 0, 0; i < len(combined); i++ {
-			for j > 0 && combined[i] != pattern[j] {
-				j = failure[j-1]
-			}
-			if combined[i] == pattern[j] {
-				j++
-			}
-			if j == len(pattern) {
-				start := i - len(pattern) + 1
-				marks[start]++
-				marks[i+1]--
-				j = failure[j-1]
-			}
-		}
+	masked, err := runner.MaskExecutionOutput(chunks, secrets)
+	if err != nil {
+		return nil, errCredentialUnavailable
 	}
-	active := int32(0)
-	for i := range combined {
-		active += marks[i]
-		if active > 0 {
-			combined[i] = '*'
-		}
-	}
-	result := make([]string, len(chunks))
-	offset := 0
-	for i, text := range chunks {
-		result[i] = string(combined[offset : offset+len(text)])
-		offset += len(text)
-		if !runnerLogText(result[i]) {
-			return nil, errCredentialUnavailable
-		}
-	}
-	return result, nil
+	return masked, nil
 }
+
 func (s *Server) releaseQuarantinedOutput(ctx context.Context, tx *sql.Tx, run workflowRunRecord, attempt string, env *runner.ExecutionEnvironment) error {
 	rows, e := tx.QueryContext(ctx, `SELECT sequence,raw_bytes,job_instance_id,step_id,encrypted_content,content_binding,credential_key_id FROM golf_workflow_quarantined_outputs WHERE run_id=$1 AND attempt_id=$2 ORDER BY sequence LIMIT 16385`, run.ID, attempt)
 	if e != nil {

@@ -7,7 +7,7 @@ import { isCommitID, repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
 import { sourceRepositoryID, sourcePath, validSourceLatestChange } from './sourceReads';
 import type { Commit } from './gen/golf/v1/golf_pb';
-import { DateLabel, privateSnapshotQuery } from './RepositoryUI';
+import { DateLabel, privateNavigationQuery } from './RepositoryUI';
 
 // Only these directory-row reads share this cap. No speculative/offscreen RPCs.
 let activeReads = 0;
@@ -40,6 +40,7 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
   const projected = validTarget && latestChange && validSourceLatestChange(latestChange, commitId) ? latestChange : undefined;
   const eligible = validTarget && !projected;
   const visible = visibleIdentity === identity;
+  const retained = client.getQueryState(key);
   useEffect(() => {
     const element = target.current;
     if (!eligible || finished || !element || typeof IntersectionObserver === 'undefined') return;
@@ -56,7 +57,7 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
     if (!visible && !finished) void client.cancelQueries({ queryKey: key, exact: true });
   }, [client, key, visible, finished]);
   useEffect(() => () => { void client.cancelQueries({ queryKey: key, exact: true }); }, [client, key]);
-  const query = useQuery({ ...privateSnapshotQuery, queryKey: key, enabled: eligible && (visible || finished), retry: false,
+  const query = useQuery({ ...privateNavigationQuery, queryKey: key, enabled: eligible && (visible || finished || retained?.status === 'success' || retained?.status === 'error'), retry: false, retryOnMount: false,
     queryFn: async ({ signal }) => {
       const release = await entryReadSlot(signal);
       try {

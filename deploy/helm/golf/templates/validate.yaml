@@ -30,11 +30,25 @@
 {{- end -}}
 
 {{- if and .Values.postgresql.enabled .Values.gitea.enabled (or (ne .Values.gitea.database.name "gitea") (ne .Values.gitea.database.user "gitea")) -}}{{ fail "bundled PostgreSQL initializes Gitea database/name as gitea; use those fixed roles" }}{{- end -}}
-{{- if and .Values.gitea.enabled .Values.gitea.image.tag (ne .Values.gitea.image.tag "1.27.3-rootless") -}}{{ fail "bundled Gitea requires qualified rootless tag 1.27.3-rootless or its pinned digest" }}{{- end -}}
+{{- if and .Values.gitea.enabled .Values.gitea.image.tag (ne .Values.gitea.image.tag (ternary "15.0.9-rootless" "1.27.3-rootless" (eq .Values.forge.kind "forgejo"))) -}}{{ fail "bundled Gitea requires qualified rootless tag 1.27.3-rootless or its pinned digest" }}{{- end -}}
 {{- if and .Values.postgresql.enabled .Values.postgresql.image.tag (ne .Values.postgresql.image.tag "18.4-alpine3.24") -}}{{ fail "bundled PostgreSQL requires qualified Alpine tag 18.4-alpine3.24 or its pinned digest" }}{{- end -}}
 
 {{- with .Values.observability.tracing.endpoint -}}
   {{- if not (regexMatch "^https?://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?(/[^?#@]*)?$" .) -}}{{ fail "tracing.endpoint requires HTTP(S) without credentials, query or fragment" }}{{- end -}}
   {{- if and (hasPrefix "http://" .) (not $.Values.observability.tracing.insecure) -}}{{ fail "HTTP tracing requires explicit tracing.insecure" }}{{- end -}}
   {{- if and $.Values.networkPolicy.enabled (empty $.Values.networkPolicy.externalEgress) -}}{{ fail "tracing requires explicit networkPolicy.externalEgress for the collector" }}{{- end -}}
+{{- end -}}
+
+{{- if eq .Values.forge.kind "forgejo" -}}
+  {{- $_ := required "Forgejo requires forge.instanceID for this fresh installation" .Values.forge.instanceID -}}
+  {{- if ne .Values.gitea.qualifiedVersion "15.0.9" -}}{{ fail "Forgejo requires qualifiedVersion 15.0.9" }}{{- end -}}
+  {{- if and .Values.gitea.enabled (or (ne .Values.gitea.image.repository "codeberg.org/forgejo/forgejo") (ne .Values.gitea.image.digest "sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413")) -}}{{ fail "Forgejo requires the qualified exact image digest" }}{{- end -}}
+  {{- if .Release.IsUpgrade -}}
+    {{- $existing := lookup "apps/v1" "Deployment" .Release.Namespace (include "golf.fullname" .) -}}
+    {{- $bound := false -}}
+    {{- if $existing -}}{{- range $container := $existing.spec.template.spec.containers -}}{{- range $env := $container.env -}}
+      {{- if and (eq $env.name "GOLF_FORGE_KIND") (eq $env.value "forgejo") -}}{{- $bound = true -}}{{- end -}}
+    {{- end -}}{{- end -}}{{- end -}}
+    {{- if not $bound -}}{{ fail "Cannot replace a retained Gitea release with Forgejo; install a fresh destination release" }}{{- end -}}
+  {{- end -}}
 {{- end -}}

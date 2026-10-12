@@ -114,3 +114,5 @@ production runtimes/resources/secrets/data, PR-close cleanup, machine preview
 access, provider deployment/R2 runtime qualification, Cloudflare/Kubernetes and
 latest-schema recovery remain separate acceptance. The source packet alone does
 not mark Environments Ready.
+
+The trusted Golf-to-preview form handoff uses `strict-origin` in both HTTP and HTML referrer policy so browsers preserve its POST Origin without disclosing paths or queries. Project content and denials retain `no-referrer`. Source094 corrects the earlier handoff policy; see the Cloudflare preview qualification in the implementation ledger.

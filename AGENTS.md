@@ -2,7 +2,7 @@
 
 Read `GOLF_IMPLEMENTATION_PLAN.md` and `docs/IMPLEMENTATION_STATUS.md` before changing product scope.
 
-- The initial forge is Gitea on both infrastructure tracks. Application features use supported APIs; do not write Gitea's database or repository files directly. The explicit P1.6 exception is privileged offline recovery using documented native PostgreSQL/Docker procedures into a fresh, stopped target, with all writers drained and traffic quarantined; see `docs/RECOVERY.md`. This does not authorize direct forge writes in application features or ad hoc edits to a live installation.
+- The portable backend transition target is Forgejo; read `docs/FORGEJO_MIGRATION_PLAN.md` and ADR 0009 before provider changes. Existing Gitea deployments stay unchanged until their migration gates pass. Cloudflare-native remains Artifacts/D1/Workers. Application features use supported APIs; do not write either forge's database or repository files directly. The explicit P1.6 exception is privileged offline recovery using documented native PostgreSQL/Docker procedures into a fresh, stopped target, with all writers drained and traffic quarantined; see `docs/RECOVERY.md`. This does not authorize direct forge writes, cross-product schema surgery, or ad hoc edits to a live installation.
 - AI and Cloudflare are optional for the portable core. Expose capability states honestly; do not substitute mock successes for missing integrations.
 - Keep tenant/user authorization and credential handling explicit. Never commit provider tokens, local keys, environment files or runtime data.
 - No repository CI workflows yet. Run applicable checks locally and record the result. This restriction does not remove Golf's planned CI/CD product features.

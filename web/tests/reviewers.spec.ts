@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import { GetRepositoryResponseSchema,GetAuthenticationOptionsResponseSchema,GetSessionResponseSchema,ListCapabilitiesResponseSchema,GetRepositoryAccessResponseSchema,GetRepositorySettingsResponseSchema,GetExecutionPolicyResponseSchema,ListWorkflowRunsResponseSchema,InspectWorkflowsResponseSchema,ListAgentTasksResponseSchema,GetAgentUsageResponseSchema,GetReviewerResponseSchema,SaveReviewerRequestSchema,SaveReviewerResponseSchema,ListReviewerRunsResponseSchema,ListCodexConnectionsResponseSchema,ListAgentModelsResponseSchema,AgentUsageScope,CodexConnectionState } from '../src/gen/golf/v1/golf_pb';
 import { request,respond,reject } from './rpc';
@@ -7,7 +8,7 @@ test('reviewer settings require explicit edit, bind revision and show only autho
  const method=new URL(route.request().url()).pathname.split('/').at(-1);
  if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
  if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'42',login:'alex'}});
- if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+ if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
  if(method==='GetRepositoryAccess')return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:'12',ownerId:'42',currentPermission:'owner'}});
  if(method==='GetRepositorySettings')return respond(route,GetRepositorySettingsResponseSchema,{settings:{repositoryId:'12',ownerId:'42',canEdit:true}});
  if(method==='GetExecutionPolicy')return respond(route,GetExecutionPolicyResponseSchema,{});

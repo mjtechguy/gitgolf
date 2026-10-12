@@ -1,0 +1,187 @@
+{
+  "format": "golf.compatibility.catalog.v1",
+  "profile": "connected-native-ci-unimplemented",
+  "reference": "profile.json#connected",
+  "features": [
+    {
+      "id": "github.ci_credentials",
+      "packet": "C1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Selected personal import credentials do not grant CI management; separate native IDs, scoped purpose/grants and real native execution need implementation."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "github.workflow_discovery_dispatch",
+      "packet": "C1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Selected personal import credentials do not grant CI management; separate native IDs, scoped purpose/grants and real native execution need implementation."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "github.runs_jobs_logs_artifacts",
+      "packet": "C1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Selected personal import credentials do not grant CI management; separate native IDs, scoped purpose/grants and real native execution need implementation."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "github.cancel_retry",
+      "packet": "C1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Selected personal import credentials do not grant CI management; separate native IDs, scoped purpose/grants and real native execution need implementation."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "gitlab.ci_credentials",
+      "packet": "C1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Selected personal import credentials do not grant CI management; separate native IDs, scoped purpose/grants and real native execution need implementation."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "gitlab.pipeline_discovery_dispatch",
+      "packet": "C1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Selected personal import credentials do not grant CI management; separate native IDs, scoped purpose/grants and real native execution need implementation."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "gitlab.jobs_logs_artifacts",
+      "packet": "C1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Selected personal import credentials do not grant CI management; separate native IDs, scoped purpose/grants and real native execution need implementation."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "gitlab.cancel_retry_play",
+      "packet": "C1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Selected personal import credentials do not grant CI management; separate native IDs, scoped purpose/grants and real native execution need implementation."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "execution.owner",
+      "packet": "C1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Selected personal import credentials do not grant CI management; separate native IDs, scoped purpose/grants and real native execution need implementation."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "profile.enterprise_self_managed",
+      "packet": "C1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Selected personal import credentials do not grant CI management; separate native IDs, scoped purpose/grants and real native execution need implementation."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "events.signed_deduplication",
+      "packet": "C2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Origin CI event/reconciliation/result-ownership consumers are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "events.cursor_reconciliation",
+      "packet": "C2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Origin CI event/reconciliation/result-ownership consumers are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "results.origin_checks_status",
+      "packet": "C2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Origin CI event/reconciliation/result-ownership consumers are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "permissions.forks_revocation",
+      "packet": "C2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Origin CI event/reconciliation/result-ownership consumers are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "events.causality_feedback",
+      "packet": "C2",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Origin CI event/reconciliation/result-ownership consumers are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    }
+  ]
+}

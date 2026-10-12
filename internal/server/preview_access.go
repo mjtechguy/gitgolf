@@ -75,7 +75,24 @@ func (s *Server) DeploymentOpenHandler() http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		parts := strings.Split(r.URL.Path, "/")
-		if r.Method != "POST" || len(parts) != 5 || parts[1] != "api" || parts[2] != "deployments" || parts[4] != "open" || !deploymentUUID(parts[3]) || r.URL.RawQuery != "" || r.Header.Get("Origin") != s.config.PublicURL || r.Header.Get("Authorization") != "" || r.Header.Get("Sec-Fetch-Site") == "cross-site" || !s.previewAvailable() || r.TLS == nil || r.TLS.Version < tls.VersionTLS13 || len(r.Header.Values("Origin")) != 1 {
+		if s.preview != nil && s.preview.cloudflare != nil && r.Method == "GET" && len(parts) == 5 && parts[4] == "resume" && parts[3] == s.preview.cloudflare.DeploymentID && r.URL.RawQuery == "" {
+			previewHeaders(w)
+			w.Header().Set("Referrer-Policy", "strict-origin")
+			if _, e := s.sessionCredential(r.Context(), s.cookieValue(r.Header)); e != nil {
+				http.Redirect(w, r, "/?preview_login="+parts[3], http.StatusSeeOther)
+				return
+			}
+			nonce, _, e := previewToken()
+			if e != nil {
+				previewDenied(w)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'nonce-"+nonce+"'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+			fmt.Fprintf(w, `<!doctype html><title>Opening protected preview</title><form method="post" action="/api/deployments/%s/open"><input type="hidden" name="access_ready" value="true"><button>Open protected preview</button></form><script nonce="%s">document.forms[0].submit()</script>`, parts[3], nonce)
+			return
+		}
+		if r.Method != "POST" || len(parts) != 5 || parts[1] != "api" || parts[2] != "deployments" || parts[4] != "open" || !deploymentUUID(parts[3]) || r.URL.RawQuery != "" || r.Header.Get("Origin") != s.config.PublicURL || r.Header.Get("Authorization") != "" || r.Header.Get("Sec-Fetch-Site") == "cross-site" || !s.previewAvailable() || s.preview.cloudflare == nil && (r.TLS == nil || r.TLS.Version < tls.VersionTLS13) || len(r.Header.Values("Origin")) != 1 {
 			previewDenied(w)
 			return
 		}
@@ -99,6 +116,29 @@ func (s *Server) DeploymentOpenHandler() http.HandlerFunc {
 		if e != nil {
 			previewDenied(w)
 			return
+		}
+		if s.preview.cloudflare != nil {
+			if d.wire.Id != s.preview.cloudflare.DeploymentID {
+				previewDenied(w)
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, 256)
+			if r.ParseForm() != nil || len(r.PostForm) > 1 || len(r.PostForm["access_ready"]) > 1 {
+				previewDenied(w)
+				return
+			}
+			if len(r.PostForm) == 0 {
+				if s.deploymentRead(r.Context(), token, d.wire, u.ID) != nil {
+					previewDenied(w)
+					return
+				}
+				http.Redirect(w, r, s.previewOrigin(d.wire.Id)+"/__golf/enter", http.StatusSeeOther)
+				return
+			}
+			if r.PostForm.Get("access_ready") != "true" {
+				previewDenied(w)
+				return
+			}
 		}
 		value, digest, e := previewToken()
 		if e != nil {
@@ -141,10 +181,12 @@ func (s *Server) DeploymentOpenHandler() http.HandlerFunc {
 			previewDenied(w)
 			return
 		}
+		// Native form POST needs its real Origin; no-referrer makes browsers send null.
+		w.Header().Set("Referrer-Policy", "strict-origin")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'nonce-"+nonce+"'; form-action "+s.previewOrigin(d.wire.Id)+"; base-uri 'none'; frame-ancestors 'none'")
-		fmt.Fprintf(w, `<!doctype html><html><head><meta name="referrer" content="no-referrer"><title>Opening protected preview</title></head><body><form method="post" action="%s"><input type="hidden" name="grant" value="%s"><button>Open protected preview</button></form><script nonce="%s">document.forms[0].submit()</script></body></html>`, html.EscapeString(action), html.EscapeString(value), html.EscapeString(nonce))
+		fmt.Fprintf(w, `<!doctype html><html><head><meta name="referrer" content="strict-origin"><title>Opening protected preview</title></head><body><form method="post" action="%s"><input type="hidden" name="grant" value="%s"><button>Open protected preview</button></form><script nonce="%s">document.forms[0].submit()</script></body></html>`, html.EscapeString(action), html.EscapeString(value), html.EscapeString(nonce))
 	}
 }
 func (s *Server) redeemPreview(w http.ResponseWriter, r *http.Request, d *deploymentRecord) {
@@ -186,6 +228,9 @@ func (s *Server) redeemPreview(w http.ResponseWriter, r *http.Request, d *deploy
 			return errUnauthenticated
 		}
 		expiry = deadline
+		if s.preview.cloudflare != nil && time.Now().Add(5*time.Minute).Before(expiry) {
+			expiry = time.Now().Add(5 * time.Minute)
+		}
 		_, e = tx.ExecContext(r.Context(), "INSERT INTO golf_preview_credentials(token_hash,deployment_id,user_id,native_actor_id,parent_session_hash,kind,expires_at) VALUES($1,$2,$3,$4,$5,'viewer',$6)", digest, d.wire.Id, credential.user, credential.native, credential.parent, expiry)
 		if e != nil {
 			return errStorageUnavailable

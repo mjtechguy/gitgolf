@@ -1,11 +1,10 @@
 package runner
 
 import (
-	"archive/tar"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
 	"time"
 )
 
@@ -25,25 +24,11 @@ func (a *ActionsExecutor) transferGitSource(ctx context.Context, container strin
 	}
 	transferCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	reader, writer := io.Pipe()
-	done := make(chan error, 1)
-	go func() {
-		archive := tar.NewWriter(writer)
-		err := archive.WriteHeader(&tar.Header{Name: "git-source.tar", Typeflag: tar.TypeReg, Mode: 0444, Size: int64(len(metadata)), Uid: 0, Gid: 0})
-		if err == nil {
-			_, err = archive.Write(metadata)
-		}
-		if err == nil {
-			err = archive.Close()
-		}
-		writer.CloseWithError(err)
-		done <- err
-	}()
-	_, copyErr := a.executor.command(transferCtx, reader, "container", "cp", "-", container+":/golf")
-	// Command failure/cancellation must also release a producer blocked on stdin.
-	reader.CloseWithError(copyErr)
-	produceErr := <-done
-	if copyErr != nil || produceErr != nil || transferCtx.Err() != nil {
+	// Docker cp can acknowledge writes beneath a running tmpfs on rootless
+	// daemons. Exec writes through the actual mount; bytes remain stdin and
+	// neither source paths nor source contents become command syntax.
+	_, err := a.executor.command(transferCtx, bytes.NewReader(metadata), "exec", "-i", container, "/bin/sh", "-c", "umask 077; cat > /golf/git-source.tar && chmod 0444 /golf/git-source.tar")
+	if err != nil || transferCtx.Err() != nil {
 		return phase, ErrInfrastructure
 	}
 	phase = "git_source_remote_hash"

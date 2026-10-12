@@ -1,0 +1,14 @@
+{
+  "name": "golf-cloudflare-agents",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --test *.test.mjs"
+  },
+  "dependencies": {
+    "@cloudflare/sandbox": "1.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

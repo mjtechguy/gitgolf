@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the closed, pinned act runtime subset and its two source adaptations.
+"""Verify the closed, pinned act runtime subset and its explicit source adaptations.
 
 No module-cache writes, downloads, Go builds, or network requests. An optional
 --upstream-dir independently checks every baseline byte against a local v0.2.89
@@ -29,12 +29,21 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+PATCHES = {
+    "manual-inputs": ("patchSha256", ("pkg/runner/expression.go", "pkg/runner/step.go")),
+    "readonly-copy": ("readonlyCopyPatchSHA256", ("pkg/container/container_types.go", "pkg/container/docker_run.go", "pkg/runner/runner.go", "pkg/runner/run_context.go", "pkg/runner/job_executor.go")),
+}
+
+
 def verify(root, manifest, upstream=None):
     if manifest.get("schemaVersion") != 1 or manifest.get("upstream") != PIN:
         raise ValueError("unexpected source pin or manifest schema")
     entries = manifest["files"]
     golf_files = {".golf-upstream/expression.go.txt", ".golf-upstream/step.go.txt", ".golf-upstream/manual-inputs.patch",
                   "pkg/runner/golf_dispatch_inputs_test.go"}
+    golf_files.update(".golf-upstream/" + Path(path).name + ".txt" for _, paths in PATCHES.values() for path in paths)
+    golf_files.update(".golf-upstream/" + name + ".patch" for name in PATCHES)
+    patched_paths = {path for _, paths in PATCHES.values() for path in paths}
     expected = {}
     for row in entries:
         path = row["path"]
@@ -64,7 +73,7 @@ def verify(root, manifest, upstream=None):
         if baseline is not None:
             if not re.fullmatch(r"[a-f0-9]{64}", baseline):
                 raise ValueError("invalid upstream digest")
-            if path not in ("pkg/runner/expression.go", "pkg/runner/step.go") and baseline != row["sha256"]:
+            if path not in patched_paths and baseline != row["sha256"]:
                 raise ValueError("unrecorded upstream patch: " + path)
             if upstream is not None and sha((upstream / path).read_bytes()) != baseline:
                 raise ValueError("independent upstream byte mismatch: " + path)
@@ -73,19 +82,19 @@ def verify(root, manifest, upstream=None):
                  "pkg/schema/action_schema.json"):
         if expected[path].get("upstreamSha256") != expected[path]["sha256"]:
             raise ValueError("license/module/embed baseline changed")
-    diff = b""
-    for name in ("expression.go", "step.go"):
-        original = (root / (".golf-upstream/" + name + ".txt")).read_bytes()
-        path = "pkg/runner/" + name
-        patched = (root / path).read_bytes()
-        if sha(original) != expected[path]["upstreamSha256"]:
-            raise ValueError("recorded upstream baseline mismatch")
-        diff += "".join(difflib.unified_diff(
-            original.decode().splitlines(True), patched.decode().splitlines(True),
-            fromfile="a/" + path, tofile="b/" + path, n=0)).encode()
-    patch = (root / ".golf-upstream/manual-inputs.patch").read_bytes()
-    if diff != patch or sha(patch) != manifest["patchSha256"]:
-        raise ValueError("baseline/patch reconstruction mismatch")
+    for name, (digest_field, paths) in PATCHES.items():
+        diff = b""
+        for path in paths:
+            original = (root / (".golf-upstream/" + Path(path).name + ".txt")).read_bytes()
+            patched = (root / path).read_bytes()
+            if sha(original) != expected[path]["upstreamSha256"]:
+                raise ValueError("recorded upstream baseline mismatch")
+            diff += "".join(difflib.unified_diff(
+                original.decode().splitlines(True), patched.decode().splitlines(True),
+                fromfile="a/" + path, tofile="b/" + path, n=0)).encode()
+        patch = (root / (".golf-upstream/" + name + ".patch")).read_bytes()
+        if diff != patch or sha(patch) != manifest[digest_field]:
+            raise ValueError("baseline/patch reconstruction mismatch")
     return len(entries)
 
 
@@ -96,6 +105,8 @@ def self_check(root, manifest):
         lambda p: (p / "pkg/runner/hashfiles/index.js").unlink(),
         lambda p: (p / ".golf-upstream/expression.go.txt").write_text("wrong baseline"),
         lambda p: (p / "symlink").symlink_to(p / "LICENSE"),
+        lambda p: (p / ".golf-upstream/docker_run.go.txt").write_text("wrong baseline"),
+        lambda p: (p / ".golf-upstream/readonly-copy.patch").write_text("wrong patch"),
     )
     for change in changes:
         with tempfile.TemporaryDirectory(prefix="golf-act-source-check-") as temp:
@@ -122,6 +133,7 @@ def main():
     print(json.dumps({"status": "source_verified", "files": count,
                       "sourceCommitId": PIN["sourceCommitId"],
                       "patchSha256": manifest["patchSha256"],
+                      "readonlyCopyPatchSHA256": manifest["readonlyCopyPatchSHA256"],
                       "independentUpstream": args.upstream_dir is not None,
                       "tamperCasesRejected": rejected}, sort_keys=True))
 

@@ -32,6 +32,79 @@ func runnerGitRequest(attempt, suffix string, body []byte) *http.Request {
 	return r
 }
 
+func TestJobGitV2ClosedNegotiationAndAdvertisement(t *testing.T) {
+	for _, commit := range []string{strings.Repeat("a", 40), strings.Repeat("a", 64)} {
+		format := "sha1"
+		if len(commit) == 64 {
+			format = "sha256"
+		}
+		request := func(command string, capabilities []string, arguments ...string) []byte {
+			body := encodeGitPacket([]byte("command=" + command + "\n"))
+			for _, value := range capabilities {
+				body = append(body, encodeGitPacket([]byte(value+"\n"))...)
+			}
+			body = append(body, []byte("0001")...)
+			for _, value := range arguments {
+				body = append(body, encodeGitPacket([]byte(value+"\n"))...)
+			}
+			return append(body, []byte("0000")...)
+		}
+		caps := []string{"agent=git/2.43.0", "object-format=" + format}
+		args := []string{"thin-pack", "ofs-delta", "no-progress", "want " + commit, "shallow " + commit, "deepen 1", "have " + commit, "done"}
+		valid := request("fetch", caps, args...)
+		if jobGitV2Negotiation(valid, commit) != nil || jobGitV2Negotiation(request("fetch", caps, "want "+commit, "have "+commit, "deepen 1"), commit) != nil || jobGitV2Negotiation(request("ls-refs", caps, "peel", "symrefs", "unborn", "ref-prefix refs/heads/", "ref-prefix HEAD"), commit) != nil {
+			t.Fatal("bounded v2 discovery/fetch rejected")
+		}
+		for _, replacement := range []string{"want " + strings.Repeat("f", len(commit)), "have " + strings.Repeat("f", len(commit)), "deepen 2", "deepen-relative", "filter blob:none", "include-tag", "want-ref refs/heads/main", "server-option=attacker", "packfile-uris https", "sideband-all"} {
+			changed := append(append([]string{}, args...), replacement)
+			if jobGitV2Negotiation(request("fetch", caps, changed...), commit) == nil {
+				t.Fatal("unsupported or foreign v2 fetch accepted", replacement)
+			}
+		}
+		for _, body := range [][]byte{
+			append(append([]byte{}, valid...), []byte("0000")...),
+			bytes.Replace(valid, []byte("0001"), []byte("0002"), 1),
+			valid[:len(valid)-4],
+			bytes.Repeat([]byte("0000"), 1025),
+			request("fetch", caps, "want "+commit, "done"),
+			request("fetch", caps, "deepen 1", "done"),
+			request("fetch", caps, "want "+commit, "deepen 1"),
+			request("fetch", append(append([]string{}, caps...), caps[0]), args...),
+			request("fetch", []string{"object-format=wrong"}, args...),
+			request("fetch", []string{"server-option=attacker"}, args...),
+			request("object-info", caps, "oid "+commit),
+			request("ls-refs", caps, "ref-prefix private\rurl"),
+		} {
+			if jobGitV2Negotiation(body, commit) == nil {
+				t.Fatal("malformed or widened v2 command accepted")
+			}
+		}
+		advertisement := func(rows ...string) []byte {
+			body := encodeGitPacket([]byte("version 2\n"))
+			for _, row := range rows {
+				body = append(body, encodeGitPacket([]byte(row+"\n"))...)
+			}
+			return append(body, []byte("0000")...)
+		}
+		native := advertisement("agent=git/2.43.0", "ls-refs=unborn", "fetch=shallow filter wait-for-done", "server-option", "object-format="+format, "object-info")
+		filtered, err := jobGitV2Advertisement(native, commit)
+		if err != nil || bytes.Contains(filtered, []byte("filter")) || bytes.Contains(filtered, []byte("server-option")) || bytes.Contains(filtered, []byte("object-info")) || !bytes.Contains(filtered, []byte("fetch=shallow\n")) {
+			t.Fatal("v2 advertisement did not describe the actual bounded commands")
+		}
+		preamble := append(encodeGitPacket([]byte("# service=git-upload-pack\n")), []byte("0000")...)
+		wrapped := append(append([]byte{}, preamble...), native...)
+		actual, err := jobGitV2Advertisement(wrapped, commit)
+		if err != nil || !bytes.Equal(actual, append(append([]byte{}, preamble...), filtered...)) {
+			t.Fatal("native smart-HTTP service preamble was lost", err)
+		}
+		for _, body := range [][]byte{native[:len(native)-4], append(append([]byte{}, native...), []byte("0002")...), advertisement("ls-refs", "fetch=filter", "object-format="+format), advertisement("ls-refs", "fetch=shallow", "object-format=wrong"), advertisement("ls-refs", "ls-refs", "fetch=shallow", "object-format="+format)} {
+			if _, err := jobGitV2Advertisement(body, commit); err == nil {
+				t.Fatal("unusable or malformed native v2 advertisement accepted")
+			}
+		}
+	}
+}
+
 func runnerGitFetch(commit string) []byte {
 	body := encodeGitPacket([]byte("want " + commit + " multi_ack_detailed side-band-64k thin-pack ofs-delta agent=git/2.54.0\n"))
 	body = append(body, encodeGitPacket([]byte("deepen 1\n"))...)
@@ -100,7 +173,7 @@ func TestRunnerGitPreparationActualGitDepthOne(t *testing.T) {
 	}
 	root := t.TempDir()
 	env := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + root, "XDG_CONFIG_HOME=" + root, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_TERMINAL_PROMPT=0", "LANG=C"}
-	run := func(dir string, args ...string) string {
+	run := func(t *testing.T, dir string, args ...string) string {
 		t.Helper()
 		cmd := exec.CommandContext(t.Context(), git, args...)
 		cmd.Dir = dir
@@ -115,26 +188,31 @@ func TestRunnerGitPreparationActualGitDepthOne(t *testing.T) {
 	if err = os.Mkdir(work, 0700); err != nil {
 		t.Fatal(err)
 	}
-	run(work, "init", "--initial-branch=main")
+	run(t, work, "init", "--initial-branch=main")
 	for _, text := range []string{"older source", "exact admitted source"} {
 		if err = os.WriteFile(filepath.Join(work, "README.md"), []byte(text), 0600); err != nil {
 			t.Fatal(err)
 		}
-		run(work, "add", "README.md")
-		run(work, "-c", "user.name=Golf fixture", "-c", "user.email=fixture@golf.invalid", "commit", "-m", "controlled source")
+		run(t, work, "add", "README.md")
+		run(t, work, "-c", "user.name=Golf fixture", "-c", "user.email=fixture@golf.invalid", "commit", "-m", "controlled source")
 	}
-	commit := run(work, "rev-parse", "HEAD")
-	run(root, "clone", "--bare", "--no-hardlinks", work, filepath.Join(root, "fixture.git"))
+	commit := run(t, work, "rev-parse", "HEAD")
+	run(t, root, "clone", "--bare", "--no-hardlinks", work, filepath.Join(root, "fixture.git"))
 	backend := &cgi.Handler{Path: git, Args: []string{"http-backend"}, Root: "/", Dir: root, Env: append(env, "GIT_PROJECT_ROOT="+root, "GIT_HTTP_EXPORT_ALL=1"), Stderr: io.Discard}
 	var reads atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Git-Protocol") != "" || (r.URL.Path != "/fixture.git/info/refs" && r.URL.Path != "/fixture.git/git-upload-pack") {
+		v2 := r.Header.Get("Git-Protocol") == "version=2"
+		if r.Header.Get("Git-Protocol") != "" && !v2 || (r.URL.Path != "/fixture.git/info/refs" && r.URL.Path != "/fixture.git/git-upload-pack") {
 			http.Error(w, "unsupported", 400)
 			return
 		}
 		if r.Method == http.MethodPost {
 			body, err := io.ReadAll(io.LimitReader(r.Body, 4097))
-			if err != nil || runnerGitNegotiation(body, commit) != nil {
+			negotiation := runnerGitNegotiation
+			if v2 {
+				negotiation = jobGitV2Negotiation
+			}
+			if err != nil || negotiation(body, commit) != nil {
 				t.Logf("controlled exact-H Git request refused: %q", body)
 				http.Error(w, "unsupported exact-H negotiation", 400)
 				return
@@ -150,7 +228,11 @@ func TestRunnerGitPreparationActualGitDepthOne(t *testing.T) {
 		body := recorder.Body.Bytes()
 		if r.Method == http.MethodGet && recorder.Code == 200 {
 			var err error
-			body, err = runnerGitAdvertisement(body)
+			if v2 {
+				body, err = jobGitV2Advertisement(body, commit)
+			} else {
+				body, err = runnerGitAdvertisement(body)
+			}
 			if err != nil {
 				http.Error(w, "advertisement refused", 500)
 				return
@@ -160,19 +242,30 @@ func TestRunnerGitPreparationActualGitDepthOne(t *testing.T) {
 		w.Write(body)
 	}))
 	t.Cleanup(server.Close)
-	destination := filepath.Join(root, "destination")
-	if err = os.Mkdir(destination, 0700); err != nil {
-		t.Fatal(err)
-	}
-	run(destination, "init")
-	run(destination, "remote", "add", "origin", server.URL+"/fixture.git")
-	run(destination, "-c", "protocol.version=0", "-c", "credential.helper=", "fetch", "--no-tags", "--depth=1", "origin", commit)
-	run(destination, "checkout", "--detach", "FETCH_HEAD")
-	if reads.Load() < 1 || run(destination, "rev-parse", "HEAD") != commit || run(destination, "rev-list", "--count", "HEAD") != "1" || run(destination, "rev-parse", "--is-shallow-repository") != "true" {
-		t.Fatal("controlled real Git consumer did not retain exact shallow H")
-	}
-	if content, err := os.ReadFile(filepath.Join(destination, "README.md")); err != nil || string(content) != "exact admitted source" {
-		t.Fatal("real checkout bytes differ", err)
+	for _, version := range []string{"0", "2"} {
+		t.Run("protocol_"+version, func(t *testing.T) {
+			destination := filepath.Join(root, "destination-"+version)
+			if err = os.Mkdir(destination, 0700); err != nil {
+				t.Fatal(err)
+			}
+			run(t, destination, "init")
+			run(t, destination, "remote", "add", "origin", server.URL+"/fixture.git")
+			before := reads.Load()
+			repeats := 1
+			if version == "2" {
+				repeats = 2
+			}
+			for range repeats {
+				run(t, destination, "-c", "protocol.version="+version, "-c", "credential.helper=", "fetch", "--no-tags", "--prune", "--no-recurse-submodules", "--depth=1", "origin", "+"+commit+":refs/remotes/origin/admitted")
+			}
+			run(t, destination, "checkout", "--detach", "FETCH_HEAD")
+			if reads.Load() <= before || run(t, destination, "rev-parse", "HEAD") != commit || run(t, destination, "rev-list", "--count", "HEAD") != "1" || run(t, destination, "rev-parse", "--is-shallow-repository") != "true" {
+				t.Fatal("controlled real Git consumer did not retain exact shallow H")
+			}
+			if content, err := os.ReadFile(filepath.Join(destination, "README.md")); err != nil || string(content) != "exact admitted source" {
+				t.Fatal("real checkout bytes differ", err)
+			}
+		})
 	}
 }
 

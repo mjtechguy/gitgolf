@@ -1,0 +1,237 @@
+{
+  "sourceRevision": "6e35c3d30f317e11fe00f9dadf4578436bb27e29",
+  "sourceDirty": true,
+  "sourceFiles": {
+    "internal/workflowpath/path.go": "c27c5b90c51d3ef780521bced64e25e24c12de27e75288ab1fba1910dfadc06b",
+    "internal/server/workflows.go": "adb8aa29c1c97ef5f7ec2e13b59c563fe0bb238f4c0ff5bfb41bc5f2013357c6",
+    "internal/server/workflow_runs.go": "cfaab1b36dd02e3bc5e0022e09cb1f4bfca0aaeb2d3a5b0b9f98538dbb721b03",
+    "internal/server/server.go": "07a56f97653c3507adb09a94d1502cd6b33b5515117b3a90927a225061ffe21e",
+    "internal/server/execution_policy.go": "c23c57e52c963a7347da46e0c5fc76d30394f15bf6e08f83499ef35bc7fa59e9",
+    "scripts/actions-two-job-smoke.py": "20ba7bac7c0a06f22dc62231de1b8b536def0b20bbab2b8cb1c8f15956c971c8",
+    "compose.yaml": "a3172df4f6509b3029df3bacfb15c96b4c3874d424b68bb89fbdfca55f2b98a1"
+  },
+  "schema": 202610050091,
+  "platforms": {
+    "golf": "linux/amd64",
+    "runner": "linux/amd64",
+    "native": "linux/amd64",
+    "postgres": "linux/amd64",
+    "daemon": "linux/amd64"
+  },
+  "images": {
+    "golf": "sha256:83ceed9ad307aac64be3a2a89c7782a83002d557259baf0ab587cf1adf4cceed",
+    "runner": "sha256:286089b5dd603593c3adc35d4f3763f6e80fdcf1cf392e02c55b2e04e905d5f7",
+    "native": "sha256:1c17ecaead42eb3b5391553d8708103a4beb0e86edf5b9ebc1eb269c318845f2",
+    "postgres": "sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15",
+    "daemon": "sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0"
+  },
+  "binarySha256": {
+    "golf/golf": "ab65dde6a824d655589eba75539cfa89a319ab7a9f5f36186b75a6d9cd8eba14",
+    "runner/golf-runner": "b653a92bb54f2052b6ad2a3e4a0746d6870b4ffbd56be5ec25e952d2fe8d3102",
+    "golf/golf-actions-engine": "8a4b9e915d1f0434fd459199e765c54af0369c5906f0a1c2ac69595017e32e01",
+    "runner/golf-actions-engine": "8a4b9e915d1f0434fd459199e765c54af0369c5906f0a1c2ac69595017e32e01"
+  },
+  "fixtureSha256": {
+    ".gitea/workflows/two-job.yml": "86f524dac2db55c2e9f72416d80d9898d05dea05f2f69dcf68bff00032ae8e1f"
+  },
+  "workflowPath": ".gitea/workflows/two-job.yml",
+  "withPush": true,
+  "servedFrontendIndexSha256": "f83570378209c8db077047e950751e0719d5f94ff38fef948f5b2fcb6ee68bd2",
+  "installedSpec": {
+    "version": "1.27.3",
+    "canonicalSha256": "35a1a36d298cb1f701693d6c37404e5c11a803ed599e476161e15b465e4ad361",
+    "pathsDefinitionsSecurityMatch": true,
+    "instance": "fresh owned qualification Gitea; not the retained installation",
+    "nativeActionsEnabled": false,
+    "workflowDirs": ".gitea/workflows,.github/workflows"
+  },
+  "dependencyOrderVerified": true,
+  "freshWorkspaceMarkerVerified": true,
+  "suppressedDirectoryRefusedWithoutAdmission": true,
+  "nativeSignedPush": true,
+  "actualDockerCleanup": {
+    "attemptContainersAbsent": true,
+    "attemptVolumesAbsent": true
+  },
+  "runCount": 2,
+  "restart": {
+    "originalRunAndAttemptUnchanged": true,
+    "originalDispatchNoReplay": true,
+    "runCount": 1
+  },
+  "tls": {
+    "version": "TLSv1.3",
+    "serverAuthenticationOnly": true,
+    "wrongHostnameDenied": true,
+    "untrustedCADenied": true,
+    "tls12Denied": true
+  },
+  "complete": true,
+  "passed": true,
+  "cleanupPassed": true,
+  "foreignIdentityUnchanged": true,
+  "limitations": [
+    "Owned input-free two-job maintained Actions fixture only; no matrix, outputs, secrets, remote actions, failure/skip or cancellation qualification.",
+    "Current native before/after read authority is not an atomic native CAS."
+  ],
+  "format": "golf.compatibility.native-evidence.v1",
+  "packet": "F1",
+  "recorded_at": "2026-10-07",
+  "evidence_layers": [
+    "native-provider",
+    "actual-Docker"
+  ],
+  "deployed": false,
+  "actor_roles": [
+    "owned ordinary native repository owner; explicitly enrolled Golf instance administrator"
+  ],
+  "private_receipt_sha256": "0251dcc29a28fa95fddec157b9eb576a1518bb3345978594d4db9b27e8d084b1",
+  "manual_run": {
+    "id": "3684de05-5244-43b8-9517-6fd975b444c7",
+    "repositoryId": "1",
+    "ownerId": "2",
+    "commitId": "4e732b3738998f34fa6ef2d6c8899cc5aa5e4753",
+    "workflowPath": ".gitea/workflows/two-job.yml",
+    "workflowBlobId": "ebe34db52a6b30ece4a198af18caa09411f6bb65",
+    "sourceSha256": "17680be05af342cf7bcccae60fc4479d047501baa6d04fc42b370576757eda3e",
+    "attemptId": "67a472bb08e9e5b0cfe039293f6da1fb",
+    "state": "WORKFLOW_RUN_STATE_SUCCEEDED",
+    "engineCatalog": "golf.workflow.act.v0.2.89.linux.v1",
+    "engineCommit": "4f411281417e88660bea1c1a1749aa71ae0bd60f",
+    "startedAt": "2026-10-07T05:42:10.036421Z",
+    "finishedAt": "2026-10-07T05:42:14.182388Z",
+    "jobs": [
+      {
+        "instanceId": "0c05b6b937730b77f8fe42369ebaaec6",
+        "jobId": "first",
+        "state": "WORKFLOW_STEP_STATE_SUCCEEDED",
+        "imageDigest": "alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0",
+        "eventsRecorded": true,
+        "startedAt": "2026-10-07T05:42:12.584989Z",
+        "finishedAt": "2026-10-07T05:42:13.028794Z",
+        "steps": [
+          {
+            "id": "source",
+            "state": "WORKFLOW_STEP_STATE_SUCCEEDED",
+            "startedAt": "2026-10-07T05:42:12.632559Z",
+            "finishedAt": "2026-10-07T05:42:12.713306Z"
+          },
+          {
+            "id": "write",
+            "state": "WORKFLOW_STEP_STATE_SUCCEEDED",
+            "startedAt": "2026-10-07T05:42:12.762811Z",
+            "finishedAt": "2026-10-07T05:42:12.861326Z"
+          }
+        ]
+      },
+      {
+        "instanceId": "747823ed17eeeeba74d3d9329459ed44",
+        "jobId": "second",
+        "needs": [
+          "first"
+        ],
+        "state": "WORKFLOW_STEP_STATE_SUCCEEDED",
+        "imageDigest": "alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0",
+        "eventsRecorded": true,
+        "startedAt": "2026-10-07T05:42:13.5632Z",
+        "finishedAt": "2026-10-07T05:42:13.877492Z",
+        "steps": [
+          {
+            "id": "fresh",
+            "state": "WORKFLOW_STEP_STATE_SUCCEEDED",
+            "startedAt": "2026-10-07T05:42:13.606458Z",
+            "finishedAt": "2026-10-07T05:42:13.708356Z"
+          }
+        ]
+      }
+    ]
+  },
+  "push_run": {
+    "id": "fc50d4c4-befa-4a68-9e27-7c4febe089e5",
+    "attemptId": "df365cd3f3b4174c94ba5678074699ac",
+    "commitId": "c64e7ced16cc6aec63d303483445ce901a40d8b7",
+    "workflowPath": ".gitea/workflows/two-job.yml",
+    "workflowBlobId": "ebe34db52a6b30ece4a198af18caa09411f6bb65",
+    "sourceSha256": "b2378e6a19b2f616dac6e85971e63298c00182068c712e590bec82e3bb6bf0e1",
+    "origin": "WORKFLOW_RUN_ORIGIN_PUSH",
+    "eventRef": "refs/heads/main",
+    "automationGrantId": "c29f10b3-44bf-4820-b666-a902294f89ed",
+    "repositoryEventId": "1",
+    "state": "WORKFLOW_RUN_STATE_SUCCEEDED",
+    "engineCatalog": "golf.workflow.act.v0.2.89.linux.v1",
+    "engineCommit": "4f411281417e88660bea1c1a1749aa71ae0bd60f",
+    "jobs": [
+      {
+        "instanceId": "0c05b6b937730b77f8fe42369ebaaec6",
+        "jobId": "first",
+        "state": "WORKFLOW_STEP_STATE_SUCCEEDED",
+        "imageDigest": "alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0",
+        "eventsRecorded": true,
+        "startedAt": "2026-10-07T05:42:32.377598Z",
+        "finishedAt": "2026-10-07T05:42:32.855893Z",
+        "steps": [
+          {
+            "id": "source",
+            "state": "WORKFLOW_STEP_STATE_SUCCEEDED",
+            "startedAt": "2026-10-07T05:42:32.438012Z",
+            "finishedAt": "2026-10-07T05:42:32.531696Z"
+          },
+          {
+            "id": "write",
+            "state": "WORKFLOW_STEP_STATE_SUCCEEDED",
+            "startedAt": "2026-10-07T05:42:32.586723Z",
+            "finishedAt": "2026-10-07T05:42:32.690998Z"
+          }
+        ]
+      },
+      {
+        "instanceId": "747823ed17eeeeba74d3d9329459ed44",
+        "jobId": "second",
+        "needs": [
+          "first"
+        ],
+        "state": "WORKFLOW_STEP_STATE_SUCCEEDED",
+        "imageDigest": "alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0",
+        "eventsRecorded": true,
+        "startedAt": "2026-10-07T05:42:33.388523Z",
+        "finishedAt": "2026-10-07T05:42:33.714884Z",
+        "steps": [
+          {
+            "id": "fresh",
+            "state": "WORKFLOW_STEP_STATE_SUCCEEDED",
+            "startedAt": "2026-10-07T05:42:33.44807Z",
+            "finishedAt": "2026-10-07T05:42:33.551953Z"
+          }
+        ]
+      }
+    ]
+  },
+  "execution_policies": {
+    "manual_initial": "explicitly enabled instance/repository ceilings",
+    "push": "independently enabled exact-path instance/repository ceilings and a current sponsor grant",
+    "native_actions_scheduler": false
+  },
+  "failed_attempts": [
+    {
+      "id": "native-attempt1",
+      "passed": true,
+      "cleanup_passed": true,
+      "private_receipt_sha256": "8caf91ee8d1b1412b27d2f6dcd46f4fa5afd92adcdf7b5e5d642a984c1eac0c7",
+      "scope": "Earlier successful manual/push proof; preceded suppressed-directory negative case and final schema/frontend binding."
+    },
+    {
+      "id": "native-attempt2",
+      "passed": false,
+      "cleanup_passed": true,
+      "private_receipt_sha256": "798895ea4b55064dbb336577622bd987946432b6b0c83c4506b9cd205c841b61",
+      "failure": "Qualifier expected invalid_argument; native suppressed-directory guard correctly returned failed_precondition. Receipt retained unchanged."
+    }
+  ],
+  "foreign_observation": {
+    "before_count": 19,
+    "after_count": 19,
+    "identity_unchanged": true,
+    "independent_lifecycle_observations": 1,
+    "lifecycle_cause": "not asserted"
+  }
+}

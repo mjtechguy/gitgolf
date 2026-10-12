@@ -1,0 +1,327 @@
+{
+  "format": "golf.forgejo.qualification.v1",
+  "date": "2026-10-11",
+  "completeMigration": false,
+  "cutoverPerformed": false,
+  "runtime": {
+    "profile": "forgejo-15.0.9",
+    "image": "codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413",
+    "checks": [
+      {
+        "script": "go test -race ./... -run TestForge|TestPathsAndDirectoryConfiguration|TestForgeTokenAlias|TestApiCredentialQuotaAndScopePostgres|TestSessionAndRepositoryWithPostgres",
+        "passed": true
+      },
+      {
+        "script": "smoke.py",
+        "passed": true,
+        "seconds": 16.786
+      },
+      {
+        "script": "workflow-config-smoke.py",
+        "passed": true,
+        "seconds": 15.192
+      },
+      {
+        "script": "forgejo-native-smoke.py",
+        "passed": true,
+        "seconds": 8.63
+      },
+      {
+        "script": "forgejo-migration-smoke.py",
+        "passed": true,
+        "seconds": 9.92
+      }
+    ],
+    "cleanup": true,
+    "serverVersion": "15.0.9+gitea-1.22.0",
+    "openapiSHA256": "98d1a3969ec545b9dab7745de948d9bfacf19990589dabfe779a3991febd3208",
+    "passed": true,
+    "seconds": 160.14
+  },
+  "staging": {
+    "scope": "Real Gitea 1.27.3 -> Forgejo 15.0.9 native import; private owned fixture",
+    "stagingToolPhases": [
+      "plan",
+      "export",
+      "import",
+      "verify",
+      "status"
+    ],
+    "encryptedExportRoundTrip": true,
+    "comparisons": {
+      "branches": {
+        "source": {
+          "count": 2,
+          "sha256": "3b54746da6608edb73bf3d811e86fe7b67ef649ecf071fcd333a72215c1ecac4"
+        },
+        "target": {
+          "count": 2,
+          "sha256": "3b54746da6608edb73bf3d811e86fe7b67ef649ecf071fcd333a72215c1ecac4"
+        },
+        "matches": true
+      },
+      "tags": {
+        "source": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "target": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "matches": true
+      },
+      "refs": {
+        "source": {
+          "blocked": "Inventory endpoint unavailable or incomplete; no absence inferred"
+        },
+        "target": {
+          "blocked": "Inventory endpoint unavailable or incomplete; no absence inferred"
+        },
+        "matches": false
+      },
+      "issues": {
+        "source": {
+          "count": 1,
+          "sha256": "4d7b3b9bb6d34a2b66a7c53ef3afd18b635a43ee60515bf0cd27fb97cdf04cb0"
+        },
+        "target": {
+          "count": 1,
+          "sha256": "4d7b3b9bb6d34a2b66a7c53ef3afd18b635a43ee60515bf0cd27fb97cdf04cb0"
+        },
+        "matches": true
+      },
+      "pulls": {
+        "source": {
+          "count": 1,
+          "sha256": "0b6f68b99f8e417b861ec1fd6ca246d18af67458ed2a14c8e810139dd832bd30"
+        },
+        "target": {
+          "count": 1,
+          "sha256": "0b6f68b99f8e417b861ec1fd6ca246d18af67458ed2a14c8e810139dd832bd30"
+        },
+        "matches": true
+      },
+      "labels": {
+        "source": {
+          "count": 1,
+          "sha256": "69faf48793858a788986f2d160f6b6b749bba693163957abc993335d8f748222"
+        },
+        "target": {
+          "count": 1,
+          "sha256": "69faf48793858a788986f2d160f6b6b749bba693163957abc993335d8f748222"
+        },
+        "matches": true
+      },
+      "milestones": {
+        "source": {
+          "count": 1,
+          "sha256": "ceb81d6be70a8210836a1d7ee9a84c720c0633807981cc5bd8e7cd3c27780b45"
+        },
+        "target": {
+          "count": 1,
+          "sha256": "ceb81d6be70a8210836a1d7ee9a84c720c0633807981cc5bd8e7cd3c27780b45"
+        },
+        "matches": true
+      },
+      "releases": {
+        "source": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "target": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "matches": true
+      },
+      "collaborators": {
+        "source": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "target": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "matches": true
+      },
+      "branch_protections": {
+        "source": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "target": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "matches": true
+      },
+      "tag_protections": {
+        "source": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "target": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "matches": true
+      },
+      "hooks": {
+        "source": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "target": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "matches": true
+      },
+      "deploy_keys": {
+        "source": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "target": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "matches": true
+      },
+      "issue_comments": {
+        "source": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "target": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "matches": true
+      },
+      "pull_reviews": {
+        "source": {
+          "count": 1,
+          "sha256": "e03e8d5e83b02b54ffa0e1deb8aab35c65ec469d779149555ec306c1ce48fc34"
+        },
+        "target": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "matches": false
+      },
+      "review_comments": {
+        "source": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "target": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "matches": true
+      },
+      "discussion_inventory_error": {
+        "source": {
+          "blocked": "Discussion/review inventory incomplete under the exporting actor"
+        },
+        "target": {
+          "blocked": "Discussion/review inventory incomplete under the exporting actor"
+        },
+        "matches": false
+      }
+    },
+    "pendingReviews": {
+      "sourcePending": 1,
+      "targetPending": 0
+    },
+    "cutoverAllowed": false,
+    "blockers": [
+      "Golf identity/current-state mapping and credential reenrollment are not qualified.",
+      "Users, organizations, teams and effective native protection require separate reconciliation.",
+      "Git hidden refs, retained PR commits, LFS payloads, wiki and submodules require byte-level verification.",
+      "Review authorship/dates/privacy, projects, attachments, packages and historical runs require fidelity qualification.",
+      "Coordinated recovery, all-writer freeze and post-write rollback require installation-specific evidence."
+    ],
+    "sourceUnchanged": true
+  },
+  "shadowDiagnostics": {
+    "profile": "forgejo-15.0.9",
+    "image": "codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413",
+    "checks": [
+      {
+        "script": "forgejo-native-smoke.py",
+        "passed": true,
+        "seconds": 5.0
+      }
+    ],
+    "cleanup": true,
+    "serverVersion": "15.0.9+gitea-1.22.0",
+    "openapiSHA256": "98d1a3969ec545b9dab7745de948d9bfacf19990589dabfe779a3991febd3208",
+    "passed": true,
+    "seconds": 20.896
+  },
+  "ci": {
+    "passed": true,
+    "command": "python3 scripts/ci-compose-smoke.py --forge-kind forgejo --image <current Golf qualification image> --runner-image golf-compat-runner:m2",
+    "coreImage": "sha256:4e00bb276cf81f660f6bf76dc05e24f172e04c6a12a55a6c4402bd3c6d8d6858",
+    "runnerImage": "sha256:c0050f44737c7098d891097ca2a0edb9bb715b3fb66506b769a9962649cfa6fd",
+    "scope": "Actual bounded shell Actions/GitLab profile, policies, restart, cancellation, log/history pagination and cleanup. Built before final shadow-diagnostic and help-text edits; those have separate checks.",
+    "cleanup": true
+  },
+  "checks": {
+    "unit": "go test ./... passed without database environment",
+    "integration": "Affected PostgreSQL/race selection passed; see runtime.checks",
+    "browser": "102 focused workflow/automation/policy cases passed",
+    "helm": "Bundled/external legacy and fresh Forgejo lint/render, wrong digest and missing identity refusals passed",
+    "compose": "Independent project, exact Forgejo image, Actions disabled and destination volume configuration passed",
+    "generated": "make generate-check passed",
+    "cloudflare": "make cloudflare-check passed; no hosted allocation",
+    "compatibility": "make compatibility-check passed",
+    "transferBoundaries": "6 Python tests passed; actual encrypted export/import/verify/status phases passed with Docker source alias adaptation"
+  },
+  "limits": [
+    "Native importer lost one private pending review; no source cutover allowed.",
+    "Installation ID is a configuration fence, not remote attestation at unchanged origin.",
+    "All-user identity/current-state mappings, complete API fidelity, full-stack recovery, Kubernetes deployment, performance/load and retirement remain open.",
+    "The full historical database suite did not pass: its OAuth downgrade fixture conflicts with migration092; broad run stopped during schema cleanup.",
+    "An initial runner cancellation fixture flaked under load; five focused repeats and final unit run passed."
+  ],
+  "sourceHead": "6e35c3d30f317e11fe00f9dadf4578436bb27e29",
+  "dirtyWorkingTree": true,
+  "recordingNote": "This aggregates bounded receipts; final file hashes are a recording snapshot, not an assertion that every historical test used those exact bytes.",
+  "sourceFilesAtRecording": {
+    "internal/server/forge_config.go": "ca614962b1ba04ccea5dfcf14d8953bb1bda81ace066c11be697263ace7c3ef7",
+    "internal/server/forge_binding.go": "42df79a7b134bad9e8750366a7080f62ede0380fc630f7b708cf7908323cc6c9",
+    "internal/server/workflows.go": "5565c3badb95496808f60d9bee569e2464caf3f09a6cc3c2fcf713727b474546",
+    "internal/workflowpath/path.go": "e29e095b38a7ee99bdcc4ba55a672139da639b9bbc4fa6f999962a4d578c9b87",
+    "scripts/forgejo-qualify.py": "87d6e6b30d7415475ccae3018f4d4b11fcf47f736e20d6b4c21e63fa0fe5d4fc",
+    "scripts/forgejo-migrate.py": "b904537b0f51ee141fd9ce3adef397a3ebee80c526222324b0144c492008fe83",
+    "scripts/forgejo-migration-smoke.py": "73a64cd77bde3f91c908248a0c14bc21ada56158ea3bc707a64a880ee01c5ab2",
+    "scripts/ci-compose-smoke.py": "d6bfb11a6d6776f552667169e2924710c5e494543de3f201779df5136efb9505",
+    "compose.forgejo.yaml": "5266ebe9c462130f728343ce455c6dc53eca562b313218341ed6a48f7bdfcbed"
+  },
+  "stagingRuntime": {
+    "profile": "forgejo-15.0.9",
+    "image": "codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413",
+    "checks": [
+      {
+        "script": "forgejo-native-smoke.py",
+        "passed": true,
+        "seconds": 10.595
+      },
+      {
+        "script": "forgejo-migration-smoke.py",
+        "passed": true,
+        "seconds": 15.744
+      }
+    ],
+    "cleanup": true,
+    "serverVersion": "15.0.9+gitea-1.22.0",
+    "openapiSHA256": "98d1a3969ec545b9dab7745de948d9bfacf19990589dabfe779a3991febd3208",
+    "passed": true,
+    "seconds": 63.664
+  }
+}

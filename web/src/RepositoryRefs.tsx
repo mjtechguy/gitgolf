@@ -7,7 +7,7 @@ import { repositoryClient } from './api';
 import { isCommitID, repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
 import type { RepositoryKey } from './gen/golf/v1/golf_pb';
-import { disclosureDismiss, Loading, More, nextPage, PanelError, privateQuery, shortSHA } from './RepositoryUI';
+import { disclosureDismiss, Loading, More, nextPage, PanelError, privateSnapshotQuery, shortSHA } from './RepositoryUI';
 
 export function RepositoryRefs({ repositoryKey, repositoryId, queryKey, location, defaultBranch, onLatest, latestPending, pinnedCommitId, unresolvedSource }: {
   repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; repositoryId: string; queryKey: readonly unknown[];
@@ -16,9 +16,9 @@ export function RepositoryRefs({ repositoryKey, repositoryId, queryKey, location
   const navigate = useNavigate(), details = useRef<HTMLDetailsElement>(null);
   const [search, setSearch] = useState(''), [kind, setKind] = useState<'branches' | 'tags'>('branches');
   const [tagsRequested, setTagsRequested] = useState(false);
-  const branchesQuery = useInfiniteQuery({ ...privateQuery, queryKey: [...queryKey, 'branches', repositoryId], initialPageParam: 1,
+  const branchesQuery = useInfiniteQuery({ ...privateSnapshotQuery, queryKey: [...queryKey, 'branches', repositoryId], initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => repositoryClient.listBranches({ repository: repositoryKey, repositoryId, page: { page: pageParam } }, { signal }), getNextPageParam: nextPage });
-  const tagsQuery = useInfiniteQuery({ ...privateQuery, retry: false, queryKey: [...queryKey, 'tags', repositoryId], initialPageParam: 1, enabled: tagsRequested,
+  const tagsQuery = useInfiniteQuery({ ...privateSnapshotQuery, retry: false, queryKey: [...queryKey, 'tags', repositoryId], initialPageParam: 1, enabled: tagsRequested,
     queryFn: async ({ pageParam, signal }) => {
       const response = await repositoryClient.listTags({ repository: repositoryKey, repositoryId, page: { page: pageParam } }, { signal });
       if (response.repositoryId !== repositoryId || response.tags.some(tag => !isCommitID(tag.commitId))) throw new ConnectError('The tags do not match this repository.', Code.FailedPrecondition);
@@ -53,7 +53,7 @@ export function RepositoryRefs({ repositoryKey, repositoryId, queryKey, location
         {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()}/> : query.isPending || query.isFetching && !query.isFetchingNextPage ? <Loading label={`Loading ${kind}…`}/> : <>
           <ul>{kind === 'branches' ? branches.filter(branch => matches(branch.name)).map(branch => <li key={branch.name}><Link {...repositoryOptions(location, { ref: branch.name, refKind: location.view === 'source' ? 'branch' : undefined, refName: location.view === 'source' ? branch.name : undefined, branch: branch.name, tag: undefined, path: '', historyPath: undefined })} onClick={()=>choose('branch',branch.name)}><GitBranch size={15}/><span>{branch.name}<small>Listed at {shortSHA(branch.commitId)}</small></span>{branch.protected ? <ShieldCheck size={15} aria-label="Protected branch"/> : null}</Link></li>) : tags.filter(tag => matches(tag.name)).map(tag => <li key={tag.name}><Link {...repositoryOptions(location, { ref: location.view === 'source' ? tag.name : tag.commitId, refKind: location.view === 'source' ? 'tag' : undefined, refName: location.view === 'source' ? tag.name : undefined, branch: '', tag: tag.name, path: '', historyPath: undefined })} onClick={()=>choose('tag',tag.name)}><Tag size={15}/><span>{tag.name}<small>Listed at {shortSHA(tag.commitId)}</small></span></Link></li>)}</ul>
           {!(kind === 'branches' ? branches : tags).some(item => matches(item.name)) ? <p className="muted">{search ? `No loaded ${kind} match your search.` : `No ${kind} available.`}</p> : null}
-          <More hasMore={query.hasNextPage} loading={query.isFetchingNextPage} load={() => void query.fetchNextPage()} label={kind}/>
+          <More hasMore={query.hasNextPage} loading={query.isFetchingNextPage} load={() => { details.current?.querySelector<HTMLInputElement>('input')?.focus(); void query.fetchNextPage(); }} label={kind}/>
         </>}
       </div>
     </details>

@@ -81,6 +81,92 @@ func TestInfrastructureValidation(t *testing.T) {
 		t.Fatal("credential domain downgrade accepted")
 	}
 }
+
+func cloudflareProfile() *golfv1.InfrastructureConnection {
+	return &golfv1.InfrastructureConnection{Label: "Managed Cloudflare account", Kind: "CLOUDFLARE", Backend: "CLOUDFLARE", Endpoint: "https://api.cloudflare.com", CloudflareAccountId: "0123456789abcdef0123456789abcdef"}
+}
+
+func TestInfrastructureCloudflareValidation(t *testing.T) {
+	p := cloudflareProfile()
+	c, err := validateInfrastructureConnection(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mutate := range []func(*golfv1.InfrastructureConnection){
+		func(p *golfv1.InfrastructureConnection) { p.Endpoint = "https://other.invalid" },
+		func(p *golfv1.InfrastructureConnection) { p.CloudflareAccountId = "../other" },
+		func(p *golfv1.InfrastructureConnection) { p.ArtifactsNamespace = "../private" },
+		func(p *golfv1.InfrastructureConnection) { p.Bucket = "private" },
+		func(p *golfv1.InfrastructureConnection) { p.AllowInsecure = true },
+		func(p *golfv1.InfrastructureConnection) { p.Kind = "OBJECT_STORAGE" },
+	} {
+		other := proto.Clone(p).(*golfv1.InfrastructureConnection)
+		mutate(other)
+		if _, err := validateInfrastructureConnection(other); err == nil {
+			t.Fatal("foreign endpoint, target or mixed kind accepted")
+		}
+	}
+	if _, err := validateInfrastructureSecret(c, &golfv1.InfrastructureConnectionCredential{CloudflareApiToken: "private-token"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []*golfv1.InfrastructureConnectionCredential{
+		{}, {CloudflareApiToken: "x\nsecret"}, {CloudflareApiToken: "x y"},
+		{CloudflareApiToken: "private-token", SessionToken: "mixed"},
+		{AccessKeyId: "private-access", SecretAccessKey: "private-secret"},
+	} {
+		if _, err := validateInfrastructureSecret(c, secret); err == nil {
+			t.Fatal("invalid Cloudflare credential accepted")
+		}
+	}
+	if _, err := validateInfrastructureSecret(infrastructureConnectionConfig{Kind: "OBJECT_STORAGE"}, &golfv1.InfrastructureConnectionCredential{CloudflareApiToken: "private-token", AccessKeyId: "key", SecretAccessKey: "secret"}); err == nil {
+		t.Fatal("management token passed into object storage")
+	}
+}
+
+func TestInfrastructureCloudflareProfilePostgres(t *testing.T) {
+	f := newManagementFixture(t)
+	enrollLocal(t, f, "alice", true)
+	enrollLocal(t, f, "bob", false)
+	admin := localLogin(t, f, "alice")
+	save := &golfv1.SaveInfrastructureConnectionRequest{Connection: cloudflareProfile(), ExpectedVersion: "0", Credential: &golfv1.InfrastructureConnectionCredential{CloudflareApiToken: "private-management-token"}, PasswordConfirmation: localTestPassword}
+	for _, session := range []loginResult{localLogin(t, f, "bob"), f.session(t, "alice", "pat"), f.session(t, "alice", "oauth")} {
+		if r := infrastructureRequest(f.s, session, "SaveInfrastructureConnection", save); r.Code != 403 {
+			t.Fatal("foreign management authority accepted", r.Code)
+		}
+	}
+	r := infrastructureRequest(f.s, admin, "SaveInfrastructureConnection", save)
+	var created golfv1.SaveInfrastructureConnectionResponse
+	if r.Code != 200 || protojson.Unmarshal(r.Body.Bytes(), &created) != nil || created.Connection.CloudflareAccountId != save.Connection.CloudflareAccountId || strings.Contains(r.Body.String(), "private-management-token") {
+		t.Fatal("management save or redaction failed", r.Code)
+	}
+	row, err := f.s.loadInfrastructureConnection(t.Context(), created.Connection.Id, 1)
+	if err != nil || bytes.Contains(row.EncryptedCredential, []byte("private-management-token")) {
+		t.Fatal("token stored in clear text", err)
+	}
+	plain, err := f.s.keyring.open(row.CredentialKeyID, infrastructureConnectionDomain, row.EncryptedCredential, row.CredentialBinding)
+	if err != nil || !strings.Contains(plain, "private-management-token") {
+		t.Fatal("encrypted token not recoverable", err)
+	}
+	save.Connection.Id, save.ExpectedVersion, save.RetainCredential, save.Credential = row.ID, "1", true, nil
+	save.Connection.CloudflareAccountId = "fedcba9876543210fedcba9876543210"
+	if r = infrastructureRequest(f.s, admin, "SaveInfrastructureConnection", save); r.Code != 400 {
+		t.Fatal("retained token widened to a different account", r.Code)
+	}
+	save.Connection.CloudflareAccountId = row.Config.CloudflareAccountID
+	save.Connection.Label = "Renamed account"
+	if r = infrastructureRequest(f.s, admin, "SaveInfrastructureConnection", save); r.Code != 200 || strings.Contains(r.Body.String(), "private-management-token") {
+		t.Fatal("same-account retention failed", r.Code)
+	}
+	if r = infrastructureRequest(f.s, admin, "SaveInfrastructureConnection", save); r.Code == 200 {
+		t.Fatal("stale management edit accepted")
+	}
+	if r = infrastructureRequest(f.s, admin, "ActivateInfrastructureConnection", &golfv1.ActivateInfrastructureConnectionRequest{Id: row.ID, ExpectedVersion: "2", ExpectedActiveRevision: "0", PasswordConfirmation: localTestPassword}); r.Code == 200 {
+		t.Fatal("management connection activated as object storage")
+	}
+	if r = infrastructureRequest(f.s, admin, "ListInfrastructureConnections", &golfv1.ListInfrastructureConnectionsRequest{}); r.Code != 200 || strings.Contains(r.Body.String(), "private-management-token") {
+		t.Fatal("management inventory exposed token", r.Code)
+	}
+}
 func TestInfrastructureProfileHistoryPostgres(t *testing.T) {
 	f := newManagementFixture(t)
 	enrollLocal(t, f, "alice", true)
@@ -221,7 +307,7 @@ func TestInfrastructureBrowserBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, method := range []string{"ListInfrastructureConnections", "SaveInfrastructureConnection", "TestInfrastructureConnection", "ActivateInfrastructureConnection"} {
+	for _, method := range []string{"ListInfrastructureConnections", "SaveInfrastructureConnection", "TestInfrastructureConnection", "ActivateInfrastructureConnection", "ProvisionCloudflareEnvironmentResources", "GetCloudflareEnvironmentResources", "ListCloudflareEnvironmentResources", "RemoveCloudflareEnvironmentResources"} {
 		route := "/golf.v1.InfrastructureConnectionService/" + method
 		request := httptest.NewRequest("POST", "/rpc"+route, strings.NewReader("{}"))
 		request.Header.Set("Origin", s.config.PublicURL)

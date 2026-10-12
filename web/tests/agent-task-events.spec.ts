@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { test,expect,type Page } from '@playwright/test';
 import { create,toJson } from '@bufbuild/protobuf';
 import { reject,request,respond } from './rpc';
@@ -9,7 +10,7 @@ async function fixture(page:Page){
  await page.route('**/rpc/**',async route=>{const method=new URL(route.request().url()).pathname.split('/').at(-1)!;state.methods.push(method);
  if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
  if(method==='GetSession')return state.ended?respond(route,GetSessionResponseSchema,{}):respond(route,GetSessionResponseSchema,{user:{id:actor,login:'alex'}});
- if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+ if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
  if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:repo,name:'private',fullName:'alex/private',defaultBranch:'main',private:true}});
  if(method==='WatchRepository'&&state.live){await new Promise(resolve=>setTimeout(resolve,180));const raw=route.request().postDataBuffer()!,input=JSON.parse(raw.subarray(5).toString()),cursor=String(state.cursor);const event=toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:repo,cursor,kind:input.cursor?input.cursor===cursor?'heartbeat':'change':'reset',topics:input.cursor!==cursor?['agents']:[]}));return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([envelope(0,event),envelope(0,{repositoryId:repo,cursor,kind:'reconnect'}),envelope(2,{})])});}
  if(method==='GetActionRun'){if(state.deniedTask)return reject(route,'permission_denied','Current task access revoked.');const task={id,repository:{owner:'alex',name:'private'},state:state.taskState,commitId:commit,version:'1',createdAt:'2026-10-01T12:00:00Z',workerId:'worker-1',attemptId:state.attempt,modelId:'codex-model',tokens:'0',summary:'Private recorded result',patch:'diff --git a/private.ts b/private.ts\n--- a/private.ts\n+++ b/private.ts\n@@ -0,0 +1 @@\n+const secret = true;\n'};return respond(route,GetActionRunResponseSchema,{repositoryId:repo,summary:{ref:{kind:ActionRunKind.CODING_TASK,id},repositoryId:repo,ownerId:actor,title:'Coding task',state:task.state,commitId:commit,createdAt:task.createdAt,workerId:task.workerId,attemptId:task.attemptId,modelId:task.modelId},detail:{case:'task',value:task}});}

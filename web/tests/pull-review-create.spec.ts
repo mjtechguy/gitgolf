@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create, clone } from '@bufbuild/protobuf';
@@ -24,7 +25,7 @@ async function backend(page:Page){
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
   if(method==='Logout'){if(s.logoutHold)await s.logoutHold;s.signedIn=false;return respond(route,LogoutResponseSchema,{});}
   if(method==='WatchRepository')return reject(route,'unimplemented','No stream in this unary fixture.');
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository});
   if(method==='GetPullRequest')return s.detailDenied?reject(route,'permission_denied','PR access revoked.'):respond(route,GetPullRequestResponseSchema,{pullRequest:s.pull});

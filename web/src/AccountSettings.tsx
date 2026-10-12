@@ -1,10 +1,13 @@
+import { NativeInstallationSettings } from './NativeForge';
 import { AgentUsagePanel } from './AgentUsagePanel';
+import { useRuntimeCapabilities } from './useRuntimeCapabilities';
+import { runtimeFeature, settingAvailable } from './runtimeCapabilities';
 import { AgentUsageScope } from './gen/golf/v1/golf_pb';
 import { ProfileSettings } from './ProfileSettings';
 import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
-import { lazy, Suspense, useMemo, type ReactNode } from 'react';
-import { Link } from '@tanstack/react-router';
+import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
+import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { Rocket, Server, MailPlus, Webhook, History, KeyRound, Plug, ShieldCheck, Tags, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
@@ -17,14 +20,15 @@ const OwnEmailNotifications = lazy(() => import('./EmailNotificationSettings').t
 const RepositoryAccessObservation = lazy(() => import('./RepositoryAccessObservation').then(module => ({ default: module.RepositoryAccessObservation })));
 
 export function AccountLayout({ children }: { children: ReactNode }) {
+  const runtime = useRuntimeCapabilities(), localAuth = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.local-auth');
   return <div className="account-layout"><nav className="account-navigation" aria-label="Account settings"><span className="eyebrow">PERSONAL SETTINGS</span>
     <Link to="/account/settings" activeOptions={{ exact:true }}><UserRound size={18} />Profile</Link>
-    <Link to="/account/security" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sign-in and security</Link>
+    {localAuth && <Link to="/account/security" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sign-in and security</Link>}
     <Link to="/account/invitations" activeOptions={{ exact:true }}><MailPlus size={18} />Invitations</Link>
     <Link to="/account/connections" activeOptions={{exact:true}}><Plug size={18}/>Provider connections</Link>
     <Link to="/account/agents" activeOptions={{ exact:true }}><KeyRound size={18} />Coding agents</Link>
-    <Link to="/account/sessions" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sessions</Link>
-    <Link to="/account/ssh-keys" activeOptions={{ exact:true }}><KeyRound size={18} />SSH keys</Link>
+    {localAuth && <Link to="/account/sessions" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sessions</Link>}
+    {localAuth && <Link to="/account/ssh-keys" activeOptions={{ exact:true }}><KeyRound size={18} />SSH keys</Link>}
     <Link to="/account/api-credentials" activeOptions={{ exact:true }}><KeyRound size={18} />API credentials</Link>
     <Link to="/audit" activeOptions={{ exact:true }}><History size={18} />Account activity</Link>
   </nav><div className="account-content">{children}</div></div>;
@@ -40,30 +44,46 @@ export function OrganizationSettingsLayout({ children, organization }: { childre
 }
 
 export function RepositorySettingsLayout({ children, owner, name }: { children: ReactNode; owner: string; name: string }) {
-  return <div className="account-layout"><nav className="account-navigation" aria-label="Repository settings"><span className="eyebrow">REPOSITORY SETTINGS</span>
-    <Link to="/$owner/$name/settings" params={{ owner, name }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
-    <Link to="/$owner/$name/settings/access" params={{ owner, name }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Access</Link>
-    <Link to="/$owner/$name/settings/git" params={{owner,name}} activeOptions={{exact:true}}><KeyRound size={18}/>Git credentials</Link>
-    <Link to="/$owner/$name/settings/runners" params={{ owner, name }} activeOptions={{ exact:true }}><Server size={18}/>Runners</Link>
-    <Link to="/$owner/$name/settings/rules" params={{ owner, name }} activeOptions={{ exact:true }}><ShieldCheck size={18}/>Rules and merge policy</Link>
-    <Link to="/$owner/$name/settings/secrets" params={{ owner, name }} activeOptions={{ exact:true }}><KeyRound size={18}/>Secrets and variables</Link>
-    <Link to="/$owner/$name/settings/environments" params={{ owner, name }} activeOptions={{ exact:true }}><Rocket size={18}/>Environments</Link>
-    <Link to="/$owner/$name/settings/webhooks" params={{ owner, name }} activeOptions={{exact:true}}><Webhook size={18}/>Webhooks</Link>
-    <Link to="/$owner/$name/settings/workflows" params={{ owner, name }} activeOptions={{ exact: true }}><History size={18} />Workflows</Link>
-  </nav><div className="account-content">{children}</div></div>;
+  const runtime = useRuntimeCapabilities(), navigate = useNavigate();
+  const manifest = runtime.isError ? undefined : runtime.data;
+  const pathname = useLocation({select: location => location.pathname});
+  const entries = [
+    { label: 'General', group: '', suffix: '', icon: UserRound, enabled: runtimeFeature(manifest, 'settings.repository-general'), to: '/$owner/$name/settings' },
+    { label: 'Access', group: 'Access and security', suffix: '/access', icon: ShieldCheck, enabled: runtimeFeature(manifest, 'settings.repository-access'), to: '/$owner/$name/settings/access' },
+    { label: 'Git credentials', group: 'Access and security', suffix: '/git', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-git'), to: '/$owner/$name/settings/git' },
+    { label: 'Rules and merge policy', group: 'Access and security', suffix: '/rules', icon: ShieldCheck, enabled: runtimeFeature(manifest, 'settings.repository-rules'), to: '/$owner/$name/settings/rules' },
+    { label: 'Workflows', group: 'Automation', suffix: '/workflows', icon: History, enabled: runtimeFeature(manifest, 'settings.repository-workflows'), to: '/$owner/$name/settings/workflows' },
+    { label: 'Runners', group: 'Automation', suffix: '/runners', icon: Server, enabled: settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.runners'), to: '/$owner/$name/settings/runners' },
+    { label: 'Secrets and variables', group: 'Automation', suffix: '/secrets', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-secrets'), to: '/$owner/$name/settings/secrets' },
+    { label: 'Environments', group: 'Automation', suffix: '/environments', icon: Rocket, enabled: runtimeFeature(manifest, 'settings.repository-environments'), to: '/$owner/$name/settings/environments' },
+    { label: 'Webhooks', group: 'Integrations', suffix: '/webhooks', icon: Webhook, enabled: runtimeFeature(manifest, 'settings.repository-webhooks'), to: '/$owner/$name/settings/webhooks' },
+  ] as const;
+  const availability = (enabled: boolean) => enabled ? '' : runtime.isPending ? 'Checking…' : runtime.isError ? 'Status unknown' : 'Unavailable';
+  const current = entries.find(entry => pathname.endsWith('/settings'+entry.suffix));
+  return <div className="account-layout repository-settings-layout">
+    <label className="settings-section-picker">Settings section<select aria-label="Settings section" value={current?.to || ''} onChange={event=>{const entry=entries.find(item=>item.to===event.target.value);if(entry)void navigate({to:entry.to,params:{owner,name}});}}>
+      {!current ? <option value="" disabled>Current settings page</option> : null}
+      {entries.map(entry=><option key={entry.to} value={entry.to}>{entry.label}{availability(entry.enabled) ? ` — ${availability(entry.enabled)}` : ''}</option>)}
+    </select></label>
+    <nav className="account-navigation" aria-label="Repository settings">
+      {['', 'Access and security', 'Automation', 'Integrations'].map(group => {const items=entries.filter(entry=>entry.group===group);return items.length ? <div className="settings-navigation-group" key={group}>{group?<h2>{group}</h2>:null}{items.map(entry=><Link key={entry.to} to={entry.to} params={{owner,name}} activeOptions={{exact:true}}><entry.icon size={18} aria-hidden="true"/><span className="settings-navigation-label">{entry.label}{availability(entry.enabled) ? <small>{availability(entry.enabled)}</small> : null}</span></Link>)}</div>:null;})}
+    </nav><div className="account-content">{children}</div>
+  </div>;
 }
 
 export function AccountSettings({ user, signingOut }: { user: User; signingOut: boolean }) {
+  const runtime = useRuntimeCapabilities();
+  const native = runtime.data?.runtimeProfile === 'cloudflare-native';
   return <section className="page-stack" aria-labelledby="settings-title">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1 id="settings-title"><UserRound size={29} />Profile</h1><p>Your identity, access and account preferences.</p></div></header>
     <ProfileSettings key={user.id} userId={user.id} signingOut={signingOut} isInstanceAdmin={user.isInstanceAdmin} />
-    <Suspense fallback={<Loading label="Opening notification settings…" />}><OwnEmailNotifications userId={user.id} signingOut={signingOut} /></Suspense>
+    {native ? <NativeInstallationSettings/> : runtime.isSuccess ? <Suspense fallback={<Loading label="Opening notification settings…" />}><OwnEmailNotifications userId={user.id} signingOut={signingOut} /></Suspense> : null}
     <SettingsInventory scope="personal" />
   </section>;
 }
 
 export type SettingsScope = 'personal' | 'organization' | 'repository' | 'instance';
-type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/connections' | '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/runners' | '/admin/settings/notifications' | '/admin/settings/infrastructure' | '/admin/settings' | '/admin/agents'; hash?: string };
+type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned' | 'Unavailable'; unavailable?: boolean; detail: string; task: string; to?: '/account/connections' | '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/runners' | '/admin/settings/notifications' | '/admin/settings/infrastructure' | '/admin/settings' | '/admin/agents'; hash?: string };
 const inventory: Record<SettingsScope, SettingEntry[]> = {
   personal: [
     { id: 'profile', section: 'Profile and email', state: 'Partial', detail: 'Edit public profile fields above. Golf sign-in email changes have a separate security page; username changes and verified-email password recovery remain planned. Notification mailbox verification is configured separately.', task: 'P1.3 / G1' },
@@ -123,15 +143,20 @@ function settingsColumns(repository?: { owner: string; name: string }, organizat
     <details className="metadata-details"><summary aria-label={`Scope and limitations for ${row.original.section}`}><span className="visibility">{row.original.state}</span>{' '}Scope and limitations</summary><p>{row.original.detail}</p><small><a href="https://github.com/ghost-hardened-open-source/golf-git/blob/main/GOLF_IMPLEMENTATION_PLAN.md" target="_blank" rel="noreferrer">Plan tasks: {row.original.task}</a></small></details>
   </div> },
   { id: 'actions', header: 'Action', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => {
+    if (row.original.unavailable) return <span className="muted">Unavailable on this runtime</span>;
     const route = repository && ({ general: '/$owner/$name/settings', runners: '/$owner/$name/settings/runners', rules: '/$owner/$name/settings/rules', secrets: '/$owner/$name/settings/secrets', deployments: '/$owner/$name/settings/environments', access: '/$owner/$name/settings/access', ci: '/$owner/$name/settings/workflows', agents: '/$owner/$name/settings/workflows', events: '/$owner/$name/settings/webhooks' } as const)[row.original.id as 'general' | 'runners' | 'rules' | 'secrets' | 'access' | 'ci' | 'agents' | 'events' | 'deployments'];
     return organization && row.original.id === 'secrets' ? <Link className="text-button" to="/organizations/$organization/settings/secrets" params={{ organization }} aria-label="Open Secrets, variables and OIDC">Open</Link> : route && repository ? <Link className="text-button" to={route} params={repository} hash={row.original.id === 'general' ? 'repository-general-title' : undefined} aria-label={`Open ${row.original.section}`}>Open</Link> : row.original.to ? <Link className="text-button" to={row.original.to} hash={row.original.hash}>Open</Link> : <span className="muted">{row.original.state === 'Planned' ? 'Not configurable yet' : row.original.state === 'Partial' ? 'See available scope controls' : 'No browser editor'}</span>;
   } },
 ]; }
 
 export function SettingsInventory({ scope, generalObservation, repository, organization, accessTarget, userId }: { scope: SettingsScope; organization?: string; repository?: { owner: string; name: string }; generalObservation?: { canEdit: boolean; implemented: boolean; issues: string; wiki: string }; accessTarget?: AccessObservationTarget; userId?: string }) {
+ const runtime = useRuntimeCapabilities();
+ const [expanded, setExpanded] = useState(false);
  const columns = useMemo(() => settingsColumns(scope === 'repository' && repository ? { owner: repository.owner, name: repository.name } : undefined, scope === 'organization' ? organization : undefined), [scope, repository?.owner, repository?.name, organization]);
- const entries = scope === 'repository' && generalObservation ? inventory[scope].map((entry) => entry.id === 'general' ? { ...entry, state: generalObservation.implemented ? 'Ready' as const : 'Partial' as const, detail: `Verified current configuration: issues ${generalObservation.issues.toLowerCase()}, wiki ${generalObservation.wiki.toLowerCase()}. ${generalObservation.implemented ? 'Website, topics, default branch and tracker/wiki configuration editors are qualified.' : 'Editor support unavailable.'} ${generalObservation.canEdit ? 'You can administer these settings.' : 'You have view-only access.'} Wiki configuration does not include a Golf wiki workspace.` } : entry) : inventory[scope];
-  return <section className="browser-panel credential-list-panel" aria-labelledby={`${scope}-inventory-title`}><div className="browser-panel-heading"><h2 id={`${scope}-inventory-title`}>Settings coverage</h2><span className="visibility">Current preview</span></div><DataTable data={entries} columns={columns} getRowId={(entry) => entry.id} label={`${scope.charAt(0).toUpperCase()}${scope.slice(1)} settings`} /><p className="panel-footnote">Availability describes this build. Planned rows document missing enforcement and do not grant execution or administration. Search and sorting cover this displayed inventory.</p>{scope === 'repository' && repository && accessTarget && userId ? <Suspense fallback={<Loading label="Opening access inspection…" />}><RepositoryAccessObservation key={JSON.stringify([userId,repository.owner,repository.name,accessTarget])} userId={userId} owner={repository.owner} name={repository.name} target={accessTarget}/></Suspense> : null}</section>;
+ const originalEntries = scope === 'repository' && generalObservation ? inventory[scope].map((entry) => entry.id === 'general' ? { ...entry, state: generalObservation.implemented ? 'Ready' as const : 'Partial' as const, detail: `Verified current configuration: issues ${generalObservation.issues.toLowerCase()}, wiki ${generalObservation.wiki.toLowerCase()}. ${generalObservation.implemented ? runtime.data?.runtimeProfile === 'cloudflare-native' ? 'Description, website, topics and an existing default branch are editable; feature policies are operator-managed.' : 'Website, topics, default branch and tracker/wiki configuration editors are qualified.' : 'Editor support unavailable.'} ${generalObservation.canEdit ? 'You can administer these settings.' : 'You have view-only access.'} Wiki configuration does not include a Golf wiki workspace.` } : entry) : inventory[scope];
+ const requirements: Record<string, string> = scope === 'personal' ? { authentication: 'settings.local-auth', sessions: 'settings.local-auth', keys: 'settings.local-auth' } : scope === 'instance' ? { infrastructure: 'settings.infrastructure', runners: 'settings.runners', connections: 'settings.notifications', enrollment: 'settings.local-auth', security: 'settings.local-auth' } : scope === 'repository' ? { runners: 'settings.runners', ...(runtime.data?.runtimeProfile === 'cloudflare-native' ? { general: 'settings.repository-general', access: 'settings.repository-access', rules: 'settings.repository-rules', ci: 'settings.repository-workflows', secrets: 'settings.repository-secrets', deployments: 'settings.repository-environments', agents: 'settings.repository-agents', events: 'settings.repository-webhooks', danger: 'settings.repository-lifecycle' } : {}) } : {};
+ const entries: SettingEntry[] = originalEntries.map(entry => requirements[entry.id] && !settingAvailable(runtime.isError ? undefined : runtime.data, requirements[entry.id]!) ? { ...entry, state: 'Unavailable', unavailable: true, detail: runtime.data?.capabilities.find(c => c.id === requirements[entry.id])?.reason || 'This installation has not confirmed support for this settings editor.' } : entry);
+  return <details className="settings-diagnostics" onToggle={event=>setExpanded(event.currentTarget.open)}><summary>Capability diagnostics</summary>{expanded ? <section className="browser-panel credential-list-panel" aria-labelledby={`${scope}-inventory-title`}><div className="browser-panel-heading"><h2 id={`${scope}-inventory-title`}>Settings coverage</h2><span className="visibility">Current preview</span></div><DataTable data={entries} columns={columns} getRowId={(entry) => entry.id} label={`${scope.charAt(0).toUpperCase()}${scope.slice(1)} settings`} /><p className="panel-footnote">Availability describes this build. Planned rows document missing enforcement and do not grant execution or administration. Search and sorting cover this displayed inventory.</p>{scope === 'repository' && runtimeFeature(runtime.data, 'settings.repository-access') && repository && accessTarget && userId ? <Suspense fallback={<Loading label="Opening access inspection…" />}><RepositoryAccessObservation key={JSON.stringify([userId,repository.owner,repository.name,accessTarget])} userId={userId} owner={repository.owner} name={repository.name} target={accessTarget}/></Suspense> : null}</section> : null}</details>;
 }
 
 export function ScopedSettings({ scope, name, userId, signingOut=false }: { signingOut?:boolean; scope: 'organization' | 'instance'; name?: string; userId: string }) {

@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { test, expect, type Page } from '@playwright/test';
 import { create, toJson } from '@bufbuild/protobuf';
 import { GetSessionResponseSchema, GetAuthenticationOptionsResponseSchema, LogoutResponseSchema, ListRepositoriesResponseSchema,
@@ -9,7 +10,7 @@ import { request, respond, reject } from './rpc';
 const repositoryId='11', original='a'.repeat(40), next='b'.repeat(40), old='c'.repeat(40), blob='d'.repeat(40);
 const repository={id:repositoryId,name:'readable',fullName:'alex/readable',description:'Private readable repository',private:true,defaultBranch:'main',cloneUrl:'https://forge.example/alex/readable.git'};
 async function fixture(page:Page){
- const state={signedIn:true,defaultBranch:'main',head:original,live:false,denied:false,resolverError:'',bad:'',held:undefined as Promise<void>|undefined,
+ const state={signedIn:true,defaultBranch:'main',head:original,live:false,denied:false,resolverError:'',bad:'',contentHeld:undefined as Promise<void>|undefined,held:undefined as Promise<void>|undefined,
   resolvers:[] as ReturnType<typeof request<typeof ResolveRepositorySourceRequestSchema>>[],reads:[] as ReturnType<typeof request<typeof GetContentsRequestSchema>>[],images:[] as ReturnType<typeof request<typeof GetRepositoryImageRequestSchema>>[]};
  await page.route('**/rpc/**',async route=>{
   const method=route.request().url().split('/').at(-1);
@@ -19,7 +20,7 @@ async function fixture(page:Page){
   if(!state.signedIn)return reject(route,'unauthenticated','Session expired.');
   if(method==='GetRepository')return state.denied?reject(route,'permission_denied','Private repository inaccessible.'):respond(route,GetRepositoryResponseSchema,{repository:{...repository,defaultBranch:state.defaultBranch}});
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='WatchRepository'&&state.live){
    const frame=(flag:number,value:unknown)=>{const body=Buffer.from(JSON.stringify(value)),header=Buffer.alloc(5);header[0]=flag;header.writeUInt32BE(body.length,1);return Buffer.concat([header,body]);};
    await new Promise(resolve=>setTimeout(resolve,120));
@@ -47,7 +48,7 @@ async function fixture(page:Page){
    return respond(route,ResolveRepositorySourceResponseSchema,data);
   }
   if(method==='GetContents'){
-   const input=request(route,GetContentsRequestSchema);state.reads.push(input);expect(input.repositoryId).toBe(repositoryId);expect([original,next,old]).toContain(input.ref);
+   const input=request(route,GetContentsRequestSchema);state.reads.push(input);if(state.contentHeld)await state.contentHeld;expect(input.repositoryId).toBe(repositoryId);expect([original,next,old]).toContain(input.ref);
    if(state.denied)return reject(route,'permission_denied','Private source inaccessible.');
    const path=input.path,entry=(name:string,type=SourceEntryType.FILE)=>({name:path?name.split('/').at(-1):name,path:path?`${path}/${name}`:name,sha:blob,type,size:20n});
    if(!path||path==='docs')return respond(route,GetContentsResponseSchema,{repositoryId,commitId:input.ref,path,kind:SourceEntryType.DIRECTORY,entries:!path?[entry('docs',SourceEntryType.DIRECTORY),entry('README.md')]:[entry('README.md'),entry('file.ts')]});
@@ -154,4 +155,14 @@ for(const theme of ['dark','light'])for(const width of [390,1280])test(`readable
  await page.getByLabel('Source actions',{exact:true}).click();await page.getByRole('button',{name:'Copy source permalink',exact:true}).click();expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(`${new URL(page.url()).origin}/alex/readable/blob/${original}/docs/file.ts#L1`);await page.keyboard.press('Escape');await expect(page.locator('.source-action-options')).toBeHidden();
  await page.getByRole('navigation',{name:'Source path'}).getByRole('link',{name:'docs',exact:true}).click();await expect(page.locator('.source-tree')).toBeVisible();await page.goBack();await expect(preview(page)).toContainText(original);expect(new URL(page.url()).hash).toBe('#L1');
  state.head=next;await page.reload();await expect(preview(page)).toContainText(next);expect(new URL(page.url()).pathname).toBe('/alex/readable/blob/main/docs/file.ts');expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
+});
+
+
+test('source refresh keeps the current immutable file painted until a denial clears it',async({page})=>{
+ const state=await fixture(page);await page.goto(typed('branch','main'));await expect(preview(page)).toContainText(original);
+ let release!:()=>void;state.contentHeld=new Promise(resolve=>release=resolve);
+ const before=state.reads.length;await page.getByRole('button',{name:'Refresh source',exact:true}).click();
+ await expect.poll(()=>state.reads.length).toBeGreaterThan(before);
+ await expect(preview(page)).toContainText(original);await expect(page.getByText('Reading source…',{exact:true})).toHaveCount(0);
+ state.denied=true;release();await expect(preview(page)).toHaveCount(0);await expect(page.getByRole('alert')).toContainText('Private source inaccessible.');
 });

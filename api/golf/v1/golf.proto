@@ -194,6 +194,7 @@ service RepositoryService {
   rpc GetRepositoryImage(GetRepositoryImageRequest) returns (GetRepositoryImageResponse);
   rpc ResolveRepositorySource(ResolveRepositorySourceRequest) returns (ResolveRepositorySourceResponse);
   rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
+  rpc GetRepositoryFileIndex(GetRepositoryFileIndexRequest) returns (GetRepositoryFileIndexResponse);
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
   rpc GetPullRequestDiscussion(GetPullRequestDiscussionRequest) returns (GetPullRequestDiscussionResponse);
   rpc GetIssue(GetIssueRequest) returns (GetIssueResponse);
@@ -260,6 +261,11 @@ service AuditService {
   rpc ListAuditEvents(ListAuditEventsRequest) returns (ListAuditEventsResponse);
 }
 
+// Read-only administrator observations; not billing or mutation authority.
+service OperationsService {
+  rpc GetOperationsDashboard(GetOperationsDashboardRequest) returns (GetOperationsDashboardResponse);
+}
+
 service CapabilityService {
   rpc ListCapabilities(ListCapabilitiesRequest) returns (ListCapabilitiesResponse);
 }
@@ -270,7 +276,7 @@ message User {
   string login = 2;
   string full_name = 3;
   string avatar_url = 4;
-  // Golf instance role; only populated for a verified local-password session.
+  // Golf administration; verified local password or explicitly enrolled native Access session.
   bool is_instance_admin = 5;
 }
 
@@ -390,7 +396,12 @@ message GetRepositoryCreationResponse {
   Repository repository = 2;
 }
 message GetRepositoryRequest { RepositoryKey repository = 1; }
-message GetRepositoryResponse { Repository repository = 1; }
+message GetRepositoryResponse {
+  Repository repository = 1;
+  // Optional current default-branch observation from the same authorized read.
+  // Clients pin this commit; this is not a lasting permission grant.
+  RepositorySourceSelection source_selection = 2;
+}
 
 message Branch {
   string name = 1;
@@ -591,6 +602,8 @@ message GetContentsRequest {
   string repository_id = 4;
   // Exact-ID/full-SHA directory optimization; unmatched entries omit the observation.
   bool include_latest_changes = 5;
+  // Pages are bound to repository_id, ref and literal path. Omit for legacy callers.
+  PageRequest page = 6;
 }
 message GetContentsResponse {
   string commit_id = 1;
@@ -599,6 +612,20 @@ message GetContentsResponse {
   repeated SourceEntry entries = 4;
   SourceFile file = 5;
   string repository_id = 6;
+  PageResponse page = 7;
+  uint32 total_entries = 8;
+}
+
+// Complete bounded file-path inventory at an exact snapshot; never partial results.
+message GetRepositoryFileIndexRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string commit_id = 3;
+}
+message GetRepositoryFileIndexResponse {
+  string repository_id = 1;
+  string commit_id = 2;
+  repeated string paths = 3;
 }
 
 enum IssueState {
@@ -1044,7 +1071,10 @@ message Capability {
   string reason = 4;
 }
 message ListCapabilitiesRequest {}
-message ListCapabilitiesResponse { repeated Capability capabilities = 1; }
+message ListCapabilitiesResponse {
+  repeated Capability capabilities = 1;
+  string runtime_profile = 2;
+}
 
 message GetAuthenticationOptionsRequest {}
 message GetAuthenticationOptionsResponse {
@@ -1657,6 +1687,10 @@ service InfrastructureConnectionService {
  rpc SaveInfrastructureConnection(SaveInfrastructureConnectionRequest) returns (SaveInfrastructureConnectionResponse);
  rpc TestInfrastructureConnection(TestInfrastructureConnectionRequest) returns (TestInfrastructureConnectionResponse);
  rpc ActivateInfrastructureConnection(ActivateInfrastructureConnectionRequest) returns (ActivateInfrastructureConnectionResponse);
+ rpc ProvisionCloudflareEnvironmentResources(ProvisionCloudflareEnvironmentResourcesRequest) returns (ProvisionCloudflareEnvironmentResourcesResponse);
+ rpc GetCloudflareEnvironmentResources(GetCloudflareEnvironmentResourcesRequest) returns (GetCloudflareEnvironmentResourcesResponse);
+ rpc ListCloudflareEnvironmentResources(ListCloudflareEnvironmentResourcesRequest) returns (ListCloudflareEnvironmentResourcesResponse);
+ rpc RemoveCloudflareEnvironmentResources(RemoveCloudflareEnvironmentResourcesRequest) returns (RemoveCloudflareEnvironmentResourcesResponse);
 }
 message InfrastructureConnection {
  string id = 1;
@@ -1677,12 +1711,15 @@ message InfrastructureConnection {
  string prefix = 16;
  bool allow_insecure = 17;
  string created_at = 18;
+ string cloudflare_account_id = 19;
+ string artifacts_namespace = 20;
 }
 message InfrastructureConnectionCredential {
  string database_password = 1;
  string access_key_id = 2;
  string secret_access_key = 3;
  string session_token = 4;
+ string cloudflare_api_token = 5;
 }
 message ListInfrastructureConnectionsRequest { PageRequest page = 1; }
 message ListInfrastructureConnectionsResponse { repeated InfrastructureConnection connections = 1; PageResponse page = 2; string active_revision = 3; string active_connection_id = 4; string active_connection_version = 5; repeated InfrastructureConnection deployment_defaults = 6; InfrastructureConnection active_connection = 7; }
@@ -1695,10 +1732,50 @@ message SaveInfrastructureConnectionRequest {
 }
 message SaveInfrastructureConnectionResponse { InfrastructureConnection connection = 1; }
 message TestInfrastructureConnectionRequest { string id = 1; string expected_version = 2; string password_confirmation = 3; }
-message TestInfrastructureConnectionResponse { bool accessible = 1; string result_code = 2; string checked_at = 3; string qualification_scope = 4; }
+message InfrastructureCapability { string service = 1; string state = 2; string scope = 3; uint32 http_status = 4; }
+message TestInfrastructureConnectionResponse { bool accessible = 1; string result_code = 2; string checked_at = 3; string qualification_scope = 4; repeated InfrastructureCapability capabilities = 5; }
 
 message ActivateInfrastructureConnectionRequest { string id = 1; string expected_version = 2; string password_confirmation = 3; string expected_active_revision = 4; }
 message ActivateInfrastructureConnectionResponse { InfrastructureConnection connection = 1; string active_revision = 2; }
+
+// Operator-managed empty D1/R2 resources. READY never means an application or
+// protected preview was deployed. Original operation identities are single-use.
+message CloudflareEnvironmentResources {
+ string operation_id = 1;
+ RepositoryEnvironmentTarget target = 2;
+ string environment_id = 3;
+ string environment_version = 4;
+ string connection_id = 5;
+ string connection_version = 6;
+ string account_id = 7;
+ string state = 8;
+ string d1_name = 9;
+ string d1_id = 10;
+ string d1_state = 11;
+ string r2_bucket = 12;
+ string r2_state = 13;
+ string actor_id = 14;
+ string created_at = 15;
+ string updated_at = 16;
+ string reason = 17;
+ string r2_created_at = 18;
+}
+message ProvisionCloudflareEnvironmentResourcesRequest {
+ RepositoryEnvironmentTarget target = 1;
+ string environment_id = 2;
+ string environment_version = 3;
+ string connection_id = 4;
+ string connection_version = 5;
+ string operation_id = 6;
+ string password_confirmation = 7;
+}
+message ProvisionCloudflareEnvironmentResourcesResponse { CloudflareEnvironmentResources resources = 1; }
+message GetCloudflareEnvironmentResourcesRequest { string operation_id = 1; }
+message GetCloudflareEnvironmentResourcesResponse { CloudflareEnvironmentResources resources = 1; }
+message ListCloudflareEnvironmentResourcesRequest { RepositoryEnvironmentTarget target = 1; string environment_id = 2; PageRequest page = 3; }
+message ListCloudflareEnvironmentResourcesResponse { repeated CloudflareEnvironmentResources resources = 1; PageResponse page = 2; }
+message RemoveCloudflareEnvironmentResourcesRequest { string operation_id = 1; string password_confirmation = 2; }
+message RemoveCloudflareEnvironmentResourcesResponse { CloudflareEnvironmentResources resources = 1; }
 
 // Own public profile only. Email, login and authentication changes are separate.
 service ProfileService {
@@ -2411,6 +2488,7 @@ enum RepositoryOverviewSectionState {
   REPOSITORY_OVERVIEW_SECTION_STATE_UNAVAILABLE = 1;
   REPOSITORY_OVERVIEW_SECTION_STATE_AVAILABLE = 2;
   REPOSITORY_OVERVIEW_SECTION_STATE_ERROR = 3;
+  REPOSITORY_OVERVIEW_SECTION_STATE_INDEXING = 4;
 }
 message RepositoryLanguage {
   string name = 1;
@@ -2420,6 +2498,8 @@ message RepositoryLanguage {
 message GetRepositoryOverviewRequest {
   RepositoryKey repository = 1;
   string repository_id = 2;
+  // Optional immutable source for backends with snapshot-bound indexes.
+  string ref = 3;
 }
 message GetRepositoryOverviewResponse {
   RepositoryKey repository = 1;
@@ -2435,6 +2515,11 @@ message GetRepositoryOverviewResponse {
   repeated RepositoryLanguage languages = 10;
   RepositoryOverviewSectionState languages_state = 11;
   RepositoryOverviewSectionState licenses_state = 12;
+  string indexed_commit_id = 13;
+  uint32 indexed_files = 14;
+  string language_classifier = 15;
+  uint32 indexing_processed = 16;
+  repeated string license_paths = 17;
 }
 
 // Browser-only unified inventory; each kind retains its existing visibility.
@@ -3584,6 +3669,9 @@ message GitCredential {
  string id = 1; string label = 2; string repository_id = 3; string owner_id = 4;
  GitCredentialMode mode = 5; string created_at = 6; string expires_at = 7;
  string revoked_at = 8; string source_session_id = 9; bool source_session_active = 10;
+ // Native Access credentials bind to Golf identity/grant generations, not a browser session.
+ // When identity_bound is true, source_session_id is empty and source_session_active is false.
+ bool identity_bound = 11; bool source_identity_active = 12;
 }
 message CreateGitCredentialRequest {
  RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3;
@@ -4205,6 +4293,8 @@ message PrepareStaticDeploymentRequest { RepositoryEnvironmentTarget target=1; s
 message PrepareStaticDeploymentResponse {
  RepositoryEnvironmentTarget target=1; WorkflowArtifact artifact=2; repeated StaticPreviewRoot roots=3;
  string manifest_sha256=4; string target_fingerprint=5; bool available=6; string reason=7;
+ // An operator-pinned remote target fixes this identity before provider effects.
+ string reserved_deployment_id=8;
 }
 message CreateRepositoryDeploymentRequest {
  RepositoryEnvironmentTarget target=1; string deployment_id=2; string run_id=3; string attempt_id=4;
@@ -5035,4 +5125,34 @@ message ProtectedReviewExclusion {
   string reviewed_commit_id = 3;
   // stale_head, dismissed, stale, unofficial, author, non_decision, superseded.
   string reason = 4;
+}
+
+// State/source timestamps distinguish configuration from successful observation.
+message OperationsServiceStatus {
+  string id = 1;
+  string label = 2;
+  string state = 3;
+  string source = 4;
+  string checked_at = 5;
+  string detail = 6;
+}
+message OperationsMetric {
+  string id = 1;
+  string label = 2;
+  optional double value = 3;
+  string unit = 4;
+  string source = 5;
+  string observed_at = 6;
+  string window = 7;
+  string state = 8;
+}
+message GetOperationsDashboardRequest {}
+message GetOperationsDashboardResponse {
+  string runtime_profile = 1;
+  string scope = 2;
+  string generated_at = 3;
+  string release = 4;
+  repeated OperationsServiceStatus services = 5;
+  repeated OperationsMetric metrics = 6;
+  repeated string notices = 7;
 }

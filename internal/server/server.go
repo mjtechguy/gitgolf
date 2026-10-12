@@ -24,6 +24,10 @@ import (
 var immutableWebAsset = regexp.MustCompile(`^assets/[^/]+-[A-Za-z0-9_-]{8}\.(js|css|woff2?)$`)
 
 type Config struct {
+	ForgeKind, ForgeInstanceID, ForgeURL, ForgeWorkflowDirs    string
+	ForgePublicURL, ForgeOAuthClientID, ForgeOAuthClientSecret string
+	RuntimeProfile                                             string
+	GiteaWorkflowDirs                                          string
 	WebhookEgressPolicyJSON                                    string
 	AgentImage, ReviewImage, ReviewPublisherToken              string
 	ClaudeBinary, OpenCodeBinary, CodexBinary                  string
@@ -37,10 +41,12 @@ type Config struct {
 	WebDir                                                     string
 	RunnerKeysJSON, RunnerImagesJSON                           string
 	ActionsEngineCatalog, ActionsEngineBinary                  string
+	ActionsRemoteBundles                                       string
 	RepositoryEventConnectionsJSON                             string
 	Telemetry                                                  *telemetry.Runtime
 }
 type Server struct {
+	accessOIDC                    *accessOIDC
 	preview                       *previewConfiguration
 	previewBound                  atomic.Bool
 	previewRequests               chan struct{}
@@ -62,9 +68,36 @@ type Server struct {
 }
 
 func New(config Config, db *sql.DB) (*Server, error) {
+	if config.RuntimeProfile == "" {
+		config.RuntimeProfile = "portable"
+	}
+	switch config.RuntimeProfile {
+	case "portable", "local", "docker", "kubernetes", "cloudflare-bridge":
+	default:
+		return nil, errors.New("unsupported Golf runtime profile")
+	}
+	var err error
+	config, err = NormalizeForgeConfig(config)
+	if err != nil {
+		return nil, err
+	}
 	preview, previewErr := previewConfig(config.PublicURL, config.AllowInsecureCookies, os.Getenv)
 	if previewErr != nil {
 		return nil, previewErr
+	}
+	access, accessErr := loadAccessOIDC(config.PublicURL, config.AllowInsecureCookies, os.Getenv("GOLF_ACCESS_OIDC_CONFIG_FILE"))
+	if accessErr != nil {
+		return nil, accessErr
+	}
+	edgePreview, edgeErr := loadCloudflarePreview(config.PublicURL, access, os.Getenv("GOLF_CLOUDFLARE_PREVIEW_CONFIG_FILE"))
+	if edgeErr != nil {
+		return nil, edgeErr
+	}
+	if edgePreview != nil {
+		if preview != nil {
+			return nil, errors.New("Select one isolated preview runtime")
+		}
+		preview = edgePreview
 	}
 	gitConfig, gitErr := managedGitConfig(os.Getenv)
 	if gitErr != nil {
@@ -97,7 +130,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	}
 	forge, err := url.Parse(config.GiteaURL)
 	if err != nil || forge.Host == "" || forge.User != nil || forge.RawQuery != "" || forge.Fragment != "" || (forge.Scheme != "http" && forge.Scheme != "https") {
-		return nil, errors.New("GITEA_URL must be an HTTP(S) URL without credentials or query")
+		return nil, errors.New("GOLF_FORGE_URL must be an HTTP(S) URL without credentials or query")
 	}
 	if err := validateOAuthConfig(config); err != nil {
 		return nil, err
@@ -116,8 +149,14 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	}
 	config.PublicURL = public.Scheme + "://" + public.Host
 	config.GiteaURL = strings.TrimRight(config.GiteaURL, "/")
-	s := &Server{previewRequests: make(chan struct{}, 8), preview: preview, managedGit: gitConfig, config: config, db: db, keyring: keyring, client: &http.Client{Timeout: 10 * time.Second,
+	if err := BindForgeInstallation(context.Background(), db, config); err != nil {
+		return nil, err
+	}
+	s := &Server{accessOIDC: access, previewRequests: make(chan struct{}, 8), preview: preview, managedGit: gitConfig, config: config, db: db, keyring: keyring, client: &http.Client{Timeout: 10 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	if edgePreview != nil {
+		s.previewBound.Store(true)
+	}
 	if config.Telemetry != nil {
 		s.client.Transport = config.Telemetry.HTTPTransport(http.DefaultTransport)
 	}
@@ -221,6 +260,14 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	return s, nil
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/internal/cloudflare/preview" {
+		s.CloudflarePreviewHandler().ServeHTTP(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/auth/access/") {
+		s.AccessOIDCHandler().ServeHTTP(w, r)
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, "/api/deployments/") {
 		s.DeploymentOpenHandler().ServeHTTP(w, r)
 		return
@@ -258,7 +305,7 @@ func (s *Server) dependencyChecks(ctx context.Context) (map[string]string, bool)
 	if _, err := s.forge(ctx, "GET", "/version", forgeCredential{}, nil, &version); err != nil || version.Version == "" {
 		checks["gitea"] = "unavailable"
 		ready = false
-	} else if strings.TrimPrefix(version.Version, "v") != "1.27.3" {
+	} else if !supportedForgeVersion(s.config.ForgeKind, version.Version) {
 		checks["gitea"] = "unsupported_version"
 		ready = false
 	}

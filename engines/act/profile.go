@@ -39,7 +39,9 @@ type file struct {
 	directory bool
 }
 
-func sourceFiles(archive []byte) (map[string]file, error) {
+func sourceFiles(archive []byte) (map[string]file, error) { return archiveFiles(archive, false) }
+
+func archiveFiles(archive []byte, actionLinks bool) (map[string]file, error) {
 	if len(archive) == 0 || len(archive) > 16<<20 {
 		return nil, ErrProfile
 	}
@@ -56,7 +58,7 @@ func sourceFiles(archive []byte) (map[string]file, error) {
 			return nil, ErrProfile
 		}
 		name := strings.TrimSuffix(h.Name, "/")
-		if !safePath(name) || h.Linkname != "" || !ordinaryPAX(h) || (h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA && h.Typeflag != tar.TypeDir) || h.Size < 0 || h.Size > 8<<20 || h.Typeflag == tar.TypeDir && h.Size != 0 || len(files) >= 4096 {
+		if !safePath(name) || (h.Linkname != "" && (!actionLinks || h.Typeflag != tar.TypeSymlink || len(h.Linkname) > 1024 || strings.HasPrefix(h.Linkname, "/") || !safePath(path.Clean(path.Join(path.Dir(name), h.Linkname))))) || !ordinaryPAX(h) || (h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA && h.Typeflag != tar.TypeDir && (!actionLinks || h.Typeflag != tar.TypeSymlink)) || h.Size < 0 || h.Size > 8<<20 || h.Typeflag == tar.TypeDir && h.Size != 0 || len(files) >= 4096 {
 			return nil, ErrProfile
 		}
 		if _, exists := files[name]; exists {
@@ -82,7 +84,15 @@ func sourceFiles(archive []byte) (map[string]file, error) {
 		if err != nil || int64(len(body)) != h.Size {
 			return nil, ErrProfile
 		}
-		files[name] = file{body, h.Mode & 0777, h.Typeflag == tar.TypeDir}
+		mode := h.Mode & 0777
+		if h.Typeflag == tar.TypeSymlink {
+			if h.Size != 0 {
+				return nil, ErrProfile
+			}
+			body = []byte(h.Linkname)
+			mode = 0120000
+		}
+		files[name] = file{body, mode, h.Typeflag == tar.TypeDir}
 	}
 	padding, err := io.ReadAll(input)
 	if err != nil || len(bytes.Trim(padding, "\x00")) != 0 {
@@ -277,25 +287,38 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 	out := protocol.ActionPlan{}
 	typed := input.Catalog == protocol.ActionsInputsCatalog
 	agents := input.Catalog == protocol.ActionsAgentCatalog
-	if (input.Catalog != protocol.ActionsCatalog && !typed && !agents) || agents && input.Event == "push" || !safePath(input.WorkflowPath) || !fullObjectPattern.MatchString(input.WorkflowBlobID) || (input.Event != "workflow_dispatch" && input.Event != "push" && input.Event != "inspect") || input.Event == "push" && (!strings.HasPrefix(input.Ref, "refs/heads/") || !safePath(strings.TrimPrefix(input.Ref, "refs/heads/"))) || len(input.Images) < 1 || len(input.Images) > 20 {
+	remote := input.Catalog == protocol.ActionsRemoteCatalog
+	if (input.Catalog != protocol.ActionsCatalog && !typed && !agents && !remote) || agents && input.Event == "push" || !safePath(input.WorkflowPath) || !fullObjectPattern.MatchString(input.WorkflowBlobID) || (input.Event != "workflow_dispatch" && input.Event != "push" && input.Event != "inspect") || input.Event == "push" && (!strings.HasPrefix(input.Ref, "refs/heads/") || !safePath(strings.TrimPrefix(input.Ref, "refs/heads/"))) || len(input.Images) < 1 || len(input.Images) > 20 {
 		return out, nil, nil, ErrProfile
 	}
 	for label, image := range input.Images {
-		if !keyPattern.MatchString(label) || !digestPattern.MatchString(image) {
+		if (!keyPattern.MatchString(label) && (!remote || !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`).MatchString(label))) || !digestPattern.MatchString(image) {
 			return out, nil, nil, ErrProfile
 		}
 	}
-	files, err := sourceFiles(input.Archive)
+	remoteActions, remoteErr := admitRemoteActions(input)
+	if remoteErr != nil {
+		return out, nil, nil, remoteErr
+	}
+	files, err := archiveFiles(input.Archive, remote)
+	if remote && protocol.ValidateGitSourceArchive(input.Archive) != nil {
+		return out, nil, nil, ErrProfile
+	}
 	if err != nil {
 		return out, nil, nil, err
 	}
 	workflow, ok := files[input.WorkflowPath]
-	if !ok || workflow.directory || !blobMatches(workflow.body, input.WorkflowBlobID) {
+	if !ok || workflow.directory || workflow.mode == 0120000 || !blobMatches(workflow.body, input.WorkflowBlobID) {
 		return out, nil, nil, ErrProfile
 	}
 	root, err := tree(workflow.body)
-	if err != nil || !mapping(root, "name", "on", "env", "defaults", "jobs") || !env(field(root, "env")) || !defaults(field(root, "defaults")) {
+	if err != nil || !mapping(root, "name", "on", "env", "defaults", "jobs", "permissions") || !env(field(root, "env")) || !defaults(field(root, "defaults")) {
 		return out, nil, nil, ErrProfile
+	}
+	if permissions := field(root, "permissions"); permissions != nil {
+		if !remote || !mapping(permissions, "contents") || !scalar(field(permissions, "contents")) || field(permissions, "contents").Value != "read" {
+			return out, nil, nil, ErrProfile
+		}
 	}
 	if typed {
 		if input.ManualInputsContract != protocol.ManualInputsCapability || !fullObjectPattern.MatchString(input.Ref) || (input.Event != "workflow_dispatch" && input.Event != "inspect") {
@@ -313,7 +336,7 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 	if err = validateExpressions(root, false, typed); err != nil {
 		return out, nil, nil, err
 	}
-	matched, err := eventMatches(field(root, "on"), input.Event, input.Ref, typed)
+	matched, err := eventMatches(field(root, "on"), input.Event, input.Ref, typed, remote)
 	if err != nil {
 		return out, nil, nil, err
 	}
@@ -329,7 +352,7 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 	expandedSteps := map[string]int{}
 	for i := 0; i < len(jobs.Content); i += 2 {
 		id, j := jobs.Content[i].Value, jobs.Content[i+1]
-		if !keyPattern.MatchString(id) || !mapping(j, "name", "needs", "runs-on", "steps", "strategy", "env", "outputs", "if", "defaults") || !env(field(j, "env")) || !defaults(field(j, "defaults")) || !staticMatrix(field(j, "strategy")) {
+		if !keyPattern.MatchString(id) || !mapping(j, "name", "needs", "runs-on", "steps", "strategy", "env", "outputs", "if", "defaults", "timeout-minutes") || !env(field(j, "env")) || !defaults(field(j, "defaults")) || !staticMatrix(field(j, "strategy")) {
 			return out, nil, nil, ErrProfile
 		}
 		if strategy := field(j, "strategy"); field(strategy, "matrix") != nil {
@@ -337,6 +360,15 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 			// Native shared-matrix aggregate output/cancellation semantics are
 			// not part of this first per-instance completion contract.
 			if failFast == nil || failFast.Tag != "!!bool" || failFast.Value != "false" || field(j, "outputs") != nil {
+				return out, nil, nil, ErrProfile
+			}
+		}
+		if timeout := field(j, "timeout-minutes"); timeout != nil {
+			if !remote || timeout.Tag != "!!int" {
+				return out, nil, nil, ErrProfile
+			}
+			minutes, e := strconv.Atoi(timeout.Value)
+			if e != nil || minutes < 1 || minutes > 15 {
 				return out, nil, nil, ErrProfile
 			}
 		}
@@ -353,7 +385,7 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 			return out, nil, nil, ErrProfile
 		}
 		expanded := 0
-		if err = validateSteps(steps, files, dependencies, nil, 0, false, typed, agents, &expanded); err != nil {
+		if err = validateSteps(steps, files, dependencies, nil, 0, false, typed, agents, &expanded, remoteActions); err != nil {
 			return out, nil, nil, err
 		}
 		expandedSteps[id] = expanded
@@ -422,6 +454,10 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 				}
 				runtimeNames[runtimeName] = true
 				entry := protocol.ActionJob{InstanceID: instance, JobID: run.JobID, Name: name, Image: input.Images[job.RawRunsOn.Value], Needs: job.Needs()}
+				if timeout := field(field(jobs, run.JobID), "timeout-minutes"); timeout != nil {
+					minutes, _ := strconv.Atoi(timeout.Value)
+					entry.TimeoutSeconds = uint32(minutes * 60)
+				}
 				for key, value := range matrix {
 					b, e := json.Marshal(value)
 					if e != nil {
@@ -466,6 +502,16 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 	}
 	sort.Slice(out.LocalActions, func(i, j int) bool { return out.LocalActions[i].MetadataPath < out.LocalActions[j].MetadataPath })
 	depJSON, _ := json.Marshal(dependencies)
+	if remote {
+		for _, action := range remoteActions {
+			out.RemoteActions = append(out.RemoteActions, action.identity)
+		}
+		sort.Slice(out.RemoteActions, func(i, j int) bool { return out.RemoteActions[i].Uses < out.RemoteActions[j].Uses })
+		depJSON, _ = json.Marshal(struct {
+			Local  map[string]string               `json:"local"`
+			Remote []protocol.ActionRemoteIdentity `json:"remote"`
+		}{dependencies, out.RemoteActions})
+	}
 	depSHA := sha256.Sum256(depJSON)
 	archiveSHA := sha256.Sum256(input.Archive)
 	out.Catalog = input.Catalog
@@ -495,7 +541,7 @@ func blobMatches(data []byte, id string) bool {
 	return hex.EncodeToString(h[:]) == id
 }
 
-func eventMatches(n *yaml.Node, event, ref string, typed bool) (bool, error) {
+func eventMatches(n *yaml.Node, event, ref string, typed bool, remote bool) (bool, error) {
 	if n == nil {
 		return false, ErrProfile
 	}
@@ -509,7 +555,7 @@ func eventMatches(n *yaml.Node, event, ref string, typed bool) (bool, error) {
 		matched := false
 		seen := map[string]bool{}
 		for _, v := range n.Content {
-			if !scalar(v) || (v.Value != "push" && v.Value != "workflow_dispatch") || seen[v.Value] {
+			if !scalar(v) || (v.Value != "push" && v.Value != "workflow_dispatch" && (!remote || v.Value != "pull_request")) || seen[v.Value] {
 				return false, ErrProfile
 			}
 			seen[v.Value] = true
@@ -711,7 +757,7 @@ func inputExpressionAST(root actionlint.ExprNode) bool {
 	})
 	return valid
 }
-func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]string, stack map[string]bool, depth int, composite, typed, agents bool, budget *int) error {
+func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]string, stack map[string]bool, depth int, composite, typed, agents bool, budget *int, remoteActions map[string]*admittedRemoteAction) error {
 	if depth > 4 {
 		return ErrProfile
 	}
@@ -741,6 +787,12 @@ func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]stri
 				return ErrProfile
 			}
 			if field(step, "with") != nil {
+				return ErrProfile
+			}
+			continue
+		}
+		if scalar(uses) && remoteActions[uses.Value] != nil {
+			if field(step, "shell") != nil || !remoteActionInputs(step, remoteActions[uses.Value]) {
 				return ErrProfile
 			}
 			continue
@@ -835,7 +887,7 @@ func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]stri
 		}
 		deps[metadataPath] = hex.EncodeToString(h[:])
 		stack[directory] = true
-		err = validateSteps(children, files, deps, stack, depth+1, true, typed, agents, budget)
+		err = validateSteps(children, files, deps, stack, depth+1, true, typed, agents, budget, remoteActions)
 		delete(stack, directory)
 		if err != nil {
 			return err

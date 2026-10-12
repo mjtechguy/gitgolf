@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -12,7 +13,7 @@ async function backend(page: Page) {
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id:'42', login:'alex' } });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'Logout') return respond(route, LogoutResponseSchema, {});
     if (method === 'ListSSHKeys') {

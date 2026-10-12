@@ -1,0 +1,21 @@
+{
+  "name": "golf-protected-preview",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-08",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{"pattern": "DEPLOYMENT_UUID.previews.example.com", "custom_domain": true}],
+  "d1_databases": [{"binding": "PREVIEW_DB", "database_id": "APPROVED_D1_UUID", "database_name": "APPROVED_D1_NAME"}],
+  "r2_buckets": [{"binding": "PREVIEW_R2", "bucket_name": "APPROVED_PRIVATE_R2_BUCKET"}],
+  "vars": {
+    "GOLF_ORIGIN": "https://golf.example.com",
+    "PREVIEW_ORIGIN": "https://DEPLOYMENT_UUID.previews.example.com",
+    "DEPLOYMENT_ID": "DEPLOYMENT_UUID",
+    "ACCESS_AUD": "ACCESS_APPLICATION_AUDIENCE",
+    "TARGET_FINGERPRINT": "PREPARED_GOLF_TARGET_FINGERPRINT",
+    "ARCHIVE_SHA256": "TESTED_ARTIFACT_SHA256",
+    "COMMIT_ID": "TESTED_COMMIT_ID",
+    "D1_ID": "APPROVED_D1_UUID",
+    "R2_BUCKET": "APPROVED_PRIVATE_R2_BUCKET"
+  }
+}

@@ -2,6 +2,8 @@
 
 Status: accepted architecture; production environment qualification remains required.
 
+The 2026-10-07 user decision targets fully Cloudflare-native managed SaaS. [ADR0008](0008-cloudflare-native-saas-ownership.md) records the selected destination and proposed native ownership/cutover. This ADR's PostgreSQL authority remains the current portable and migration-bridge contract; it is not a permanent requirement of the future native managed service.
+
 Golf already relies on PostgreSQL transactions for sessions, actor-bound authorization, policy revisions, audit events, execution admission and durable queue state. Moving those controls into an optional cache would introduce another failure and consistency boundary. PostgreSQL stays authoritative on both infrastructure tracks. CloudNativePG owns database replication/failover in Kubernetes; Barman Cloud Plugin owns physical backup/WAL storage. They are platform releases independent of the Golf application chart.
 
 Valkey can later accelerate hot read metadata, rate-limit counters and disposable coordination where failure behavior is defined. No active core consumer requires it today, so this profile does not install it or advertise a functional cache integration. Introducing it requires measured benefit, explicit namespace/tenant separation, TTL/eviction limits, TLS/auth, failure fallback and tests; durable policy, session revocation and jobs must still reconcile against PostgreSQL. This avoids turning a speed option into a portable-core prerequisite.

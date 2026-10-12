@@ -40,6 +40,8 @@ const (
 	InstanceAdminServiceName = "golf.v1.InstanceAdminService"
 	// AuditServiceName is the fully-qualified name of the AuditService service.
 	AuditServiceName = "golf.v1.AuditService"
+	// OperationsServiceName is the fully-qualified name of the OperationsService service.
+	OperationsServiceName = "golf.v1.OperationsService"
 	// CapabilityServiceName is the fully-qualified name of the CapabilityService service.
 	CapabilityServiceName = "golf.v1.CapabilityService"
 	// RepositoryAccessServiceName is the fully-qualified name of the RepositoryAccessService service.
@@ -282,6 +284,9 @@ const (
 	// RepositoryServiceGetContentsProcedure is the fully-qualified name of the RepositoryService's
 	// GetContents RPC.
 	RepositoryServiceGetContentsProcedure = "/golf.v1.RepositoryService/GetContents"
+	// RepositoryServiceGetRepositoryFileIndexProcedure is the fully-qualified name of the
+	// RepositoryService's GetRepositoryFileIndex RPC.
+	RepositoryServiceGetRepositoryFileIndexProcedure = "/golf.v1.RepositoryService/GetRepositoryFileIndex"
 	// RepositoryServiceListIssuesProcedure is the fully-qualified name of the RepositoryService's
 	// ListIssues RPC.
 	RepositoryServiceListIssuesProcedure = "/golf.v1.RepositoryService/ListIssues"
@@ -420,6 +425,9 @@ const (
 	// AuditServiceListAuditEventsProcedure is the fully-qualified name of the AuditService's
 	// ListAuditEvents RPC.
 	AuditServiceListAuditEventsProcedure = "/golf.v1.AuditService/ListAuditEvents"
+	// OperationsServiceGetOperationsDashboardProcedure is the fully-qualified name of the
+	// OperationsService's GetOperationsDashboard RPC.
+	OperationsServiceGetOperationsDashboardProcedure = "/golf.v1.OperationsService/GetOperationsDashboard"
 	// CapabilityServiceListCapabilitiesProcedure is the fully-qualified name of the CapabilityService's
 	// ListCapabilities RPC.
 	CapabilityServiceListCapabilitiesProcedure = "/golf.v1.CapabilityService/ListCapabilities"
@@ -492,6 +500,20 @@ const (
 	// InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure is the fully-qualified
 	// name of the InfrastructureConnectionService's ActivateInfrastructureConnection RPC.
 	InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure = "/golf.v1.InfrastructureConnectionService/ActivateInfrastructureConnection"
+	// InfrastructureConnectionServiceProvisionCloudflareEnvironmentResourcesProcedure is the
+	// fully-qualified name of the InfrastructureConnectionService's
+	// ProvisionCloudflareEnvironmentResources RPC.
+	InfrastructureConnectionServiceProvisionCloudflareEnvironmentResourcesProcedure = "/golf.v1.InfrastructureConnectionService/ProvisionCloudflareEnvironmentResources"
+	// InfrastructureConnectionServiceGetCloudflareEnvironmentResourcesProcedure is the fully-qualified
+	// name of the InfrastructureConnectionService's GetCloudflareEnvironmentResources RPC.
+	InfrastructureConnectionServiceGetCloudflareEnvironmentResourcesProcedure = "/golf.v1.InfrastructureConnectionService/GetCloudflareEnvironmentResources"
+	// InfrastructureConnectionServiceListCloudflareEnvironmentResourcesProcedure is the fully-qualified
+	// name of the InfrastructureConnectionService's ListCloudflareEnvironmentResources RPC.
+	InfrastructureConnectionServiceListCloudflareEnvironmentResourcesProcedure = "/golf.v1.InfrastructureConnectionService/ListCloudflareEnvironmentResources"
+	// InfrastructureConnectionServiceRemoveCloudflareEnvironmentResourcesProcedure is the
+	// fully-qualified name of the InfrastructureConnectionService's
+	// RemoveCloudflareEnvironmentResources RPC.
+	InfrastructureConnectionServiceRemoveCloudflareEnvironmentResourcesProcedure = "/golf.v1.InfrastructureConnectionService/RemoveCloudflareEnvironmentResources"
 	// ProfileServiceGetProfileProcedure is the fully-qualified name of the ProfileService's GetProfile
 	// RPC.
 	ProfileServiceGetProfileProcedure = "/golf.v1.ProfileService/GetProfile"
@@ -1699,6 +1721,7 @@ type RepositoryServiceClient interface {
 	GetRepositoryImage(context.Context, *connect.Request[v1.GetRepositoryImageRequest]) (*connect.Response[v1.GetRepositoryImageResponse], error)
 	ResolveRepositorySource(context.Context, *connect.Request[v1.ResolveRepositorySourceRequest]) (*connect.Response[v1.ResolveRepositorySourceResponse], error)
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
+	GetRepositoryFileIndex(context.Context, *connect.Request[v1.GetRepositoryFileIndexRequest]) (*connect.Response[v1.GetRepositoryFileIndexResponse], error)
 	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
 	GetPullRequestDiscussion(context.Context, *connect.Request[v1.GetPullRequestDiscussionRequest]) (*connect.Response[v1.GetPullRequestDiscussionResponse], error)
 	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
@@ -1856,6 +1879,12 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+RepositoryServiceGetContentsProcedure,
 			connect.WithSchema(repositoryServiceMethods.ByName("GetContents")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryFileIndex: connect.NewClient[v1.GetRepositoryFileIndexRequest, v1.GetRepositoryFileIndexResponse](
+			httpClient,
+			baseURL+RepositoryServiceGetRepositoryFileIndexProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("GetRepositoryFileIndex")),
 			connect.WithClientOptions(opts...),
 		),
 		listIssues: connect.NewClient[v1.ListIssuesRequest, v1.ListIssuesResponse](
@@ -2039,6 +2068,7 @@ type repositoryServiceClient struct {
 	getRepositoryImage                 *connect.Client[v1.GetRepositoryImageRequest, v1.GetRepositoryImageResponse]
 	resolveRepositorySource            *connect.Client[v1.ResolveRepositorySourceRequest, v1.ResolveRepositorySourceResponse]
 	getContents                        *connect.Client[v1.GetContentsRequest, v1.GetContentsResponse]
+	getRepositoryFileIndex             *connect.Client[v1.GetRepositoryFileIndexRequest, v1.GetRepositoryFileIndexResponse]
 	listIssues                         *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
 	getPullRequestDiscussion           *connect.Client[v1.GetPullRequestDiscussionRequest, v1.GetPullRequestDiscussionResponse]
 	getIssue                           *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
@@ -2165,6 +2195,11 @@ func (c *repositoryServiceClient) ResolveRepositorySource(ctx context.Context, r
 // GetContents calls golf.v1.RepositoryService.GetContents.
 func (c *repositoryServiceClient) GetContents(ctx context.Context, req *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error) {
 	return c.getContents.CallUnary(ctx, req)
+}
+
+// GetRepositoryFileIndex calls golf.v1.RepositoryService.GetRepositoryFileIndex.
+func (c *repositoryServiceClient) GetRepositoryFileIndex(ctx context.Context, req *connect.Request[v1.GetRepositoryFileIndexRequest]) (*connect.Response[v1.GetRepositoryFileIndexResponse], error) {
+	return c.getRepositoryFileIndex.CallUnary(ctx, req)
 }
 
 // ListIssues calls golf.v1.RepositoryService.ListIssues.
@@ -2321,6 +2356,7 @@ type RepositoryServiceHandler interface {
 	GetRepositoryImage(context.Context, *connect.Request[v1.GetRepositoryImageRequest]) (*connect.Response[v1.GetRepositoryImageResponse], error)
 	ResolveRepositorySource(context.Context, *connect.Request[v1.ResolveRepositorySourceRequest]) (*connect.Response[v1.ResolveRepositorySourceResponse], error)
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
+	GetRepositoryFileIndex(context.Context, *connect.Request[v1.GetRepositoryFileIndexRequest]) (*connect.Response[v1.GetRepositoryFileIndexResponse], error)
 	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
 	GetPullRequestDiscussion(context.Context, *connect.Request[v1.GetPullRequestDiscussionRequest]) (*connect.Response[v1.GetPullRequestDiscussionResponse], error)
 	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
@@ -2474,6 +2510,12 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		RepositoryServiceGetContentsProcedure,
 		svc.GetContents,
 		connect.WithSchema(repositoryServiceMethods.ByName("GetContents")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceGetRepositoryFileIndexHandler := connect.NewUnaryHandler(
+		RepositoryServiceGetRepositoryFileIndexProcedure,
+		svc.GetRepositoryFileIndex,
+		connect.WithSchema(repositoryServiceMethods.ByName("GetRepositoryFileIndex")),
 		connect.WithHandlerOptions(opts...),
 	)
 	repositoryServiceListIssuesHandler := connect.NewUnaryHandler(
@@ -2674,6 +2716,8 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceResolveRepositorySourceHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetContentsProcedure:
 			repositoryServiceGetContentsHandler.ServeHTTP(w, r)
+		case RepositoryServiceGetRepositoryFileIndexProcedure:
+			repositoryServiceGetRepositoryFileIndexHandler.ServeHTTP(w, r)
 		case RepositoryServiceListIssuesProcedure:
 			repositoryServiceListIssuesHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetPullRequestDiscussionProcedure:
@@ -2813,6 +2857,10 @@ func (UnimplementedRepositoryServiceHandler) ResolveRepositorySource(context.Con
 
 func (UnimplementedRepositoryServiceHandler) GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetContents is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) GetRepositoryFileIndex(context.Context, *connect.Request[v1.GetRepositoryFileIndexRequest]) (*connect.Response[v1.GetRepositoryFileIndexResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetRepositoryFileIndex is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error) {
@@ -3616,6 +3664,76 @@ func (UnimplementedAuditServiceHandler) ListAuditEvents(context.Context, *connec
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AuditService.ListAuditEvents is not implemented"))
 }
 
+// OperationsServiceClient is a client for the golf.v1.OperationsService service.
+type OperationsServiceClient interface {
+	GetOperationsDashboard(context.Context, *connect.Request[v1.GetOperationsDashboardRequest]) (*connect.Response[v1.GetOperationsDashboardResponse], error)
+}
+
+// NewOperationsServiceClient constructs a client for the golf.v1.OperationsService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewOperationsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OperationsServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	operationsServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OperationsService").Methods()
+	return &operationsServiceClient{
+		getOperationsDashboard: connect.NewClient[v1.GetOperationsDashboardRequest, v1.GetOperationsDashboardResponse](
+			httpClient,
+			baseURL+OperationsServiceGetOperationsDashboardProcedure,
+			connect.WithSchema(operationsServiceMethods.ByName("GetOperationsDashboard")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// operationsServiceClient implements OperationsServiceClient.
+type operationsServiceClient struct {
+	getOperationsDashboard *connect.Client[v1.GetOperationsDashboardRequest, v1.GetOperationsDashboardResponse]
+}
+
+// GetOperationsDashboard calls golf.v1.OperationsService.GetOperationsDashboard.
+func (c *operationsServiceClient) GetOperationsDashboard(ctx context.Context, req *connect.Request[v1.GetOperationsDashboardRequest]) (*connect.Response[v1.GetOperationsDashboardResponse], error) {
+	return c.getOperationsDashboard.CallUnary(ctx, req)
+}
+
+// OperationsServiceHandler is an implementation of the golf.v1.OperationsService service.
+type OperationsServiceHandler interface {
+	GetOperationsDashboard(context.Context, *connect.Request[v1.GetOperationsDashboardRequest]) (*connect.Response[v1.GetOperationsDashboardResponse], error)
+}
+
+// NewOperationsServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewOperationsServiceHandler(svc OperationsServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	operationsServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OperationsService").Methods()
+	operationsServiceGetOperationsDashboardHandler := connect.NewUnaryHandler(
+		OperationsServiceGetOperationsDashboardProcedure,
+		svc.GetOperationsDashboard,
+		connect.WithSchema(operationsServiceMethods.ByName("GetOperationsDashboard")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.OperationsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case OperationsServiceGetOperationsDashboardProcedure:
+			operationsServiceGetOperationsDashboardHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedOperationsServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedOperationsServiceHandler struct{}
+
+func (UnimplementedOperationsServiceHandler) GetOperationsDashboard(context.Context, *connect.Request[v1.GetOperationsDashboardRequest]) (*connect.Response[v1.GetOperationsDashboardResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OperationsService.GetOperationsDashboard is not implemented"))
+}
+
 // CapabilityServiceClient is a client for the golf.v1.CapabilityService service.
 type CapabilityServiceClient interface {
 	ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error)
@@ -4415,6 +4533,10 @@ type InfrastructureConnectionServiceClient interface {
 	SaveInfrastructureConnection(context.Context, *connect.Request[v1.SaveInfrastructureConnectionRequest]) (*connect.Response[v1.SaveInfrastructureConnectionResponse], error)
 	TestInfrastructureConnection(context.Context, *connect.Request[v1.TestInfrastructureConnectionRequest]) (*connect.Response[v1.TestInfrastructureConnectionResponse], error)
 	ActivateInfrastructureConnection(context.Context, *connect.Request[v1.ActivateInfrastructureConnectionRequest]) (*connect.Response[v1.ActivateInfrastructureConnectionResponse], error)
+	ProvisionCloudflareEnvironmentResources(context.Context, *connect.Request[v1.ProvisionCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.ProvisionCloudflareEnvironmentResourcesResponse], error)
+	GetCloudflareEnvironmentResources(context.Context, *connect.Request[v1.GetCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.GetCloudflareEnvironmentResourcesResponse], error)
+	ListCloudflareEnvironmentResources(context.Context, *connect.Request[v1.ListCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.ListCloudflareEnvironmentResourcesResponse], error)
+	RemoveCloudflareEnvironmentResources(context.Context, *connect.Request[v1.RemoveCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.RemoveCloudflareEnvironmentResourcesResponse], error)
 }
 
 // NewInfrastructureConnectionServiceClient constructs a client for the
@@ -4452,15 +4574,43 @@ func NewInfrastructureConnectionServiceClient(httpClient connect.HTTPClient, bas
 			connect.WithSchema(infrastructureConnectionServiceMethods.ByName("ActivateInfrastructureConnection")),
 			connect.WithClientOptions(opts...),
 		),
+		provisionCloudflareEnvironmentResources: connect.NewClient[v1.ProvisionCloudflareEnvironmentResourcesRequest, v1.ProvisionCloudflareEnvironmentResourcesResponse](
+			httpClient,
+			baseURL+InfrastructureConnectionServiceProvisionCloudflareEnvironmentResourcesProcedure,
+			connect.WithSchema(infrastructureConnectionServiceMethods.ByName("ProvisionCloudflareEnvironmentResources")),
+			connect.WithClientOptions(opts...),
+		),
+		getCloudflareEnvironmentResources: connect.NewClient[v1.GetCloudflareEnvironmentResourcesRequest, v1.GetCloudflareEnvironmentResourcesResponse](
+			httpClient,
+			baseURL+InfrastructureConnectionServiceGetCloudflareEnvironmentResourcesProcedure,
+			connect.WithSchema(infrastructureConnectionServiceMethods.ByName("GetCloudflareEnvironmentResources")),
+			connect.WithClientOptions(opts...),
+		),
+		listCloudflareEnvironmentResources: connect.NewClient[v1.ListCloudflareEnvironmentResourcesRequest, v1.ListCloudflareEnvironmentResourcesResponse](
+			httpClient,
+			baseURL+InfrastructureConnectionServiceListCloudflareEnvironmentResourcesProcedure,
+			connect.WithSchema(infrastructureConnectionServiceMethods.ByName("ListCloudflareEnvironmentResources")),
+			connect.WithClientOptions(opts...),
+		),
+		removeCloudflareEnvironmentResources: connect.NewClient[v1.RemoveCloudflareEnvironmentResourcesRequest, v1.RemoveCloudflareEnvironmentResourcesResponse](
+			httpClient,
+			baseURL+InfrastructureConnectionServiceRemoveCloudflareEnvironmentResourcesProcedure,
+			connect.WithSchema(infrastructureConnectionServiceMethods.ByName("RemoveCloudflareEnvironmentResources")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // infrastructureConnectionServiceClient implements InfrastructureConnectionServiceClient.
 type infrastructureConnectionServiceClient struct {
-	listInfrastructureConnections    *connect.Client[v1.ListInfrastructureConnectionsRequest, v1.ListInfrastructureConnectionsResponse]
-	saveInfrastructureConnection     *connect.Client[v1.SaveInfrastructureConnectionRequest, v1.SaveInfrastructureConnectionResponse]
-	testInfrastructureConnection     *connect.Client[v1.TestInfrastructureConnectionRequest, v1.TestInfrastructureConnectionResponse]
-	activateInfrastructureConnection *connect.Client[v1.ActivateInfrastructureConnectionRequest, v1.ActivateInfrastructureConnectionResponse]
+	listInfrastructureConnections           *connect.Client[v1.ListInfrastructureConnectionsRequest, v1.ListInfrastructureConnectionsResponse]
+	saveInfrastructureConnection            *connect.Client[v1.SaveInfrastructureConnectionRequest, v1.SaveInfrastructureConnectionResponse]
+	testInfrastructureConnection            *connect.Client[v1.TestInfrastructureConnectionRequest, v1.TestInfrastructureConnectionResponse]
+	activateInfrastructureConnection        *connect.Client[v1.ActivateInfrastructureConnectionRequest, v1.ActivateInfrastructureConnectionResponse]
+	provisionCloudflareEnvironmentResources *connect.Client[v1.ProvisionCloudflareEnvironmentResourcesRequest, v1.ProvisionCloudflareEnvironmentResourcesResponse]
+	getCloudflareEnvironmentResources       *connect.Client[v1.GetCloudflareEnvironmentResourcesRequest, v1.GetCloudflareEnvironmentResourcesResponse]
+	listCloudflareEnvironmentResources      *connect.Client[v1.ListCloudflareEnvironmentResourcesRequest, v1.ListCloudflareEnvironmentResourcesResponse]
+	removeCloudflareEnvironmentResources    *connect.Client[v1.RemoveCloudflareEnvironmentResourcesRequest, v1.RemoveCloudflareEnvironmentResourcesResponse]
 }
 
 // ListInfrastructureConnections calls
@@ -4487,6 +4637,30 @@ func (c *infrastructureConnectionServiceClient) ActivateInfrastructureConnection
 	return c.activateInfrastructureConnection.CallUnary(ctx, req)
 }
 
+// ProvisionCloudflareEnvironmentResources calls
+// golf.v1.InfrastructureConnectionService.ProvisionCloudflareEnvironmentResources.
+func (c *infrastructureConnectionServiceClient) ProvisionCloudflareEnvironmentResources(ctx context.Context, req *connect.Request[v1.ProvisionCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.ProvisionCloudflareEnvironmentResourcesResponse], error) {
+	return c.provisionCloudflareEnvironmentResources.CallUnary(ctx, req)
+}
+
+// GetCloudflareEnvironmentResources calls
+// golf.v1.InfrastructureConnectionService.GetCloudflareEnvironmentResources.
+func (c *infrastructureConnectionServiceClient) GetCloudflareEnvironmentResources(ctx context.Context, req *connect.Request[v1.GetCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.GetCloudflareEnvironmentResourcesResponse], error) {
+	return c.getCloudflareEnvironmentResources.CallUnary(ctx, req)
+}
+
+// ListCloudflareEnvironmentResources calls
+// golf.v1.InfrastructureConnectionService.ListCloudflareEnvironmentResources.
+func (c *infrastructureConnectionServiceClient) ListCloudflareEnvironmentResources(ctx context.Context, req *connect.Request[v1.ListCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.ListCloudflareEnvironmentResourcesResponse], error) {
+	return c.listCloudflareEnvironmentResources.CallUnary(ctx, req)
+}
+
+// RemoveCloudflareEnvironmentResources calls
+// golf.v1.InfrastructureConnectionService.RemoveCloudflareEnvironmentResources.
+func (c *infrastructureConnectionServiceClient) RemoveCloudflareEnvironmentResources(ctx context.Context, req *connect.Request[v1.RemoveCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.RemoveCloudflareEnvironmentResourcesResponse], error) {
+	return c.removeCloudflareEnvironmentResources.CallUnary(ctx, req)
+}
+
 // InfrastructureConnectionServiceHandler is an implementation of the
 // golf.v1.InfrastructureConnectionService service.
 type InfrastructureConnectionServiceHandler interface {
@@ -4494,6 +4668,10 @@ type InfrastructureConnectionServiceHandler interface {
 	SaveInfrastructureConnection(context.Context, *connect.Request[v1.SaveInfrastructureConnectionRequest]) (*connect.Response[v1.SaveInfrastructureConnectionResponse], error)
 	TestInfrastructureConnection(context.Context, *connect.Request[v1.TestInfrastructureConnectionRequest]) (*connect.Response[v1.TestInfrastructureConnectionResponse], error)
 	ActivateInfrastructureConnection(context.Context, *connect.Request[v1.ActivateInfrastructureConnectionRequest]) (*connect.Response[v1.ActivateInfrastructureConnectionResponse], error)
+	ProvisionCloudflareEnvironmentResources(context.Context, *connect.Request[v1.ProvisionCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.ProvisionCloudflareEnvironmentResourcesResponse], error)
+	GetCloudflareEnvironmentResources(context.Context, *connect.Request[v1.GetCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.GetCloudflareEnvironmentResourcesResponse], error)
+	ListCloudflareEnvironmentResources(context.Context, *connect.Request[v1.ListCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.ListCloudflareEnvironmentResourcesResponse], error)
+	RemoveCloudflareEnvironmentResources(context.Context, *connect.Request[v1.RemoveCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.RemoveCloudflareEnvironmentResourcesResponse], error)
 }
 
 // NewInfrastructureConnectionServiceHandler builds an HTTP handler from the service implementation.
@@ -4527,6 +4705,30 @@ func NewInfrastructureConnectionServiceHandler(svc InfrastructureConnectionServi
 		connect.WithSchema(infrastructureConnectionServiceMethods.ByName("ActivateInfrastructureConnection")),
 		connect.WithHandlerOptions(opts...),
 	)
+	infrastructureConnectionServiceProvisionCloudflareEnvironmentResourcesHandler := connect.NewUnaryHandler(
+		InfrastructureConnectionServiceProvisionCloudflareEnvironmentResourcesProcedure,
+		svc.ProvisionCloudflareEnvironmentResources,
+		connect.WithSchema(infrastructureConnectionServiceMethods.ByName("ProvisionCloudflareEnvironmentResources")),
+		connect.WithHandlerOptions(opts...),
+	)
+	infrastructureConnectionServiceGetCloudflareEnvironmentResourcesHandler := connect.NewUnaryHandler(
+		InfrastructureConnectionServiceGetCloudflareEnvironmentResourcesProcedure,
+		svc.GetCloudflareEnvironmentResources,
+		connect.WithSchema(infrastructureConnectionServiceMethods.ByName("GetCloudflareEnvironmentResources")),
+		connect.WithHandlerOptions(opts...),
+	)
+	infrastructureConnectionServiceListCloudflareEnvironmentResourcesHandler := connect.NewUnaryHandler(
+		InfrastructureConnectionServiceListCloudflareEnvironmentResourcesProcedure,
+		svc.ListCloudflareEnvironmentResources,
+		connect.WithSchema(infrastructureConnectionServiceMethods.ByName("ListCloudflareEnvironmentResources")),
+		connect.WithHandlerOptions(opts...),
+	)
+	infrastructureConnectionServiceRemoveCloudflareEnvironmentResourcesHandler := connect.NewUnaryHandler(
+		InfrastructureConnectionServiceRemoveCloudflareEnvironmentResourcesProcedure,
+		svc.RemoveCloudflareEnvironmentResources,
+		connect.WithSchema(infrastructureConnectionServiceMethods.ByName("RemoveCloudflareEnvironmentResources")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.InfrastructureConnectionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case InfrastructureConnectionServiceListInfrastructureConnectionsProcedure:
@@ -4537,6 +4739,14 @@ func NewInfrastructureConnectionServiceHandler(svc InfrastructureConnectionServi
 			infrastructureConnectionServiceTestInfrastructureConnectionHandler.ServeHTTP(w, r)
 		case InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure:
 			infrastructureConnectionServiceActivateInfrastructureConnectionHandler.ServeHTTP(w, r)
+		case InfrastructureConnectionServiceProvisionCloudflareEnvironmentResourcesProcedure:
+			infrastructureConnectionServiceProvisionCloudflareEnvironmentResourcesHandler.ServeHTTP(w, r)
+		case InfrastructureConnectionServiceGetCloudflareEnvironmentResourcesProcedure:
+			infrastructureConnectionServiceGetCloudflareEnvironmentResourcesHandler.ServeHTTP(w, r)
+		case InfrastructureConnectionServiceListCloudflareEnvironmentResourcesProcedure:
+			infrastructureConnectionServiceListCloudflareEnvironmentResourcesHandler.ServeHTTP(w, r)
+		case InfrastructureConnectionServiceRemoveCloudflareEnvironmentResourcesProcedure:
+			infrastructureConnectionServiceRemoveCloudflareEnvironmentResourcesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -4560,6 +4770,22 @@ func (UnimplementedInfrastructureConnectionServiceHandler) TestInfrastructureCon
 
 func (UnimplementedInfrastructureConnectionServiceHandler) ActivateInfrastructureConnection(context.Context, *connect.Request[v1.ActivateInfrastructureConnectionRequest]) (*connect.Response[v1.ActivateInfrastructureConnectionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InfrastructureConnectionService.ActivateInfrastructureConnection is not implemented"))
+}
+
+func (UnimplementedInfrastructureConnectionServiceHandler) ProvisionCloudflareEnvironmentResources(context.Context, *connect.Request[v1.ProvisionCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.ProvisionCloudflareEnvironmentResourcesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InfrastructureConnectionService.ProvisionCloudflareEnvironmentResources is not implemented"))
+}
+
+func (UnimplementedInfrastructureConnectionServiceHandler) GetCloudflareEnvironmentResources(context.Context, *connect.Request[v1.GetCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.GetCloudflareEnvironmentResourcesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InfrastructureConnectionService.GetCloudflareEnvironmentResources is not implemented"))
+}
+
+func (UnimplementedInfrastructureConnectionServiceHandler) ListCloudflareEnvironmentResources(context.Context, *connect.Request[v1.ListCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.ListCloudflareEnvironmentResourcesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InfrastructureConnectionService.ListCloudflareEnvironmentResources is not implemented"))
+}
+
+func (UnimplementedInfrastructureConnectionServiceHandler) RemoveCloudflareEnvironmentResources(context.Context, *connect.Request[v1.RemoveCloudflareEnvironmentResourcesRequest]) (*connect.Response[v1.RemoveCloudflareEnvironmentResourcesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InfrastructureConnectionService.RemoveCloudflareEnvironmentResources is not implemented"))
 }
 
 // ProfileServiceClient is a client for the golf.v1.ProfileService service.

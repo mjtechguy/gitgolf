@@ -18,8 +18,8 @@ type engineGitSource struct {
 }
 
 // This file lives only in the owned trusted engine domain. Source containers
-// never receive its path, a Docker socket or controller credentials. Job source
-// continues to use the existing owned volume; it has no hard disk quota.
+// never receive its path, a Docker socket or controller credentials. Git jobs use
+// verified bounded tmpfs volumes and a read-only container root.
 func loadEngineGitSource(input protocol.ActionExecutionInput) (*engineGitSource, error) {
 	if input.GitSource == nil {
 		return nil, nil
@@ -70,7 +70,7 @@ func (s *engineGitSource) transfer(ctx context.Context, id string) error {
 	if out, err := gitSourceCommand(ctx, id, nil, 64<<10, "/bin/sh", "-c", "test ! -e .git && test ! -L .git"); err != nil || len(out) != 0 {
 		return ErrExecution
 	}
-	if _, err := docker(ctx, bytes.NewReader(s.metadata), "cp", "-", id+":"+workspace); err != nil {
+	if _, err := gitSourceCommand(ctx, id, bytes.NewReader(s.metadata), 64<<10, "/bin/tar", "-xf", "-", "-C", workspace); err != nil {
 		return ErrExecution
 	}
 	return nil
@@ -161,4 +161,30 @@ func gitSourceCommand(ctx context.Context, id string, input io.Reader, limit int
 		return nil, ErrExecution
 	}
 	return out.Bytes(), nil
+}
+
+// Source is already extracted and validated in the owned engine domain. Both
+// argv vectors are fixed; extraction occurs inside the actual bounded mount.
+func transferJobSource(ctx context.Context, id string) error {
+	if !containerID.MatchString(id) {
+		return ErrExecution
+	}
+	source := exec.CommandContext(ctx, "/bin/tar", "-cf", "-", "-C", jobSource, ".")
+	pipe, err := source.StdoutPipe()
+	if err != nil {
+		return ErrExecution
+	}
+	source.Stderr = io.Discard
+	if source.Start() != nil {
+		return ErrExecution
+	}
+	_, err = gitSourceCommand(ctx, id, pipe, 64<<10, "/bin/tar", "-xf", "-", "-C", workspace)
+	pipe.Close()
+	if err != nil {
+		source.Process.Kill()
+	}
+	if source.Wait() != nil || err != nil {
+		return ErrExecution
+	}
+	return nil
 }

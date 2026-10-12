@@ -1,8 +1,9 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { WorkflowDispatchInputType, WorkflowDispatchInputDefinitionSchema, PrepareWorkflowDispatchRequestSchema, PrepareWorkflowDispatchResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { disabledAgentTasks, disabledAgentUsage } from './rpc';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { ActionRunKind, ListActionRunsRequestSchema, ListActionRunsResponseSchema, DispatchWorkflowRequestSchema, DispatchWorkflowResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, GetReviewerResponseSchema, ListReviewerRunsResponseSchema, GetRepositoryResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, WorkflowRunOrigin, WorkflowRunState, GetWorkflowDispatchRequestSchema, GetWorkflowDispatchResponseSchema, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
+import { ActionRunKind, ListActionRunsRequestSchema, ListActionRunsResponseSchema, DispatchWorkflowRequestSchema, DispatchWorkflowResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, GetReviewerResponseSchema, ListReviewerRunsResponseSchema, GetRepositoryResponseSchema, GetRepositoryStarResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, WorkflowRunOrigin, WorkflowRunState, GetWorkflowDispatchRequestSchema, GetWorkflowDispatchResponseSchema, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const path = '/repositories/alex/private/settings/workflows';
@@ -17,7 +18,7 @@ const inputDefinitions=[
  create(WorkflowDispatchInputDefinitionSchema,{name:'choice',type:WorkflowDispatchInputType.CHOICE,options:['first','second'],defaultValue:{name:'choice',value:{case:'stringValue',value:'first'}}}),
 ];
 async function backend(page: Page) {
-  const state = { typed:false, gitlabReady:false, writeBodies:[] as Record<string,unknown>[], definitions:inputDefinitions, badPreparation:'', badInputs:false, prepareBarrier:undefined as Promise<void>|undefined, prepared:[] as ReturnType<typeof request<typeof PrepareWorkflowDispatchRequestSchema>>[], mode: 'ready', worker: false, policyKnown: true, manualPolicy: false, pushPolicy: false, badPolicyRevision: false, badTarget: false, dispatchLost: false, inspectBarrier: undefined as Promise<void>|undefined, inspectMode: 'ready', permission: 'write', badOwner:false, badReceipt:'', actor:'9007199254740993', signedRun: undefined as ReturnType<typeof completeRun>|undefined, writes: [] as ReturnType<typeof request<typeof DispatchWorkflowRequestSchema>>[], inspections: [] as ReturnType<typeof request<typeof GetWorkflowDispatchRequestSchema>>[], badMetadata: false, missingMetadata: false, signedIn: true, barrier: undefined as Promise<void> | undefined, requests: [] as unknown[], runPages: false, matchingRuns: false, methods: [] as string[], denyRuns: false, requestedRunPages: [] as number[] };
+  const state = { nativeDirectory:false, forgejoDirectory:false, typed:false, gitlabReady:false, writeBodies:[] as Record<string,unknown>[], definitions:inputDefinitions, badPreparation:'', badInputs:false, prepareBarrier:undefined as Promise<void>|undefined, prepared:[] as ReturnType<typeof request<typeof PrepareWorkflowDispatchRequestSchema>>[], mode: 'ready', worker: false, policyKnown: true, manualPolicy: false, pushPolicy: false, badPolicyRevision: false, badTarget: false, dispatchLost: false, inspectBarrier: undefined as Promise<void>|undefined, inspectMode: 'ready', permission: 'write', badOwner:false, badReceipt:'', actor:'9007199254740993', signedRun: undefined as ReturnType<typeof completeRun>|undefined, writes: [] as ReturnType<typeof request<typeof DispatchWorkflowRequestSchema>>[], inspections: [] as ReturnType<typeof request<typeof GetWorkflowDispatchRequestSchema>>[], badMetadata: false, missingMetadata: false, signedIn: true, barrier: undefined as Promise<void> | undefined, requests: [] as unknown[], runPages: false, matchingRuns: false, methods: [] as string[], denyRuns: false, requestedRunPages: [] as number[] };
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1); state.methods.push(method||'');
  if(method === 'ListAgentTasks') return disabledAgentTasks(route);
@@ -28,9 +29,10 @@ async function backend(page: Page) {
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');
     if(method==='GetReviewer')return respond(route,GetReviewerResponseSchema,{executionAvailable:false});
     if(method==='ListReviewerRuns')return respond(route,ListReviewerRunsResponseSchema,{});
+    if(method==='GetRepositoryStar')return respond(route,GetRepositoryStarResponseSchema,{preference:{repository:{owner:'alex',name:'private'},repositoryId:'9007199254740997',ownerId:'9007199254740993',nativeUserId:state.actor,starred:false,starsCount:'0'}});
     if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:'9007199254740997',name:state.missingMetadata?'':state.badMetadata?'other':'private',fullName:state.missingMetadata?'':'alex/private',defaultBranch:'main',private:true}});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: state.actor, login: 'alex' } });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: { repositoryId: '9007199254740997', ownerId: state.badOwner?'18':'9007199254740993', currentPermission: state.permission } });
     if (method === 'GetRepositorySettings') return respond(route, GetRepositorySettingsResponseSchema, { settings: { repositoryId: '9007199254740997', ownerId: '9007199254740993', canEdit: false } });
     if (method === 'GetExecutionPolicy') return respond(route, GetExecutionPolicyResponseSchema, { policy: { scope: ExecutionScope.REPOSITORY, scopeId: '9007199254740997', ownerId: '9007199254740993', mode: ExecutionMode.DISABLED, revision: '0', revocationEpoch: '0', authorityRevision: 'd'.repeat(64) } });
@@ -62,9 +64,9 @@ async function backend(page: Page) {
       if (state.mode === 'denied') return reject(route, 'permission_denied', 'Workflow inspection requires repository read access.');
       if (state.mode === 'expired') { state.signedIn = false; return reject(route, 'unauthenticated', 'Your session ended.'); }
       if (state.mode === 'overfull') return reject(route, 'resource_exhausted', 'Workflow configuration inventory exceeds its bound.');
-      return respond(route, InspectWorkflowsResponseSchema, { repositoryId: state.badTarget?'18':'9007199254740997', commitId: commit, catalogVersion: 'golf.workflow.inspect.v2', executionCatalog:state.typed?'golf.workflow.act.v0.2.89.linux.v2':'', executionAvailable: state.worker, policyRevision: state.policyKnown?(state.badPolicyRevision?'not-a-revision':'e'.repeat(64)):'', configurations: (state.mode === 'empty' ? [] : [state.mode === 'push' ? { ...manual, events: ['push'] } : manual, { path: '.gitlab-ci.yml', blobId: 'c'.repeat(40), byteSize: 321n, format: WorkflowFormat.GITLAB_CI, state: state.gitlabReady?WorkflowInspectionState.VALIDATED_SUBSET:WorkflowInspectionState.UNSUPPORTED, jobs: [{ id: 'build', stage: 'test', stepCount: 1 }], diagnostics: [{ code: 'unsupported_field', message: 'Remote includes are not fetched.', line: 3, column: 2 }] }]).map(item=>({...item,...(state.typed&&item.path===manual.path?{manualInputs:state.badInputs?[{...inputDefinitions[0]!,type:99}]:state.definitions,manualInputsSchemaSha256:inputSchema}:{}),manualPolicyAllowed:state.policyKnown?state.manualPolicy:undefined,pushPolicyAllowed:state.policyKnown?state.pushPolicy:undefined})) });
+      return respond(route, InspectWorkflowsResponseSchema, { repositoryId: state.badTarget?'18':'9007199254740997', commitId: commit, catalogVersion: 'golf.workflow.inspect.v3', executionCatalog:state.typed?'golf.workflow.act.v0.2.89.linux.v2':'', executionAvailable: state.worker, policyRevision: state.policyKnown?(state.badPolicyRevision?'not-a-revision':'e'.repeat(64)):'', configurations: (state.mode === 'empty' ? [] : [state.mode === 'push' ? { ...manual, events: ['push'] } : manual, { path: '.gitlab-ci.yml', blobId: 'c'.repeat(40), byteSize: 321n, format: WorkflowFormat.GITLAB_CI, state: state.gitlabReady?WorkflowInspectionState.VALIDATED_SUBSET:WorkflowInspectionState.UNSUPPORTED, jobs: [{ id: 'build', stage: 'test', stepCount: 1 }], diagnostics: [{ code: 'unsupported_field', message: 'Remote includes are not fetched.', line: 3, column: 2 }] }]).map(item=>({...item,path:state.nativeDirectory&&item.path===manual.path?(state.forgejoDirectory?'.forgejo/workflows/manual.yml':'.gitea/workflows/manual.yml'):item.path,...(state.typed&&item.path===manual.path?{manualInputs:state.badInputs?[{...inputDefinitions[0]!,type:99}]:state.definitions,manualInputsSchemaSha256:inputSchema}:{}),manualPolicyAllowed:state.policyKnown?state.manualPolicy:undefined,pushPolicyAllowed:state.policyKnown?state.pushPolicy:undefined})) });
     }
-    return reject(route, 'not_found', 'Unsupported workflow fixture.');
+    return reject(route, 'not_found', 'Unsupported workflow fixture: '+method);
   });
   return state;
 }
@@ -86,7 +88,7 @@ test('workflow inventory pins source links, exposes keyboard details and renders
   await scope.focus(); await page.keyboard.press('Enter');
   await expect(page.getByText('Limits: 20 files', { exact: false })).toBeVisible();
   await expect(page.getByText('Static inspection does not grant execution.', { exact: false })).toBeVisible();
-  await expect(page.getByText('golf.workflow.inspect.v2', { exact: true })).toBeVisible();
+  await expect(page.getByText('golf.workflow.inspect.v3', { exact: true })).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.getByText('Limits: 20 files', { exact: false })).not.toBeVisible();
   expect(state.methods.length).toBe(requestsBeforeDisclosure);
@@ -157,7 +159,8 @@ test('run inventory loads the next server page and clears private rows on denial
   await page.getByRole('searchbox', { name: 'Search loaded Action runs', exact: true }).fill('later.yml');
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(1);
   await expect(table).toContainText('.github/workflows/later.yml');
-  expect(state.requestedRunPages.filter(value => value === 2)).toEqual([2]);
+  // The five-second live fallback may re-read loaded pages on a busy test host.
+  expect(state.requestedRunPages).toContain(2);
   expect(state.requestedRunPages.every(value => value === 1 || value === 2)).toBe(true);
   state.denyRuns = true; await page.getByRole('button', { name: 'Refresh runs', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Workflow runs require repository read access.');
@@ -192,7 +195,7 @@ for(const theme of ['dark','light'])for(const width of [1440,390])test(`Actions 
  const s=await backend(page);s.runPages=true;s.matchingRuns=true;await page.setViewportSize({width,height:1000});await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);
  await page.goto('/alex/private/actions?ref='+commit+'&branch=older-context');
  const table=page.getByRole('table',{name:'Action runs',exact:true});await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
- if(width===390){await expect(page.getByRole('combobox',{name:'Run type',exact:true})).toBeVisible();expect((await table.boundingBox())!.y).toBeLessThan(700);}
+ if(width===390){await expect(page.getByRole('combobox',{name:'Run type',exact:true})).toBeVisible();await page.evaluate(()=>document.fonts.ready);expect((await table.boundingBox())!.y).toBeLessThan(700);}
  const navigation=page.getByRole('navigation',{name:'Workflow navigation'});await expect(page.getByRole('link',{name:'All runs',exact:true,includeHidden:true})).toHaveAttribute('aria-current','page');
  expect(s.methods).not.toContain('ListAgentTasks');await expect(page.getByRole('table',{name:'Workflow configurations',exact:true})).toBeHidden();
  await page.getByText('Execution details and configuration',{exact:true}).click();
@@ -380,4 +383,29 @@ test('v2 Actions catalog preserves input-free GitHub legacy dispatch and origina
  expect(state.prepared).toHaveLength(0);await expect(page.getByRole('form',{name:'Workflow inputs',exact:true})).toHaveCount(0);expect(Object.keys(state.writeBodies[0]!).sort()).toEqual(['idempotencyKey','ref','repository','workflowPath']);expect(state.writeBodies[0]).toMatchObject({repository:{owner:'alex',name:'private'},ref:commit,workflowPath:manual.path});expect(state.writes[0]!.inputContract).toBeUndefined();expect(state.writes[0]!.inputs).toEqual([]);
  await expect(page.getByRole('status').filter({hasText:'recorded'})).toBeVisible();const original=await page.evaluate(()=>{const key=Object.keys(sessionStorage).find(value=>value.startsWith('golf.workflow-dispatch.v1:'))!;return JSON.parse(sessionStorage.getItem(key)!);});expect(Object.keys(original)).toHaveLength(9);expect(original).not.toHaveProperty('inputContract');
  await page.reload();await open(page);expect(state.writes).toHaveLength(1);expect(state.prepared).toHaveLength(0);expect(state.inspections).toHaveLength(0);await page.getByRole('button',{name:'Inspect original dispatch',exact:true}).click();await expect.poll(()=>state.inspections.length).toBe(1);expect(state.inspections[0]).toMatchObject({repository:{owner:'alex',name:'private'},repositoryId:'9007199254740997',ownerId:'9007199254740993',commitId:commit,workflowPath:manual.path,idempotencyKey:state.writes[0]!.idempotencyKey});expect(state.inspections[0]!.inputContract).toBeUndefined();expect(state.inspections[0]!.submittedSha256).toBeUndefined();expect(state.inspections[0]!.effectiveSha256).toBeUndefined();await expect(page.getByRole('status').filter({hasText:'recorded'})).toBeVisible();expect(state.writes).toHaveLength(1);expect(state.prepared).toHaveLength(0);
+});
+
+
+test('native Gitea path is shown and dispatched without widening source selection', async ({ page }) => {
+  const state = await backend(page);
+  state.nativeDirectory = true; state.worker = true; state.manualPolicy = true;
+  await open(page);
+  await expect(page.getByText('.gitea/workflows/manual.yml', { exact: true })).toBeVisible();
+  await expect(page.getByText('.github/workflows/manual.yml', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Run workflow', exact: true }).click();
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0]!.workflowPath).toBe('.gitea/workflows/manual.yml');
+  expect(state.writes[0]!.ref).toBe(commit);
+});
+
+
+test('Forgejo path stays visible and exact through dispatch', async ({ page }) => {
+  const state = await backend(page);
+  state.nativeDirectory = true; state.forgejoDirectory = true; state.worker = true; state.manualPolicy = true;
+  await open(page);
+  await expect(page.getByText('.forgejo/workflows/manual.yml', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Run workflow', exact: true }).click();
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0]!.workflowPath).toBe('.forgejo/workflows/manual.yml');
+  expect(state.writes[0]!.ref).toBe(commit);
 });

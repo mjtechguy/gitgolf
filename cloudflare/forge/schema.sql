@@ -1,0 +1,549 @@
+-- One independently provisioned workspace partition. Never applied to PostgreSQL.
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  login TEXT NOT NULL UNIQUE,
+  full_name TEXT NOT NULL DEFAULT '',
+  email TEXT UNIQUE,
+  active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+  can_create INTEGER NOT NULL DEFAULT 0 CHECK(can_create IN (0,1))
+);
+CREATE TABLE IF NOT EXISTS credentials (
+  digest TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  expires_at INTEGER NOT NULL,
+  revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1))
+);
+CREATE TABLE IF NOT EXISTS repositories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL,
+  artifact_name TEXT NOT NULL UNIQUE,
+  default_branch TEXT NOT NULL DEFAULT 'main',
+  creator_id INTEGER NOT NULL REFERENCES users(id),
+  creation_key TEXT NOT NULL,
+  input_hash TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('CREATING','ACTIVE')),
+  created_at TEXT NOT NULL,
+  write_pending TEXT,
+  UNIQUE(creator_id, creation_key)
+);
+CREATE TABLE IF NOT EXISTS grants (
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  role TEXT NOT NULL CHECK(role IN ('read','write','admin')),
+  PRIMARY KEY(repository_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS git_operations (
+  id TEXT PRIMARY KEY,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  ref TEXT NOT NULL,
+  old_sha TEXT NOT NULL,
+  new_sha TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('DISPATCHED','APPLIED')),
+  ci_state TEXT NOT NULL DEFAULT 'NONE' CHECK(ci_state IN ('NONE','PENDING','RECORDED','REFUSED')),
+  created_at TEXT NOT NULL
+);
+
+-- Native collaboration; shared issue/PR numbers, separate PR identities.
+CREATE TABLE IF NOT EXISTS discussions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  number INTEGER NOT NULL CHECK(number BETWEEN 1 AND 4294967295),
+  kind TEXT NOT NULL CHECK(kind IN ('issue','pull')),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('OPEN','CLOSED')),
+  revision INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(repository_id,number)
+);
+CREATE INDEX IF NOT EXISTS discussions_repository ON discussions(repository_id,kind,state,number DESC);
+CREATE TABLE IF NOT EXISTS pull_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discussion_id INTEGER NOT NULL UNIQUE REFERENCES discussions(id),
+  base_branch TEXT NOT NULL,
+  head_branch TEXT NOT NULL,
+  base_commit TEXT NOT NULL,
+  head_commit TEXT NOT NULL,
+  draft INTEGER NOT NULL CHECK(draft IN (0,1))
+);
+CREATE TABLE IF NOT EXISTS discussion_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS discussion_comments_parent ON discussion_comments(discussion_id,id);
+CREATE TABLE IF NOT EXISTS pull_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pull_request_id INTEGER NOT NULL REFERENCES pull_requests(id),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  head_commit TEXT NOT NULL,
+  base_commit TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('APPROVED','COMMENT','REQUEST_CHANGES')),
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS pull_reviews_parent ON pull_reviews(pull_request_id,id);
+-- Reported status observations only; not execution attestations or merge evidence.
+CREATE TABLE IF NOT EXISTS reported_checks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  commit_id TEXT NOT NULL,
+  context TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('PENDING','SUCCESS','FAILURE','ERROR','WARNING','SKIPPED')),
+  description TEXT NOT NULL,
+  target_url TEXT NOT NULL,
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS reported_checks_commit ON reported_checks(repository_id,commit_id,context,id DESC);
+CREATE TABLE IF NOT EXISTS collaboration_operations (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  operation_key TEXT NOT NULL,
+  method TEXT NOT NULL,
+  input_hash TEXT NOT NULL,
+  result_kind TEXT NOT NULL CHECK(result_kind IN ('issue','pull','comment','review','check')),
+  result_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(user_id,operation_key)
+);
+CREATE TABLE IF NOT EXISTS evidence_jobs (
+  id TEXT PRIMARY KEY,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  operation_key TEXT NOT NULL,
+  input_hash TEXT NOT NULL,
+  snapshot TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'QUEUED' CHECK(state IN ('QUEUED','SUCCEEDED','REFUSED','EXPIRED')),
+  delivery TEXT NOT NULL DEFAULT 'PENDING' CHECK(delivery IN ('PENDING','SENT','STARTED')),
+  delivery_attempts INTEGER NOT NULL DEFAULT 0,
+  advice_state TEXT NOT NULL CHECK(advice_state IN ('NONE','REQUESTED','RESERVED','SUCCEEDED','UNKNOWN')),
+  advice TEXT,
+  test_state TEXT NOT NULL DEFAULT 'NONE' CHECK(test_state IN ('NONE','REQUESTED','RUNNING','PASSED','FAILED','TIMED_OUT','CANCELLED','LOST')),
+  test_result TEXT,
+  agent_state TEXT NOT NULL DEFAULT 'NONE' CHECK(agent_state IN ('NONE','REQUESTED','FORK_PENDING','RUNNING','succeeded','failed','cancelled','timed_out','lost')),
+  agent_fork TEXT,
+  agent_publish TEXT CHECK(agent_publish IN ('DISPATCHED','APPLIED')),
+  agent_proposal TEXT,
+  agent_result TEXT,
+  report_key TEXT,
+  report_hash TEXT,
+  report_bytes INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  UNIQUE(user_id,operation_key)
+);
+CREATE INDEX IF NOT EXISTS evidence_daily ON evidence_jobs(created_at);
+
+-- Native protected static PR delivery.
+CREATE TABLE IF NOT EXISTS previews (
+  id TEXT PRIMARY KEY, repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  user_id INTEGER NOT NULL REFERENCES users(id), job_id TEXT NOT NULL REFERENCES evidence_jobs(id),
+  operation_key TEXT NOT NULL, input_hash TEXT NOT NULL, selection TEXT NOT NULL, pr_revision TEXT NOT NULL,
+  commit_id TEXT NOT NULL, tree_id TEXT NOT NULL, source_path TEXT NOT NULL,
+  bundle_key TEXT NOT NULL, bundle_hash TEXT NOT NULL, bundle_bytes INTEGER NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('PUBLISHING','READY','REVOKED','EXPIRED')),
+  created_at TEXT NOT NULL, expires_at TEXT NOT NULL, purged INTEGER NOT NULL DEFAULT 0 CHECK(purged IN (0,1)),
+  capture_state TEXT NOT NULL DEFAULT 'NONE' CHECK(capture_state IN ('NONE','DISPATCHED','READY','UNKNOWN')),
+  capture_key TEXT, capture_hash TEXT, capture_bytes INTEGER, browser_ms INTEGER,
+  kind TEXT NOT NULL DEFAULT 'STATIC' CHECK(kind IN ('STATIC','WORKER')), policy_hash TEXT,
+  UNIQUE(user_id,operation_key)
+);
+CREATE INDEX IF NOT EXISTS previews_cleanup ON previews(purged,state,expires_at);
+CREATE TABLE IF NOT EXISTS preview_credentials (
+  digest TEXT PRIMARY KEY, preview_id TEXT NOT NULL REFERENCES previews(id), user_id INTEGER NOT NULL REFERENCES users(id),
+  kind TEXT NOT NULL CHECK(kind IN ('grant','session')), expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS preview_credentials_expiry ON preview_credentials(expires_at);
+
+-- Native managed application resources and verified-push CI admission.
+CREATE TABLE IF NOT EXISTS app_resources (
+  preview_id TEXT NOT NULL REFERENCES previews(id), kind TEXT NOT NULL CHECK(kind IN ('database','bucket','cleaner','script','domain','migration')),
+  name TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('DISPATCHED','READY','DELETED')),
+  provider_id TEXT, identity TEXT, PRIMARY KEY(preview_id,kind)
+);
+CREATE TABLE IF NOT EXISTS ci_intake (
+  id TEXT PRIMARY KEY, operation_id TEXT NOT NULL REFERENCES git_operations(id), repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  user_id INTEGER NOT NULL REFERENCES users(id), number INTEGER NOT NULL, selection TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'PENDING' CHECK(state IN ('PENDING','ADMITTED','REFUSED')),
+  job_id TEXT, reason TEXT, created_at TEXT NOT NULL, UNIQUE(operation_id,number)
+);
+CREATE TABLE IF NOT EXISTS app_requests (day TEXT PRIMARY KEY, total INTEGER NOT NULL);
+
+-- Apply only to Golf's native D1 workspace; seed its configured workspace separately.
+CREATE TABLE IF NOT EXISTS workspaces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL UNIQUE,
+  artifact_namespace TEXT NOT NULL UNIQUE
+);
+CREATE TABLE IF NOT EXISTS repository_stars (
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  PRIMARY KEY(repository_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS profiles (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id),
+  full_name TEXT NOT NULL,
+  bio TEXT NOT NULL DEFAULT '',
+  location TEXT NOT NULL DEFAULT '',
+  website TEXT NOT NULL DEFAULT '',
+  version INTEGER NOT NULL DEFAULT 0
+);
+
+-- Native D1 only. Existing repository identities and Git authority are preserved.
+CREATE TABLE IF NOT EXISTS repository_settings (
+  repository_id INTEGER PRIMARY KEY REFERENCES repositories(id),
+  description TEXT NOT NULL,
+  website TEXT NOT NULL DEFAULT '',
+  topics TEXT NOT NULL DEFAULT '[]',
+  version INTEGER NOT NULL DEFAULT 0
+);
+-- Replaceable immutable read models; no credentials or permission decisions are cached.
+CREATE TABLE repository_indexes (
+  key TEXT PRIMARY KEY, repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  commit_id TEXT NOT NULL, input_hash TEXT NOT NULL, payload TEXT NOT NULL,
+  payload_hash TEXT NOT NULL, payload_bytes INTEGER NOT NULL,
+  state TEXT NOT NULL DEFAULT 'PENDING' CHECK(state IN ('PENDING','READY')),
+  created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+CREATE INDEX repository_indexes_expiry ON repository_indexes(expires_at,state);
+CREATE TABLE repository_index_budget (
+  day TEXT PRIMARY KEY, operations INTEGER NOT NULL CHECK(operations BETWEEN 0 AND 60000)
+);
+-- No role is inferred from can_create or repository grants on existing installs.
+CREATE TABLE IF NOT EXISTS operations_admins (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id),
+  active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1))
+);
+CREATE TABLE IF NOT EXISTS operations_maintenance (
+  stage TEXT PRIMARY KEY CHECK(stage IN ('ci','previews','evidence','indexes')),
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  last_success_at TEXT,
+  outcome TEXT NOT NULL CHECK(outcome IN ('running','succeeded','degraded','failed')),
+  processed INTEGER CHECK(processed IS NULL OR processed >= 0),
+  pending INTEGER CHECK(pending IS NULL OR pending >= 0)
+);
+CREATE INDEX IF NOT EXISTS evidence_operations ON evidence_jobs(state,created_at);
+CREATE INDEX IF NOT EXISTS app_resources_operations ON app_resources(state,kind);
+CREATE TABLE IF NOT EXISTS operations_provider (
+  service TEXT PRIMARY KEY CHECK(service IN ('workers','artifacts','r2')),
+  attempted_at TEXT NOT NULL, observed_at TEXT,
+  window_start TEXT, window_end TEXT,
+  state TEXT NOT NULL CHECK(state IN ('running','succeeded','failed')),
+  requests INTEGER, errors INTEGER, subrequests INTEGER
+);
+CREATE TABLE IF NOT EXISTS operations_delivery_failures (
+  message_id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL REFERENCES evidence_jobs(id),
+  observed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS operations_delivery_expiry ON operations_delivery_failures(observed_at);
+
+-- Grant revisions include deletions and external operator changes, preventing ABA edits.
+CREATE TABLE IF NOT EXISTS repository_access_versions (
+  repository_id INTEGER PRIMARY KEY REFERENCES repositories(id),
+  version INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS collaborator_versions (
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  generation INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(repository_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS repository_access_operations (
+  actor_id INTEGER NOT NULL REFERENCES users(id),
+  operation_key TEXT NOT NULL,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  recipient_id INTEGER NOT NULL REFERENCES users(id),
+  input_hash TEXT NOT NULL,
+  receipt TEXT NOT NULL,
+  PRIMARY KEY(actor_id,operation_key)
+);
+CREATE TRIGGER IF NOT EXISTS grants_insert_revision AFTER INSERT ON grants BEGIN
+  INSERT INTO repository_access_versions VALUES(NEW.repository_id,1)
+    ON CONFLICT(repository_id) DO UPDATE SET version=version+1;
+  INSERT INTO collaborator_versions VALUES(NEW.repository_id,NEW.user_id,1)
+    ON CONFLICT(repository_id,user_id) DO UPDATE SET generation=generation+1;
+END;
+CREATE TRIGGER IF NOT EXISTS grants_update_revision AFTER UPDATE OF role ON grants BEGIN
+  INSERT INTO repository_access_versions VALUES(NEW.repository_id,1)
+    ON CONFLICT(repository_id) DO UPDATE SET version=version+1;
+  INSERT INTO collaborator_versions VALUES(NEW.repository_id,NEW.user_id,1)
+    ON CONFLICT(repository_id,user_id) DO UPDATE SET generation=generation+1;
+END;
+CREATE TRIGGER IF NOT EXISTS grants_delete_revision AFTER DELETE ON grants BEGIN
+  INSERT INTO repository_access_versions VALUES(OLD.repository_id,1)
+    ON CONFLICT(repository_id) DO UPDATE SET version=version+1;
+  INSERT INTO collaborator_versions VALUES(OLD.repository_id,OLD.user_id,1)
+    ON CONFLICT(repository_id,user_id) DO UPDATE SET generation=generation+1;
+END;
+
+CREATE TABLE IF NOT EXISTS native_identity_versions (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id), version INTEGER NOT NULL DEFAULT 0
+);
+CREATE TRIGGER IF NOT EXISTS native_identity_revision AFTER UPDATE OF active,email,login ON users BEGIN
+  INSERT INTO native_identity_versions VALUES(NEW.id,1)
+    ON CONFLICT(user_id) DO UPDATE SET version=version+1;
+END;
+CREATE TABLE IF NOT EXISTS repository_invitations (
+  id TEXT PRIMARY KEY,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  artifact_name TEXT NOT NULL,
+  issuer_id INTEGER NOT NULL REFERENCES users(id),
+  issuer_version INTEGER NOT NULL,
+  issuer_generation INTEGER NOT NULL,
+  recipient_id INTEGER NOT NULL REFERENCES users(id),
+  recipient_version INTEGER NOT NULL,
+  recipient_generation INTEGER NOT NULL,
+  permission TEXT NOT NULL CHECK(permission IN ('read','write','admin')),
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  state TEXT NOT NULL DEFAULT 'PENDING' CHECK(state IN ('PENDING','ACCEPTED','REJECTED','REVOKED','EXPIRED')),
+  operation_key TEXT NOT NULL,
+  input_hash TEXT NOT NULL,
+  UNIQUE(issuer_id,operation_key)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS repository_invitation_pending ON repository_invitations(repository_id,recipient_id) WHERE state='PENDING';
+CREATE INDEX IF NOT EXISTS repository_invitation_inbox ON repository_invitations(recipient_id,created_at,id);
+CREATE INDEX IF NOT EXISTS repository_invitation_inventory ON repository_invitations(repository_id,created_at,id);
+CREATE TABLE IF NOT EXISTS repository_invitation_operations (
+  actor_id INTEGER NOT NULL REFERENCES users(id),
+  operation_key TEXT NOT NULL,
+  invitation_id TEXT NOT NULL REFERENCES repository_invitations(id),
+  input_hash TEXT NOT NULL,
+  receipt TEXT NOT NULL,
+  PRIMARY KEY(actor_id,operation_key)
+);
+CREATE TABLE IF NOT EXISTS discussion_resources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  kind TEXT NOT NULL CHECK(kind IN ('label','milestone')),
+  name TEXT NOT NULL COLLATE NOCASE,
+  payload TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0,1))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS discussion_resource_name ON discussion_resources(repository_id,kind,name) WHERE deleted=0;
+CREATE INDEX IF NOT EXISTS discussion_resource_inventory ON discussion_resources(repository_id,kind,deleted,id);
+CREATE TABLE IF NOT EXISTS discussion_resource_operations (
+  actor_id INTEGER NOT NULL REFERENCES users(id),
+  operation_key TEXT NOT NULL,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  input_hash TEXT NOT NULL,
+  receipt TEXT NOT NULL,
+  PRIMARY KEY(actor_id,operation_key)
+);
+CREATE TABLE IF NOT EXISTS discussion_labels (
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id),
+  label_id INTEGER NOT NULL REFERENCES discussion_resources(id),
+  PRIMARY KEY(discussion_id,label_id)
+);
+CREATE INDEX IF NOT EXISTS discussion_label_members ON discussion_labels(label_id,discussion_id);
+CREATE TABLE IF NOT EXISTS discussion_assignees (
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  PRIMARY KEY(discussion_id,user_id)
+);
+CREATE INDEX IF NOT EXISTS discussion_assignee_members ON discussion_assignees(user_id,discussion_id);
+CREATE TABLE IF NOT EXISTS discussion_milestones (
+  discussion_id INTEGER PRIMARY KEY REFERENCES discussions(id),
+  milestone_id INTEGER NOT NULL REFERENCES discussion_resources(id)
+);
+CREATE INDEX IF NOT EXISTS discussion_milestone_members ON discussion_milestones(milestone_id,discussion_id);
+CREATE TRIGGER IF NOT EXISTS discussion_resource_revision AFTER UPDATE ON discussion_resources BEGIN
+  UPDATE discussions SET revision=revision+1 WHERE id IN (
+    SELECT discussion_id FROM discussion_labels WHERE label_id=NEW.id
+    UNION SELECT discussion_id FROM discussion_milestones WHERE milestone_id=NEW.id
+  );
+  DELETE FROM discussion_labels WHERE label_id=NEW.id AND NEW.deleted=1;
+  DELETE FROM discussion_milestones WHERE milestone_id=NEW.id AND NEW.deleted=1;
+END;
+-- Reactions and inbox activity are native D1 records; no external email is sent.
+CREATE TABLE IF NOT EXISTS discussion_engagement_versions (
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id), comment_id INTEGER NOT NULL DEFAULT 0,
+  version INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(discussion_id,comment_id)
+);
+CREATE TABLE IF NOT EXISTS discussion_reactions (
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id), comment_id INTEGER NOT NULL DEFAULT 0,
+  user_id INTEGER NOT NULL REFERENCES users(id), content TEXT NOT NULL CHECK(content IN ('+1','-1','laugh','hooray','confused','heart','rocket','eyes')),
+  PRIMARY KEY(discussion_id,comment_id,user_id,content)
+);
+CREATE TABLE IF NOT EXISTS discussion_subscriptions (
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id), user_id INTEGER NOT NULL REFERENCES users(id),
+  PRIMARY KEY(discussion_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS discussion_events (
+  id TEXT PRIMARY KEY, discussion_id INTEGER NOT NULL REFERENCES discussions(id),
+  actor_id INTEGER NOT NULL REFERENCES users(id), kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS discussion_event_inventory ON discussion_events(discussion_id,created_at);
+CREATE TABLE IF NOT EXISTS discussion_notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id),
+  discussion_id INTEGER NOT NULL REFERENCES discussions(id), event_id TEXT NOT NULL REFERENCES discussion_events(id),
+  unread INTEGER NOT NULL DEFAULT 1 CHECK(unread IN (0,1)), revision INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
+  UNIQUE(user_id,event_id)
+);
+CREATE INDEX IF NOT EXISTS discussion_notification_inbox ON discussion_notifications(user_id,unread,id);
+CREATE TRIGGER IF NOT EXISTS discussion_reaction_added AFTER INSERT ON discussion_reactions BEGIN
+  INSERT INTO discussion_engagement_versions VALUES(NEW.discussion_id,NEW.comment_id,1) ON CONFLICT(discussion_id,comment_id) DO UPDATE SET version=version+1;
+END;
+CREATE TRIGGER IF NOT EXISTS discussion_reaction_removed AFTER DELETE ON discussion_reactions BEGIN
+  INSERT INTO discussion_engagement_versions VALUES(OLD.discussion_id,OLD.comment_id,1) ON CONFLICT(discussion_id,comment_id) DO UPDATE SET version=version+1;
+END;
+CREATE TRIGGER IF NOT EXISTS discussion_subscription_added AFTER INSERT ON discussion_subscriptions BEGIN
+  INSERT INTO discussion_engagement_versions VALUES(NEW.discussion_id,0,1) ON CONFLICT(discussion_id,comment_id) DO UPDATE SET version=version+1;
+END;
+CREATE TRIGGER IF NOT EXISTS discussion_subscription_removed AFTER DELETE ON discussion_subscriptions BEGIN
+  INSERT INTO discussion_engagement_versions VALUES(OLD.discussion_id,0,1) ON CONFLICT(discussion_id,comment_id) DO UPDATE SET version=version+1;
+END;
+CREATE TRIGGER IF NOT EXISTS discussion_comment_engagement_removed AFTER DELETE ON discussion_comments BEGIN
+  DELETE FROM discussion_reactions WHERE discussion_id=OLD.discussion_id AND comment_id=OLD.id;
+END;
+
+-- Native webhook configuration and transactional outbox. Secrets are AES-GCM ciphertext.
+CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+ id TEXT PRIMARY KEY, repository_id INTEGER NOT NULL REFERENCES repositories(id), artifact_name TEXT NOT NULL,
+ version INTEGER NOT NULL CHECK(version>0), name TEXT NOT NULL, destination_host TEXT NOT NULL,
+ encrypted TEXT NOT NULL, credential_version INTEGER NOT NULL CHECK(credential_version>0), event_topics TEXT NOT NULL, workflow_notifications INTEGER NOT NULL CHECK(workflow_notifications BETWEEN 1 AND 3),
+ enabled INTEGER NOT NULL CHECK(enabled IN (0,1)), sponsor_id INTEGER NOT NULL REFERENCES users(id),
+ identity_version INTEGER NOT NULL, grant_generation INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS webhook_repository ON webhook_subscriptions(repository_id,id);
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+ id TEXT PRIMARY KEY, subscription_id TEXT NOT NULL REFERENCES webhook_subscriptions(id), subscription_version INTEGER NOT NULL,
+ event_id TEXT NOT NULL, event_topic TEXT NOT NULL, payload TEXT NOT NULL, automatic_key TEXT,
+ requested_by INTEGER REFERENCES users(id), input_hash TEXT,
+ state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','sending','retrying','accepted','failed','cancelled')),
+ attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 6), response_status INTEGER NOT NULL DEFAULT 0,
+ failure_code TEXT NOT NULL DEFAULT '', possible_duplicate INTEGER NOT NULL DEFAULT 0 CHECK(possible_duplicate IN (0,1)),
+ lease TEXT, lease_until TEXT, next_attempt_at TEXT NOT NULL, created_at TEXT NOT NULL, completed_at TEXT,
+ UNIQUE(subscription_id,subscription_version,automatic_key)
+);
+CREATE INDEX IF NOT EXISTS webhook_delivery_inventory ON webhook_deliveries(subscription_id,created_at DESC,id);
+CREATE INDEX IF NOT EXISTS webhook_delivery_due ON webhook_deliveries(state,next_attempt_at);
+CREATE TABLE IF NOT EXISTS webhook_daily (day TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0);
+CREATE TRIGGER IF NOT EXISTS webhook_discussion_event AFTER INSERT ON discussion_events
+
+BEGIN
+ INSERT OR IGNORE INTO webhook_deliveries(id,subscription_id,subscription_version,event_id,event_topic,payload,automatic_key,next_attempt_at,created_at)
+ SELECT lower(hex(randomblob(4))||'-'||hex(randomblob(2))||'-4'||substr(hex(randomblob(2)),2)||'-a'||substr(hex(randomblob(2)),2)||'-'||hex(randomblob(6))),s.id,s.version,'discussion:'||NEW.id,CASE WHEN (SELECT kind FROM discussions WHERE id=NEW.discussion_id)='pull' THEN 'pulls' ELSE 'issues' END,
+  json_object('schema','golf.webhook.v1','event','golf.repository.changed','event_id','discussion:'||NEW.id,'repository_id',CAST(s.repository_id AS TEXT),'topic',CASE WHEN (SELECT kind FROM discussions WHERE id=NEW.discussion_id)='pull' THEN 'pulls' ELSE 'issues' END),
+  'discussion:'||NEW.id,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM webhook_subscriptions s
+ WHERE s.repository_id=(SELECT repository_id FROM discussions WHERE id=NEW.discussion_id) AND s.enabled=1 AND EXISTS(SELECT 1 FROM json_each(s.event_topics) WHERE value=CASE WHEN (SELECT kind FROM discussions WHERE id=NEW.discussion_id)='pull' THEN 'pulls' ELSE 'issues' END) AND (1);
+END;
+CREATE TRIGGER IF NOT EXISTS webhook_source_event AFTER UPDATE OF state ON git_operations
+WHEN NEW.state='APPLIED' AND OLD.state!='APPLIED'
+BEGIN
+ INSERT OR IGNORE INTO webhook_deliveries(id,subscription_id,subscription_version,event_id,event_topic,payload,automatic_key,next_attempt_at,created_at)
+ SELECT lower(hex(randomblob(4))||'-'||hex(randomblob(2))||'-4'||substr(hex(randomblob(2)),2)||'-a'||substr(hex(randomblob(2)),2)||'-'||hex(randomblob(6))),s.id,s.version,'source:'||NEW.id,'source',
+  json_object('schema','golf.webhook.v1','event','golf.repository.changed','event_id','source:'||NEW.id,'repository_id',CAST(s.repository_id AS TEXT),'topic','source'),
+  'source:'||NEW.id,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM webhook_subscriptions s
+ WHERE s.repository_id=NEW.repository_id AND s.enabled=1 AND EXISTS(SELECT 1 FROM json_each(s.event_topics) WHERE value='source') AND (1);
+END;
+CREATE TRIGGER IF NOT EXISTS webhook_test_admission_event AFTER INSERT ON evidence_jobs
+WHEN NEW.test_state='REQUESTED'
+BEGIN
+ INSERT OR IGNORE INTO webhook_deliveries(id,subscription_id,subscription_version,event_id,event_topic,payload,automatic_key,next_attempt_at,created_at)
+ SELECT lower(hex(randomblob(4))||'-'||hex(randomblob(2))||'-4'||substr(hex(randomblob(2)),2)||'-a'||substr(hex(randomblob(2)),2)||'-'||hex(randomblob(6))),s.id,s.version,'test:'||NEW.id||':'||NEW.test_state,'actions',
+  json_object('schema','golf.webhook.v1','event','golf.repository.changed','event_id','test:'||NEW.id||':'||NEW.test_state,'repository_id',CAST(s.repository_id AS TEXT),'topic','actions'),
+  'test:'||NEW.id||':'||NEW.test_state,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM webhook_subscriptions s
+ WHERE s.repository_id=NEW.repository_id AND s.enabled=1 AND EXISTS(SELECT 1 FROM json_each(s.event_topics) WHERE value='actions') AND (s.workflow_notifications=1);
+END;
+CREATE TRIGGER IF NOT EXISTS webhook_test_state_event AFTER UPDATE OF test_state ON evidence_jobs
+WHEN NEW.test_state!=OLD.test_state
+BEGIN
+ INSERT OR IGNORE INTO webhook_deliveries(id,subscription_id,subscription_version,event_id,event_topic,payload,automatic_key,next_attempt_at,created_at)
+ SELECT lower(hex(randomblob(4))||'-'||hex(randomblob(2))||'-4'||substr(hex(randomblob(2)),2)||'-a'||substr(hex(randomblob(2)),2)||'-'||hex(randomblob(6))),s.id,s.version,'test:'||NEW.id||':'||NEW.test_state,'actions',
+  json_object('schema','golf.webhook.v1','event','golf.repository.changed','event_id','test:'||NEW.id||':'||NEW.test_state,'repository_id',CAST(s.repository_id AS TEXT),'topic','actions'),
+  'test:'||NEW.id||':'||NEW.test_state,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM webhook_subscriptions s
+ WHERE s.repository_id=NEW.repository_id AND s.enabled=1 AND EXISTS(SELECT 1 FROM json_each(s.event_topics) WHERE value='actions') AND (s.workflow_notifications=1 OR s.workflow_notifications=2 AND NEW.test_state IN ('PASSED','FAILED','TIMED_OUT','CANCELLED','LOST') OR s.workflow_notifications=3 AND NEW.test_state IN ('FAILED','TIMED_OUT'));
+END;
+-- Keep the existing maintenance journal intact; its stage constraint predates webhooks.
+CREATE TABLE IF NOT EXISTS webhook_maintenance (
+ stage TEXT PRIMARY KEY CHECK(stage='webhooks'), started_at TEXT NOT NULL, completed_at TEXT, last_success_at TEXT,
+ outcome TEXT NOT NULL CHECK(outcome IN ('running','succeeded','degraded','failed')),
+ processed INTEGER CHECK(processed IS NULL OR processed>=0), pending INTEGER CHECK(pending IS NULL OR pending>=0)
+);
+-- Native push policy and original mutation receipts; no Git objects are rewritten.
+CREATE TABLE IF NOT EXISTS repository_rules (
+ repository_id INTEGER PRIMARY KEY REFERENCES repositories(id), artifact_name TEXT NOT NULL,
+ version INTEGER NOT NULL CHECK(version>0), branches TEXT NOT NULL, tags TEXT NOT NULL,
+ next_tag INTEGER NOT NULL CHECK(next_tag>0)
+);
+CREATE TABLE IF NOT EXISTS repository_rule_operations (
+ operation_id TEXT PRIMARY KEY, repository_id INTEGER NOT NULL REFERENCES repositories(id),
+ actor_id INTEGER NOT NULL REFERENCES users(id), input_hash TEXT NOT NULL,
+ receipt TEXT NOT NULL, current_rules TEXT
+);
+-- Repository-only Git credentials. Secrets are returned once and only their hashes persist.
+CREATE TABLE IF NOT EXISTS git_credentials (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ digest TEXT NOT NULL UNIQUE,
+ user_id INTEGER NOT NULL REFERENCES users(id),
+ repository_id INTEGER NOT NULL REFERENCES repositories(id),
+ artifact_name TEXT NOT NULL,
+ label TEXT NOT NULL,
+ mode INTEGER NOT NULL CHECK(mode IN (1,2)),
+ identity_version INTEGER NOT NULL,
+ grant_generation INTEGER NOT NULL,
+ created_at INTEGER NOT NULL,
+ expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+3600),
+ revoked_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS git_credentials_inventory ON git_credentials(user_id,repository_id,id);
+
+-- Review routing and administration are collaboration state, not merge authority.
+CREATE TABLE IF NOT EXISTS pull_review_versions (
+  pull_request_id INTEGER PRIMARY KEY REFERENCES pull_requests(id),
+  version INTEGER NOT NULL CHECK(version>0)
+);
+CREATE TABLE IF NOT EXISTS pull_review_requests (
+  pull_request_id INTEGER NOT NULL REFERENCES pull_requests(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  identity_version INTEGER NOT NULL,
+  grant_generation INTEGER NOT NULL,
+  PRIMARY KEY(pull_request_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS pull_review_lifecycle (
+  review_id INTEGER PRIMARY KEY REFERENCES pull_reviews(id),
+  version INTEGER NOT NULL CHECK(version>0),
+  dismissed INTEGER NOT NULL CHECK(dismissed IN (0,1)),
+  reason TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pull_review_operations (
+  actor_id INTEGER NOT NULL REFERENCES users(id),
+  operation_id TEXT NOT NULL,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id),
+  pull_request_id INTEGER NOT NULL REFERENCES pull_requests(id),
+  kind TEXT NOT NULL CHECK(kind IN ('request','lifecycle','authoring')),
+  input_hash TEXT NOT NULL,
+  receipt TEXT NOT NULL,
+  PRIMARY KEY(actor_id,operation_id)
+);
+CREATE TABLE IF NOT EXISTS pull_review_drafts (
+  review_id INTEGER PRIMARY KEY REFERENCES pull_reviews(id),
+  pull_request_id INTEGER NOT NULL REFERENCES pull_requests(id),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL CHECK(status IN ('PENDING','PUBLISHED','DISCARDED')),
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS pull_review_one_pending ON pull_review_drafts(pull_request_id,author_id) WHERE status='PENDING';
+CREATE TABLE IF NOT EXISTS pull_review_draft_versions (
+  pull_request_id INTEGER NOT NULL REFERENCES pull_requests(id),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  version INTEGER NOT NULL CHECK(version>0),
+  PRIMARY KEY(pull_request_id,author_id)
+);

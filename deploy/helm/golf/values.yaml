@@ -25,6 +25,12 @@ resources:
     cpu: "1"
     memory: 512Mi
 
+# Existing installations keep this profile until a verified fresh-target transfer.
+forge:
+  kind: gitea
+  instanceID: ""
+
+# Legacy value/resource names remain stable to preserve existing PVC ownership.
 gitea:
   enabled: true
   # Required public origin; configures clone URLs and optional OAuth navigation.
@@ -32,6 +38,8 @@ gitea:
   # Set only when enabled=false. No Gitea storage or workload is then created.
   externalURL: ""
   qualifiedVersion: "1.27.3"
+  # Match the external Gitea setting when enabled=false. Custom paths are unsupported.
+  workflowDirs: ".gitea/workflows,.github/workflows"
   image:
     repository: gitea/gitea
     tag: 1.27.3-rootless

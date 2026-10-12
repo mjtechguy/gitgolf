@@ -12,6 +12,16 @@ import (
 	"github.com/google/uuid"
 )
 
+type GolfAccessOidcCode struct {
+	TokenHash         []byte
+	SessionHash       []byte
+	NativeActorID     int64
+	ConfigurationHash string
+	Challenge         string
+	Nonce             string
+	ExpiresAt         time.Time
+}
+
 type GolfActiveObjectConnection struct {
 	Singleton bool
 	ProfileID uuid.NullUUID
@@ -273,6 +283,32 @@ type GolfAutomationGrantEvent struct {
 	ActorUserID    sql.NullInt64
 	ActorSessionID sql.NullInt64
 	OccurredAt     time.Time
+}
+
+type GolfCloudflareResourceEvent struct {
+	OperationID uuid.UUID
+	Sequence    int64
+	State       string
+	Receipt     []byte
+	OccurredAt  time.Time
+}
+
+type GolfCloudflareResourceOperation struct {
+	ID                 uuid.UUID
+	ForgeURL           string
+	UserID             int64
+	NativeActorID      int64
+	RepositoryID       int64
+	OwnerID            int64
+	EnvironmentID      uuid.UUID
+	EnvironmentVersion int64
+	ConnectionID       uuid.UUID
+	ConnectionVersion  int64
+	InputHash          []byte
+	Receipt            []byte
+	State              string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type GolfCodexAuth struct {
@@ -637,6 +673,15 @@ type GolfExecutionValueVersion struct {
 	ContentBinding   []byte
 	CredentialKeyID  string
 	CreatedAt        time.Time
+}
+
+type GolfForgeInstallation struct {
+	Singleton           bool
+	Kind                string
+	Origin              string
+	InstanceID          string
+	WorkflowDirectories string
+	EnrolledAt          time.Time
 }
 
 type GolfGitCredential struct {

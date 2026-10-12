@@ -22,6 +22,7 @@ services:
   runner:
     environment:
       GOLF_RUNNER_ACTIONS_ENGINE_BINARY: /usr/local/bin/golf-actions-engine
+      GOLF_RUNNER_GIT_PREPARATION_IMAGE: ${GOLF_RUNNER_GIT_PREPARATION_IMAGE:-}
       GOLF_RUNNER_ACTIONS_PLATFORMS: ${GOLF_RUNNER_IMAGES:?Run scripts/init-ci-env.py}
     depends_on:
       runner-actions-image-init:

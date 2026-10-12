@@ -57,7 +57,7 @@ export function validateResolvedAddress(response: ResolveRepositorySourceRespons
 
 // Only accepted immutable identities live here. No bodies, paths or refs enter browser storage.
 // Named refs are resolved on entry/explicit Latest, never on focus, SSE or reconnect.
-export function useRepositorySourceSelection(location: RepositoryLocation, repositoryId: string, userId: string, enabled: boolean) {
+export function useRepositorySourceSelection(location: RepositoryLocation, repositoryId: string, userId: string, enabled: boolean, initial?: Selection) {
   const identity = JSON.stringify([userId, location.owner, location.name, repositoryId]);
   const [accepted, setAccepted] = useState<Accepted>();
   const [generation, setGeneration] = useState(0);
@@ -70,9 +70,11 @@ export function useRepositorySourceSelection(location: RepositoryLocation, repos
   const direct = requested?.selector?.kind === Kind.COMMIT;
   const reusable = accepted?.identity === identity && accepted.generation === generation && (accepted.addressKey === addressKey || requested?.selector &&
     requested.selector.name === accepted.selection.name && (requested.selector.kind === accepted.selection.kind || requested.selector.kind === Kind.BRANCH && accepted.selection.kind === Kind.DEFAULT_BRANCH));
+  const bootstrap = enabled && !invalid && !accepted && generation === 0 && valid(initial) && initial?.kind === Kind.DEFAULT_BRANCH &&
+    requested?.selector && (requested.selector.kind === Kind.DEFAULT_BRANCH || requested.selector.kind === Kind.BRANCH && requested.selector.name === initial.name) ? initial : undefined;
   const query = useQuery({ ...privateQuery, staleTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false, refetchOnMount: false, retry: false,
     queryKey: ['repository', userId, location.owner, location.name, 'source-selection', repositoryId, addressKey, generation],
-    enabled: enabled && !invalid && !direct && !reusable,
+    enabled: enabled && !invalid && !direct && !reusable && !bootstrap,
     queryFn: async ({ signal }) => {
       const response = await repositoryClient.resolveRepositorySource({ repository: { owner: location.owner, name: location.name }, repositoryId,
         selector: requested?.selector, path: requested?.selector ? '' : undefined, suffix: requested?.suffix }, { signal, timeoutMs: 16000 });
@@ -81,9 +83,9 @@ export function useRepositorySourceSelection(location: RepositoryLocation, repos
       return validateResolvedAddress(response, location, repositoryId, requested?.selector ? { ...requested, path: '' } : requested!);
     } });
   const response = enabled && !invalid && !reusable && query.isSuccess && !query.isFetching ? query.data : undefined;
-  const resolved = response?.resolution === Resolution.RESOLVED ? response.selection : undefined;
+  const resolved = bootstrap || (response?.resolution === Resolution.RESOLVED ? response.selection : undefined);
   useEffect(() => {
-    if (resolved) setAccepted({ generation, identity, addressKey, selection: resolved, path: response!.path });
+    if (resolved) setAccepted({ generation, identity, addressKey, selection: resolved, path: response?.path || requested?.path || '' });
   }, [resolved, response, identity, addressKey, generation]);
   const selection = enabled && !invalid ? direct ? { kind: Kind.COMMIT, name: requested!.selector!.name, commitId: requested!.selector!.name } : reusable ? accepted!.selection : resolved : undefined;
   const path = requested?.selector ? requested.path : reusable ? accepted!.path : response?.path || '';

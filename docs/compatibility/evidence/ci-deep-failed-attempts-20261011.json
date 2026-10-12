@@ -1,0 +1,172 @@
+{
+  "date": "2026-10-11",
+  "attempts": [
+    {
+      "runtime": "forgejo",
+      "attempt": "deep-forgejo-requests",
+      "accepted": false,
+      "reason": "Forgejo signed push was not admitted; the pinned provider has a different webhook header contract and allowlist setting.",
+      "cleanupComplete": true,
+      "failure": {
+        "type": "AssertionError",
+        "stage": "actual private checkout, Node24 setup action and unchanged dependency commands",
+        "frames": [
+          {
+            "file": "actions-two-job-smoke.py",
+            "line": 410
+          },
+          {
+            "file": "dependency",
+            "line": 121
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "forgejo",
+      "attempt": "deep-forgejo-requests2",
+      "accepted": false,
+      "reason": "Header compatibility was fixed, but Compose still used the wrong webhook allowlist section; no callback reached Golf.",
+      "cleanupComplete": true,
+      "failure": {
+        "type": "AssertionError",
+        "stage": "actual private checkout, Node24 setup action and unchanged dependency commands",
+        "frames": [
+          {
+            "file": "actions-two-job-smoke.py",
+            "line": 410
+          },
+          {
+            "file": "dependency",
+            "line": 121
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "cloudflare",
+      "attempt": "golf-native-20261011-38d19bc7",
+      "accepted": false,
+      "checksPassed": false,
+      "reason": "Initial canonical Git push returned HTTP 500; cause not established. Later fresh installations passed.",
+      "cleanup": {
+        "test_tasks": "absent",
+        "queue_consumer": "absent",
+        "workflow": "absent",
+        "worker": "absent",
+        "durable_object_namespaces": "absent",
+        "test_applications": "absent",
+        "test_image": "absent",
+        "queue": "absent",
+        "bucket": "absent",
+        "namespace": "absent",
+        "database": "absent"
+      },
+      "cleanupErrors": {},
+      "providerResourcesAbsent": true,
+      "cancelObserved": null
+    },
+    {
+      "runtime": "cloudflare",
+      "attempt": "golf-native-20261011-372fbb8f",
+      "accepted": false,
+      "checksPassed": false,
+      "reason": "Cancellation did not retain the expected terminal state; initial fast fixture lacked sufficient diagnostic capture.",
+      "cleanup": {
+        "test_tasks": "absent",
+        "queue_consumer": "absent",
+        "workflow": "absent",
+        "worker": "absent",
+        "durable_object_namespaces": "absent",
+        "test_applications": "absent",
+        "test_image": "absent",
+        "queue": "absent",
+        "bucket": "absent",
+        "namespace": "absent",
+        "database": "absent"
+      },
+      "cleanupErrors": {},
+      "providerResourcesAbsent": true,
+      "cancelObserved": null
+    },
+    {
+      "runtime": "cloudflare",
+      "attempt": "golf-native-20261011-87066034",
+      "accepted": false,
+      "checksPassed": false,
+      "reason": "Cancellation interrupted clone; the preparation exception replaced CANCELLED with LOST during destruction. Reproduced and fixed.",
+      "cleanup": {
+        "test_tasks": "absent",
+        "queue_consumer": "absent",
+        "workflow": "absent",
+        "worker": "absent",
+        "durable_object_namespaces": "absent",
+        "test_applications": "absent",
+        "test_image": "absent",
+        "queue": "absent",
+        "bucket": "absent",
+        "namespace": "absent",
+        "database": "absent"
+      },
+      "cleanupErrors": {},
+      "providerResourcesAbsent": true,
+      "cancelObserved": [
+        {
+          "state": "QUEUED",
+          "testState": "RUNNING"
+        },
+        {
+          "state": "REFUSED",
+          "testState": "LOST"
+        },
+        {
+          "state": "REFUSED",
+          "testState": "LOST"
+        }
+      ]
+    },
+    {
+      "runtime": "cloudflare",
+      "attempt": "golf-native-20261011-f9109110",
+      "accepted": false,
+      "checksPassed": true,
+      "reason": "All product assertions passed after the cancellation fix; the harness cleanup bound still allowed only two jobs. Corrected to use the configured allocation limit.",
+      "cleanup": {
+        "test_tasks": "failed",
+        "queue_consumer": "absent",
+        "workflow": "absent",
+        "worker": "absent",
+        "durable_object_namespaces": "absent",
+        "test_applications": "absent",
+        "test_image": "absent",
+        "queue": "absent",
+        "bucket": "absent",
+        "namespace": "absent",
+        "database": "absent"
+      },
+      "cleanupErrors": {
+        "test_tasks": "Ambiguous owned test task"
+      },
+      "providerResourcesAbsent": true,
+      "cancelObserved": [
+        {
+          "state": "QUEUED",
+          "testState": "RUNNING"
+        },
+        {
+          "state": "REFUSED",
+          "testState": "CANCELLED"
+        },
+        {
+          "state": "REFUSED",
+          "testState": "CANCELLED"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Later passing attempts do not erase these failures.",
+    "The first hosted Git HTTP 500 has no established root cause.",
+    "The fourth hosted attempt removed all provider resources despite its pre-removal task-count guard failure."
+  ]
+}

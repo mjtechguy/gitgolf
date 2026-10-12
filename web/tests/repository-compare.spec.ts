@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import {expect,test} from '@playwright/test';
 import type {Page} from '@playwright/test';
 import {create} from '@bufbuild/protobuf';
@@ -29,7 +30,7 @@ async function backend(page:Page) {
    return respond(route,v.GetRepositoryResponseSchema,{repository:source?fork:repository});
   }
   if(method==='ListRepositories')return respond(route,v.ListRepositoriesResponseSchema,{repositories:[repository]});
-  if(method==='ListCapabilities')return respond(route,v.ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,v.ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='ListBranches'){
    const input=request(route,v.ListBranchesRequestSchema);const key=input.repository!.owner+'/'+input.repository!.name;state.branches.push(key);
    if(key.startsWith('team/')&&state.sourceDenied)return reject(route,'not_found','Source access revoked');

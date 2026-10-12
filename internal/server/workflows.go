@@ -21,10 +21,11 @@ import (
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/internal/runner"
+	"github.com/mjtechguy/golf-git/internal/workflowpath"
 	"go.yaml.in/yaml/v3"
 )
 
-const workflowCatalog = "golf.workflow.inspect.v2"
+const workflowCatalog = "golf.workflow.inspect.v3"
 const maxWorkflowBytes = 64 << 10
 const maxWorkflowTotalBytes = 512 << 10
 const maxWorkflowFiles = 20
@@ -61,6 +62,24 @@ func (v workflowInspector) unsupported(code, message string, node *yaml.Node) {
 }
 func workflowString(node *yaml.Node) bool {
 	return node != nil && node.Kind == yaml.ScalarNode && node.Tag == "!!str" && strings.TrimSpace(node.Value) != ""
+}
+
+// GitLab setup and script entries share one shell; indirection stays unsupported.
+func workflowScript(node *yaml.Node) ([]string, bool) {
+	if workflowString(node) {
+		return []string{node.Value}, true
+	}
+	if node == nil || node.Kind != yaml.SequenceNode || len(node.Content) > 50 {
+		return nil, false
+	}
+	commands := make([]string, 0, len(node.Content))
+	for _, command := range node.Content {
+		if !workflowString(command) {
+			return nil, false
+		}
+		commands = append(commands, command.Value)
+	}
+	return commands, true
 }
 func workflowField(node *yaml.Node, name string) *yaml.Node {
 	if node == nil || node.Kind != yaml.MappingNode {
@@ -251,6 +270,9 @@ func (v workflowInspector) actions(root *yaml.Node) {
 			continue
 		}
 		summary.StepCount = uint32(len(steps.Content))
+		if len(steps.Content) > 50 {
+			v.unsupported("step_limit", "The shell execution profile accepts at most 50 steps.", steps)
+		}
 		for _, step := range steps.Content {
 			if step.Kind != yaml.MappingNode {
 				v.invalid("step_shape", "Each Actions step must be a mapping.", step)
@@ -338,7 +360,7 @@ func (v workflowInspector) gitlab(root *yaml.Node) {
 			summary.Stage = v.label(stage)
 		}
 		v.config.Jobs = append(v.config.Jobs, summary)
-		v.fields(job, "stage", "image", "script", "artifacts")
+		v.fields(job, "stage", "image", "before_script", "script", "artifacts")
 		if node := workflowField(job, "artifacts"); node != nil {
 			if _, e := workflowArtifactPaths(node); e != nil {
 				v.unsupported("artifacts_shape", "Artifacts require only one to eight distinct literal relative paths; globs, links, reports, expiry and other modes are unavailable.", node)
@@ -356,22 +378,28 @@ func (v workflowInspector) gitlab(root *yaml.Node) {
 			v.unsupported("image_pin", "Inspection requires a literal image with a lowercase sha256 digest; no image is pulled or approved.", image)
 		}
 		script := workflowField(job, "script")
-		switch {
-		case workflowString(script):
-			summary.StepCount = 1
-		case script != nil && script.Kind == yaml.SequenceNode && len(script.Content) > 0:
-			summary.StepCount = uint32(len(script.Content))
-			for _, command := range script.Content {
-				if !workflowString(command) {
-					v.unsupported("script_shape", "Only a string or a flat nonempty list of script strings is checked.", command)
-				}
-			}
-		default:
+		commands, valid := workflowScript(script)
+		if !valid || len(commands) == 0 {
 			if workflowField(job, "trigger") != nil || workflowField(job, "extends") != nil || workflowField(root, "include") != nil {
 				v.unsupported("indirect_script", "Trigger, included and inherited scripts are not resolved.", job)
+			} else if script != nil && script.Kind == yaml.SequenceNode && len(script.Content) > 0 {
+				v.unsupported("script_shape", "Only a string or flat list of up to 50 nonempty script strings is checked.", script)
 			} else {
 				v.invalid("script_shape", "A GitLab shell job requires a nonempty script string or sequence.", job)
 			}
+		} else {
+			summary.StepCount = uint32(len(commands))
+		}
+		if before := workflowField(job, "before_script"); before != nil {
+			setup, valid := workflowScript(before)
+			if !valid {
+				v.unsupported("before_script_shape", "Job before_script requires a literal string or flat list of up to 50 strings; inheritance and nested lists are unavailable.", before)
+			} else {
+				summary.StepCount += uint32(len(setup))
+			}
+		}
+		if summary.StepCount > 50 {
+			v.unsupported("step_limit", "The shell execution profile accepts at most 50 before_script and script entries combined.", job)
 		}
 	}
 	if len(v.config.Jobs) != 1 {
@@ -423,6 +451,59 @@ func workflowLFSPointer(data []byte) bool {
 func workflowMissing(err error) bool {
 	var upstream forgeError
 	return errors.Is(err, errResourceNotFound) || errors.As(err, &upstream) && upstream.status == http.StatusNotFound
+}
+
+// Select the first actual directory at the immutable commit, even if empty or
+// containing only unsupported files. A failed permission/provider read is never
+// interpreted as absence. Parent symlinks and submodules are never followed.
+func (s *Server) actionsWorkflowDirectory(ctx context.Context, token forgeCredential, base, commit string) (string, []forgeContents, []*golfv1.WorkflowDiagnostic, error) {
+	directories, err := workflowpath.Directories(s.config.GiteaWorkflowDirs)
+	if err != nil {
+		return "", nil, nil, errWorkflowExecutionUnsupported
+	}
+	var diagnostics []*golfv1.WorkflowDiagnostic
+	var selected string
+	var entries []forgeContents
+	for _, directory := range directories {
+		parent, _, _ := strings.Cut(directory, "/")
+		root, err := s.workflowContents(ctx, token, base, commit, parent, false)
+		if workflowMissing(err) {
+			continue
+		}
+		if err != nil {
+			return "", nil, nil, err
+		}
+		if root.File != nil {
+			diagnostics = append(diagnostics, workflowDiagnostic("actions_location", parent+" is not an ordinary directory; no target is followed.", nil))
+			continue
+		}
+		for _, entry := range root.Directory {
+			if entry.Name != "workflows" {
+				continue
+			}
+			if entry.Type != "dir" {
+				diagnostics = append(diagnostics, workflowDiagnostic("actions_location", directory+" is not an ordinary directory; no target is followed.", nil))
+				break
+			}
+			if selected != "" {
+				diagnostics = append(diagnostics, workflowDiagnostic("actions_shadowed", directory+" is shadowed by the selected "+selected+" directory; its workflows will not execute.", nil))
+				break
+			}
+			contents, err := s.workflowContents(ctx, token, base, commit, directory, false)
+			if err != nil {
+				return "", nil, nil, err
+			}
+			if contents.File != nil {
+				return "", nil, nil, errInvalidForgeResponse
+			}
+			if s.config.ForgeKind != "forgejo" {
+				return directory, contents.Directory, diagnostics, nil
+			}
+			selected, entries = directory, contents.Directory
+			break
+		}
+	}
+	return selected, entries, diagnostics, nil
 }
 
 func workflowBlobMatches(data []byte, expected string) bool {
@@ -538,33 +619,22 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 		}
 		result.RepositoryId, result.CommitId = strconv.FormatInt(repo.ID, 10), commits[0].SHA
 		var candidates []forgeContents
-		github, err := s.workflowContents(ctx, token, base, result.CommitId, ".github", false)
-		if err != nil && !workflowMissing(err) {
+		_, entries, diagnostics, err := s.actionsWorkflowDirectory(ctx, token, base, result.CommitId)
+		if err != nil {
 			return err
 		}
-		if err == nil && github.File != nil {
-			result.Diagnostics = append(result.Diagnostics, workflowDiagnostic("actions_location", ".github is not a directory; no target is followed.", nil))
-		} else if err == nil {
-			for _, item := range github.Directory {
-				if item.Name != "workflows" {
-					continue
-				}
-				if item.Type != "dir" {
-					result.Diagnostics = append(result.Diagnostics, workflowDiagnostic("actions_location", ".github/workflows is not a directory; no target is followed.", nil))
-					break
-				}
-				workflows, err := s.workflowContents(ctx, token, base, result.CommitId, ".github/workflows", false)
-				if err != nil {
-					return err
-				}
-				if workflows.File != nil {
-					return errInvalidForgeResponse
-				}
-				for _, entry := range workflows.Directory {
-					if strings.HasSuffix(entry.Name, ".yml") || strings.HasSuffix(entry.Name, ".yaml") {
-						candidates = append(candidates, entry)
-					}
-				}
+		result.Diagnostics = append(result.Diagnostics, diagnostics...)
+		for _, entry := range entries {
+			if entry.Type == "dir" {
+				result.Diagnostics = append(result.Diagnostics, workflowDiagnostic("actions_nested_location", "Nested workflow directories are unsupported by Golf's direct-file profile; use a direct workflow filename.", nil))
+				break
+			}
+		}
+		for _, entry := range entries {
+			if entry.Type == "dir" {
+				continue
+			} else if strings.HasSuffix(entry.Name, ".yml") || strings.HasSuffix(entry.Name, ".yaml") {
+				candidates = append(candidates, entry)
 			}
 		}
 		gitlab, err := s.workflowContents(ctx, token, base, result.CommitId, ".gitlab-ci.yml", false)
@@ -598,6 +668,10 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 				config.Format = golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI
 			}
 			result.Configurations = append(result.Configurations, config)
+			if !executionWorkflowPath(candidate.Path) {
+				workflowInspector{config}.unsupported("workflow_path", "This filename is outside Golf's literal workflow path profile; select a direct ASCII filename without globs or traversal.", nil)
+				continue
+			}
 			if candidate.Type != "file" || candidate.LFSOID != "" || candidate.Size > maxWorkflowBytes {
 				workflowInspector{config}.unsupported("source_unavailable", "Only ordinary non-LFS files of at most 64 KiB are inspected; no target is followed.", nil)
 				continue
@@ -650,8 +724,19 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 					e = s.verifyActionSources(ctx, base, token, result.CommitId, plan)
 				}
 				if e != nil {
-					config.State = golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_UNSUPPORTED
-					config.Diagnostics = append(config.Diagnostics, workflowDiagnostic("engine_profile", "This source is outside the selected pinned Linux engine profile or its bounded planner is unavailable.", nil))
+					if !errors.Is(e, errActionsProfile) {
+						// Planner/provider downtime and authority failures are not
+						// semantic incompatibility. Do not cache a false refusal.
+						return e
+					}
+					inspectWorkflow(config, data)
+					if config.State != golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_INVALID {
+						config.State = golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_UNSUPPORTED
+					}
+					if len(config.Diagnostics) >= maxWorkflowDiagnostics {
+						config.Diagnostics = config.Diagnostics[:maxWorkflowDiagnostics-1]
+					}
+					config.Diagnostics = append(config.Diagnostics, workflowDiagnostic("engine_profile", "Selected profile "+s.config.ActionsEngineCatalog+" does not admit this source. Use supported syntax or native provider CI; no execution or dependency download occurred.", nil))
 				} else {
 					config.State = golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET
 					config.Events = plan.Events

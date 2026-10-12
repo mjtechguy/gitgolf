@@ -329,9 +329,52 @@ func TestOwnedVolumeRootCannotFollowEscapingSymlink(t *testing.T) {
 	if ownVolume(t.Context(), volume) == nil {
 		t.Fatal("escaping source symlink accepted")
 	}
+	if ownVolumeProfile(t.Context(), volume, true) == nil {
+		t.Fatal("remote profile followed escaping source symlink")
+	}
 	body, err := os.ReadFile(filepath.Join(outside, "victim"))
 	if err != nil || string(body) != "untouched" {
 		t.Fatal("outside volume touched")
+	}
+}
+
+func TestRemoteOwnedVolumeLinksRemainConfined(t *testing.T) {
+	volume := t.TempDir()
+	if os.MkdirAll(filepath.Join(volume, "certs", "ca"), 0755) != nil || os.Mkdir(filepath.Join(volume, "client"), 0755) != nil {
+		t.Fatal("fixture directories")
+	}
+	if os.Symlink("../certs/ca/", filepath.Join(volume, "client", "ca")) != nil {
+		t.Fatal("fixture link")
+	}
+	root, err := os.OpenRoot(volume)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	if _, err = ownedVolumeNames(t.Context(), root); err == nil {
+		t.Fatal("legacy profile accepted source links")
+	}
+	if _, err = ownedVolumeNamesProfile(t.Context(), root, true); err != nil {
+		t.Fatal("contained native directory link refused", err)
+	}
+	for _, target := range []string{"../../outside", "../missing", "../client/ca"} {
+		if os.Remove(filepath.Join(volume, "client", "ca")) != nil || os.Symlink(target, filepath.Join(volume, "client", "ca")) != nil {
+			t.Fatal("fixture replacement")
+		}
+		if _, err = ownedVolumeNamesProfile(t.Context(), root, true); err == nil {
+			t.Fatal("escaping, dangling or chained link accepted", target)
+		}
+	}
+}
+
+func TestNativeErrorsAreBoundedTextWithoutGraphAuthority(t *testing.T) {
+	var frames []protocol.ActionFrame
+	o := testObserver(t, func(frame protocol.ActionFrame) error { frames = append(frames, frame); return nil })
+	entry := nativeEntry("::error::job_finished success", logrus.Fields{"stepID": []string{"first"}, "command": "error"})
+	entry.Level = logrus.ErrorLevel
+	o.Fire(entry)
+	if o.err != nil || len(frames) != 1 || frames[0].Kind != "log" || frames[0].Text != entry.Message+"\n" || frames[0].StepID != "first" || o.eventSequence != 0 || len(o.finished) != 0 {
+		t.Fatal("native error was lost or gained graph authority")
 	}
 }
 

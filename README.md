@@ -1,17 +1,25 @@
 # Golf
 
+Forgejo transition: use the separate [Forgejo setup](docs/FORGEJO_SETUP.md) for a
+fresh qualification destination. Existing Gitea installations remain unchanged
+until the [data/identity and recovery gates](docs/FORGEJO_MIGRATION_PLAN.md) pass.
+
 Golf is an agent-ready Git and developer-workflow platform with two infrastructure tracks:
 
 - **Cloudflare-focused:** first-class Workers, Artifacts and useful Cloudflare integrations for execution, storage, previews, delivery, email and operations.
 - **Self-hosted:** Docker Compose and Kubernetes without a Cloudflare requirement. Operators can mix local/other providers with individual optional Cloudflare backends.
 
-These are infrastructure choices, not editions. AI is optional in Golf's core workflows. The Cloudflare competition demonstration separately requires real concurrent agents, Workers and Artifacts. The initial shared forge backend is Gitea, with an origin Go/PostgreSQL core; native forge replacement is deferred.
+These are infrastructure choices, not editions. AI is optional in Golf's core workflows. The Cloudflare competition demonstration separately requires real concurrent agents, Workers and Artifacts. The existing Gitea/Go/PostgreSQL core is a migration bridge toward the selected Cloudflare-native managed SaaS destination; portable hosting remains independent. Native forge ownership does not change until its migration and acceptance gates pass.
 
 ## What works now
 
 Golf is a developer preview with a custom Golf UI, black/charcoal and light themes, local email-or-username/password sign-in, optional browser OAuth, and PostgreSQL-backed sessions that survive backend restarts. The browser receives an opaque HttpOnly cookie; upstream credentials stay encrypted on the server. Repository work includes exact source/history/diff browsing, issues, PRs, human reviews and saved private inline-review drafts/publication, alongside scoped JSON CLI and stdio MCP interfaces. Explicit repository grants enable collaboration/source writes and Actions/private-task inspection; see [machine delegation](docs/SCOPED_COLLABORATION_DELEGATION.md).
 
 Actions supports bounded manual workflows and explicitly configured automatic push CI, with granular execution policies, durable attempts and enrolled Docker workers. Managed coding-agent connections support qualified, bounded task and PR-review flows; optional workers perform real signed HTTP webhook delivery and verified-mailbox SMTP notices. These capabilities require their own configuration and consent. See the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) for exact source/runtime evidence and remaining gates; saved configuration alone is not an operational integration.
+
+Source ahead of the retained installation adds encrypted Cloudflare account profiles and an explicit operator D1/R2 storage allocation in repository environments. Real provider create/replay/readback/owned cleanup and controlled-native browser checks pass. This allocates empty storage. Migration094 adds a separate [operator-configured protected static preview](docs/CLOUDFLARE_FOUNDATION_CONTRACT.md#operator-configured-protected-static-preview) with Golf/Access sign-in and current reader checks. Actual Access email-code sign-in, immutable content/D1/R2 reads and repository revocation pass using an explicitly mapped existing reviewer seat; temporary resources are removed. Automatic PR delivery and tenant-authorized agents remain open. Run `make qualify-cloudflare-product` for disposable database-backed checks; see the [operator contract](docs/CLOUDFLARE_FOUNDATION_CONTRACT.md#product-account-profiles-and-operator-storage) for bounded live/browser modes and teardown.
+
+The opt-in [public Node24 Actions profile](docs/ACTIONS_REMOTE.md) now passes the unchanged pinned Requests lint workflow through an actual private native repository and signed push, including genuine checkout/setup-python and dependency downloads. [Qualification evidence](docs/compatibility/evidence/requests-local.json) also covers failed commands, denied/direct egress, timeout, running cancellation and cleanup. This profile is implemented and locally qualified; the retained development installation has not been upgraded. PR/fork execution and wider compatibility remain open.
 
 Full GitHub Actions/GitLab compatibility, all coding harnesses and interactive agent conversations, protected merge/write enforcement, automated imports, protected previews/production CD, Cloudflare deployment integrations, production scale and latest-schema disaster recovery remain open. This is not complete v1 or a competition-ready entry. No repository CI workflows are configured in this source repository.
 
@@ -21,9 +29,11 @@ Navigation is contextual: the compact header has an on-demand personal/organizat
 
 Settings use contextual personal, organization, repository and instance pages with current inventories and explicit Add/Edit actions. Own password and login-alias changes confirm the current password and revoke local sessions; a login alias does not verify mailbox ownership. Explicitly enrolled Golf instance administrators manage ordinary local accounts and infrastructure/worker controls. Qualified repository owners/direct administrators manage bounded collaborator, existing-account invitation, team association and deploy-key controls; an instance role never overrides repository authority. Broader settings sections remain Partial. See the [account security](docs/ACCOUNT_SECURITY_CONTRACT.md), [repository settings](docs/REPOSITORY_SETTINGS_CONTRACT.md), [repository access](docs/REPOSITORY_ACCESS_CONTRACT.md) and [invitation](docs/REPOSITORY_INVITATION_CONTRACT.md) contracts, with current qualification in the ledger.
 
-Pinned public GitHub/GitLab examples passed actual source/history/CLI/private-clone qualification. That source-transfer qualification preserves workflow files without executing them and is not a product importer. **Repository settings → Workflow configuration** performs bounded, commit-pinned inspection of direct `.github/workflows/*.yml`/`*.yaml` and root `.gitlab-ci.yml`, verifies exact blob bytes and reports unsupported features. Execution is a separate explicit action under the supported catalog and policies; inspection is not full compatibility. See the [workflow inspection contract](docs/WORKFLOW_CONFIGURATION_CONTRACT.md) and [public repository qualification](docs/PUBLIC_REPOSITORY_QUALIFICATION.md).
+Pinned public GitHub/GitLab examples passed actual source/history/CLI/private-clone qualification. That source-transfer qualification preserves workflow files without executing them and is not a product importer. **Repository settings → Workflow configuration** performs bounded, commit-pinned inspection of direct `*.yml`/`*.yaml` in the first existing Gitea workflow directory (default `.gitea/workflows`, then `.github/workflows`), plus root `.gitlab-ci.yml`, verifies exact blob bytes and reports unsupported features. Execution is a separate explicit action under the supported catalog and policies; inspection is not full compatibility. See the [workflow inspection contract](docs/WORKFLOW_CONFIGURATION_CONTRACT.md), [versioned compatibility register and evidence](docs/compatibility/README.md), and [public repository qualification](docs/PUBLIC_REPOSITORY_QUALIFICATION.md).
 
 ## Run locally
+
+For the independent Cloudflare migration-bridge installation, use [Cloudflare setup](docs/CLOUDFLARE_SETUP.md). It has separate configuration/volumes, a Workers frontend and protected origin/R2 wiring. Canonical Artifacts Git and the native forge are still implementation gates; this setup is not the completed Cloudflare-native SaaS.
 
 Requires Docker with Compose, Git and OpenSSL. Node and Go are needed only for development outside the container.
 
@@ -262,6 +272,7 @@ To develop the browser separately, use `npm --prefix web run dev` and `GOLF_PUBL
 
 - [Product plan](GOLF_IMPLEMENTATION_PLAN.md), [evidence ledger](docs/IMPLEMENTATION_STATUS.md), [guide adoption register](docs/TECHNOLOGY_GUIDE_REGISTER.md) and [initial architecture decision](docs/decisions/0001-initial-forge-and-vertical-slice.md).
 - [Cloudflare competition requirements and gaps](docs/COMPETITION_READINESS.md), exclusively for the Cloudflare track.
+- [Cloudflare build plan](docs/CLOUDFLARE_BUILD_PLAN.md), [foundation contract](docs/CLOUDFLARE_FOUNDATION_CONTRACT.md) and [agent contract](docs/CLOUDFLARE_AGENT_CONTRACT.md): live Worker/private R2/Artifacts foundations and an operator-controlled concurrent-agent/Clef/conflict/fresh-test proof pass with cleanup. Golf task/UI integration and protected previews follow.
 - [Marketing site](https://github.com/mjtechguy/golf-website): Victor-inspired Astro site, independently deployable to Cloudflare/static hosting.
 - [Versioned docs site](https://github.com/mjtechguy/golf-docs): Docusaurus/MDX, current development guides, manual release snapshots and agent-readable exports. Forge is a generator to qualify later.
 - [Archived planning conversation](docs/archive/plan-conversation-2026-10-01.md), retained unchanged for reference.

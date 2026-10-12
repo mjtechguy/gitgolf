@@ -1,3 +1,4 @@
+import {RuntimeFeature} from './RuntimeFeature';
 import {DiscussionAttachmentDisclosure} from './DiscussionAttachments';
 import {useEffect,useState} from 'react';
 import {useInfiniteQuery,useQuery} from '@tanstack/react-query';
@@ -35,7 +36,7 @@ export function DiscussionEngagement(scope:Scope){
   </div>
   {picker&&data?<div className="row-actions reaction-picker" aria-label="Choose reaction">{data.reactions.map(r=><button key={r.content} className="icon-button" aria-label={labels[r.content]} title={labels[r.content]} aria-pressed={r.reacted} disabled={!ready} onClick={()=>send(r.reacted?Kind.REMOVE_REACTION:Kind.ADD_REACTION,r.content)}>{emojis[r.content]}</button>)}</div>:null}
   {operation.status}{operation.error?<p className="error" role="alert">{operation.error}</p>:null}
- </div><DiscussionAttachmentDisclosure target={create(DiscussionTargetSchema,target(scope))} userId={scope.userId} blocked={query.isError||query.isFetching} onDenied={scope.onDenied}/></>;
+ </div><RuntimeFeature id="discussion.attachments"><DiscussionAttachmentDisclosure target={create(DiscussionTargetSchema,target(scope))} userId={scope.userId} blocked={query.isError||query.isFetching} onDenied={scope.onDenied}/></RuntimeFeature></>;
 }
 function eventText(e:DiscussionTimelineEvent){
  switch(e.kind){case 'close':return 'closed this';case 'reopen':return 'reopened this';case 'change_title':return `changed the title from “${e.oldTitle}” to “${e.newTitle}”`;case 'label':return `${e.label?'changed label '+e.label.name:'changed labels'}`;case 'assignees':return 'changed assignees';case 'milestone':return 'changed the milestone';case 'commit_ref':return 'referenced this in a commit';case 'issue_ref':case 'pull_ref':return 'referenced this';default:return e.kind.replaceAll('_',' ');}

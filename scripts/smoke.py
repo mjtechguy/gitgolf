@@ -20,8 +20,8 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
-GOLF = 'http://localhost:8080'
-GITEA = 'http://localhost:3001'
+GOLF = os.environ.get('GOLF_SMOKE_URL', 'http://localhost:8080')
+GITEA = os.environ.get('GOLF_SMOKE_FORGE_URL', 'http://localhost:3001')
 
 
 def command(*args, env=None, cwd=ROOT):
@@ -32,6 +32,11 @@ def command(*args, env=None, cwd=ROOT):
 
 
 def admin(*args):
+    if container := os.environ.get('GOLF_SMOKE_FORGE_CONTAINER'):
+        binary = os.environ.get('GOLF_SMOKE_FORGE_KIND', 'gitea')
+        if binary not in ('gitea', 'forgejo'): raise ValueError('unsupported fixture provider')
+        config = '/var/lib/gitea/custom/conf/app.ini' if binary == 'forgejo' else '/etc/gitea/app.ini'
+        return command('docker', 'exec', container, binary, '--config', config, 'admin', 'user', *args)
     return command('docker', 'compose', 'exec', '-T', 'gitea', 'gitea',
                    '--config', '/etc/gitea/app.ini', 'admin', 'user', *args)
 
@@ -123,7 +128,7 @@ def commit(path, message):
 
 def cli_check(binary, token, full_name, revision, nested_path, nested_text):
     # Stdin keeps the credential out of process arguments and shell history.
-    env = {key: value for key, value in os.environ.items() if key not in {'GOLF_GITEA_TOKEN', 'GOLF_API_TOKEN'}}
+    env = {key: value for key, value in os.environ.items() if key not in {'GOLF_FORGE_TOKEN', 'GOLF_GITEA_TOKEN', 'GOLF_API_TOKEN', 'GOLF_NATIVE_TOKEN'}}
     env['GOLF_URL'] = GOLF
     args = [str(binary), '--token-stdin', 'repo', 'contents', full_name,
             '--ref', revision, '--path', nested_path]
@@ -134,6 +139,9 @@ def cli_check(binary, token, full_name, revision, nested_path, nested_text):
     assert envelope['schema_version'] == 'golf.cli.v1'
     assert envelope['data']['commitId'] == revision
     assert envelope['data']['file']['content'] == nested_text
+    neutral = subprocess.run([str(binary), 'repo', 'contents', full_name, '--ref', revision, '--path', nested_path], env={**env, 'GOLF_FORGE_TOKEN': token}, capture_output=True, text=True, timeout=30)
+    assert neutral.returncode == 0 and json.loads(neutral.stdout)['data']['file']['content'] == nested_text, 'Neutral forge token alias failed'
+    assert token not in neutral.stdout + neutral.stderr
     invalid = secrets.token_hex(20)
     result = subprocess.run(args, input=invalid + '\n', cwd=ROOT, env=env, capture_output=True, text=True)
     assert result.returncode != 0 and not result.stdout

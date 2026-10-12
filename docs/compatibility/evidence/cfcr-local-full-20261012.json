@@ -1,0 +1,103 @@
+{
+  "schema": "golf.cfcr.local-qualification.v1",
+  "recordedAt": "2026-10-12",
+  "cases": [
+    {
+      "case": "build",
+      "exitCode": 0,
+      "finishedAt": "2026-10-11T23:55:20.805275+00:00"
+    },
+    {
+      "case": "oci",
+      "exitCode": 0,
+      "finishedAt": "2026-10-11T23:55:30.781285+00:00"
+    },
+    {
+      "case": "docker",
+      "exitCode": 0,
+      "finishedAt": "2026-10-11T23:56:05.619782+00:00"
+    },
+    {
+      "case": "job-docker",
+      "exitCode": 0,
+      "finishedAt": "2026-10-11T23:56:42.182123+00:00"
+    },
+    {
+      "case": "chunked",
+      "exitCode": 0,
+      "finishedAt": "2026-10-11T23:57:28.236196+00:00"
+    },
+    {
+      "case": "golf-ci",
+      "exitCode": 0,
+      "finishedAt": "2026-10-11T23:57:38.439536+00:00"
+    },
+    {
+      "case": "signing",
+      "exitCode": 0,
+      "finishedAt": "2026-10-11T23:57:45.201854+00:00"
+    },
+    {
+      "case": "scanner-gzip",
+      "exitCode": 0,
+      "finishedAt": "2026-10-11T23:58:04.919891+00:00"
+    },
+    {
+      "case": "scanner-zstd",
+      "exitCode": 0,
+      "finishedAt": "2026-10-11T23:58:20.143777+00:00"
+    },
+    {
+      "case": "large-10g",
+      "exitCode": 0,
+      "finishedAt": "2026-10-12T00:20:21.032631+00:00"
+    }
+  ],
+  "largeUpload": {
+    "size": 10737418240,
+    "digest": "sha256:06ef7ad0eda60c11f4a5a68313c6474399cac153b3783816800a4d76367a8eb1",
+    "uploadRestart": true,
+    "publicationRestart": true,
+    "transportRetries": 1,
+    "downloadVerified": true,
+    "rangeVerified": true,
+    "reclaimed": true,
+    "elapsedSeconds": 1319.133,
+    "runtime": "local workerd",
+    "recordedAt": "2026-10-12T00:20:20.803Z"
+  },
+  "oci": {
+    "specification": "OCI Distribution v1.1.1",
+    "sourceCommit": "a139cc423184af6078077b9b7ee336eddbd03f8f",
+    "categories": [
+      "pull",
+      "push",
+      "content-discovery",
+      "content-management"
+    ],
+    "runtime": "local workerd with D1, R2 and SQLite Durable Objects",
+    "passed": true,
+    "recordedAt": "2026-10-11T23:55:30.731Z"
+  },
+  "unitTests": {
+    "javascriptPassed": 42,
+    "pythonPassed": 1
+  },
+  "sourceSha256": {
+    "src/catalog.mjs": "ce8c566a351d242f0cbc7be3ca8938b74e32dd6eb98669bbf9e17458cb1ce846",
+    "src/evidence.mjs": "e4e56a092306d0746d6200f6407758e3669815379b0b70feedde92bd87ac21cb",
+    "src/jobs.mjs": "6b73198d4c073be9c6e8e7628ebe11546df3fb810448d03bf0e7b3299d13a52b",
+    "src/lifecycle.mjs": "0dab95afd9c89b03e01e39f2b492ef225e5b6f807f25da55980ae317171826a6",
+    "src/limits.mjs": "ea31b12db68951b62a3879579488f49e3c51a89bdf5abc4054fc1e152b163342",
+    "src/management.mjs": "27914aaaa4640ca5dbc4f3713eca066290cc5510930817c24795d39ce57fb127",
+    "src/policy.mjs": "35c332faf42db3d0a02007365f631c044ae8155ed596c837dae4916c05843f8b",
+    "src/protocol.mjs": "0e5a80e8666836cb2e6c8d5e909798e3f48ac6a26543deba5f315c3f4a4ac99c",
+    "src/sbom.mjs": "1355de24dc0e7b77a30a0c459152ca99964925767bf635aa9b85bbd429ad58ca",
+    "src/scanner.mjs": "5d37a3c2e9d23db75b763a24b55cb7da180292b40a0d96993567071150f088ef",
+    "src/trust.mjs": "b0679485762bd6e64fdbf5247b2644c857adb6f00277ac6b5e989809028f070b",
+    "src/uploads.mjs": "d57b10c71da5e8bca87ba5702beea529314197b49d260ccdc66c7febac43bd48",
+    "src/verification.mjs": "4d63a3b4706c91c07975579351e7fc7767898ff9bfc41a0354b8e34920f79c4e",
+    "src/worker.mjs": "d58648c7b7214e96a1df9d4ba60e4ef98d255d49b68c33981c3d94493647a346"
+  },
+  "scope": "Local workerd and real Docker/regctl/Cosign/Syft/Grype/Trivy clients. Not hosted 10 GiB capacity or load qualification."
+}

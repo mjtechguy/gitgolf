@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { create, toJson } from '@bufbuild/protobuf';
 import { expect, test, type Page } from '@playwright/test';
 import {
@@ -14,7 +15,7 @@ const repository = { id: repositoryId, name: 'sidebar', fullName: 'alex/sidebar'
   description: 'PRIVATE parent description', cloneUrl: 'https://forge.example/alex/sidebar.git', updatedAt: '2026-10-01T12:00:00Z' };
 const overview = { repositoryId, repository: { owner: 'alex', name: 'sidebar' }, description: 'PRIVATE current description',
   website: 'https://example.com/developer', topics: ['developer-tools', 'private-topic'], licenseIds: ['MIT'], starsCount: '0', watchersCount: '2', forksCount: '1000',
-  languages: [{ name: 'TypeScript', byteCount: '750' }, { name: 'Go', byteCount: '250' }], languagesState: State.AVAILABLE, licensesState: State.AVAILABLE };
+  languages: [{ name: 'TypeScript', byteCount: '750' }, { name: 'Go', byteCount: '250' }], languagesState: State.AVAILABLE, licensesState: State.AVAILABLE, indexedCommitId: '', indexedFiles: 0, indexingProcessed: 0, licensePaths: [] as string[], languageClassifier: '' };
 async function fixture(page: Page) {
   const state = { signedIn: true, empty: false, denied: false, live: false, liveDenied: false, overviewError: '', held: undefined as Promise<void> | undefined,
     data: structuredClone(overview), methods: [] as string[], reads: [] as ReturnType<typeof request<typeof GetRepositoryOverviewRequestSchema>>[] };
@@ -32,7 +33,7 @@ async function fixture(page: Page) {
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Session expired.');
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return state.denied ? reject(route, 'permission_denied', 'Repository inaccessible.') : respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty } });
     if (method === 'GetRepositoryOverview') {
@@ -56,6 +57,19 @@ async function fixture(page: Page) {
   return state;
 }
 const sidebar = (page: Page) => page.getByRole('complementary', { name: 'About this repository' });
+
+test('index progress refresh retains the displayed sidebar and clears it on denial', async ({ page }) => {
+  const state = await fixture(page); state.data.languagesState = State.INDEXING; state.data.languages = [];
+  await page.goto('/alex/sidebar'); await expect(sidebar(page)).toContainText('PRIVATE current description');
+  let release!: () => void; state.held = new Promise(resolve => { release = resolve; });
+  const reads = state.reads.length;
+  await expect.poll(() => state.reads.length, { timeout: 8000 }).toBeGreaterThan(reads);
+  await expect(sidebar(page)).toContainText('PRIVATE current description');
+  await expect(sidebar(page)).not.toContainText('Reading repository details…');
+  state.overviewError = 'permission_denied'; release();
+  await expect(sidebar(page)).not.toContainText('PRIVATE current description');
+  await expect(sidebar(page)).toContainText('Details unavailable.');
+});
 
 test('root About contains bounded real topics, licenses, totals and explicitly indexed languages', async ({ page }) => {
   const state = await fixture(page); await page.goto('/alex/sidebar'); const rail = sidebar(page);
@@ -82,7 +96,7 @@ test('valid empty metadata does not revive the stale description or invent unkno
 
 for (const stateValue of [State.UNAVAILABLE, State.ERROR]) test(`optional section ${stateValue} does not imply indexed empty success`, async ({ page }) => {
   const state = await fixture(page); state.data.languages = []; state.data.licenseIds = []; state.data.languagesState = stateValue; state.data.licensesState = stateValue;
-  await page.goto('/alex/sidebar'); await expect(sidebar(page)).toContainText(stateValue === State.ERROR ? 'Language statistics could not be read.' : 'Language statistics unavailable.');
+  await page.goto('/alex/sidebar'); await expect(sidebar(page)).toContainText(stateValue === State.ERROR ? 'Language indexing failed. Refresh repository details to retry.' : 'Language statistics unavailable.');
   await expect(sidebar(page)).not.toContainText('No classified language bytes');
 });
 
@@ -173,4 +187,18 @@ for (const theme of ['dark', 'light']) for (const width of [390, 1280]) test(`ro
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
   await sidebar(page).getByRole('button', { name: 'Refresh repository details' }).focus(); expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Refresh repository details');
   expect(await sidebar(page).getByRole('heading', { name: 'About' }).evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(16);
+});
+
+test('native metadata shows progress, then commit-bound languages and actual license source', async ({ page }) => {
+  const state = await fixture(page);
+  state.data.languagesState = State.INDEXING; state.data.languages = [];
+  state.data.indexedCommitId = head; state.data.indexingProcessed = 314;
+  state.data.licensePaths = ['LICENSE'];
+  await page.goto('/alex/sidebar'); const rail = sidebar(page);
+  await expect(rail.getByText('Indexing source languages… 314 files processed.')).toBeVisible();
+  await expect(rail.getByRole('link', { name: 'LICENSE', exact: true })).toHaveAttribute('href', new RegExp(`/blob/${head}/LICENSE`));
+  state.data.languagesState = State.AVAILABLE; state.data.languages = [{ name: 'TypeScript', byteCount: '30' }]; state.data.indexedFiles = 314;
+  await rail.getByRole('button', { name: 'Refresh repository details' }).click();
+  await expect(rail).toContainText(`Source snapshot ${head.slice(0, 8)}`);
+  expect(state.reads.at(-1)?.ref).toBe(head);
 });

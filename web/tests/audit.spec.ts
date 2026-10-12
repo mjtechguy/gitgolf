@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -29,7 +30,7 @@ async function backend(page: Page) {
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Sign in required.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [{ id: '1', name: 'private-repository', fullName: 'alex/private-repository', private: true }] });
     if (method === 'ListAuditEvents') {
       const input = request(route, ListAuditEventsRequestSchema);

@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import {expect,test,type Page} from '@playwright/test';
 import {create,clone,toJson} from '@bufbuild/protobuf';
 import {GetSessionResponseSchema,GetAuthenticationOptionsResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryResponseSchema,GetPullRequestResponseSchema,ListPullRequestReviewsResponseSchema,ListReviewerRunsResponseSchema,GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,GetPullRequestMergeObservationRequestSchema,GetPullRequestMergeObservationResponseSchema,PullRequestSchema,PullRequestMergeObservationSchema,ProtectedReviewObservationSchema,RepositorySchema,UserSchema,IssueState,PullMergeTargetProtection,PullMergeSourceState,RepositorySourceRefKind,WatchRepositoryResponseSchema,type PullRequestMergeObservation} from '../src/gen/golf/v1/golf_pb';
@@ -9,7 +10,7 @@ const repository=create(RepositorySchema,{id:'11',name:key.name,fullName:'alex/p
 const original=create(PullRequestSchema,{id:'9007199254740993',number:7,title:'Private comparison title',body:'PRIVATE PR BODY',revision:R,state:IssueState.OPEN,mergeBaseCommitId:B,base:{repositoryId:'11',ref:'main',commitId:B},head:{repositoryId:'23',ref:'feature/topic',commitId:H},user});
 function streamFrame(flag:number,value:unknown){const body=Buffer.from(JSON.stringify(value)),header=Buffer.alloc(5);header[0]=flag;header.writeUInt32BE(body.length,1);return Buffer.concat([header,body]);}
 function observation(p=original){return create(PullRequestMergeObservationSchema,{selection:{repository:key,repositoryId:'11',pullRequestId:p.id,number:p.number,headCommitId:p.head!.commitId,baseCommitId:p.base!.commitId},pullRevision:p.revision,targetOwnerId:'42',sourceRepository:{owner:'contributor',name:'fork'},sourceRepositoryId:'23',source:{kind:RepositorySourceRefKind.BRANCH,name:'feature/topic',commitId:p.head!.commitId},base:{kind:RepositorySourceRefKind.BRANCH,name:'main',commitId:p.base!.commitId},targetProtection:PullMergeTargetProtection.UNPROTECTED,nativeCallerCanMerge:false,currentTargetWriter:false,sourceState:PullMergeSourceState.CURRENT,mergeConfiguration:{allowMergeCommits:true,allowSquashMerge:true,defaultMergeStyle:'merge',defaultUpdateStyle:'merge'},fingerprint:'f'.repeat(64),observedAt:'2026-10-04T18:00:00.123Z',unavailableReason:'protected_integration_unqualified'});}
-async function backend(page:Page){
+async function backend(page:Page,native=false){
  const state={liveEnded:false,pullWait:undefined as Promise<void>|undefined,liveWait:undefined as Promise<void>|undefined,pull:clone(PullRequestSchema,original),count:0,methods:[] as string[],denial:0,wait:undefined as Promise<void>|undefined,change:undefined as ((v:PullRequestMergeObservation)=>void)|undefined};
  await page.route('**/rpc/**',async route=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;state.methods.push(method);
@@ -17,7 +18,7 @@ async function backend(page:Page){
   if(method==='WatchRepository'&&state.liveWait){await state.liveWait;state.liveEnded=true;return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([streamFrame(0,toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:'11',cursor:'1',kind:'reset',topics:[]}))),streamFrame(0,{repositoryId:'11',cursor:'1',kind:'reconnect'}),streamFrame(2,{})])});}
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user});
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, native?{...portableRuntimeFixture,runtimeProfile:'cloudflare-native',capabilities:[{id:'pull.merge-observation',state:3}]}:portableRuntimeFixture);
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository});
   if(method==='GetPullRequest'){if(state.pullWait)await state.pullWait;return respond(route,GetPullRequestResponseSchema,{pullRequest:state.pull});}
@@ -151,4 +152,74 @@ test('protected exact-head exclusions remain diagnostic and never enable publica
 for(const fault of ['head','count','reason','duplicate'] as const)test(`protected review ${fault} receipt rejected087`,async({page})=>{
  const state=await backend(page);state.change=v=>{v.targetProtection=PullMergeTargetProtection.PROTECTED;v.protectedReviews=create(ProtectedReviewObservationSchema,{selectedHeadCommitId:H,observedReviews:1,exclusions:[{reviewId:'99',reviewedCommitId:B,reason:'stale_head'}]});const reviews=v.protectedReviews;if(fault==='head')reviews.selectedHeadCommitId=B;if(fault==='count')reviews.observedReviews=2;if(fault==='reason')reviews.exclusions[0]!.reason='eligible';if(fault==='duplicate'){reviews.exclusions.push(reviews.exclusions[0]!);reviews.observedReviews=2;}};
  await open(page);await inspect(page);await expect(panel(page).getByRole('alert')).toContainText('does not match');await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);
+});
+
+for(const width of [390,1440])test(`native merge diagnostics are available without enabling publication at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:900});const state=await backend(page,true);
+ state.change=v=>{v.mergeConfiguration!.allowMergeCommits=false;v.mergeConfiguration!.allowSquashMerge=false;};
+ await open(page);await inspect(page);await expect(panel(page)).toContainText('Live source matches');
+ await panel(page).getByText('Native merge observations',{exact:true}).click();await expect(panel(page)).toContainText('None');
+ await expect(page.getByRole('button',{name:/^Merge pull request/})).toHaveCount(0);
+ expect(state.methods).not.toContain('SubmitStandardPullMerge');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+
+for(const width of [390,1440])test(`native image receipt stays private and fits at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:900});await backend(page,true);
+ let denied=false;
+ const job={id:'72b855f6-2fe7-42ca-8a83-9a4a65d87f2b',state:'SUCCEEDED',agentState:'NONE',testState:'PASSED',adviceState:'NONE',stale:false,selection:{headCommitId:H}};
+ const image={registry:'https://registry.example.com',repository:'alex/private',tag:'ci-'+job.id,digest:'sha256:'+'d'.repeat(64),commitId:H};
+ await page.route('**/native/**',async route=>{
+  const path=new URL(route.request().url()).pathname;
+  if(path==='/native/config')return route.fulfill({json:{workspace:'alex',evidence:true,tests:true,previews:false}});
+  if(path==='/native/repository-access')return route.fulfill({json:{role:'read'}});
+  if(path==='/native/pr-evidence'){
+   if(denied)return route.fulfill({status:403,json:{message:'Repository access revoked'}});
+   const input=route.request().postDataJSON();
+   return route.fulfill({json:input.action==='report'?{job,report:{agentResult:{state:'NONE'},tests:{state:'PASSED',image},advice:{state:'NONE'},limitations:[]}}:{jobs:[job],truncated:false}});
+  }
+  return route.fulfill({status:404,json:{message:'Fixture route unavailable'}});
+ });
+ await open(page);await page.getByRole('button',{name:'Read report',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Published container image'})).toBeVisible();
+ await expect(page.getByText('registry.example.com/alex/private@'+image.digest,{exact:true})).toBeVisible();
+ await expect(page.getByText(/not a signed build attestation/)).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain(image.digest);
+ denied=true;await page.getByRole('button',{name:'Refresh PR',exact:true}).click();
+ await expect(page.getByText(/Repository access revoked/)).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Published container image'})).toHaveCount(0);
+});
+
+for (const view of ['conversation', 'checks']) test(`native ${view} connects each run to its protected preview and removes expired links`, async ({ page }) => {
+ await page.setViewportSize({ width: 390, height: 900 });
+ await page.clock.install({ time: new Date('2026-10-12T01:30:00Z') });
+ await backend(page, true);
+ let denied = false;
+ const job = { id: '72b855f6-2fe7-42ca-8a83-9a4a65d87f2b', state: 'SUCCEEDED', agentState: 'NONE', testState: 'PASSED', adviceState: 'NONE', stale: false, selection: { headCommitId: H } };
+ const preview = { id: 'preview-owned', kind: 'WORKER', jobId: job.id, commitId: H, state: 'READY', expiresAt: '2026-10-12T01:31:00Z', purged: false, captureState: 'NONE', url: 'https://4b1a5b0c-4aa2-42ba-be6f-f705ba949bed.qual-1012b-preview.mjtechguy.com/' };
+ await page.route('**/native/**', async route => {
+  const path = new URL(route.request().url()).pathname;
+  if (denied) return route.fulfill({ status: 403, json: { message: 'Repository access revoked' } });
+  if (path === '/native/config') return route.fulfill({ json: { workspace: 'alex', evidence: true, tests: true, previews: true, apps: true } });
+  if (path === '/native/repository-access') return route.fulfill({ json: { role: 'read' } });
+  if (path === '/native/pr-evidence') return route.fulfill({ json: { jobs: [job], truncated: false } });
+  if (path === '/native/pr-preview') return route.fulfill({ json: { previews: [preview, { ...preview, id: 'other-pr', jobId: 'foreign', url: 'https://foreign.example.com/' }, { ...preview, id: 'wrong-source', commitId: B, url: 'https://wrong-source.example.com/' }], truncated: false } });
+  return route.fulfill({ status: 404, json: { message: 'Fixture route unavailable' } });
+ });
+ await page.goto('/alex/private/pull/7' + (view === 'checks' ? '/checks' : ''));
+ const runs = page.getByRole('table', { name: 'PR runs', exact: true });
+ await expect(runs.getByRole('link', { name: 'Open protected preview' })).toHaveAttribute('href', preview.url + '__golf/enter');
+ await expect(runs.getByRole('button', { name: 'Copy protected preview URL' })).toBeVisible();
+ await expect(runs).toContainText('4b1a5b0c-4aa2-42ba-be6f-f705ba949bed.qual-1012b-preview.mjtechguy.com/');
+ await expect(runs).toContainText('expires');
+ await expect(page.locator('a[href*="foreign.example.com"], a[href*="wrong-source.example.com"]')).toHaveCount(0);
+ expect(await page.evaluate(() => ({ viewport: innerWidth, width: document.documentElement.scrollWidth }))).toEqual({ viewport: 390, width: 390 });
+ await page.clock.fastForward(61_000);
+ await expect(page.getByRole('link', { name: 'Open protected preview' })).toHaveCount(0);
+ await expect(runs).toContainText('Preview expired');
+ denied = true;
+ await page.getByRole('button', { name: 'Refresh PR', exact: true }).click();
+ await expect(page.getByText(/Repository access revoked/).first()).toBeVisible();
+ await expect(page.getByRole('link', { name: 'Open protected preview' })).toHaveCount(0);
 });

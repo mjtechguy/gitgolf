@@ -45,6 +45,8 @@ type Config struct {
 	UsernsMode                         string                       // user namespace to use
 	ContainerArchitecture              string                       // Desired OS/architecture platform for running containers
 	ContainerDaemonSocket              string                       // Path to Docker daemon socket
+	ContainerVolumeOptions             map[string]map[string]string // Golf: local-driver options keyed by mount destination
+	ContainerCopyViaExec               bool                         // Golf: trusted tar stdin into writable job mounts
 	ContainerOptions                   string                       // Options for the job container
 	UseGitIgnore                       bool                         // controls if paths in .gitignore should not be copied into container, default true
 	GitHubInstance                     string                       // GitHub instance to use, default "github.com"

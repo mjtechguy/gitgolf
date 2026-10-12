@@ -185,3 +185,29 @@ func TestGitSourceSnapshotMaterializationBoundary(t *testing.T) {
 		t.Fatal("manifest bypassed source tree comparison")
 	}
 }
+
+// Actual tar bytes distinguish confined certificate links from links that can
+// redirect native extraction or later file reads outside the admitted source.
+func TestGitSourceContainedLinks(t *testing.T) {
+	for _, target := range []string{"../ordinary/ca", "../../private", "/private", "../link/../ordinary/ca", "../missing"} {
+		var body bytes.Buffer
+		writer := tar.NewWriter(&body)
+		for _, h := range []*tar.Header{
+			{Name: "ordinary", Typeflag: tar.TypeDir, Mode: 0755},
+			{Name: "ordinary/ca", Typeflag: tar.TypeReg, Mode: 0644, Size: 1},
+			{Name: "cert", Typeflag: tar.TypeDir, Mode: 0755},
+			{Name: "cert/ca", Typeflag: tar.TypeSymlink, Mode: 0777, Linkname: target},
+		} {
+			if writer.WriteHeader(h) != nil {
+				t.Fatal("tar header")
+			}
+			if h.Size == 1 {
+				writer.Write([]byte("x"))
+			}
+		}
+		writer.Close()
+		if (ValidateGitSourceArchive(body.Bytes()) == nil) != (target == "../ordinary/ca") {
+			t.Fatal("link containment differs", target)
+		}
+	}
+}

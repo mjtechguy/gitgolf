@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { RefreshCw } from 'lucide-react';
-import { capabilityClient, errorMessage } from './api';
+import { errorMessage } from './api';
+import { useRuntimeCapabilities } from './useRuntimeCapabilities';
+import { runtimeLabel, settingAvailable } from './runtimeCapabilities';
 import { CapabilityState } from './gen/golf/v1/golf_pb';
 import type { Capability } from './gen/golf/v1/golf_pb';
 import { DataTable } from './DataTable';
@@ -19,6 +20,7 @@ const groups = [
   { id: 'cloudflare', title: 'Cloudflare integrations', description: 'Optional provider implementations are listed separately by function. A configured credential does not establish a verified connection or operational service.' },
 ];
 function setupAction(row: StatusRow, isInstanceAdmin: boolean) {
+  if (row.id === 'operations.dashboard') return isInstanceAdmin ? <Link className="text-button" to="/admin/operations">Open Operations</Link> : <span className="muted">Administrator access required</span>;
   if (['agents.codex', 'agents.claude-code', 'agents.opencode'].includes(row.id)) return <div><Link className="text-button" to="/account/agents">Manage {row.label} connection</Link>{isInstanceAdmin ? <p><Link className="text-button" to="/admin/agents">Manage instance accounts</Link></p> : null}<p className="field-help">Personal and permitted instance accounts; model access and task execution are separate.</p></div>;
   if (row.id === 'repositories') return <Link className="text-button" to="/">Manage repositories</Link>;
   if (row.id === 'pipelines') return isInstanceAdmin ? <Link className="text-button" to="/admin/execution">Manage policies</Link> : <span className="muted">Ask an instance administrator about worker setup</span>;
@@ -27,18 +29,18 @@ function setupAction(row: StatusRow, isInstanceAdmin: boolean) {
   return <span className="muted">Setup not available yet</span>;
 }
 function groupFor(id: string) {
-  return id === 'agents' || id.startsWith('agents.') ? 'agents' : id === 'cloudflare' || id.startsWith('cloudflare.') ? 'cloudflare' : 'platform';
+  return id === 'agents' || id.startsWith('agents.') ? 'agents' : id === 'cloudflare' || id.startsWith('cloudflare.') || id.startsWith('native-') ? 'cloudflare' : 'platform';
 }
 export function Capabilities({ isInstanceAdmin }: { isInstanceAdmin: boolean }) {
-  const query = useQuery({ queryKey: ['capabilities'], queryFn: () => capabilityClient.listCapabilities({}) });
+  const query = useRuntimeCapabilities();
   const rows: StatusRow[] = query.isError ? [] : (query.data?.capabilities ?? []).map(row => ({ ...row, availability: row.state === CapabilityState.DEGRADED ? 'configured · degraded' : CapabilityState[row.state]?.toLowerCase() || 'unknown' }));
   const setupColumns: DataTableColumn<StatusRow>[] = [...columns, { id: 'setup', header: 'Configuration', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => setupAction(row.original, isInstanceAdmin) }];
   return <section className="capabilities-section page-stack" id="capabilities" aria-labelledby="capabilities-title">
     <div className="section-heading"><div><span className="eyebrow">A CLEAR VIEW OF WHAT’S AVAILABLE</span><h2 id="capabilities-title">Your workspace today</h2></div><button type="button" className="button secondary" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} />Refresh status</button></div>
-    <p className="section-description">Availability comes directly from this Golf installation. Configuration, connection verification and successful execution are separate evidence.</p>
+    <p className="section-description">Runtime: {runtimeLabel(query.data?.runtimeProfile)}. Availability comes directly from this Golf installation. Configuration, connection verification and successful execution are separate evidence.</p>
     {query.error ? <div className="error-message" role="alert">{errorMessage(query.error)}</div> : null}
     {query.isPending ? <p role="status" className="muted">Loading capabilities…</p> : null}
-    {query.isSuccess ? <><section className="browser-panel" aria-labelledby="connection-setup-title"><div className="browser-panel-heading"><h3 id="connection-setup-title">Database and storage connections</h3>{isInstanceAdmin ? <Link className="button secondary" to="/admin/settings/infrastructure">Manage connections</Link> : null}</div><p className="panel-footnote">{isInstanceAdmin ? 'Add a PostgreSQL, RustFS, S3 or R2 profile, then test it. Multiple profiles can be saved. One storage binding is active for future CI sources; existing runs retain their original version. Database profiles can be saved and tested, but live database cutover is not available.' : 'Instance administrators manage database and storage connections. Repository owners manage workflow policies and automation grants in repository settings.'}</p></section><div className="capability-groups">{groups.map(group => <section key={group.id} aria-labelledby={`capabilities-${group.id}`}>
+    {query.isSuccess ? <><section className="browser-panel" aria-labelledby="connection-setup-title"><div className="browser-panel-heading"><h3 id="connection-setup-title">Database and storage connections</h3>{isInstanceAdmin && settingAvailable(query.data, 'settings.infrastructure') ? <Link className="button secondary" to="/admin/settings/infrastructure">Manage connections</Link> : null}</div><p className="panel-footnote">{query.data.runtimeProfile === 'cloudflare-native' ? 'Native metadata uses D1 and canonical Git uses Artifacts. Optional R2 retains private outputs and read indexes. Workspace administrators can inspect connected services, maintenance and usage in Operations; allocations use the separate native operator setup.' : isInstanceAdmin ? 'Add a PostgreSQL, RustFS, S3 or R2 profile, then test it. Multiple profiles can be saved. One storage binding is active for future CI sources; existing runs retain their original version. Database profiles can be saved and tested, but live database cutover is not available.' : 'Instance administrators manage database and storage connections. Repository owners manage workflow policies and automation grants in repository settings.'}</p></section><div className="capability-groups">{groups.map(group => <section key={group.id} aria-labelledby={`capabilities-${group.id}`}>
       <div className="section-heading"><h3 id={`capabilities-${group.id}`}>{group.title}</h3></div><p className="section-description">{group.description}</p>
       <DataTable label={group.title} data={rows.filter(row => groupFor(row.id) === group.id)} columns={setupColumns} pagination={false} getRowId={row => row.id} emptyMessage="No capability information was reported for this section." />
     </section>)}</div></> : null}

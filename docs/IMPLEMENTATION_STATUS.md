@@ -1,25 +1,1032 @@
 # Golf implementation status
 
-## Product status against the plan (2026-10-06)
+## 2026-10-12 — Cloudflare/CFCR qualification and preview discoverability
+
+See the [qualification packet](CLOUDFLARE_FULL_QUALIFICATION_2026-10-12.md) for real hosted results, failed attempts, timing receipts and cleanup. Native CI now publishes an exact-commit OCI image into separate CFCR: the full agent/test bundles had omitted the private authorization entrypoint. Both exports are repaired and production preparation checks configured exports against the built bundle. Registry infrastructure failures preserve bounded diagnostics, terminate as LOST and destroy the job container.
+
+Immutable file history reuses the bounded shared navigation cache after current access verification. PR conversation/Checks and native run rows prominently expose protected deployment URLs, copy actions and expiry, with job/commit matching and revocation masking. Shared mobile copy-control overflow is fixed. Cloudflare final-authority queue/database timing is visible separately in Operations.
+
+This is not a full qualification sign-off. Loaded-workspace metadata tails and incomplete large-repository indexing remain open. Hosted Docker/regctl/Cosign, OCI (71 passed, eight skipped) and live authority checks now pass. A post-indexing 60-read sample has zero failures and warm p50 223 ms / p95 832 ms; this does not close loaded-workspace contention. Native scanner startup still fails; the final release rehearsal failed at rollback preflight with provider D1 HTTP 403/API 7403 after release convergence; rollback/promotion remain unverified; general native Actions/GitLab execution remains outside the approved Python-module runner. All owned resources were removed and the independent stop timer cancelled at 02:11 UTC.
+
+## 2026-10-11 — Deeper CI fault, concurrency and Forgejo qualification
+
+The advanced maintained Actions launcher now supports a fresh, digest-pinned
+Forgejo installation with an inventory-matched API baseline. Real signed-push
+testing exposed two portability bugs: Forgejo's callback allowlist belongs under
+`webhook`, and its signed webhook headers omit the Gitea installation-scope
+header. Both are fixed. Golf requires matching Forgejo/Gitea header aliases,
+valid HMAC and the existing immutable repository/owner binding; the legacy
+Gitea scope requirement is unchanged. Rejection tests include duplicate/mixed
+headers, invalid signatures, organization scope and signed foreign repositories.
+
+The unchanged PSF Requests lint workflow now passes on **Forgejo** with actual
+checkout/setup-python actions, pre-commit, signed push admission, restricted
+dependency egress, timeout, running cancellation and owned cleanup. The
+[receipt](compatibility/evidence/requests-forgejo-deep-20261011.json) binds current
+binaries, source hashes, provider image and API baseline. This extends the prior
+Gitea evidence; it does not expand the supported Actions language.
+
+The separate [Forgejo worker-loss packet](compatibility/evidence/worker-loss-forgejo-deep-20261011.json)
+passed `.forgejo/workflows` precedence, historical exact Git source, two dependent
+jobs with fresh workspaces/scoped logs, manual and signed-push execution, and
+restart without replay. A real `SIGKILL` during a running step left owned residue;
+ordinary startup refused reuse. Explicit recovery fenced the original attempt as
+lost, removed its containers/volumes and created no replacement run. Owned stack
+cleanup passed and foreign container identity remained unchanged.
+
+Actual Cloudflare cancellation during clone found a terminal-state race:
+destruction interrupted preparation, whose exception replaced cancellation with
+`LOST`. Cleanup now preserves the first terminal result and shares in-flight
+destruction. A second regression fences late authorization after cancellation;
+a recreated task also retries cleanup without restarting execution. Both original
+race counterexamples fail before the fix and pass afterward.
+
+The final [hosted resilience packet](compatibility/evidence/ci-hosted-resilience-20261011.json)
+passed six-way original-intent replay, conflicting input refusal, six requests
+competing for one remaining daily slot, exhausted-budget refusal with replay,
+repeated cancellation, denied reader cancellation, cross-repository status/report/
+cancel isolation, successful and failed exact-head tests, staleness and reader
+revocation. Cancellation was observed after admission, not confirmed command
+start. All eleven cleanup categories are absent. This was a disposable,
+machine-authenticated installation; no human login or retained rollout occurred.
+
+Twelve PostgreSQL coordination-test families passed three times under `-race`
+(36 executions, no skipped cases), including lease loss, competing dispatch and
+cancel, pool capacity, current-authority changes and artifact privacy. Its
+[receipt](compatibility/evidence/ci-database-races-20261011.json) distinguishes
+actual database tests with native HTTP fixtures from real forge/job execution.
+The full Go suite, Cloudflare checks, compatibility checks, targeted webhook and
+container regressions, and six migration-tool tests passed.
+
+Failed attempts remain in a [separate record](compatibility/evidence/ci-deep-failed-attempts-20261011.json).
+One initial hosted Git push returned an unexplained HTTP 500; later fresh
+installations passed. The expanded harness also exposed a stale two-job cleanup
+guard, now shared with its configured allocation limit and verified in the final
+run. All earlier provider resources were removed. **Native Cloudflare Actions/
+GitLab YAML execution, full GitLab pipelines and sustained production load remain
+unqualified.** See the [complete qualification report](CI_QUALIFICATION_2026-10-11.md).
+
+## 2026-10-11 — Shared UI review and real cross-runtime CI qualification
+
+Cold portable file reads now use the source endpoint's authorization receipt,
+avoiding the redundant metadata request; retained source still requires a fresh
+authority check and is hidden after denial. Shared source/diff menus stay within
+narrow viewports, and commit summaries remain visible at320px. These components
+serve portable and Cloudflare builds. The navigation regression fixtures now
+revoke access at the intended request boundary and wait for asynchronous workflow
+inspection instead of racing render completion.
+
+GitLab-format shell jobs now accept bounded job-level `before_script`; setup and
+`script` share one shell, variables, functions and working directory. A failed
+setup stops execution. Inspection and compilation agree on the combined50-entry
+bound, including the Actions step bound. Global/default setup, `after_script`,
+includes/rules and multi-job GitLab pipelines remain unsupported. This is not
+GitLab Runner compatibility.
+
+Current Forgejo/Docker CI passed actual Actions and GitLab shell execution,
+failure/cancellation, queue restart persistence, log/history pagination, policy
+revocation and owned cleanup. [Its receipt](compatibility/evidence/ci-review-20261011.json)
+is separate from the broader [CI qualification report](CI_QUALIFICATION_2026-10-11.md).
+
+The unchanged PSF Requests lint workflow passed on the maintained Actions engine
+with real pinned checkout/setup-python actions and pre-commit. Actual signed-push
+admission, scoped dependency egress, denied private/direct egress, one-minute job
+timeout and running cancellation passed, with attempt resources removed. The
+[dated receipt](compatibility/evidence/requests-review-20261011.json) binds the
+current binaries/source hashes; this advanced packet uses the Gitea profile.
+An initial preparation attempt used the sanitized Git-image receipt (which omits
+local acquisition fields); a second correctly rejected stale frontend assets.
+Both were corrected before the successful third attempt. Neither failed attempt
+is counted as a pipeline pass.
+
+The actual secret/variable packet passed matrix/dependent job execution, encrypted
+raw-output quarantine, cross-chunk exact-secret masking, value-version changes,
+repository-admin loss, approval-session logout, binding removal and drained key
+rotation followed by restart without the retired key. Its
+[receipt](compatibility/evidence/execution-values-review-20261011.json) records the
+bounded scope; transformed-secret concealment and broad Secrets/OIDC are not
+qualified. The shared native test-proxy validator now accepts AMD64 and ARM64
+and checks the binary architecture against the actual immutable container image.
+Both positive architectures and mismatched image/OS/architecture/hash cases pass
+pure counterexample checks.
+
+The real GitLab-format artifact producer passed exact private archive validation,
+independent signed object-store readback, refused storage-outage fallback, retained
+readback after restart, and reader revocation. Its fresh RustFS/Docker stack is
+removed. The [artifact receipt](compatibility/evidence/artifacts-review-20261011.json)
+is not GitHub artifact/cache protocol compatibility. Two preflight attempts stopped
+before creating a stack: missing pinned RustFS image, then the ARM64-only test
+proxy guard. The image was acquired and the shared guard fixed before the passing
+run. All temporary local qualification images and owned runtime resources were
+removed after the final packet.
+
+The real Cloudflare packet passed canonical Artifacts Git, private PR test success
+and failure, stale-source checks, evidence-reader revocation and scoped machine
+access. Both canonical YAML fixtures were read back byte-for-byte, but Actions
+and GitLab inspection/dispatch returned typed501 `unimplemented` responses.
+**Hosted YAML pipeline execution is missing; cross-runtime enterprise CI is not
+qualified.** All temporary cloud resources are confirmed absent in the
+[hosted receipt](compatibility/evidence/ci-hosted-review-20261011.json). No human
+login, retained deployment update or ongoing demo was required.
+
+Validation: `go test ./...` without the database environment, maintained engine
+checks, compiler/shared-shell counterexamples, generated contracts, compatibility,
+Cloudflare checks, TypeScript and both frontend builds passed. The broad browser
+run passed277/279; the two timing failures were corrected and the affected routes
+plus diff suite passed91/91, followed by the focused capability-recovery check.
+Fresh/cached source authorization and mobile menus have explicit regression tests.
+Full historical database integration, every Actions/GitLab feature, positive human
+hosted browser coverage and production-scale load are not claimed.
+
+## 2026-10-11 — Forgejo portable foundation and staged import qualification
+
+[Setup and exact limits](FORGEJO_SETUP.md) now cover explicit Forgejo configuration,
+legacy aliases, schema095 installation/workflow binding, neutral CLI tokens,
+`.forgejo/workflows` discovery/dispatch and shadow diagnostics, provider-aware
+login/Operations labels, separate rootless Compose and guarded Helm profiles.
+The [API inventory](compatibility/forgejo-inventory.json) records410 shared route
+pairs,72 source-only pairs and81 target-only pairs; matching paths are not parity.
+
+Actual Forgejo15.0.9/PostgreSQL smoke checks passed private source/Git/CLI access,
+revocation, workflow inspection/precedence and native PR/review creation. Actual
+Compose CI passed `.forgejo` Actions and GitLab-format shell jobs, restart
+persistence, denied dispatch, failure/cancellation, source/log receipts, history
+pagination, policy revocation and cleanup. The importer rehearsal transferred core
+Git/collaboration metadata but **lost one private pending review**. Its report is
+not cutover approval. The staged transfer CLI journals uncertain dispatch, encrypts
+API inventories with age and reports unresolved fidelity/identity classes.
+
+Validation: focused PostgreSQL/race tests, final `go test ./...` without the database
+environment,102 focused shared UI tests, frontend build, generated contracts,
+compatibility and Cloudflare checks passed. Helm lint/render and separate Compose
+configuration checks passed. An earlier broad PostgreSQL run found the existing
+OAuth downgrade test's conflict with migration092's no-downgrade guard and was
+stopped during lengthy cleanup; the full historical integration suite is not
+qualified. A timing-sensitive runner cancellation test failed in an initial busy
+run, then passed five targeted repeats and the final full unit run.
+
+No retained installation, production default, cloud deployment or source authority
+was changed. Complete private-data/identity migration, backend replacement detection
+at an unchanged URL, all APIs/roles, coordinated recovery, Kubernetes runtime,
+performance/scale and Gitea retirement remain open. All owned native/CI containers,
+volumes, networks and temporary CI image were removed. See the
+[execution plan](FORGEJO_MIGRATION_PLAN.md) and
+[qualification receipt](compatibility/evidence/forgejo-local.json).
+
+## 2026-10-11 — Forgejo transition direction accepted; planning only
+
+The user selected Forgejo as the destination for portable Golf and the
+origin-backed bridge. The [transition plan](FORGEJO_MIGRATION_PLAN.md) and
+[ADR 0009](decisions/0009-forgejo-portable-backend.md) specify version/API inventory,
+configuration compatibility, native behavior tests, CI discovery, fresh-target
+data/identity migration, shared UI/packaging, recovery, cutover and Gitea retirement.
+Current Gitea 1.27.3 is outside the documented transparent upgrade path; no image
+swap over existing data is planned. Cloudflare-native and independent CFCR retain
+their existing architecture. Documentation links and whitespace were checked;
+no Forgejo runtime was started, no migration was run and no deployment changed.
+
+## 2026-10-11 — Deep-history comparisons, native merge diagnostics and CFCR job publishing
+
+Native coverage is **91/298 shared procedures** (207 remain). The new merge
+observation adapter binds the exact PR revision and selected commits, checks
+current repository authority and reports source/target freshness and branch lock
+state. The shared PR UI exposes these observations separately from publication.
+All native merge methods remain disabled: diagnostics do not implement protected
+merge, trusted required checks, write-ingress fencing or ambiguous-write recovery.
+
+Short linear comparisons now avoid walking old common history. Both commit
+identities are validated; merges fall back to the existing bounded DAG walker.
+Tests cover 10,000-commit history, reversed comparisons, missing commits,
+60 deterministic DAGs checked against an exhaustive oracle and real Git patches.
+The hosted fixture added 1,000 actual Artifacts commits; its exact one-commit
+comparison took **429 ms**, then **283 ms**. Its unchanged small tree and single
+service principal do not qualify large-tree diffs or global concurrent load.
+Eight additional final-release comparisons at concurrency four all passed; the
+first batch took roughly 1.5 seconds and the next 380–448 ms. These slower burst
+observations remain in the [speed record](CLOUDFLARE_SPEED_QUALIFICATION.md).
+
+The independent CFCR integration now supports an explicitly enabled native job
+broker. Credentials bind the current job, repository, actor, commit, policy and
+deadline; repository code receives only registry/image/source coordinates.
+CFCR restricts job tags, rejects management/deletion and isolates upload sessions.
+Current execution/access checks deny stale or cancelled jobs. Successful tests
+can retain an independently digest-verified image receipt after container cleanup,
+shown in the shared report UI. This is not signed build provenance or a general
+Docker image-build workflow. Setup and limits: [CFCR integration](CFCR_INTEGRATION.md).
+
+Local validation passed:
+
+- `make cloudflare-check`, both frontend builds and 129 focused shared browser
+  cases, including native merge diagnostics and image receipts at 390 and 1440
+  pixels. Receipts fit without page overflow, stay out of browser storage and
+  disappear after current-access denial.
+- 152 final core/task tests, six comparison tests and 15 native operator/setup
+  tests, including the maintained actual-Git deep-history fixture self-check.
+- 42 CFCR JavaScript tests plus the Python archive-boundary check; default and
+  CI-enabled native build-output validation.
+- Real Docker build/push/remove/pull with identical image identity; cancellation
+  then denies pull. This check uses a fixture execution authority.
+- Actual local Golf Worker/D1/private service bindings → CFCR → current Golf
+  execution authorization → OCI publication/digest readback. Changing the source
+  denies later access. The running job and Artifacts transport are fixtures.
+
+Hosted run `golf-native-20261011-4e4a3c97` passed real Git/PR/check/review tests,
+passing and failing container CI, stale-source refusal, Workflows/R2 evidence, protected static and Worker previews,
+grant replay/revocation, isolated D1/R2, Secrets Store signing and egress denial.
+The service-auth browser preserved document identity through Code → PR list → PR
+detail, used Archivo and had no horizontal overflow at 1280×800. The first merge
+observation completed; a follow-up read triggered focus revalidation. Both states
+are retained in its `merge-browser-proof.json`. The private temporary browser proxy
+is stopped; human-cookie and secure-context behavior remain unqualified.
+
+Release `09a8e092a63b289e0f736df56f068172be2dfc5d16d84c809be6bf852124b611`
+passed guarded migration/check/deployment, all 111 served asset hashes, compatible
+rollback and promotion. The unrecorded predecessor and machine administrator
+access were refused. Each stage required matching Worker/workspace release
+observations; several-minute convergence delays were retained. The predecessor is
+a same-schema HTML-comment baseline, not an independently old frontend chunk.
+After promotion, eight more concurrent comparisons passed, with 580–1102 ms client
+times and zero coordination queue time; provider setup/token calls and D1 reads
+remain measurable costs. No global latency guarantee is established.
+
+The unattended run finished successfully at **21:33 UTC**, before its independent
+21:43 UTC deadline. All **24 owned resource groups** are confirmed absent,
+including 125 owned R2 objects and their bucket, canonical Artifacts namespace,
+databases, Workers, container applications/image, Access resources and temporary
+provider credentials. The cleanup timer is inactive; qualification credentials
+are removed or revoked. The owned local image alias and temporary browser/test
+servers are gone. Recorded backend/operator source hashes still match. No hosted
+demo remains running. No hosted CFCR registry was allocated, and no personal
+login, IP bypass or AI call was needed.
+[Final ownership and checks](../.tmp/cloudflare-forge/golf-native-20261011-4e4a3c97/ownership.json),
+[browser observations](../.tmp/cloudflare-forge/golf-native-20261011-4e4a3c97/merge-browser-proof.json),
+[concurrent timing](../.tmp/cloudflare-forge/golf-native-20261011-4e4a3c97/deep-comparison-promotion.json).
+
+The full six-priority scope remains open: protected publication, complete
+environment lifecycle, broader collaboration, hosted CI-to-CFCR qualification,
+large-tree/multi-tenant scale and a lasting curated demo. See the explicit
+[execution checkpoint](REPOSITORY_PARITY_PLAN.md#2026-10-11-execution-checkpoint).
+
+## 2026-10-11 — Shared file finder, cached native inventory and keyboard polish
+
+The new `GetRepositoryFileIndex` adapter brings native coverage to **90/298 shared
+procedures** (208 remain). The shared **Go to file** dialog works across local,
+Docker, Kubernetes and Cloudflare-native, with `t`, Enter and arrow navigation,
+Unicode/literal paths and immutable commit links. It finds unopened nested files
+without fetching their contents. Native indexes reuse D1/R2 under current authority;
+portable reads use supported forge object APIs with pre/post permission checks.
+
+Inventories are complete or refused: 10,000 paths, 512 directories including root,
+1 MiB of path bytes and existing literal-path bounds. Submodule repositories and
+full-text contents are not searched. Only 50 matching links render at once, with
+an explicit count. Closing discards private browser inventory; filenames are not
+persisted in browser storage. The shared details dialog now restores its original
+focus target through StrictMode replay. Native clone menus open repository Git
+credentials instead of pointing users to unsupported account SSH settings.
+
+Local validation passed:
+
+- 25 file-finder/source-navigation browser cases; 96 additional shared repository
+  routes, access and reviewer cases. Phone and desktop layouts covered all four
+  runtime profiles; no full-document navigation and no stored private filenames.
+- Full server unit suite, plus race-enabled isolated PostgreSQL file-index/source
+  selection tests. Wrong repository, changed identity, permission loss during reads
+  and rebound repository identity all deny results. The owned DB container is gone.
+- Native tests cover shared-tree deduplication, missing objects, count/byte/depth
+  limits, a warm index with Artifacts unavailable, and permission loss despite a
+  cached result. `make cloudflare-check`, both frontend builds and real local
+  workerd/Access/D1/Queues/Workflows/R2 runtime checks passed.
+
+The disposable hosted run `golf-native-20261011-f4a32b11` has verified all nine
+feature-commit filenames against actual `git ls-tree`, with a **106 ms** warm HTTPS
+inventory read. Five metadata reads measured 183–247 ms (median 204 ms). These are
+small-fixture observations, not large-repository or global-load results. Eight
+concurrent inventory requests by one service principal completed at 113–289 ms
+(median 252 ms), all with the requested repository/commit and nine paths
+([receipt](../.tmp/cloudflare-forge/golf-native-20261011-f4a32b11/file-finder-concurrency.json)). Shared
+browser inspection confirmed Archivo, nested CODEOWNERS selection at the exact
+commit, unchanged document identity and no private filenames in browser storage.
+The private HTTP service-auth proxy is stopped; it does not qualify secure-context
+or human-cookie behavior. [Browser receipt](../.tmp/cloudflare-forge/golf-native-20261011-f4a32b11/file-finder-browser-proof.json).
+
+The full unattended hosted run passed and finished at **20:37 UTC**. Release
+`840833a7085a6c97cf8691ca0396469b5b1e619ffdf07b9d19fdd34b31cbb53b`
+passed guarded migration/check/deployment, verification of all 111 served asset
+hashes, compatible rollback and promotion. Edge/workspace version agreement was
+required after every deployment; multi-minute propagation was observed. The
+unrecorded rollback predecessor was refused. This still uses the documented
+same-schema HTML-comment baseline, not an independently old frontend chunk.
+
+Real Git push/clone, PR review/checks/evidence, passing and failing container CI,
+stale-source refusal, current-reader/replay/revocation checks, protected static and
+managed Worker previews, isolated D1/R2, Secrets Store signing and outbound denial
+passed. No personal login, OTP, IP bypass or new AI calls were used. All 24 owned
+resource groups are confirmed absent, qualification credentials are removed or
+revoked, and the independent cleanup timer is inactive. No hosted demo remains
+running. Runtime backend source hashes match the recorded run.
+[Final ownership/checks](../.tmp/cloudflare-forge/golf-native-20261011-f4a32b11/ownership.json).
+
+Full protected merge, larger background search, native adapter completion, hosted
+human-cookie/secure-context checks and production/global scale remain open.
+
+
+## 2026-10-11 — Hosted schema18 rollout and unattended qualification
+
+Release `d20a2a027cb1dc852bd9a2d9bee9b2b84a8a86b43821fdee393358e8f4ae144c`
+passed the bounded service-account suite at `gitgolf.mjtechguy.com`. The final
+installation ran from 05:40 to 06:00 UTC, within its independently armed 45-minute
+cleanup deadline. No personal Access login, OTP, IP bypass or human impersonation
+was used. All 24 owned resource groups are confirmed absent, temporary credentials
+are removed/revoked, the test proxy is stopped and the timer is inactive. No demo
+remains running. [Aggregate receipt](../.tmp/cloudflare-forge/20261011-unattended-summary.json)
+and [final ownership/checks](../.tmp/cloudflare-forge/golf-native-20261011-78328ad4/ownership.json).
+
+- Guarded migration/check/deployment, compatible schema18 rollback and promotion
+  all passed, with matching edge Worker and workspace versions. All 111 served
+  retained assets matched their hashes. Rollback to an unrecorded predecessor
+  was refused; the pending-review privacy floor remains enforced.
+- Actual Artifacts push/clone, immutable browsing, issues, PRs, reviews, source-bound
+  checks/evidence, replay, stale-source rejection and reader revocation passed.
+  Both passing and deliberately failing CI jobs produced the correct reports and
+  destroyed their containers. Queues, Workflows and R2 carried the evidence.
+- Protected static and managed Worker previews passed Access/service-grant,
+  replay and revocation checks, Browser Run capture, isolated D1/R2, Secrets Store
+  signature and outbound-denial checks. This is service-auth coverage, not an
+  actual reviewer Access sign-in.
+- CODEOWNERS came from actual Artifacts. Default-branch settings and Git HEAD
+  agreed, with stale revisions rejected. Explicit disposable D1 fixtures verified
+  branch locks, repository-only read credential scope/revocation, and pending/
+  discarded draft privacy. All 17 human-only management methods rejected machine
+  credentials; Operations admin access also remained denied.
+- Shared browser Code→Settings navigation retained its document, Archivo loaded,
+  all nine settings destinations appeared, and General description save/restore
+  succeeded. [Browser evidence](../.tmp/cloudflare-forge/golf-native-20261011-78328ad4/browser-proof.json).
+  The authenticated private HTTP test proxy does not qualify secure-context or
+  human-cookie behavior. Five metadata reads measured 166–193 ms (median 185 ms).
+  A separate earlier run observed a real live issue event 300 ms after mutation
+  ([stream receipt](../.tmp/cloudflare-forge/golf-native-20261011-8c807a0f/hosted-stream.json)).
+
+An earlier attempt separately completed Clef/AI Gateway and two concurrent agent
+proposals with canonical Git unchanged and both containers destroyed. Its 42 backend
+source hashes match the final run; that entire attempt remains marked failed due
+to a later overly specific test assertion, not relabeled as passing.
+[Agent evidence](../.tmp/cloudflare-forge/golf-native-20261011-0ed3ae1d/ownership.json).
+Other failed attempts retain receipts for a stopped fixture correction, a provider
+Worker-create failure, the rehearsal's wrong HTML filename and a 60-second wrapper
+timeout. Harness fixes preserve the native asset inventory, allow 300-second release
+commands and require edge/workspace convergence. All six attempts' cleanup receipts report owned resources absent; all six timers
+were separately checked as inactive.
+
+The new `--unattended` path is documented in [native setup](CLOUDFLARE_NATIVE_SETUP.md#unattended-hosted-qualification).
+Validation also passed 46 focused Python checks and actual local workerd/D1 review
+assignment, notification, private draft, publication, dismissal and receipt replay.
+This closes bounded hosted service-account qualification, not full GitHub parity.
+Positive hosted human-only mutations, large-repository/concurrent/global load,
+and the remaining 208 shared adapter gaps remain open. The baseline differs only
+by an HTML comment; a uniquely old frontend chunk was not separately exercised.
+
+## 2026-10-11 — Native PR review workflow and default branch (schema18)
+
+Eleven additional bounded shared procedures bring the native adapter inventory to
+89/297 (208 remaining). This closes selected collaboration gaps, not the full
+GitHub parity plan or protected merge acceptance.
+
+- Existing shared reviewer UI now requests/cancels enrolled repository accounts.
+  Identity/grant generations prevent revoked requests from reappearing after
+  remove/re-add or disable/re-enable. Requests create inbox notifications even
+  without a subscription; publishing an overall review completes its request.
+- Own-account pending overall summaries can be created, edited, published or
+  discarded. Pending/discarded rows are excluded from other readers' review lists;
+  private edits emit no shared timeline, notification, webhook or live event.
+  Discard clears body text. Exact source/revision checks fence stale publication,
+  own-PR approval is refused, and source changes still permit explicit discard.
+- Administrators can dismiss reviews and restore only the latest non-stale
+  approval/change request from a currently accessible author. These observations
+  do not establish eligible protected approvals. Original operation receipts omit
+  plaintext draft/reason inputs and remain inspectable after lost acknowledgments;
+  replay cannot reapply an earlier effect.
+- CODEOWNERS suggestions use the exact base commit, `.github/CODEOWNERS`, root,
+  then `docs/CODEOWNERS` precedence and bounded case-sensitive GitHub-style globs
+  with last-match/empty-owner semantics. Matching avoids repository-supplied regex.
+  Unsupported syntax, email owners, escaped patterns and bounds are explicit;
+  no automatic reviewer requests or membership/approval eligibility is inferred.
+  The existing portable native-format regex consumer remains separate.
+- Native General edits an existing default branch. Provider ref lookup and a
+  transaction-bound identity/grant/settings revision fence protect the update.
+  Description/website/topics gain the same effect-time authority checks. Golf's
+  Git advertisement rewrites HEAD/symref to its selected branch; canonical objects
+  and the provider's direct URL metadata are unchanged. Default-branch updates
+  publish source/PR invalidations. Feature toggles remain operator-managed.
+
+Migration0018 is additive and preserves original receipts; the release/rehearsal
+schema is18. **Rollback to code below schema18 is refused**, because that code does
+not filter pending review bodies. Compatible predecessor bytes remain verified.
+A fix forward is required if no recorded schema18 predecessor exists.
+
+Validation:150 focused backend/Git tests (including actual Git `ls-remote --symref`
+against the broker),48 shared browser cases (portable and native, desktop/mobile),
+22 release/migration tests, full `make cloudflare-check`, both frontend builds,
+actual workerd/D1 review transactions and the built UI/Access/D1 checks passed.
+Artifacts reads in the review runtime check are fixtures; no new hosted Artifacts
+publication is claimed. Builds retain the existing >500kB chunk warning.
+Temporary runtimes were disposed; no Cloudflare resources or jobs were started.
+
+The source-only checkpoint above is superseded by the bounded hosted
+service-account qualification recorded at the top of this ledger; positive hosted
+human-only mutation coverage remains pending. The disposable demo is removed.
+Protected merge/check authority, inline/pending inline threads, native file writes,
+repository lifecycle, general CI/CD administration, releases/wiki/notifications,
+Golf Apps, security/insights and Projects/Discussions remain in the parity plan.
+
+## 2026-10-11 — Native repository Git credentials
+
+Four GitTransportService adapters now enable own-account repository HTTPS
+credentials in the shared settings UI. Secrets are displayed once; only SHA-256
+hashes persist. Native binding metadata explicitly identifies Golf identity/grant
+lifetime rather than inventing a browser source session. Portable Golf keeps its
+existing session semantics. Desktop/mobile native controls describe write rules,
+expiry and the fact that Access sign-out alone does not revoke a credential.
+
+Read/write mode, exact repository identity, current grants/account state, expiry
+and explicit revocation govern Basic/Bearer admission. Tokens cannot call Golf
+RPCs or address another repository. Generation checks prevent grant/account ABA
+from reviving a token; Git writes recheck credential authority during reservation
+and reads recheck before returning content. Existing branch locks/tag restrictions
+apply. One account can allocate at most 100 unexpired/unrevoked credentials.
+Schema17 adds only the credential table and inventory index; interrupted migration
+and missing-index recovery preserve the original hashes/metadata.
+
+Validation: 128 core tests, 20 migration/release tests, 47 focused Git/Rules browser
+cases, full `make cloudflare-check`, both frontend builds, `make generate-check`
+and focused portable `TestGit` Go tests passed. An actual Git client answered the
+broker's Basic challenge and listed fixture refs. Actual workerd/Access/D1 proved
+issuance, own inventory, Basic write admission reaching a branch-lock denial,
+revocation, spoof rejection and disabled-user rejection. Source tests also cover
+lost creation acknowledgement, allocation limits, cross-scope denial and
+revocation during provider lookup. The shared T3 browser returned a connection
+error for the local server, so no manual visual check is claimed. The pre-existing
+frontend chunk-size warning remains.
+
+The previous hosted demo remains removed; no provider resources were created or
+Access policy weakened. The temporary local server was stopped. Hosted Access
+machine-admission and new-token Artifacts clone/push qualification remain open.
+Git receive-outcome inspection, protected PR merge and metadata pruning remain
+unimplemented. Credentials expire in 5–60 minutes; Access browser sign-out alone
+does not revoke them. Native coverage is 78/297 bounded adapters, with 219 missing.
+
+
+## 2026-10-11 — Native branch locks and tag restrictions
+
+Cloudflare-native now implements the three shared Rules RPCs and the existing
+repository settings route. Administrators can create/edit/remove branch locks
+and enrolled-account tag restrictions. Literal or single trailing-prefix patterns
+are enforced on canonical Golf Git writes, including administrator creation,
+forced updates and deletion. Every matching tag restriction must allow the
+writer. Stable account IDs prevent login-name reuse from transferring permission.
+Portable Gitea forms retain their broader configuration; native forms and
+inventories show the supported policy without unused review, team or merge fields.
+
+Schema16 adds policy snapshots and original mutation receipts. D1 commits both
+atomically, revisions reject stale/ABA edits, and original request replay returns
+historical evidence without restoring old rules. Rules cannot change during an
+unresolved Git write. Git reservation rechecks current access/identity/credential
+and policy generation after provider lookup. Denials leave no provider effect,
+pending lock or orphan Git operation. Allowed-account resolution uses one bounded
+D1 query rather than one round trip per name. The release helper refuses rollback
+to code without rules enforcement and verifies a compatible predecessor against
+its recorded bundle digest before dispatch.
+
+Validation: 119 core tests (including lost acknowledgements, receipt rollback,
+revocation/identity ABA, overlapping rules and reused account names), 19 guarded
+release/migration tests, 77 focused Rules/mutation/settings browser tests, both
+production frontend builds, and full `make cloudflare-check` passed. Actual local
+workerd/Access/D1 checks passed policy/receipt commit, denied administrator pushes,
+original replay and disabled-user admission. Existing workerd/D1/DO/Queues/
+Workflows/R2/Secrets Store checks also passed. The shared T3 preview could not
+connect, so no manual visual inspection is claimed. The existing frontend chunk
+size warning remains.
+
+This is not protected PR merge, trusted checks/reviews, signing, force-push
+exceptions or provider-side Artifacts protection. Direct provider write
+credentials stay outside the Golf broker's enforcement boundary. Receipt
+retention/pruning remains open. Native coverage is now 74/297 bounded adapters,
+with 223 missing; full parity is unfinished. The prior hosted demo remains fully
+removed. No provider resources were started or deadline extended; hosted schema16
+qualification awaits a fresh bounded installation.
+
+
+## 2026-10-10 — Native repository webhooks
+
+Webhooks now has a working Cloudflare-native backend behind the shared settings
+editor: all five subscription/history/test/redelivery RPCs, encrypted endpoint and
+signing-secret storage, transactional source/discussion/native-test events, bounded
+retries, original delivery receipts and current sponsor authorization. Revoking
+then restoring a grant does not reactivate old delivery consent. Exact approved
+HTTPS origins and a dedicated Secrets Store encryption key are required. Portable
+email controls stay separately gated; runtime-specific help describes the actual
+native limits. Operations reports queue count/age, failures and maintenance status.
+
+Schema15 adds only webhook tables/indexes/triggers. An actual workerd test caught
+the older maintenance journal's fixed stage constraint; the additive webhook
+journal preserves that existing data. Setup rejects malformed policy before writing
+files. Interrupted migration and lost-acknowledgement tests preserve the budget
+and recover missing objects without repeating provider effects.
+
+Validation:111 core tests,20 webhook browser cases,14 native setup tests,17
+release-helper tests, both frontend builds, make cloudflare-check, built native
+UI/Access checks and real local workerd/D1/DO/Secrets Store/cron checks passed.
+The focused checks additionally cover ciphertext identity binding, expired leases,
+quota/concurrent drains, redirect refusal, uncertain responses, stale edits and
+revocation during encryption. The pre-existing >500kB frontend chunk warning
+remains. No local test server was left listening on4179.
+
+Hosted schema15 release `42fe30e0331aada0dd908d3fa03c1a4c0dde597417fea9179b56e687d6f6f64d`,
+Worker version `5e3146f7-8edc-4193-a03f-360f64376596`, serves the shared Webhooks page.
+Both actual Worker and workspace API headers agree. The first final-release page
+load encountered two transient asset401 responses while API requests worked;
+direct asset rechecks returned200 and the existing Reload Golf control recovered
+the page without another sign-in. Seamless rollout is not claimed. The earlier backend release
+`2f25a0a1196b…` qualified a signed test, automatic issue event and explicit UI
+redelivery against an owned temporary signature-verifying receiver: three HTTP204
+receipts, each on its first attempt. Replaying the original test operation did not
+create a second attempt. The UI displayed history, preserved event identity on
+redelivery and disabled the subscription. Operations recorded a successful cron
+stage at06:31:21 UTC with zero backlog/failures. Evidence is retained privately in
+`.tmp/webhook-live/hosted-evidence.json`.
+
+The fixture issue is closed, its subscription disabled, and temporary receiver
+Worker deletion/provider absence confirmed. Its local signing key was removed.
+The encryption key is in the demo's owned Secrets Store and cleanup inventory.
+The existing09:37:55 UTC demo stop timer remains active; no demo/preview lease was
+extended and no container or AI execution was started.
+
+This completes a bounded webhook adapter, **not full GitHub/settings parity**.
+The inventory is71/297 shared RPCs adapted,226 missing. Native general workflows,
+execution secrets/variables, environments, Git credentials/runners and enforced
+rules/protected merge remain open. Native webhook Actions events cover test jobs;
+receipt archival/pruning and encryption-key rewrapping remain future work. See
+[CLOUDFLARE_NATIVE_SETUP.md](CLOUDFLARE_NATIVE_SETUP.md#repository-webhooks-on-the-native-path-schema15)
+and [REPOSITORY_PARITY_PLAN.md](REPOSITORY_PARITY_PLAN.md).
+
+
+## 2026-10-10 — Repository settings navigation
+
+The reported “only General and Access” problem was capability filtering in the
+repository sidebar, not Access sign-in. The shared desktop/mobile navigation now
+retains all nine existing settings destinations, marks unavailable features and
+opens their capability explanation without mounting unsupported editors. Direct
+settings URLs wait for capability discovery; failed discovery keeps navigation
+and provides explicit recovery. Native capability descriptions distinguish the
+bounded test/preview consumers from missing workflow/environment/protection editors.
+
+Validation: 13 distinct focused browser cases across local, Docker, Kubernetes
+and native, 102 core tests, both UI builds, built native UI/Access checks and
+make cloudflare-check passed. Two new responsive tests initially used hidden
+controls incorrectly; corrected locators passed. No schema changes or new native
+RPC adapters. **Full functional parity remains incomplete (66/297 adapters).**
+
+Hosted release `f187dea82c56…`, Worker version
+`cf6513e4-a0f1-4226-a67c-f002d3bd49de`, was deployed and independently read back.
+The signed-in shared browser confirmed all nine entries on workers-sdk, working
+General and Access pages, and selected unavailable routes retaining the repo tabs.
+The initial rollout briefly served the previous workspace API alongside the new
+frontend. At 06:02:34 UTC, both actual served Worker and workspace API release
+headers matched `f187dea82c56…`, including the new per-feature explanation text.
+This qualified API convergence, beyond the provider deployment readback.
+Cloudflare documents [eventually consistent Worker/DO code updates](https://developers.cloudflare.com/durable-objects/platform/known-issues/#code-updates).
+The existing 09:37:55 UTC shutdown timer remains active; no preview lease or demo
+window was extended, and no temporary testing credentials were created.
+
+
+
+## 2026-10-10 — Native engagement and collaboration integrity
+
+Source/local qualification: native reactions, subscriptions, in-app notifications,
+mark-read receipts and transactional discussion activity are implemented. Discussion creation, plain-text/state/draft edits, new comments, overall reviews
+and reported check writes now recheck identity, credential, repository authority
+and relevant discussion revisions inside the effect/receipt transaction. Deleted
+comment identities are never reused. List author reads are batched, and issue
+comment counts share the page query; query counts stay constant across1/20 rows.
+
+Schema14 adds engagement generations, activity/inbox tables, indexes and cleanup
+triggers. The release helper now sends its validated SQL statements rather than
+leading migration comments that the installed CLI parses as flags. Tests cover
+CLI argument safety, interrupted migrations, data preservation and missing
+trigger/index recovery. Native sign-in retains the Access path even when expired
+authentication discovery fails. Unsupported attachments/templates do not mount
+inside newly enabled engagement UI. Portable behavior remains on its own adapter.
+
+Validation:109 native/core activity tests,16 release-helper tests,110 distinct
+focused browser cases passed across issue/live behavior and sign-in (two browser
+cases required rerun; the new test's invalid creation route was corrected). Both
+UI builds, make cloudflare-check, built UI/Access admission and real local
+workerd/D1 mutation/notification/revocation checks passed. No local test runtime
+was left running. Existing >500kB entry chunk warning remains.
+
+Native inventory:66/297 shared procedures have bounded adapters,231 remain missing.
+Full parity and the production/global-scale completion gates are **not complete**;
+see REPOSITORY_PARITY_PLAN.md. Hosted release `feb2122ac0f7…` / Cloudflare version
+`0fb349b8-90b3-467f-b644-96d25569db49` was deployed at05:43 UTC, with actual served
+schema14/digest verification and31 hosted API checks. Temporary label removed and
+verification issue canonical#4 closed. Repeated imported-repository metadata reads
+sampled129–219ms; this is not load/global qualification. The independent demo stop
+timer is confirmed for09:37:55 UTC; no CI/agent work was started and existing
+preview leases remain expired. Shared human Access session expired; human browser
+acceptance of the updated release remains open.
+
+## Native invitations and discussion administration (2026-10-10; source/local qualified)
+
+Native now adapts all seven shared invitation procedures and five additional
+repository resource procedures, raising inventory coverage from 51 to **63 bounded
+adapters out of 297**. This is implementation coverage, not full GitHub/Gitea parity
+or hosted qualification.
+
+Invitations use verified enrolled Access identities, explicit expiring consent,
+issuer/recipient identity generations and current administrator authority. Acceptance
+atomically commits its direct grant and actor-bound original receipt. Account or
+issuer-grant changes invalidate pending authority; expiry, decline and revocation
+are supported. Historical replay never restores a removed grant. No emails are sent
+and no new accounts or workspace memberships are created.
+
+Native repository labels/milestones support inventory, create/edit/delete, unique
+names, stale-write rejection, durable receipts and deletion tombstones. Issues and
+PRs support label/assignee/milestone assignment and combined repository filters.
+Resource changes advance linked discussion revisions and deletion clears links.
+Assignee choices require active accounts with current repository access. Comment
+edit/delete permits the author or current repository administrator and records the
+exact outcome atomically. Replays cannot recreate deleted comments.
+
+Shared UI controls serve portable and native installations. Native uses separate
+capabilities for invitations, resources and comment editing; organization labels,
+reactions and notification subscriptions remain unavailable. Resource changes wake
+live issue/PR streams and refresh open inventories. List metadata uses three batch
+queries with row/byte limits rather than per-discussion metadata reads.
+
+Additive migrations0012/0013, fresh-install schema, release preflight/readback and
+recovery tests target schema13. Existing grants/discussions are preserved and older
+schema10–12 release manifests remain supported. Setup instructions and the complete
+[execution ledger](REPOSITORY_PARITY_PLAN.md) are updated.
+
+Validation: 118 focused browser cases (access/invitations, issue/PR metadata,
+comments and live updates), 95 native core tests, seven activity tests and 15 release
+helper tests pass. Both production frontend builds, `make cloudflare-check`, real
+local workerd/D1 mutation/receipt/trigger checks and built UI/Access admission and
+spoof-rejection checks pass. All temporary test runtimes exited. Vite still reports
+an existing entry chunk above 500 kB; this increment does not qualify cold-load or
+global-scale performance. Full portable server/Docker/Kubernetes journeys and hosted
+schema13 migration/rollout were not run.
+
+No hosted rollout or human Cloudflare acceptance was performed. No paid jobs,
+external messages, live permission changes or demo extensions were made. Teams,
+Git credentials/lifecycle, protected merges, full CI/CD, Golf Apps, security,
+Projects and Discussions remain required work.
+
+
+
+## Repository parity scope and native collaborator administration (2026-10-10; source/local qualified)
+
+The user authorized the complete [repository parity execution plan](REPOSITORY_PARITY_PLAN.md),
+including Golf Apps and the wider security/planning surfaces. Native collaborator
+administration is the first completed local adapter: all six shared access RPCs,
+read/write/admin grants for enrolled accounts, removals, version-fenced edits and
+historical original receipts in one D1 transaction. Self changes and inactive
+new grants are refused. Trigger-backed generations survive removal/re-add and
+operator changes. Current repository authority still governs source, previews,
+registry access and live streams. Native Access settings reuse the shared editor;
+unimplemented invitation/team/deploy-key subpanels stay separately gated. A shared
+organization/user ID collision in locked collaborator controls is corrected.
+
+Validation: 86 browser cases, 87 focused core/activity tests, 13 release-helper tests,
+`make cloudflare-check`, both frontend production builds, real workerd/D1
+collaborator mutation/replay/revocation and built UI/Access checks pass. Existing
+native method coverage is now 51 bounded adapters out of 297 shared procedures.
+The additive 0011 access migration, release preflight and schema-aware predecessor
+rehearsal are implemented. Existing grants and schema10 release manifests are
+preserved. No production credentials, grants, services or demo deadline changed.
+
+This increment is not deployed: hosted schema11 migration/rollout and human
+administration acceptance remain open. Full settings, protected merge, invitation/
+team administration, Git credentials, full CI/CD, Golf Apps, scanning/insights,
+Projects and Discussions remain tracked requirements, not completed features.
+
+## Persistent repository navigation across hosting profiles (2026-10-10)
+
+Golf now uses one persistent application root and repository frame for its shared portable and Cloudflare frontend. Repository pages use a compact hamburger/Golf/owner/repository header; Code, Issues, Pull requests, Actions and Settings retain the same tab navigation. Settings replaces only its panel inside a persistent, capability-aware grouped sidebar, with an accessible section picker on phones. Capability diagnostics open on request. General and Access settings no longer repeat the repository heading or a redundant return button. No dependency or authorization-cache lifetime was added.
+
+Router pending updates retain stable location values so commit-history canonicalization cannot restart indefinitely. Route validation, legacy URL normalization, sign-out, revoked access and original-identity deletion remain enforced. Ref pagination returns focus inside its disclosure before disabling/removing the load button, avoiding a disappearing branch picker. Responsive checks cover 320px and desktop, dark/light, keyboard dismissal and persistent DOM identity across local, Docker, Kubernetes and Cloudflare-native profiles.
+
+Validation: all 539 selected browser scenarios passed across the main run and corrective reruns; both production builds and `make cloudflare-check` passed. The native asset/Access/D1 check also passed in real local workerd after bringing its module fixture up to date with the current worker imports. All 137 follow-up integration checks and a fresh eight-case runtime-profile pass succeeded. Release `3f86b2acb03b5c0f7cf963bbeff6e32095b8d9e062131d5ea21f4ee010c430c7`, Worker `7bfe0da6-8570-4ef3-a4e0-4f73c5dc0cd0`, schema10, is served by both ingress and Durable Objects. Hosted Vite Code → Issues → Settings → Code retained the same document, header and tabs; the hamburger returned to the workspace without a document reload. The 320px hosted layout has no horizontal page overflow. Three served JS/CSS asset digests match the reviewed release. One lazy chunk returned a transient401 during rollout; fresh asset reads and reload succeeded. Operations reports zero queued/running jobs. The original04:58:57UTC shutdown timer remains active. See the [navigation verification receipt](../.tmp/repository-shell-qualification/hosted.json). Portable sources/builds are updated; existing Docker/Kubernetes installations have not been redeployed. This is navigation/layout parity, not completion of previously documented native backend feature gaps.
+
+## Native speed and interaction profiling (2026-10-10; bounded five-repository qualification)
+
+The [speed qualification record](CLOUDFLARE_SPEED_QUALIFICATION.md) documents the complete browser/DO/D1/R2 cache path, CPU profiling, timings, failures and remaining work. Release `0d521b4763766fa80db9973294bdff2ec184c96d6d892e8721437590d8a215b6`, Worker version `e16c6e17-c81f-44cb-a3c5-017ecd9a9d09`, schema10, is served by both ingress and repository/workspace objects. Background metadata indexing no longer blocks foreground reads; stale index generations are fenced. Independent provider/diff work overlaps, completed bounded diffs reuse immutable indexes, and anonymous allowlisted README images use bounded upstream caching. Shared UI source/README/sidebar refreshes retain authorized content and clear it on denial; unchanged source rendering is memoized.
+
+The final five-repository, concurrency-four run retained108 requests:102 passed exact identity checks and six Kubernetes/Rancher HEAD diffs returned the existing comparison-limit429. File/folder median/p95 was183/274ms; repository metadata198/685ms; overview195/421ms; history176/197ms. Every request reported zero coordination-queue time, although this final run did not force a fresh background index batch. Warm cached root/file DOM readiness measured96/72ms with no observed long task in the small browser sample. Shared-browser rendering suspension prevents treating its frame timestamps as end-user paint/INP. These are one-region, one-workspace results, not global SLOs. Operations exposes retained latency/stage/cache/error observations and reported zero queued/running jobs; its30-minute window includes older releases and test failures.
+
+Vite, Kubernetes, Moby, Rancher and Workers SDK are imported as explicitly described default-branch snapshots with ten commits, canonical Git stored in Artifacts. License/language overviews are available, including25,883 indexed Kubernetes files. These are not full-history migrations; older path history and oversized diffs remain open. Hosted warm-cache revocation denied all four concurrent requests after removing the dedicated test principal's grant. Full `make cloudflare-check` passed152 native/14 frontend tests and bridge/agent checks; both frontend builds, real workerd authority/resource checks and47 operator tests passed. Four initially failing malformed-address browser cases were fixed and the affected route/source/sidebar cases passed focused reruns.
+
+The owned demo remains scheduled to stop at04:58:57UTC. Its original supervisor was found absent; recovery now retires only original owned Worker previews through the native revoke API before removing their provider cleaner. It verifies the original service-token identity, uses a five-minute native cleanup credential, refuses redirects and revokes the credential in `finally`;18 supervisor/recovery tests pass. Actual deadline retirement is still pending. No CI/AI jobs were started for these speed checks. Complete native collaboration parity, paged large diffs, cold/large-file paint, multi-principal/multi-region load and global-scale acceptance remain open.
+
+The temporary IP-bound testing policy/token was retired after qualification. Independent provider/D1 readback confirms the service token absent, original human Access policies preserved, test credential revoked and test user inactive; the local secret was removed and its separate timer stopped. The demo's original stop timer remains active. Shared-account Access login branding was not changed because it affects other applications; the qualification record documents the dedicated Golf organization option.
+
+## Replacement navigation demo (2026-10-10; bounded hosted navigation and live acceptance passed)
+
+Replacement `golf-native-20261010-014e4e98` is ready at https://gitgolf.mjtechguy.com, with canonical and review-playground repositories, completed bounded tests/agents and the original protected static/Worker preview kinds. Its current four-hour stop deadline is2026-10-10T04:58:57.889Z. The exact navigation release `4c3dfaf5d332e180b2950f7815b382ec328bcf55ef940e677888ded2209a2911`, schema10, passes actual served-version, retained-asset, machine-admin-denial, rollback-to-development-predecessor and re-promotion checks. Both owned test and agent applications independently report zero active/starting instances. The independent stop timer is active and its real service properties confirm bounded failure retries; all46 Cloudflare operator-script tests pass.
+
+The user confirmed Golf loads in a regular browser, and the shared browser subsequently loaded and authenticated successfully. Hosted checks against the small `alice/canonical` fixture measured 80ms for an intent-prefetched file, 71ms for a cached directory return and 68ms for a cached file revisit. These navigations preserved the page document, reused source payloads and performed a fresh repository-access check before displaying cached content. A real repository-description mutation appeared automatically in the About sidebar in 508ms while the document and pinned source commit remained unchanged; the description was restored using the returned revision. Browser diagnostics independently confirmed the exact current release and schema10. These are single-browser observations, not latency percentiles or global performance guarantees: the initial repository metadata request still took1413ms.
+
+The [replacement qualification receipt](../.tmp/cloudflare-forge/golf-native-20261010-014e4e98/navigation-qualification.json) binds current source/release identities, hosted observations, execution counters and timer properties. Both test/agent apps remain idle and the04:58:57UTC stop timer remains active. This closes the bounded hosted navigation/live-mutation acceptance only; large-repository/global load, complete native parity and hosted collector invocation remain open.
+
+## Expired navigation demo retirement (2026-10-10; owned resources retired, replacement preparing)
+
+The agreed four-hour navigation demo expired at2026-10-10T00:16:13.719Z. The independent host timer fired at00:16:43, but its recovery command failed during D1 inspection. A retry confirmed the managed app had not been purged; cleanup correctly refused to remove its cleaner or control authority first. The operator retried the two owned preview revocations through the native API, confirmed both purged, and revoked the temporary native credential. The original owned Access service token was rotated for cleanup; the complete recovery also retires that token and its other owned resources. The expired allocation was not extended. Final hosted navigation/live measurements remain pending the replacement window.
+
+The provider refused outbound Worker deletion while the control Worker still held its service binding (error10142). Recovery now removes preview ingress, retires/deletes the control Worker, then deletes the outbound Worker. Two regression tests verify dependency order and preserving outbound authority if control deletion fails; all demo-supervisor tests pass. Independent stop services now retry failed recovery up to three starts, thirty seconds apart, with one-second timer accuracy. This covers recovery-command failures; host loss, expired authority and a live supervisor whose own cleanup fails still require operator reconciliation. The corrected recovery confirms every journaled owned resource absent and the short-lived recovery token independently absent. The ownership receipt reports stopped. A replacement with the original bounded four-hour policy is preparing for the requested retry.
+
+The private [preview retirement receipt](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/preview-retirement-retry.json) and [recovery journal](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/cleanup-recovery.json) retain effects and current deletion states. Do not infer full retirement until the journal and ownership receipt report completed absence and the cleanup token is independently absent.
+
+Replacement attempts retain failures rather than reusing an uncertain allocation. Attempt `golf-native-20261010-7d3bc310` failed preview deployment with Cloudflare10007 and retired every recorded resource/credential. Attempt `golf-native-20261010-55e2eaab` failed the initial session read during fresh-hostname DNS propagation and also retired every recorded resource/credential. The side-effect-free current-actor readiness gate now runs before dependent preview deployment and retries DNS/timeout/routing failures with existing finite bounds; unexpected actor identity fails immediately. Focused readiness tests and all Cloudflare operator-script tests pass. The independent retry mechanism was exercised against real user-systemd with two deliberate failures and a successful third start; the proof unit completed without provider allocations.
+
+## Native navigation cache and resumable live updates (2026-10-09; bounded hosted browser acceptance passed on replacement)
+
+The shared UI now bootstraps default-branch source from the authorized repository metadata read, deduplicates source/navigator/README payloads, and prefetches at most two small files/directories on hover or keyboard focus. Cold native source entry avoids separate ref-resolution/access RPCs; the native content read still checks authority before and after provider waits. Retained private bytes require fresh repository access before display. Source snapshots remain pinned. Repository listing uses bounded concurrent provider reads rather than a serial request waterfall.
+
+The native `WatchRepository` adapter implements the existing Connect JSON/protobuf stream with durable scoped replay, compaction reset, current authorization per frame, connection limits, backpressure, cancellation and bounded rotation. Golf ingress and metadata/job workers publish topic invalidations; direct privileged Artifacts-management writes remain outside that journal. Hidden tabs pause streams and polling; visible live tabs avoid redundant periodic native repository refreshes. The [setup guide](CLOUDFLARE_NATIVE_SETUP.md) documents exact bounds and the [robustness plan](CLOUDFLARE_ROBUSTNESS_OPERATIONS_PLAN.md) retains broader load acceptance.
+
+The guarded release `4c3dfaf5d332e180b2950f7815b382ec328bcf55ef940e677888ded2209a2911` deployed as Worker version `8618516c-0feb-4827-9c12-7980548fb327`, schema10, with 113 current/predecessor assets retained. Final `make cloudflare-check` passes 142 native tests and 14 frontend unit tests, alongside the maintained bridge/agent checks. Both frontend builds, generated-contract consistency, Go server/generated packages, 84 focused browser cases and actual workerd/D1/DO JSON/protobuf mutation/revocation checks pass. The runtime check also proves ten-second server rotation works with an older fourteen-second client deadline.
+
+The [private qualification receipt](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/navigation-qualification.json) retains source identities and validation. The earlier release served and reported Live in the human browser; Access expired before the final-release navigation/live-mutation measurements. Those hosted acceptance steps remain pending, rather than inferred from local tests. The original demo stop deadline remains2026-10-10T00:16:13.719Z; its independent host timer is active. Both owned test/agent applications have zero active/starting instances. No CI or AI execution was started for navigation qualification. Current shared coverage is 46 bounded RPC adapters and 251 missing adapters; large-repository/global load and hosted collector invocation remain open.
+
+## Hosted Operations rehearsal and retirement hardening (2026-10-09; bounded hosted release and human dashboard qualified, demo replacement pending)
+
+The owned human-demo launcher now supports `--operations-rehearsal`: schema10 preflight, reviewed immutable asset retention/readback, exact served release checks, machine-admin denial, rollback to the recorded predecessor and re-promotion of the same reviewed version. Rollback/promotion intent is journaled before provider effects; lost acknowledgements fence automatic replay. R2 read-only retrieval retries explicit transient HTTP statuses/timeouts with finite bounds and private diagnostics. The browser benchmark includes representative file reads and retains transport failures as observations with a ten-second request deadline, without recording response bodies or private errors.
+
+The launcher requires independent user-systemd stop-timer readback before awaiting-login/readiness, preserving the installed CLI/Node path. Login preparation is thirty minutes; the agreed four-hour window begins after original preview lease renewal. Renewal preserves IDs/source/bundles and rechecks writer permission, canonical PR source and current policy, with an atomic original-expiry fence and four-hour/global-deadline cap. Activation failure preserves the prepared UI for a bounded repair window. This remains dependent on the operator host and credential availability. It does not implement Cloudflare-owned whole-allocation self-retirement.
+
+Recovery journals each provider deletion and confirms absence, resumes already-removed resources, validates retained release assets and repository indexes, and preserves D1 when bucket cleanup fails. Ownership/release/recovery receipts use one private atomic replacement helper so interrupted publication preserves the prior receipt. A missing database requires the previously saved storage inventory. Static-preview storage is distinct from managed Worker apps, whose resource journals must already be fully purged. Wrapped CLI404 responses are accepted as absence; other failures remain failures. Recovery credentials are scoped, short-lived, recorded by ID and explicitly revoked with readback. Unknown app effects and changed identities still refuse automated retirement.
+
+The [first attempt](../.tmp/cloudflare-forge/golf-native-20261009-c9df5872/ownership.json) failed an outdated PR/discussion fixture before the rehearsal. Its retained index objects were individually reviewed and removed after all writers retired. The [second attempt](../.tmp/cloudflare-forge/golf-native-20261009-bbb82c17/ownership.json) passed real Git/collaboration, canonical container tests, protected static/Worker delivery, isolated D1/R2/Secrets Store, two agents and grant/revocation checks, then failed an R2 asset read before release publication. Subsequent read-only probes did not reproduce that failure. Its bucket and database were preserved until ownership-reviewed recovery; [recovery](../.tmp/cloudflare-forge/golf-native-20261009-bbb82c17/cleanup-recovery.json) then confirmed all owned resources absent and successfully resumed after completed deletion. These remain failed qualification attempts. Their Access applications were removed; an OTP for either application cannot validate the replacement.
+
+The [third attempt](../.tmp/cloudflare-forge/golf-native-20261009-a87d15de/ownership.json) passed schema10 deployment, all111 retained asset hash/length checks, machine-admin denial, exact served rollback and re-promotion. Human Access login and the actual Operations API passed: two repositories, two active previews, genuine zero queued/running jobs, loaded Archivo fonts and no1280px page overflow. The [human API observation](../.tmp/cloudflare-forge/golf-native-20261009-a87d15de/operations-human-proof.json) took596ms. Provider/maintenance observations had not arrived. Its subsequent revoke/recreate activation failed with a native503 whose exact cause was not captured. The launcher removed all owned resources; the recorded host timer was stopped after confirmed cleanup. This remains a failed demo attempt, with its narrower release/human proof retained.
+
+Native Operations now batches inventory aggregates into one D1 call and reports timestamped historical successful service activity separately from current health probes. Four preview-renewal tests cover original identity/no allocation, stale replay, current authority and deadline caps. Focused operator checks pass with13 setup tests,15 demo/recovery tests and12 release tests, plus2 forge initializer tests ([log](../.tmp/cloudflare-operator-tests-final.log)). The complete `make cloudflare-check` target passes with134 native Node and13 frontend boundary/metrics tests plus maintained Go/bridge/agent checks ([log](../.tmp/cloudflare-check-operations-rehearsal-final.log)). Real local workerd/D1/DO/Queues/Workflows/R2 checks pass and dispose their runtime ([log](../.tmp/cloudflare-runtime-lease-final.log)).
+
+The [fourth replacement](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/ownership.json) reached `awaiting_login` at20:13UTC after real CI, protected previews/app storage, two successful isolated agents, all111 assets, exact served rollback/re-promotion, machine-admin denial and original static/Worker preview lease renewal passed. All44 maintained source hashes match. Both execution applications independently report zero active/starting instances ([observation](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/operations-container-proof.json)). Actual human login and activation now pass: the original preview IDs remain READY, the supervisor and independent timer are armed, and the four-hour window stops at00:16:13UTC on2026-10-10. [Human API proof](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/operations-human-proof.json) shows nine historical service-activity observations, two active previews and genuine zero running/queued work. [Layout](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/operations-layout-proof.json) verifies Archivo and no page overflow at1280px in light/dark and390px in dark.
+
+Six [warm Operations reads](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/operations-latency.json) return200 in266–308ms; the initial read took956ms. These are separate observations from the earlier596ms call, not controlled before/after speed acceptance. The [initial repository benchmark](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/repository-benchmark-initial.json) retains six not-yet-indexed overview observations out of24 requests despite HTTP200. After metadata completion, all18 [settled overview/root/file reads](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/repository-benchmark-settled.json) return200 with exact source/available metadata; warm p50 is244ms and p95/p99 are326ms. This is two small fixture repositories, one enrolled user/workspace and one browser region, not large-repository, cold-cache, multi-tenant or global acceptance.
+
+An independent five-minute Analytics Read inspection confirms the installed cron schedule and real fixed-Worker GraphQL traffic response ([proof](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/operations-provider-inspection.json)); its token was revoked and independently confirmed absent. Actual local scheduled dispatch records all four maintenance stages and a successful R2 probe, then disposes its runtime ([log](../.tmp/cloudflare-runtime-scheduled-final.log)). Hosted maintenance/provider journals remain empty through20:26UTC. The fixed-Worker scheduled-event GraphQL query also returns no invocations ([inspection](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/operations-cron-inspection.json)); the separate inspection token was revoked with independent absence confirmation. Sampled log queries returned no scheduled/error events, which does not prove their absence. The exact hosted dispatch cause remains unknown, so these services remain unknown/configured and hosted collector acceptance stays open. [Cloudflare's cron documentation](https://developers.cloudflare.com/workers/configuration/cron-triggers/) distinguishes trigger propagation and delayed past-event visibility; neither delay is used as proof that this installation's collector succeeded. [Validation](../.tmp/cloudflare-forge/golf-native-20261009-b39170f1/operations-validation.json) records operator helper hashes and the narrower proof. Full native parity, hosted collector invocation, multi-workspace/global load, staging/canary, quarantined restore and Cloudflare-owned allocation retirement remain open.
+
+## Integrated Operations dashboard and reliability increment (2026-10-09; source and local runtime qualified)
+
+The [detailed robustness execution plan](CLOUDFLARE_ROBUSTNESS_OPERATIONS_PLAN.md) records work packages and the baseline method-by-method native parity queue. The [integrated Operations dashboard](OPERATIONS.md) is implemented at `/admin/operations` using Golf's shared frontend and generated Connect RPC across local, Docker, Kubernetes, Cloudflare bridge and native profiles. Cloudflare requires no Grafana, Prometheus or collector deployment. Services distinguish configured bindings from successful timestamped observations; missing metrics remain unknown and genuine zero values remain zero.
+
+Portable observations reuse the process registry and bounded PostgreSQL/Gitea readiness checks, with approximate histogram latency and trace export failure counts. Current password-session instance administrators are checked before and after collection; provider/PAT/delegated credentials do not gain administration. Native observations use primary-session aggregate inventories, explicit current Access identity and the additive `operations_admins` role. Fresh bootstrap enrolls only the configured owner. Existing installations need reviewed migration0010 and deliberate enrollment; repository-creator grants never promote users. Current-role/email revocation during reads withholds the snapshot.
+
+Native cron now records independent CI, preview, evidence and index maintenance attempts/outcomes/last success. Failure counts remain unknown when a stage fails; other stages continue. Evidence retries preserve original job/workflow identity. An optional separate, operator-owned dead-letter queue persists known original-job delivery failures idempotently before acknowledging; it never dispatches a replacement. Records expire after seven days in bounded batches. Retry/retention limits and a prolonged D1 outage can prevent inbox persistence, so the original job journal remains recovery authority. Started jobs are governed by execution expiry/current authorization rather than their earlier queue publication-attempt count.
+
+Optional background Workers Analytics collection is scoped to the installed account/control Worker, uses an independent Secrets Store Analytics Read reference, is atomically throttled and retains last successful values across failure. Optional Artifacts info/R2 HEAD probes perform no writes. Managed request logs are sampled, omit private identifiers/bodies/URLs, disable automatic invocation logs and leave traces disabled pending separate privacy qualification. Provider storage totals, billing and broader service usage are explicit unavailable/unknown coverage. No real Analytics credential/provider eligibility is qualified by this source increment.
+
+Repository reads now retain bounded immutable blob-size metadata even when an oversized source body is not cached. Warm directory metadata can reuse the known size without downloading that body again. Account/namespace/repository scope, bounded eviction and current authorization remain enforced. The dashboard read itself can use the existing concurrent read path. These source changes do not replace a hosted cold/warm performance measurement.
+
+Validation passes: `go test ./...`; Operations authority/revocation tests with a temporary real PostgreSQL17 instance under the race detector; telemetry race tests; `make cloudflare-check` (including128 native tests,13 frontend boundary/metrics tests,13 native setup tests and7 release tests); both frontend builds/typecheck; generated contract consistency; and native CLI build-output validation for optional collectors/logs/failure-queue bindings. Real local workerd checks pass Access mapping/spoof rejection/admin admission/revocation, matching built asset bytes, D1/DO/Queues/Workflows boundaries, dead-letter persistence, conditional R2 writes and disabled-user denial. The existing Codex credential permission fixture now sets its intended public mode explicitly, so restrictive caller umasks do not invalidate that refusal test. Evidence logs: [Go](../.tmp/operations-go-final.log), [Cloudflare](../.tmp/operations-cloudflare-final.log), [UI runtime](../.tmp/operations-ui-runtime-final.log), [native runtime](../.tmp/operations-local-runtime-final.log).
+
+No new hosted resources were provisioned and the temporary PostgreSQL/local Workers processes were removed. The shared test browser could not reach the environment's local port, so visual authenticated dashboard acceptance remains open. Matching hosted schema10 rollout/readback, live collectors, Docker/Kubernetes served acceptance, full allocation self-retirement, interrupted-deletion recovery, global load qualification, organization/fleet drilldown, alerts and full native forge parity remain open. Current generated native coverage is297 procedures,45 bounded adapters and252 missing adapters. Neither this dashboard nor the written plan establishes production readiness or completes the broader roadmap.
+
+## Shared native frontend (2026-10-09; bounded hosted human qualification)
+
+The Cloudflare-native build now imports the same `main.tsx`, application, router, components, styles and fonts as the portable frontend; the parallel compact native forge UI was removed. Native allocation, test/agent evidence, proposal comparison and protected preview controls remain inside the shared account/repository/PR screens. The native API adds actual Artifacts commit metadata/history, readable source selection, commit/PR/comparison diffs and best-common-ancestor traversal, with explicit bounds and refusal of unsupported multiple merge bases/cross-repository comparisons. D1 migration0005 persists the enrolled private workspace, current-authority repository stars and revision-fenced own profiles. Create/update PR receipts now match the shared composer contract and canonical links use `/pull/NUMBER`.
+
+The current disposable control Worker is version `2073a9cd-7a7b-4253-a3ca-5b9176422805`. Its existing workspace required approximately five minutes after upload before serving the new comparison/stream-refusal contracts; an upload acknowledgement alone was not acceptance. Actual human Access qualification covers repository root/file browsing, PR conversation/commits/files, real six-file diffs, same-repository comparison, own profile/workspace reads and star/unstar. Shared PR diff layout fits390px without page overflow, and Archivo/Geist Mono bytes load in both themes. A fresh protected Worker entry/grant, D1 note write/read and private signed R2 receipt read also pass using the existing human Access browser session. Credentials were not extracted. [Shared UI validation](../.tmp/cloudflare-native-shared-ui-validation.json) records source/build/runtime/hosted evidence; [human evidence](../.tmp/cloudflare-forge/golf-native-20261009-3322fac6/human-ui-proof.json) and [demo receipt](../.tmp/cloudflare-forge/golf-native-20261009-3322fac6/ownership.json) retain their separate provenance.
+
+Both frontend builds and83 native Node tests pass; real local workerd checks pass Access identity mapping, spoof rejection and disabled-user denial. The full Cloudflare check and actual D1/DO/Queues/Workflows/R2 qualification also pass at the recorded source boundaries. No new CI/agent job or paid inference was started for shared UI qualification. Disposable execution containers remain destroyed; the intentionally retained demo auto-stops at07:37:40UTC on2026-10-09 under its original supervisor.
+
+This completes shared visual/application reuse and a bounded collaboration adapter slice, not full native capability parity. Source editing, streaming activity, inline/pending review, review requests, labels/assignees/milestones, releases/packages/wiki, general Actions, admin/team/account/email capabilities, protected canonical merge, recovery and global tenant scale remain open. Native unavailable errors/disabled controls must stay explicit. The portable installation and schema091 were not deployed or migrated by this increment. Golf Apps, Email Service, optional PlanetScale/Hyperdrive, Access branding and paid repository access remain discussion follow-ups.
+
+## Product status against the plan (2026-10-08)
 
 Golf is a usable local development installation. Neither infrastructure track has passed its complete release gate. The verified feature slices below do not make an entire phase or all ten repository Settings sections complete. Source ahead of localhost is identified separately; a successful source test is not deployment evidence.
 
 | Plan phase | Current state | Working evidence and remaining work |
 | --- | --- | --- |
-| 0 — Baseline/proofs | Partial | Build/contracts/native Git and bounded engine/harness proofs exist. P0.8 protected integration, all five harness paths and live Cloudflare provider proofs remain open. |
+| 0 — Baseline/proofs | Partial | Build/contracts/native Git and bounded engine/harness proofs exist. P0.8 protected integration, all five harness paths and complete Cloudflare execution proofs remain open. |
 | 1 — Portable foundation | Partial; local core deployed | Local email/password sessions, encrypted credentials, roles/admin/account settings, shared UI, PostgreSQL and RustFS work in the retained Compose installation. Complete identity/MFA/role matrix, every Settings consumer, fresh Kubernetes acceptance and latest-schema coordinated recovery remain required. |
 | 2 — Forge/connections | Partial; bounded 087–091 consumers deployed | Deployed 086 retains the earlier collaboration/forge slices and adds own native pending review create/edit/submit/discard, exact saved inline transfer and pending/published inline edit/delete. Deployed 086 adds personal selected-provider imports, bounded personal-owner generic package publication/mediated downloads, ordinary wiki unit writers/navigation and later mirror completion observations. Deployed 089 adds exact saved-inline pending append, bounded batch/rename and verified discussion body/comment uploads/downloads. Pending rebase, ranged/application suggestions, native CAS, wider registries/roles, projects and private migration fidelity remain open. |
 | 3 — Protection/recovery | Incomplete release gate; 083 source safeguards qualified | Foreign RESERVED/DISPATCH_UNKNOWN rule updates now fence later Golf-managed writes, including other own permits. Restored Golf factors/provider connections/agent credentials and leases are quarantined. Exact Golf-only host dump/fresh restore is tested; protected publication, every native ingress, effective approval/check authority, merge queues, wider Git/LFS maintenance and coordinated current-schema whole-stack recovery remain open. |
-| 4 — CI/runners | Partial; supported local catalogs deployed | Manual/configured push, isolated Docker runs, maintained multi-job dependencies, job/step drilldown, live terminal logs, scoped secrets/variables and bounded private artifacts are exercised. Original upstream Actions/GitLab workflows, checkout/job tokens, pinned remote actions, dependency egress, wider semantics/cache and scale qualification remain open. |
+| 4 — CI/runners | Partial; supported local catalogs deployed | Manual/configured push, isolated Docker runs, maintained multi-job dependencies, job/step drilldown, live terminal logs, scoped secrets/variables and bounded private artifacts are exercised. Source-ahead opt-in Requests push now qualifies genuine checkout, scoped job tokens, pinned public Node24 actions and controlled dependency egress. PR/fork, broader Actions/GitLab semantics/cache and scale remain open. |
 | 5 — Agents | Partial; managed088 source and controls deployed | Earlier Codex execution/OpenCode PR-review and managed connection/grant/conversation surfaces retain their evidence. Deployed 085 adds sponsor/PR-author persona mentions with current comment revalidation and running OpenCode completed-message progress. Managed private reply/cancel/live-process resume/finish and permission controls are deployed; native 1.18.34 task-image initialization/resolved policy is observed at worker startup. File-tool grants remain withheld. Actual inference/tool use, all-five harnesses and the disabled first-party agent Actions catalog need independent runtime qualification; lost workspaces are never resumed. |
-| 6 — Cloudflare services | Live track unqualified | Capability/adaptor design and configuration boundaries exist. Real account-scoped service connection/use, scalable CI/agent execution, resource limits, cost/cleanup and the end-to-end Cloudflare showcase remain required. Generic S3 support does not qualify R2 or the rest of this track. |
-| 7 — Previews/CD/DNS | Partial source work; complete delivery loop open | Environment/artifact policy and a static-preview candidate exist. The preview runtime qualification stops before stack creation at its unchanged Docker capacity reserve. Protected temporary links, production rollout/rollback, Cloudflare adoption/bindings and DNS/TLS autoconfiguration still need actual end-to-end evidence. |
+| 6 — Cloudflare services | Bounded foundation/agent/storage proofs qualified; product source ahead | Worker/R2/Artifacts and operator-private concurrent-agent/Clef/conflict/candidate-test proofs pass. Migration093 adds encrypted product Cloudflare profiles and an operator D1/R2 storage consumer with real provider and controlled-native browser acceptance/cleanup. Migration094 qualifies a bounded operator preview through actual Access email-code admission, immutable content/D1/R2 reads and repository revocation. Golf agent task integration, native tenancy, complete app provisioning, automatic protected PR previews, fleet cost and the showcase remain required. |
+| 7 — Previews/CD/DNS | Partial source work; complete delivery loop open | Environment/artifact policy and a static-preview candidate exist. The preview runtime qualification stops before stack creation at its unchanged Docker capacity reserve. Source094 has an actual temporary Cloudflare custom-domain/Access/Worker/D1/R2 browser and revocation proof. Automatic PR links/lifecycle, production rollout/rollback and general Cloudflare adoption/bindings remain open. |
 | 8 — v1 release/hardening | Incomplete | Earlier bounded backup/restore and refusal checks exist. Full latest-schema restore/upgrade, performance/soak, migration fidelity, cross-track acceptance and signed/offline distribution must close before production readiness. |
 | 9 — Wider enterprise | Planned expansion | HA/regional cells, wider enterprise governance, managed hosting, additional OS runners and advanced product surfaces have their own acceptance gates. Current admin/settings screens are not proof of those capabilities. |
 
 Current localhost runs clean frozen source `f5485677108270ccf8480556ba3ee8fbcebe905d` at schema`202610050091`, core/web `sha256:4a51995fb1a11c4f4f94a89086547fa74cae3beead9beb458915effe97d4d99c` and dedicated agent worker `sha256:3749752e851fa60adc23b246e3704f5cf23da1cdefc46871800045af000c9072`. The [aggregate](../.tmp/priority091-final/manifest.json), [deployment](../.tmp/portable-completion091-runtime-attempt1/receipt.json), [post-served independent verification](../.tmp/portable-completion091-post-served-verification/manifest.json) and [actual served checks](../.tmp/portable-completion091-served-attempt1/manifest.json) pass. Maintained engine and runner remain unchanged; the new agent Actions catalog remains disabled. Direct-TLS managed READ Git remains at `https://127.0.0.1:8443`; native web/API/SSH remain independent ingress. No managed WRITE/bootstrap or complete protected-ingress qualification is claimed.
 
 The current evidence below supersedes historical runtime identities. Older entries retain their original source, runtime and scope; their then-current wording does not describe today's deployment. See [the local sequence](LOCAL_COMPLETION_NEXT.md) and [full Settings requirements](REPOSITORY_SETTINGS_IMPLEMENTATION.md).
+
+## Managed Worker apps (2026-10-09; bounded hosted API qualified)
+
+Workers for Platforms is now enabled in the selected account. The [hosted managed-app receipt](../.tmp/cloudflare-forge/golf-native-20261009-f8536cfa/ownership.json) passes actual exact-source automatic application publication, private dispatch through the Access-gated preview gateway, isolated D1 notes and R2 receipts, hosted Secrets Store HMAC verification, denied Internet fetches, single-use grant replay denial and current repository-reader revocation. All21 owned cleanup categories are absent. The operator-only wrapper uses a synthetic reviewer with real machine Access; it does not establish human login or browser-cookie acceptance. Product gateway builds have no proof route.
+
+Provider acceptance exposed and corrected three API assumptions: a missing dispatch script can return HTTP200 with `script:null`, custom-domain IDs can be40 hexadecimal characters, and successful DELETE responses can have an empty body. Resource identity and independent absence checks remain required. `make cloudflare-check` passes with72 native Node tests and the new demo-supervisor process-identity test ([log](../.tmp/cloudflare-app-post-upgrade-check.log)). Earlier failed attempts retain their receipts and owned-resource reconciliation rather than being relabeled as successful qualification.
+
+The populated-demo supervisor and private begin/stop commands are implemented. Its first setup attempt passed real CI, Clef, application storage/dispatch and two concurrent agents, then failed while rebuilding the control UI because deployment had removed its local image tag. All24 owned cleanup categories are absent in that [failed receipt](../.tmp/cloudflare-forge/golf-native-20261009-39620e60/ownership.json). Preparation now restores the tag from the approved immutable image ID, builds the native UI, disables workers.dev on the human deployment and replaces the synthetic proof gateway with the product gateway. The second attempt reached human Access but failed the origin cutover: the outer Worker accepted the new hostname while its active workspace Durable Object still enforced the former origin. Its [exact app-resource reconciliation](../.tmp/cloudflare-forge/golf-native-20261009-53a3c47d/app-cleanup-reconciliation.json) confirms removal of the app scripts, database, bucket, domain and dispatch namespace; the remaining owned resources were removed by its original supervisor. A new setup uses the final hostname/audience from first deployment, verifies the owned control domain separately and passes machine Access credentials through Git and the native Golf CLI. The CLI pairing/header/redirect boundary passes under the race detector ([log](../.tmp/cloudflare-native-access-cli-final.log)); two demo-supervisor identity/private-receipt checks pass. A subsequent early stop exposed the qualification wrapper’s workers.dev-only setup guard; custom-host proof now requires its explicit approved preview origin. That [failed setup receipt](../.tmp/cloudflare-forge/golf-native-20261009-79322550/ownership.json) confirms teardown of its recorded resources. Its unstarted Workflow definition was separately [removed and verified absent](../.tmp/cloudflare-forge/golf-native-20261009-79322550/workflow-cleanup-reconciliation.json); the launcher now journals a Workflow attempt before deployment and cleans it up even if later readback was never reached. The next [setup receipt](../.tmp/cloudflare-forge/golf-native-20261009-59f16a80/ownership.json) passed canonical-host session/Git/CLI/CI/static checks but left app publication fenced after cleanup-script acknowledgement; all25 owned cleanup categories are absent. Static and app publication now run in separate Workflow steps after immutable report storage, with original-key replay, fresh invocation bounds and safe outcome diagnostics. All73 native Node tests pass ([log](../.tmp/cloudflare-delivery-phases-source.log)); the full Cloudflare checks ([log](../.tmp/cloudflare-delivery-phases-check-final.log)) and actual local workerd/D1/DO/Queues/Workflows/R2 checks ([log](../.tmp/cloudflare-delivery-phases-runtime.log)) pass. The current [populated demo receipt](../.tmp/cloudflare-forge/golf-native-20261009-3322fac6/ownership.json) reached `awaiting_login`: two private Artifacts repositories/PRs, actual canonical-host Git and CLI writes, passing CI, Clef, two overlapping independent agent proposals, automatic static/Worker publication, private app D1/R2, hosted Secrets Store signatures, denied egress and grant/revocation checks all pass. The product preview gateway replaced the operator-only wrapper. The owner’s macOS direct `nslookup` resolved the record while the system resolver used by curl/Chromium failed. Flushing the macOS system DNS caches restored HTTPS and browser login. [Human UI evidence](../.tmp/cloudflare-forge/golf-native-20261009-3322fac6/human-ui-proof.json) confirms Access login as `mike`, both private repositories, current settings/capabilities and the canonical PR’s real CI/agent runs. The supervisor is now `ready`: the approved window started at03:37:40UTC and stops at07:37:40UTC on2026-10-09. Fresh static/Worker previews are READY; static expiry remains04:37UTC. The native shell now reuses the local brand/layout styles and shared theme toggle; Archivo/Geist Mono font bytes, both themes and390px layout were verified. Native and portable frontend builds, public-boundary tests and real local Access/workerd/D1 UI checks pass. A human Worker-preview form exchange first returned404: the control UI’s `no-referrer` policy suppresses cross-origin navigation POST Origin, conflicting with the exact-origin grant check. The deployed control header now uses `strict-origin` without disclosing paths/queries or relaxing authority. The shared browser disconnected during that retry. Subsequent fresh entry/grant and actual human Worker-preview D1/R2 write/read now pass, as recorded in the shared frontend increment above. Current demo resources are intentionally retained for the approved window, with no qualification execution tasks left running. Full native forge parity, protected canonical merge, arbitrary builds/bindings, recovery and global SaaS scale remain open. The $10/day envelope is planning/admission policy, not a provider billing cap.
+
+## Runtime settings, automatic CI and managed Worker apps (2026-10-09; source/local qualification)
+
+The API now reports an explicit deployment runtime and settings capabilities. Local/direct launches can select `local`; Compose selects `docker`, Helm selects `kubernetes`, and the isolated Cloudflare bridge selects `cloudflare-bridge`. Native Workers report `cloudflare-native`. The portable frontend uses the same capability contract for menus, inventory actions, direct settings routes and optional Cloudflare resource controls. Missing, unknown, disabled or failed metadata withholds the affected editor; user/admin/repository authorization remains independently enforced. The native frontend has a read-only Settings and capabilities page for Access identity, approved CI/agent policy, storage/app allocations and expiry. It does not expose portable PostgreSQL, Docker pool, password/MFA/SSH or SMTP editors. Kubernetes hosting does not establish a Kubernetes execution adapter. Retained localhost still runs frozen schema091/source above; these UI/API changes require a coordinated deployment and have not updated it.
+
+The native source adds durable automatic test intake after confirmed eligible PR head/base branch pushes, rechecking current writer authority and exact canonical Artifacts source. Passing tests can admit an approved prebundled Worker module and SQL schema. Each managed app receives a separate private D1 database, R2 bucket, Workers for Platforms script, cleanup script and child preview hostname. Access remains the outer gate and Golf rechecks current repository readers, PR revision, expiry and single-use reviewer grants. Same-origin bounded app POSTs carry no control/reviewer credentials into application code. An outbound Worker denies Internet fetches; the provisioner uses a separate Secrets Store reference, with an optional distinct app signing secret. Journaled provider identities, uncertain-write fencing, current-policy checks and owned cleanup are required before readiness and retirement. Configured app hosting reports degraded while human acceptance and complete recovery remain open; a binding alone is not successful provider execution. See [native setup and limits](CLOUDFLARE_NATIVE_SETUP.md#managed-worker-applications-bounded-hosted-api-qualified).
+
+`make cloudflare-check` passes with71 native Node tests,11 initializer/migration tests,2 runtime-manifest tests and the existing bridge/preview/agent/Go CLI checks ([log](../.tmp/cloudflare-managed-app-check-final.log)). Subsequent targeted native tests also pass ([log](../.tmp/cloudflare-managed-app-core-final.log)); the actual bridge Compose render confirms its distinct runtime ([log](../.tmp/cloudflare-runtime-bridge-final.log)). Go runtime/provider metadata checks pass under the race detector ([log](../.tmp/cloudflare-runtime-server-final.log)). Both portable/native frontend builds, TypeScript, generated contracts and Helm renders pass. Actual local workerd qualifies native D1/DO/Queues/Workflows/R2 fences ([log](../.tmp/cloudflare-managed-app-runtime-final.log)), embedded UI bytes and runtime identity/capability responses ([log](../.tmp/cloudflare-managed-app-ui-final.log)). The interactive demo app executes against real local D1/R2 and verifies its signed receipt with a local test key ([log](../.tmp/cloudflare-managed-app-demo-final.log)); its Python test also passes. Managed-app Secrets Store/dispatch/outbound prebuilt outputs validate ([log](../.tmp/cloudflare-managed-app-output-final.log)). These runtimes were disposed. The collaborative browser could not reach the temporary local UI port, so no interactive UI browser acceptance is claimed.
+
+At this earlier source-only increment, the selected account denied Workers for Platforms discovery with403/error10121 ([log](../.tmp/cloudflare-managed-app-entitlement.log)); Workers Paid does not supply that separate subscription. CLI OAuth also cannot create account API tokens (403/error9109); no OAuth credential was copied into a Worker. Hosted app dispatch, outbound interception, Secrets Store attachment, per-preview DNS/TLS/Access, actual human native UI login and retirement remain unqualified. No new Cloudflare resource was created by this increment. Earlier hosted receipts below retain their exact historical source hashes and bounded scope; they do not qualify this newer app source.
+
+At this earlier increment, the requested populated demo had fixtures but was **not provisioned or ready**. Repository/CI seeding, an explicit stop command and automatic owned-resource deadline teardown still need implementation and hosted qualification. Its agreed four-hour window starts only when ready and has not started. General application dependency builds, app cookies/WebSockets, automatic PR comment links, full native forge/settings parity, production promotion and global SaaS scale remain open. The $10/day envelope remains planning/admission policy, not a provider billing cap.
+
+## Native reviewer UI and static delivery (2026-10-09; local UI and bounded hosted delivery qualified)
+
+The separate native frontend now exposes private repository/PR inventories, overall reviews, approved tests, two concurrent agent admissions, current-source evidence/report inspection and explicit proposal comparison. Overlapping edits require human resolution; separate paths still require integration tests. Neither comparison nor preview deployment publishes canonical Git. Access is the Cloudflare UI's default login: runtime-authenticated identity maps to an active D1 user, and Golf retains current repository authority. Configured Access also gates machine bearers. Caller identity headers are stripped and inactive/unmapped users cannot open the UI. The control Worker embeds a bounded 64-file/2MiB UI rather than using the Static Assets router, whose production Access-context limitation is documented by Cloudflare. Portable frontend/authentication and local schema091 remain unchanged.
+
+Approved passing canonical test reports can automatically publish one exact Artifacts static directory into digest-verified private R2. A separate Access preview Worker has only scoped service RPC into the existing Workspace authority. Current readers obtain a 60-second single-use reviewer grant and a five-minute-or-shorter HttpOnly session; every content read rechecks active user, current repository access, PR revision/refs and expiry. Pushes, PR closure and revocation deny old content. D1 fences publishing uncertainty and one optional paid Browser Run dispatch per preview; private PNG integrity/readback and purge follow the same repository authority. Expiry denies access immediately, with scheduled storage cleanup every five minutes. Four unpurged previews and daily admission limits bound this initial workspace consumer.
+
+`make cloudflare-check` passes with63 native Node and10 initializer/migration tests, the maintained shared agent tests and existing Go/CLI race checks ([log](../.tmp/cloudflare-native-delivery-check-final.log)). The separate native frontend builds with TypeScript/Vite ([log](../.tmp/cloudflare-native-delivery-web.log)). Actual local workerd validates all embedded asset bytes/MIME types, Access identity mapping, spoof rejection and disabled-user denial ([UI runtime log](../.tmp/cloudflare-native-delivery-ui-runtime-final.log)); the existing D1/DO/Queues/Workflows/R2 runtime proof also passes and disposes its runtime ([log](../.tmp/cloudflare-native-delivery-runtime-final.log)). Both production and ephemeral proof build outputs validate ([log](../.tmp/cloudflare-native-delivery-build-final.log)). Controlled tests cover proposal source/revision conflicts, reviewer/session revocation during reads, changed policy, quota/expiry/purge, lost publishing responses, corrupted private objects and uncertain Browser Run outcomes without paid redispatch. These checks do not establish a hosted human login or interactive UI browser workflow.
+
+The earlier [hosted delivery attempt](../.tmp/cloudflare-forge/golf-native-20261009-2c8119f2/ownership.json) ran actual passing container tests and published an automatic READY R2 preview from exact canonical Git, then stopped at its Access/RPC check; all14 owned cleanup categories are absent. A [subsequent attempt](../.tmp/cloudflare-forge/golf-native-20261009-2eceeb44/ownership.json) confirmed the same publication but failed an authenticated request with403; all14 cleanup categories are absent. An isolated [Access probe](../.tmp/golf-access-e766b57d8201/receipt.json) then qualified service authentication, exact runtime audience and unauthenticated denial, with Worker/app/service token absent. An earlier probe records error1010 because the Python client omitted the explicit Golf user-agent; the maintained harness now uses the same client identification as its existing API requests. A transient Artifacts403 stopped another attempt before resource allocation; the attempted namespace was independently confirmed404. Failed receipts remain failures, rather than successful full delivery claims.
+
+The final [hosted receipt](../.tmp/cloudflare-forge/golf-native-20261009-605103d9/ownership.json) passes actual passing/failing canonical container tests, automatic private R2 publication, Access service authentication and unauthenticated denial, real cross-Worker preview RPC, single-use reviewer grant replay denial, current-reader revocation and stale-preview denial after a push. Passing head `e56b370584a060a03a323abf6621cc4e16c4d47c` produced preview bundle SHA256 `910f0c8941cd0990ce60522ca78cf4d6ffce0b93dc18570189d9bc2aae1697de`. Browser Run produced a real30,697-byte [private PNG](../.tmp/cloudflare-forge/golf-native-20261009-605103d9/preview-snapshot.png), SHA256 `b9bd7b7af1b3bcce5def55ef360a2841bfa47c718c86532309056b3704ef72cc`; its binding supplied no browser-millisecond observation, so usage remains null. The synthetic mapped reviewer plus operator-only wrapper qualify the Access/service-RPC/D1/R2 path, not actual human Access identity or browser cookie exchange. Product builds contain no qualification route. Source identities and teardown are reconciled in the [final manifest](../.tmp/cloudflare-native-delivery-final.json).
+
+This slice serves a bounded static directory on UUID paths beneath one dedicated hostname, with CSP sandboxing. Per-preview hostnames, arbitrary application builds/runtimes/data bindings, automatic PR-push CI intake/comment links, tested proposal integration/protected canonical merge, full native forge/UI parity, onboarding/identity changes/recovery, actual human native Access login and global SaaS scale remain open. Browser Run renders only script-free index HTML with external requests denied; it does not establish interactive preview QA. The $10/day envelope is planning/admission policy, not enforced provider billing.
+
+The final manifest matches all27 hosted source hashes and the built CLI digest. All14 owned hosted cleanup categories are independently absent; all three isolated Access probes also removed their Worker, application and service credential. No temporary test service, preview deployment or control-domain deployment is retained.
+
+## Native PR agent execution (2026-10-09; bounded hosted API qualified)
+
+Native PR evidence now admits real OpenCode tasks under current D1 repository write/admin authority. The maintained agent controller is reused through `PRAgentTask`, with an operator-approved source file, immutable image/module/file-policy digest, exact PR head/tree, a unique private Artifacts fork and per-request60-second Git credentials kept outside the container. Queues/Workflows drive admission and immutable private R2 context/results. Current writer/PR/policy/expiry checks, two shared CI/agent slots,16 reserved inference calls,120-second agent execution, bounded tests/output and cancellation fence further effects. Publication remains proposal-only, with a durable receive-pack fence, provider ref readback and exact parent/commit/tree verification. The [separate native setup](CLOUDFLARE_NATIVE_SETUP.md#operator-approved-native-pr-agents) includes opt-in flags, API semantics, private prompt access and additive D1 migration; portable PostgreSQL/local schema091 remain unchanged.
+
+The final [hosted receipt](../.tmp/cloudflare-forge/golf-native-20261009-aacad957/ownership.json) passes two real agents from head `1a878e5b6ba115e2e7ce0fe99d5af254e689ac2d`, tree `d09b4b8e1e60eb3cc6eb958e773295d2554a3e4d`, producing separate Artifacts proposals `030f9cc42b0742ea1134c8512a4f86d39465b183` and `7dfda4d600df339aa0a92ce0cb82297c82473718`. Their recorded native execution overlaps by13,021ms; each reserves4 inference calls through the private AI Gateway. Observed native input/output/reasoning totals are5,235 and5,224 tokens, not dollar billing. Both run the approved module successfully, including intercepted network denial, and confirm destruction before report publication. Canonical Git remains unchanged. A later push marks both retained proposals stale; current readers can inspect private context, then lose that access after grant revocation. The same run also requalifies passing and deliberately failing native CI, and real Clef advice with349 input/0 output tokens.
+
+The [final manifest](../.tmp/cloudflare-native-agents-final.json) verifies all25 maintained source hashes and the built CLI digest; all12 cleanup categories are independently absent, including both container applications, their owned registry image tag, task/Workspace Durable Object namespaces, four Workflow instances, Worker, queue/consumer, gateway, private R2 reports/bucket, canonical/task Artifacts repositories/namespace and D1 database. No temporary test service or control-domain deployment remains. Earlier attempts retain their failures: transient gateway discovery/namespace403, a missing-fork lookup throwing during `get()` rather than `info()`, and a shallow Git push rejected before publication dispatch. The latter is reproduced by an actual local Git [packet trace](../.tmp/cloudflare-native-agent-shallow-proof.log). Native agents now use full single-branch clones within the16MiB upload-pack bound; the strict canonical single-ref grammar remains unchanged. Prepared execution Workflows allow two concurrent instances while D1 independently limits total containers. The earlier overly narrow task cleanup guard is corrected for the four-job proof; its historical failed receipt is preserved, with runtime/resource absence reconciled in the manifest.
+
+`make cloudflare-check` passes ([log](../.tmp/cloudflare-native-agents-check.log)):47 native Node tests,8 native initializer/migration tests, the3 maintained shared agent-runtime tests and existing Cloudflare/Go CLI race checks. Real local workerd/D1/DO/Queues/Workflows/R2 checks pass and dispose their runtime ([log](../.tmp/cloudflare-native-agents-runtime.log)), including an errored Workflow durably refusing further work. Tests cover ambiguous fork/write responses without redispatch, exact source/parent identity, existing or unconfirmed fork targets, current writer revocation, stale selection/policy, shared execution allocation, cancellation, cleanup retry, native permissions, symlink rejection, tests moving the candidate and bounded results. Hosted processes, model calls, concurrent execution and cleanup are qualified separately from controlled unit interfaces.
+
+This is an API-only, single-approved-file OpenCode/Python profile, not full native agent/forge parity, hostile-repository isolation or SaaS scale. Native agent controls, live activity, comparison/integration UI, automatic protected previews, all-harness/dependency/workflow support, protected canonical publication, migration/recovery/retention and fleet acceptance remain open. Analytics Engine still has source/unit/native build evidence only; these hosted tests create no dataset.
+
+## Native PR container execution and metrics (2026-10-08; bounded hosted API qualified)
+
+The native evidence consumer now runs real repository tests through Containers/Sandbox. An operator approves one Python unittest module and immutable local image ID; each task binds that policy digest and the PR's exact head commit/tree. D1 admission, a two-container workspace limit, current writer/PR/policy checks, read-only Git brokerage, test-stage outbound denial, single-use dispatch, bounded execution, cancellation and destruction precede private R2 publication. The separate [native setup path](CLOUDFLARE_NATIVE_SETUP.md#operator-approved-container-tests) includes allocation flags and an additive migration for existing native D1 installs. Portable PostgreSQL and the retained local deployment are unchanged.
+
+The final [hosted receipt](../.tmp/cloudflare-forge/golf-native-20261008-41c3d38b/ownership.json) passes the actual Queues/Workflows/Artifacts/D1/Durable Object/Containers/Sandbox/R2 consumer. Commit `be2e6143538c59f22b217a8b7a7ad53c3498cae6` runs two passing tests, including a real intercepted403 network denial. A later deliberately broken commit `5d82b70e730268b54f7f749f8a21efc7efbe1f10` runs the same module and records `FAILED`, exit1, its own exact tree and confirmed destruction. The original report becomes stale; revoked readers cannot download either report. Clef completes through the private AI Gateway with351 observed input tokens and0 output tokens. Neither execution nor advice grants merge authority.
+
+`make cloudflare-check` passes ([log](../.tmp/cloudflare-native-tests-check.log)):34 native Node tests,6 native initializer/migration tests and the existing Cloudflare/Go CLI race checks. The real local workerd/D1/DO/Queues/Workflows/R2 check also passes and shuts down ([log](../.tmp/cloudflare-native-tests-runtime.log)). Unit container interfaces are controlled; hosted process exits, denied traffic and teardown are qualified separately. Earlier failures exposed protocol-v2 loss in shallow cloning; only the private test broker now forwards a validated Git protocol header. Hosted first-write/clone availability remains variable; Git writes are never blindly retried.
+
+The [final manifest](../.tmp/cloudflare-native-tests-final.json) verifies all19 maintained source hashes and the built CLI digest, audits36 native receipts with no unresolved cleanup, and records removal of every final owned resource: tasks/DO namespaces, container application/image tag, Worker, queue consumer/queue, Workflow, AI Gateway, private R2 reports/bucket, Artifacts repository/namespace and D1. Earlier failed attempts remain failed in their receipts. No retained service or analytics dataset was deployed.
+
+Optional Analytics Engine completion metrics are source/unit and native build-output qualified, with no hosted ingestion/SQL readback claim. Measurements exclude private content and raw workspace/user/task names, preserve missing token observations as `-1`, and never replace D1 quota/billing authority. This remains an API consumer with one approved unittest profile; browser/CLI job controls, native agent admission/editing, general Actions execution, automatic protected previews, managed application hosting and global fleet scale remain open.
+
+## Native queued PR evidence (2026-10-08; bounded live API qualified)
+
+The [optional native allocation](CLOUDFLARE_NATIVE_SETUP.md#optional-queued-pr-evidence) connects Cloudflare Queues, Workflows and private R2 to the native repository authority, with an explicitly enabled Workers AI Clef call through AI Gateway. Writers admit an exact open-PR selection and owner-scoped operation key. D1 retains the metadata snapshot/outbox, UTC-day allocation and inference reservation; one workspace Durable Object serializes provider effects with Git/permission changes. Queue/Workflow payloads contain only job IDs/states. No Gitea, PostgreSQL, origin or Container participates in this consumer, and existing installations/repositories are unchanged.
+
+The final [live receipt](../.tmp/cloudflare-forge/golf-native-20261008-0e80dbdd/ownership.json) passes native Git/CLI/collaboration plus actual Queue-triggered Workflow completion, private conditional R2 retention, matching report SHA256/source selection, reader download, later-push staleness and repository-reader download revocation. One real Clef dispatch returns `inspect_changes` with 297 observed input tokens and 0 output tokens; its three probabilities are validated/projected without fabricating usage. It is a recommendation from PR metadata, not a code review, executed test or merge decision. Worker/schema/build/qualifier/CLI source hashes and the built CLI digest match that final receipt.
+
+Twenty-five Node tests cover the complete native source boundary, including lost queue/create/PUT acknowledgements, exact-ID Workflow deduplication, bounded redispatch, quota accounting, inference uncertainty/no re-inference, malformed typed advice/usage, policy/actor/grant loss, stale refs, corruption and expiry during R2 publication. Actual installed workerd runs D1/DO issue transactions and revocation, real Queues/Workflows expired-job denial and R2 create-only conditional writes. Three independent initializer tests apply real SQLite bootstrap and validate private/fresh installation plus optional allocation rejection. The complete Go CLI race suite and remaining Cloudflare checks pass in the [source check log](../.tmp/cloudflare-native-evidence-check.log); the [native runtime log](../.tmp/cloudflare-native-evidence-runtime.log) records its narrower platform boundary.
+
+The final launcher removes its queue consumer, Workflow instance/definition, Worker/Durable Object class, unbound queue, gateway, exact report/private bucket, Artifacts repository/namespace and D1, with independent resource absence checks. The [read-only absence audit](../.tmp/cloudflare-forge/resource-absence-20261008.json) checks all 28 native receipts and finds no remaining owned Durable Object namespace or unresolved cleanup. Earlier gateway-minimum, clone/push and cleanup-order failures remain in their original event history; subsequent exact-identity recovery records confirm final absence. Read-only Git readiness/clone retries are bounded; no uncertain Git write is automatically resent. Fresh hosted Git requests have produced HTTP 500/404 failures during this qualification, so the positive disposable flow is not production availability or scale acceptance.
+
+This adds an API evidence consumer, not browser/CLI evidence controls, actual CI/agent execution, protected previews/merge or canonical recovery. Operator-approved job allocations are 1–20/day and expire after ten minutes; AI defaults off. Advisory uncertainty can be retained in a completed metadata report. A pending outbox has at most three original-ID dispatches; there is no scheduled reconciler/garbage collector or global tenant quota/router yet. Gateway/provider retries and billing remain separate from Golf's durable single inference dispatch. The $10/day envelope is planning policy, not a provider-wide billing cap. Native user/account/credential lifecycle and retained control-domain deployment remain open.
+
+## Native D1 collaboration (2026-10-08; bounded API and CLI qualified)
+
+The [native setup](CLOUDFLARE_NATIVE_SETUP.md#native-collaboration-and-cli) now adds native issues/comments, shared issue/PR numbering with separate PR identities, same-repository PR create/read/edit/state/draft workflows, immediate overall reviews and commit-bound reported checks. D1 transactions commit the collaboration effect and owner-scoped operation receipt together; exact revision edits prevent concurrent stale changes, and lost responses after commit can be replayed without another effect. Current repository grants are checked before reads, mutations and operation inspection. The portable Go/PostgreSQL/Gitea path and existing canonical repositories are untouched by this D1 schema.
+
+The final [native receipt](../.tmp/cloudflare-forge/golf-native-20261008-690ef349/ownership.json) passes the existing Artifacts push/clone/source proof plus actual Golf CLI issue creation/read through generated Connect contracts, issue/comment creation replay, exact revision edit and stale-edit denial, a PR created from actual base/head branches, reader overall approval/replay, author-approval refusal and administrator-only reported check publication. A second actual Git push advances the proposal: the retained review becomes stale, stale review/check selections fail, and the new head has no inherited checks. Repository-reader revocation denies issue/PR and own review-operation reads as well as Git. The receipt records Worker/schema/CLI source hashes and the built CLI digest. Its owned Worker/Durable Object class, Artifacts repository/namespace and D1 database are removed with absence checks.
+
+Fifteen Node tests exercise actual SQLite transaction rollback, a lost response after commit, duplicate/conflicting inputs, concurrent revision edits, exact identities, reader/author/writer boundaries, closed/draft proposals, unavailable refs, stale reviews, reported-check supersession/commit binding and revocation. Actual local workerd/D1/Durable Object checks now include issue/comment transaction replay, not only identity. The complete Go CLI suite passes with the race detector, including explicit native credential selection, mixed-mode refusal, canonical token checks and preservation of portable/source write restrictions. The native CLI refuses MCP enrollment until an appropriate scoped native lifecycle exists. The [Cloudflare checks](../.tmp/cloudflare-native-collaboration-check.log) cover the final source; the setup initializer tests remain included.
+
+This is API/CLI collaboration acceptance, not browser acceptance or complete native forge parity. PRs are currently within one repository; comparison/history/diffs, inline/pending reviews, labels/assignees/milestones, notifications, protected rules/merge and product-integrated Actions/agents remain required. Reported checks are controlled status observations, not actual CI execution or trusted merge evidence, and overall reviews are not official approvals. Native authentication/account/credential lifecycle, browser control deployment, existing-repository cutover/backup/restore and global partition scale remain open. All owned test resources are removed; no control-domain deployment or retained-installation upgrade is attributed to this increment.
+
+## Native Artifacts repositories (2026-10-08; bounded live Git qualified)
+
+The independent [native setup path](CLOUDFLARE_NATIVE_SETUP.md) now has a real Worker/Artifacts/D1/Durable Object repository foundation. Canonical Git objects and refs are created directly in Artifacts. D1 owns workspace identities, hashed expiring credentials, per-repository grants, stable repository IDs and create/write journals. The workspace coordinator serializes provider effects and authorization changes. Existing local and bridge repositories remain untouched and Gitea-owned until explicit migration; this is not a cutover of existing data.
+
+The final [live receipt](../.tmp/cloudflare-forge/golf-native-20261008-c3a8e8aa/ownership.json) passes actual private repository creation/replay/conflicting-key denial, Git push and clone through Golf, exact commit `18e861fa1b497a7183958409c26bd7177f21d7fa`, immutable file bytes, directory/symlink/binary reads, source selection, reader-only Git access, write denial and repository-read revocation. The receipt pins the source qualified for that repository-only increment. No Gitea, PostgreSQL, Tunnel, fixture Git provider or external origin participates in this proof. The owned Worker, Durable Object class, Artifacts repository/namespace and D1 database are removed; each resource has an independent absence check. Earlier failed attempts are retained honestly in their own receipts, with their resources removed too.
+
+Nine Node tests cover the authority/operation boundaries against SQLite plus controlled provider failures. Two initializer tests exercise private files, real SQLite bootstrap application, validation and refusal to rotate an existing installation. The installed CLI's actual local workerd/D1/Durable Object runtime passes identity, spoofed-header denial and credential revocation, then shuts down. `make cloudflare-check` passes ([local log](../.tmp/cloudflare-native-check.log)); the final run includes opaque-token and initializer coverage. Artifacts commit/tree field mapping was checked against the installed runtime declarations. Qualification fixed both opaque provider-token handling and ordinary Git capability-list whitespace; the broker requests short-lived provider tokens and revokes them after each request.
+
+The offline native initializer writes `.cloudflare/native` independently from the bridge's `.cloudflare/install`. Its custom-domain/operator-bootstrap deployment is not yet live-qualified; the disposable proof uses a verified Workers subdomain. No persistent control service or DNS record was created by this increment. This is bounded private, unprotected single-ref SHA1 Git, not protected merge or full forge parity. Native issues, PRs/reviews/checks, history/diffs, the browser control UI, tenant/account administration, automated pending-write reconciliation, canonical migration/backup/restore, production partition scale and product-integrated Actions/agents remain open. Pending Git effects fence new writes without blocking repository access revocation.
+
+## Cloudflare control setup (2026-10-08; source/local runtime only)
+
+The separate [Cloudflare setup path](CLOUDFLARE_SETUP.md) now generates private configuration under `.cloudflare/install`, with project-scoped bridge volumes, new credentials, origin/runner TLS, R2 settings and optional existing agent/notification/Actions consumers. The initializer provisions nothing. Local `.env*` files and the retained local installation are preserved; inherited Compose/application variables cannot override the selected project. No host ports are published. `gitgolf.mjtechguy.com` is the control default following the user's latest suggestion; `origin.gitgolf.mjtechguy.com` is a proposed service-only origin hostname, not an existing deployed route.
+
+The control Worker serves the production frontend through Workers assets and streams existing dynamic API/Git routes to one HTTPS bridge using a separate Access service credential. Tests cover caller Authorization/Origin preservation, header/cookie isolation, separate Set-Cookie values, manual redirect handling, dynamic no-store responses, preview handoff headers and SPA/API separation. Five Node tests and two setup tests pass; the latter render actual Compose with all supported overlays, verify origin certificate names and reject unsafe/private configuration. `make cloudflare-check` passes ([local log](../.tmp/cloudflare-control-check.log)). The installed CLI's local workerd also passes fixture-origin streaming/cookie/UI checks and is disposed afterward. Native CLI prebuilt dry-run passes with116 production frontend assets; nothing is uploaded.
+
+This increment does **not** establish a live control-domain deployment, origin Access/Tunnel policy, fresh retained installation, complete local capability parity or canonical Artifacts Git. Native Git/SSH/OAuth ingress requires its own configuration/acceptance. Canonical repositories remain Gitea-owned on the bridge; the qualified Artifacts agent forks are separate. Artifacts canonical storage plus D1 collaboration/authorization and product-integrated Sandbox tasks remain necessary native work, reinforced by the user's explicit Git-in-Artifacts clarification. No provider resources or persistent test services were started by this increment, and no schema migration was added.
+
+## Cloudflare protected preview094 (2026-10-08; bounded native browser qualified)
+
+Migration094 adds an optional single-client Golf OIDC issuer, an operator-configured Cloudflare static deployment target, the existing UI's reserved deployment identity, and a Worker broker using runtime-authenticated Access identity. One-use60-second codes/grants, S256 PKCE, exact callback/client authentication, host-only five-minute viewer cookies, current native repository readers and live parent/environment/artifact fences are enforced. Private operator signer/client/broker files are separate from encrypted product account profiles. An explicit operator mapping can bind one existing external Access email to one native reader without changing Golf OIDC claims. See the [setup and scope contract](CLOUDFLARE_FOUNDATION_CONTRACT.md#operator-configured-protected-static-preview).
+
+`make check` passes ([local log](../.tmp/cloudflare-preview-make-check.log)), as does the production web build. The final [PostgreSQL/race receipt](../.tmp/cloudflare-product/golf-cf-product-20261008-c4a5a8d1/ownership.json) covers native-shaped OIDC requests, authenticated single-use/concurrent exchanges, wrong client/PKCE, expired parents/codes, private configuration and resource/secret/mapping rotation, reserved deployment identity, Access-before-grant, wrong-reviewer/broker refusal, immutable artifact reads and repository-reader/parent revocation. Seven Worker tests cover runtime Access context/audience, alternate hosts/control cookies, grant origin/body limits, credential stripping, external-identity forwarding and withholding storage output after revocation.
+
+The final [native qualification](../.tmp/cloudflare-previews/golf-cf-preview-20261008-6496579a/ownership.json) and [collaborative browser proof](../.tmp/cloudflare-previews/golf-cf-preview-20261008-6496579a/browser-proof.json) exercise actual Golf/PostgreSQL, Access email-code authentication, Worker/custom-domain TLS/DNS, D1 and private R2. The user authorized reuse of an existing Access seat and entered the emailed code in the browser. The exact-host application required both that email and the owned temporary login method; Golf separately authenticated fixture reader42. The browser executed the immutable retained JavaScript (`real-static`) and fetched matching HTML/JavaScript200/no-store responses. `/api/storage` returned a real D1 query result and the exact3072-byte archive digest from R2. JavaScript could read no authentication cookie. Anonymous requests redirected to Access; the health-only machine credential received404 for HTML, JavaScript and storage.
+
+After removing only repository read permission, the same browser received404/no-store for all three content paths. Independent checks still returned200 for the Access identity endpoint and Golf session endpoint, proving repository revocation rather than logout caused denial. No project content was returned after revocation. The original repository identity and runner-protocol artifact producer remain controlled fixture inputs: this is not a real Gitea PR or execution of real CI commands.
+
+Every owned resource from the final attempt is removed with independent native absence checks: Worker/domain/DNS, Access application/temporary IdP/service token, D1, R2 object/bucket, temporary tunnel and PostgreSQL. Existing Google IdP, users, subscriptions and unrelated zone records are preserved. The [final source/evidence manifest](../.tmp/cloudflare-preview094-final/manifest.json) records hashes, earlier attempts and cleanup without credentials.
+
+Earlier receipts remain honest failures. [Golf-issued identity admission](../.tmp/cloudflare-previews/golf-cf-preview-20261008-e5496ed9/browser-proof.json) reached the Access callback but was blocked by the organization seat limit; [existing Google login](../.tmp/cloudflare-previews/golf-cf-preview-20261008-5e9d4ec4/browser-proof.json) encountered a deleted Google OAuth client. Neither is marked native-qualified. [The first email-code attempt](../.tmp/cloudflare-previews/golf-cf-preview-20261008-d5e98a84/browser-proof.json) exposed a browser form bug: `no-referrer` produces `Origin: null`. Trusted resume/grant documents now use `strict-origin` in HTTP and HTML, keeping exact Origin checks and withholding URL paths/queries; project content/denials retain `no-referrer`. Earlier native command/TLS/user-agent/OIDC parameter failures and their owned cleanup remain in the per-attempt records.
+
+Next product gate: durable automatic PR admission/provisioning/link publication, superseded-attempt fencing, TTL/owned cleanup and approved resource/budget policy. General machine preview grants, real PR/CI execution, native SaaS tenancy/scale, arbitrary app builds and production promotion remain open. This adapter supports one explicitly configured deployment per process, with either Golf-issued aliases (source-qualified) or one explicit external reader mapping (native-qualified through email code). It does not upgrade retained schema091 or complete CF3/CF4/the competition gate.
+
+## Cloudflare foundation (2026-10-07; bounded live runtime qualified)
+
+The earlier read-only slice in the [foundation contract](CLOUDFLARE_FOUNDATION_CONTRACT.md) records: `golf-server cloudflare inspect` performs three bounded read-only account/namespace probes through direct API credentials or a named `cf` OAuth profile, and `cloudflare/qualification/src/worker.mjs` authenticates operator-private R2 object metadata/Artifacts namespace probes. It creates no native tenant, provider resource, Git token or deployment. Profile mode delegates authentication to the CLI without opening credential files and checks selected-profile/account identity before service reads. Management credentials remain separate from saved R2 S3 profiles; product management-token persistence is not implemented. [ADR0008](decisions/0008-cloudflare-native-saas-ownership.md) records the selected native SaaS destination and proposed ownership/migration boundary.
+
+`make check` passes, including formatting/vet/all root Go packages, web type checking, generated contracts, maintained engine/vendored runner checks, compatibility register checks, focused Cloudflare/command race checks and all eight Node test results. Go tests cover scoped read-only paths, malformed/oversized responses, denied/partial operations, credential omission, redirect refusal, invalid command/configuration and cancellation. Worker checks cover pre-provider authentication, metadata/credential omission, independent binding errors, routes/methods and timeout. Local documentation links and private-by-default example configuration checks pass. An initial Worker fixture incorrectly expected trailing HTTP header whitespace to remain unnormalized; the corrected fixture checks invalid internal whitespace, and the final complete checks pass.
+
+The subsequent [live account receipt](../.tmp/cloudflare-foundation/account-post-upgrade.json) binds `cf 1.0.0-beta.13`, the repository-bound `golf` OAuth profile, selected account, exact built binary/source hashes and the approved $10/day infrastructure-plus-AI testing envelope. Workers scripts search and R2 bucket-page reads succeeded before the upgrade, while Artifacts namespace discovery returned HTTP403/API10004. After the user enabled Workers Paid, subscription discovery lists that plan and Artifacts namespace discovery succeeds with an empty page. The rebuilt Golf profile inspection exits0 with all three scoped reads accessible. Artifacts accepts a repository-list read for the as-yet unprovisioned `golf-development` namespace; this success is collection-read evidence, not namespace existence or Git/write readiness. No provider-resource mutation, deployment or paid inference was performed.
+
+The account-inspection increment's full `make check` and build pass. Added native subprocess tests qualify account pinning, credential/profile ambiguity refusal before service operations, partial/malformed reads, metadata exclusion, bounded output and cancellation. The subsequent live proof below supersedes the earlier runtime-unqualified boundary only for its explicit scope.
+
+`python3 scripts/cloudflare-foundation-smoke.py --profile golf --account-id ACCOUNT_ID` now passes the disposable CF1 vertical slice. The [complete live receipt](../.tmp/cloudflare-foundation/golf-cf1-20261007-9504515f/ownership.json) binds the selected account, native CLI version, exact runner/helper/Worker/object-store source hashes, Worker ID/version, resource names, Git identities, operation outcomes and cleanup. This remains a dirty source snapshot, not a frozen product release. The existing Golf S3 store passes actual R2 immutable source/artifact create/replay, exact readback, conflicting-content preservation, hash/size/corruption rejection, four simultaneous conditional writers with one winner, unsigned-request denial and wrong-key denial. Public R2 routes remain disabled.
+
+Independent Git verifies public baseline commit `7fd1a60b01f91b314f59955a4e4d4e80d8edf11d` and tree `b4eecafa9be2f2006ce1b709d6857b07069b4608` before and after shallow Artifacts import. A separate fork starts at that baseline and accepts proposal `20f3e36ab1ef3ce227fee43b83147ca838dbb3eb`; a fresh clone verifies tree `68956d0278bca53cd5bbd3e1d1b0b39f86a2539e`. Anonymous Git returns401; read-token writes fail native authentication, cross-repository reads and revoked-reader requests return403, and parent refs remain unchanged. Native OAuth, not extracted CLI credentials, authenticates the installed SDK workaround for beta.13's dropped fork destination field.
+
+Worker `836d23215595423da8246fc3ef36a978`, version `b1fd8aa5-908d-4691-af59-d2dfcc9d8db0`, passes actual R2/Artifacts bindings with200, anonymous/wrong-token401, write-method405 and query404, fixed metadata-free responses and no-store. Its temporary workers.dev route is operator bearer-authenticated, **not Zero Trust protected**; preview URLs stay disabled. Eleven transient platform404s resolve within the bounded probe wait; the complete five checks take6.625s. Only this exact side-effect-free probe retries the platform404, not provider mutations or Worker failures.
+
+Exact Worker/bucket/namespace GET404 readbacks, minted Git-token revocations, post-deletion automatic Git-credential denials, R2 user-token GET404 and cleanup-token verify401 all pass. A five-minute current-user token-management credential resolves the native OAuth DELETE403 gap and self-revokes; its provider scope covers this user's tokens, so it is an operator cleanup mechanism, not tenant isolation. Failed earlier attempts retain their original receipts. Two early R2 cleanup harness mistakes were reconciled by exact-key deletion and bucket404, with separate correction receipts. The separate [all-owned resource audit](../.tmp/cloudflare-foundation/all-owned-resource-absence.json) confirms every attempted Worker/bucket/namespace name absent with404.
+
+Final `make check` passes with root Go/maintained-engine checks, browser type checking, generated contracts, compatibility register, focused Cloudflare race checks, all eight Worker tests and native-helper/Python syntax checks. The live Go test is explicitly opt-in and skipped by ordinary source runs; database-dependent tests remain skipped without an isolated DSN. No paid inference or account-bill measurement is claimed. The $10/day envelope is planning policy, not a provider cap.
+
+This closes the bounded Worker/R2/Artifacts proof, not all CF0/CF1 product acceptance. The following increment qualifies operator-controlled concurrent execution. Versioned product management connections, native tenant authority, full-history migration, D1/provisioning, DNS/Access previews, recovery and measured scale remain open. Retained localhost/schema091 and product capability readiness remain unchanged.
+
+## Cloudflare concurrent agent runtime (2026-10-08; bounded live CF2 prototype qualified)
+
+`python3 scripts/cloudflare-foundation-smoke.py --profile golf --account-id ACCOUNT_ID --agents` passes the [complete live receipt](../.tmp/cloudflare-foundation/golf-cf1-20261008-0496f62e/ownership.json). The maintained runtime and repeatable operator runner are specified in the [agent contract](CLOUDFLARE_AGENT_CONTRACT.md). All foundation and agent source hashes in this receipt match the current maintained files. This is an uncommitted source snapshot, not a frozen release or a tenant-authorized Golf deployment.
+
+Two native SQLite Durable Objects and separate Cloudflare containers execute pinned OpenCode1.18.34 against private Artifacts forks through Worker-only Git/inference brokers. Both real inference and execution intervals overlap. Agent A uses four model calls and reports5,386 native tokens; its addition check passes and full suite fails as intended. Agent B uses six calls and reports9,376 tokens, with both tests passing. Exact published commit/tree identities and private immutable R2 receipt hashes pass independent readback. Native resolved permissions and completed file-tool events are retained; only `calc.py` is readable/editable. GLM's binding-native usage event is normalized for OpenCode without inventing usage or completion.
+
+One real Clef advisory call returns `integrate_and_retest` with174 input tokens; replay returns the reserved result. Cancellation destroys its container after one inference dispatch. The ten-second timeout expires after three dispatches and1,543 reported native tokens; both negative forks remain at the admitted base and publish no proposal. These are process/inference cancellation observations, not proof that an already dispatched model call is unbilled.
+
+Both proposals survive a real `calc.py` merge conflict. The controller creates candidate `6af4dfbcf471b1e14b597450111734865b202956`, tree `ef1ebde5ba78254c11e5380613a5a491d2c14441`, with preserved merge ancestry. A separate native container clones that exact candidate and passes fresh full tests. Advancing the original parent makes the old base stale; promotion is withheld. Prior proposal checks are not used as candidate checks. All five complete context/result payloads were additionally retained privately on the operator machine before provider cleanup; the [local retention ledger](../.tmp/cloudflare-foundation/golf-cf1-20261008-0496f62e/retained-context.json) binds their filenames, byte counts and verified hashes.
+
+Container destruction, class retirement and namespace absence, exact application/Worker/image/gateway deletion, foundation bucket/Artifacts namespace404, post-deletion Git denials and minted credential cleanup all pass. A final [read-only account audit](../.tmp/cloudflare-foundation/all-owned-resource-absence-20261008.json) finds no owned qualification Workers, R2 buckets, Artifacts namespaces, container applications/images, AI Gateways or Durable Object namespaces. Earlier failed attempts retain their failure receipts: attested OCI images would not boot; native write shares the edit permission; permission patterns are worktree-relative; the native usage suffix needed normalization; the original three-second timeout expired before inference. None is counted as a passing full run. Final focused Cloudflare race/Node/Python checks and native prebuilt deployment dry-run pass; the earlier full `make check` remains its separately recorded broader source check.
+
+This closes the bounded provider runtime proof. Full CF2 still requires the existing Golf-authorized task/result consumer, durable product ownership and comparison/context UI. The temporary bearer-protected workers.dev endpoint is operator-only and does not qualify repository-authorized Zero Trust previews. D1/resource provisioning, DNS/Access previews and measured global SaaS operation remain open. Localhost/schema091 and production capability readiness are unchanged; the $10/day testing envelope is not a provider billing cap.
+
+## Cloudflare product accounts and operator storage (2026-10-08; migration093 source ahead)
+
+The [foundation contract](CLOUDFLARE_FOUNDATION_CONTRACT.md#product-account-profiles-and-operator-storage) now covers Cloudflare account profiles in Infrastructure connections and an explicit repository-environment operator storage consumer. Profiles reuse encrypted immutable history, administrator password/CAS checks and the shared settings UI. The API origin is fixed; account changes require credential replacement; mixed database/S3 fields and API/PAT/OAuth delegation are refused. Workers/R2/D1/Artifacts read probes report independent observations without provider writes or secret projection.
+
+Provision/Get/List/Remove reuse the existing cookie/Origin/native-repository authority boundaries. Migration093 retains original actor/repository/owner/environment/profile/account/input ownership, dispatch acknowledgements and append-only events. One unresolved pair per environment and bounded workspace history prevent duplicate allocations. Current authority/version/owner checks precede effects. Exact create acknowledgements and independent readbacks qualify D1 identity and R2 creation date/private serving; collisions are refused without adoption. Unknown effects retain their fence and are not redispatched. Cleanup uses original acknowledged identities/credentials; same-name R2 replacements remain untouched, and GET404 establishes removal. Cleanup can compensate original acknowledged resources after repository deletion but still requires current operator administrator authority/password.
+
+The served T3 browser [receipt](../.tmp/cloudflare-product/golf-cf-product-20261008-3e184472/ownership.json) passes actual password login, Add/Save encrypted-profile inventory, fixed Cloudflare fields, secret/editor clearing, saved account selection, a provider permission REFUSED allocation with both resources PLANNED, wrong-password private masking and fresh-authority absent-intent inspection/explicit clearing without creation replay. The placeholder credential returns independent Workers/R2 unavailable and D1/Artifacts denied states; none is falsely accessible. Its native repository identity is controlled and no live provider credential is installed. Main-frame DOM input/click events run together while real requests settle, because separate tool focus correctly revalidates/clears private forms. The earlier [failed browser attempt](../.tmp/cloudflare-product/golf-cf-product-20261008-99f86d67/ownership.json) remains failed, with cleanup passing; its served inventory alone was not accepted as interactive evidence.
+
+`make check` passes root Go formatting/vet/tests, generated contracts, web type checking, maintained engine/compatibility checks and focused Cloudflare/agent checks. The new PostgreSQL qualifier also runs the race detector with real encrypted-profile/version/permission/history checks, exclusive dispatch ownership, original-only replay, immutable acknowledgement identity, pre-existing foreign collisions, late repository revocation, ambiguous D1 response with no adoption/retry, cleanup after repository deletion and refusal to delete an external same-name R2 replacement. The actual [SIGTERM interruption proof](../.tmp/cloudflare-product/interrupt-proof.json) verifies owned database/child shutdown; its interrupted qualification stays failed rather than being relabeled as a positive run.
+
+The maintained launcher mints temporary native account-scoped credentials in memory, records owner-only receipts, immediately removes test resources and checks independent provider absence/revocation. Browser and source modes stop their exact tunnel/database/process groups. No provider secret is printed or retained. The $10/day infrastructure-plus-AI envelope remains planning policy, not a provider billing cap; these storage qualifications invoke no inference. Retained localhost/schema091 is unchanged. Complete build/configuration/resource policies, Worker bindings, secrets, deployment/approval/production isolation, native tenant authority, Cloudflare task/result/comparison/context integration, protected DNS/Access previews, latest-schema coordinated recovery and measured scale remain open. On 2026-10-08 the user confirmed `previews.mjtechguy.com` with per-preview hostnames and Golf-backed short-lived reviewer grants. Read-only native inspection verified the active zone and an existing Google Access identity provider; no Golf OIDC provider was present. The Golf-to-Access issuer/identity bridge and current-reader preview broker remain unimplemented/unqualified; no DNS/Access application or PR preview link has been published.
+
+Final [database/race source receipt](../.tmp/cloudflare-product/golf-cf-product-20261008-70e2f98d/ownership.json) and [native live Golf consumer receipt](../.tmp/cloudflare-product/golf-cf-product-20261008-afccc3fb/ownership.json) pass against their recorded maintained source hashes. The live operation is REMOVED, native D1/R2 GET404 checks pass, its PostgreSQL container is stopped, the exact product token is absent and its cleanup helper self-revokes. These are real Cloudflare effects through Golf RPCs with controlled native repository identity, not an actual Gitea deployment, Worker application or protected preview. Earlier successful/failed attempts retain their original source snapshots and scope.
+
+Final complete `make check` passes after the last ownership/cancellation changes (`.tmp/cloudflare-product/final-check.log`). The [owned-runtime absence audit](../.tmp/cloudflare-product/runtime-absence-20261008.json) reports zero remaining qualification databases, test launchers or cloudflared processes across all11 attempts. Unrelated installations are untouched. Private receipts, source hashes and logs remain for review; no temporary test server or tunnel is left serving them.
+
+## Local ordinary Actions milestone (2026-10-07; source ahead of deployment)
+
+The [native Requests receipt](compatibility/evidence/requests-local.json) qualifies the original `.github/workflows/lint.yml` at `414f0513c33883adf6f2b46901d4f0b38a455851` under `golf.workflow.act.v0.2.89.linux.remote-node24.v1`. Independent native Git verifies commit/tree/workflow; an explicit native sponsor and signed push admit a private repository run. Genuine pinned checkout and setup-python execute on Node24; setup-python selects the approved image's CPython3.14.8 toolcache, and the unchanged dependency command passes all nine pre-commit checks. This is a dirty source snapshot bound by binary/image/file hashes, not a clean frozen deployment revision.
+
+Three separate controlled source commits qualify failed-command/denied-egress behavior, the one-minute job timeout and cancellation after a running step. All four native run outcomes and exact-owned Docker teardown are recorded; unrelated identities remain unchanged. The legacy job resource profile is preserved. Genuine Python installation exceeds its temporary volume, so the operator image includes the authentic read-only toolcache rather than weakening job limits or replacing the action.
+
+[Checks](compatibility/evidence/m2-checks.json) record `make check`, runner/engine tests and a real PostgreSQL-backed authority/race suite with 111 named cases and no skips. Controlled native-response tests do not substitute for the separate actual Gitea runtime receipt. Existing graph UI recognizes the catalog and passes build/type checks; this increment adds no new served-browser qualification. Failed attempts, including real Git/proxy/toolcache integration discoveries and the intentionally refused workflow-level `github.token` probe, remain in owner-only local receipts.
+
+[Operator setup](ACTIONS_REMOTE.md) and the explicit Compose overlay make this profile reviewable and repeatable. Retained localhost remains schema091/frozen `f548567`; no rollout is claimed. Preserved `pull_request` declarations do not enable actual PR/fork events. Private actions, broader Git/Actions behavior, long-step token refresh, provider artifacts/cache/OIDC, hostile tenant isolation and the full compatibility plan remain open. This milestone is the stopping point for the current local work before discussing self-hosted and global Cloudflare SaaS paths.
+
+## A1 historical Git workspaces: bounded owned runtime qualification (2026-10-07)
+
+The explicitly configured `GOLF_RUNNER_GIT_PREPARATION_IMAGE` now negotiates `golf.runner.git-source.exact-h.v1` only after verified TLS1.3. The existing trusted worker/engine path prepares native Git metadata without exposing controller/provider credentials and preserves original admitted source bytes. Default workers retain the legacy archive profile; the retained deployment is unchanged.
+
+[Actual Git engine/image proof](compatibility/evidence/actual-git-engine.json) passes six cases: correct source, wrong tree before frames/acknowledgements, cancellation, workspace byte exhaustion, inode exhaustion and real create with deliberately lost acknowledgement followed by exact-owned recovery. Registry bytes bind OCI index/platform/configuration/layers/diff-IDs. Git job roots are read-only and writable tmpfs mounts have independent byte/inode limits. Four minimal vendored act adaptations preserve default behavior and are reconstructed/checked against original source; all seven drift/tamper cases are rejected.
+
+[Actual enrolled historical Git proof](compatibility/evidence/native-historical-git.json) passes on schema091, exact Linux/amd64 binaries/images/source hashes and a fresh private Gitea repository. Both jobs execute admitted H after its branch advances. Independent native Git fetch/readback verifies H, actual tree, original workflow blob and executable mode100755 separately in each scoped job. Core and worker restart retain the original graph/attempt without replay. Abrupt worker SIGKILL leaves residue, normal startup refuses reuse, and explicit recovery fences the original attempt as lost before removing owned containers/volumes. No automatic replacement is created; all owned stacks are removed and unrelated identities remain unchanged.
+
+[Local A1 checks](compatibility/evidence/a1-checks.json) record full `make check`, runner race checks and real isolated PostgreSQL authority/race tests with the independently built planner and no skips. Earlier failed receipts remain unchanged: rootless archive-copy/read-only-root failures, native volume cleanup resetting precreated options, fixture YAML/shell mistakes and launcher TLS arguments led to corrected native paths. Native attempt6's passing receipt is excluded from tree qualification because the REST field aliased H; attempt7 proves the correct tree but exposed the qualifier's missing worker namespace rebind after core restart. Corrected attempt8 passes historical source and worker-death recovery.
+
+At this historical checkpoint, four bounded A1 tasks were completed; the later local ordinary Actions section above supersedes only its explicit scopes. Job-token delivery/rotation/masking with independent public/control origins, genuine checkout options and the adversarial Git corpus remain open. Remote Node24 Actions/dependency egress and unchanged Requests remain refused. No retained rollout, source repository CI workflow, private-token job execution, GitLab Runner or broad parity is claimed.
+
+The historical separately undelivered job credential candidate admits bounded Git v2 ls-refs and exact-H/depth1 fetches. [V2 source/database proof](compatibility/evidence/job-git-v2.json) records real native Git fresh/repeated fetches and real PostgreSQL late-revocation/graph/namespace fences for v0/v2, with no skips and owned database cleanup. Advertised capabilities exclude filters/server options/alternate transports; foreign wants/haves, deeper history and cross-repository paths remain refused. The earlier historical runtime receipt remains bound to its earlier v0 binaries. Failed v2 attempts preserve native optional-LF and have-H acknowledgement-round discoveries; the final 90.674-second authority/race suite passes. Eight additional native Git source tests pass export transformation refusal, link/gitlink denial, literal LFS preservation and disabled hooks/helpers with no source-selected private endpoint contact. These are separate source/native Git checks, not private-token delivery or actual Gitea checkout.
+
+## Gitea/CI compatibility foundations: source and owned runtime qualification (2026-10-07)
+
+The [full compatibility plan](GITEA_CI_COMPATIBILITY_PLAN.md) is now underway. Its [versioned register](compatibility/README.md) freezes Gitea 1.27.3's official source spec and all 482 REST operations, separates reviewed annotations, catalogs 23 registries/four Git protocols/28 native event constants with pinned public payload definitions, and records independent Actions/GitLab/connected feature states. Five REST consumers have assessments; 477 remain unassessed. No operation is claimed complete and the aggregate explicitly reports full compatibility false.
+
+Inspection `golf.workflow.inspect.v3` selects the first existing `.gitea/workflows` or `.github/workflows` directory in the operator's Gitea order, including an empty first directory. Shared Go/browser path validation now covers native-directory policies, grants, dispatch/preparation, source approvals and runner controls. Exact source admission refuses a suppressed directory even when an allowlist permits its literal path. Compose/Helm represent both known directories in matching order and reject unsupported custom settings. Nested discovery remains an explicit difference from native Gitea. Discovery/planner availability failures remain errors; source-profile refusals carry bounded fixed diagnostics with profile/remediation. The mobile Actions heading stays compact with the existing table-position bounds.
+
+The [public native receipt](compatibility/evidence/native-gitea-paths.json) records actual fresh Gitea/Docker qualification on dirty source `6e35c3d30f317e11fe00f9dadf4578436bb27e29`, schema `202610050091`, Linux/amd64, exact core/runner/engine binary and image hashes, selected critical source-file hashes and served frontend index. Its owned ordinary native owner is separately enrolled as a Golf administrator. Both workflow directories exist; inspection chooses `.gitea`, and direct dispatch of the suppressed `.github` file fails before admission. One manual and one independently granted native HMAC-signed push run succeed with exact commit/blob/source identity, two ordered jobs, fresh workspaces and scoped logs. Original-key replay and core restart preserve the original attempt without another run. The later A1 proof additionally restarts the worker to rebind Golf’s network namespace before another assignment. TLS1.3 verification and the two-GiB resource reserve remain enforced; all owned project resources are removed and foreign identities remain unchanged. Independent foreign lifecycle observations are retained without assigning a cause. This proves one bounded input-free archive workflow; real Git checkout, Requests, remote Actions, GitLab Runner, cancellation/fault completeness and retained deployment remain open.
+
+The earlier native attempt1 also passed its narrower manual/push proof. Expanded attempt2 correctly refused the suppressed directory but failed the qualifier's expected error code (`invalid_argument` instead of `failed_precondition`); its unchanged receipt and successful cleanup remain recorded. Corrected attempt3 passed. The [local check summary](compatibility/evidence/local-checks.json) records `make check`, Helm profiles, real PostgreSQL authority tests, focused race tests, production build and all 169 focused browser cases. Earlier type-fixture, mobile-layout and polling-count failures remain separate receipts. The five-second read-only fallback legitimately re-reads loaded pages; pagination tests now assert the permitted page set rather than treating a refresh as a duplicate dispatch.
+
+Requests lint is pinned unchanged at `414f0513c33883adf6f2b46901d4f0b38a455851`; its earlier roadmap pin at `611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60` has identical workflow bytes and is preserved. An actual public GitHub run succeeded on the selected commit. Golf's pinned negative admission test refuses the same workflow with no admitted jobs. Node24 checkout/setup-python actions, genuine job checkout, controlled dependency egress, PR semantics, job permissions/timeouts and hosted toolchains remain missing. The agent catalog stays disabled. Existing import credentials have gained no CI authority, protected publication stays unavailable, and no source repository CI workflow or retained rollout was performed.
 
 ## Portable priorities087–091: deployed bounded consumers (2026-10-06)
 
@@ -1783,3 +2790,49 @@ Validation: all137 browser fixtures pass36.7s. Ordinary Go tests, format/vet/gen
 Final local image `sha256:192439b7edeb1943b0ad3a0e7868e0a971808542a6d272528c6364af4d95fb19` passes native Compose API and actual served browser organization qualification: owner-only/member/outsider/owner-team/cross-org denials, exact identity/revision, add/remove/readback, private assigned-repository access gain and subsequent loss, stale grants, Origin/bearer/logout denial, explicit resolve/review/add/reload, cancelled draft/removal and confirmed removal at320px. The initial harness tried deleting a nonempty organization and encountered500; exact leftover fixtures were cleaned with supported repo-first deletion. The corrected harness attempts all cleanup and prints overall success only after every disposable resource is removed. `make qualify-organization-admin` reruns this proof.
 
 Actual retained-administrator email login and served instance account/role inventory, SQL-projected secret exclusion, email search, mobile bounds and logout pass on the same final image. A disposable native site administrator PAT session is separately denied instance inventory, as are wrong Origin and its delegated API credential; that fixture is purged. Retained accounts/passwords and current database schema were not changed. No repository CI workflows, live Kubernetes/Cloudflare deployment, pipeline execution or integrated coding harness is introduced.
+
+
+Cloudflare-native repository performance/settings follow-up (2026-10-09): shared native General edits for description, website and topics now have additive D1 migration0006, administrator/identity/revision checks and atomic version fences. Native capability gates prevent unsupported settings, live-stream, browser-write, review-assignment/inline/private-draft, merge and discussion-resource controls from mounting and issuing unsupported RPCs. This exposes remaining native feature gaps; it does not implement or claim full forge parity. Portable editors remain available. Eight concurrent allowlisted reads retain exclusive mutation/revocation admission; immutable Git-object LRU/deduplication remains scoped and bounded, with current grants/provider identity checked per request. Directory blob-size reads are batched, and proven head changes are projected in the folder response. Generic hashed UI assets receive private browser caching; private data/HTML keep `no-store`. Live stream refusals now use the actual Connect framing contract. A real workerd RPC target qualifies delegated provider methods alongside immutable reads.
+
+The old disposable demo supervisor exited before completing its cleanup. Provider-cleaned previews were purged and all three evidence jobs were terminal at inspection. A recovery stop command with owned-resource preflight and an independent four-hour local systemd timer now covers the current validation window; teardown must still be verified after it executes. Full cold-read, large-repository, many-tenant throughput and recovery acceptance remain open.
+
+Live validation for this follow-up: 94 focused native/capability tests, four cleanup supervisor/recovery tests, 11 native setup tests, full `make cloudflare-check`, portable/native builds and actual workerd UI/evidence/RPC checks passed. The uploaded control bundle matched the local bundle. Human General edits and topic clearing passed and were restored. The three-entry demo folder showed head-change projections with no directory-row history RPCs; an in-app folder-to-file navigation took 251 ms and one `GetContents` request. Sequential warmed 46-byte file reads measured about 190 ms versus 260–290 ms before, and three simultaneous reads finished in about 280 ms versus 660 ms before. These are small-fixture observations, not production latency/throughput guarantees; cold file/metadata paths still take around one to several seconds. The real six-file PR diff rendered without unsupported review/merge RPCs. The 390-pixel file layout had no document overflow, loaded Archivo/Geist Mono and no alerts. Private measurements and deployment/source hashes are in `.tmp/cloudflare-ui-speed-validation.json`.
+
+Cloudflare-native open-source browsing/image/focus follow-up (2026-10-09): real React and Vite repositories were imported through Artifacts and enrolled in the disposable alice workspace. These are main-branch copies with history depth 100, retaining upstream licenses; GitHub issues/PRs and complete branches/tags/history were not migrated. React contains 7,252 source files and Vite 2,866. The TypeScript provider import remained unavailable for over ten minutes and was cancelled; provider 404 and removal of its unactivated Golf row were verified.
+
+The native authenticated image RPC now binds each image to the current repository reader, provider identity, immutable commit and document containing the reference. Bounded relative images and allowlisted HTTPS images use validated redirects without forwarding forge credentials. Shared SVG sanitization retains embedded raster sponsor logos while removing active content and external references. HTML picture theme/density variants use that RPC rather than exposing source URLs to the browser. Background access revalidation on a mounted source view retains its loaded tree/images; explicit access refresh still suspends private content and denied access removes it. Mounted branch/tag observations no longer refetch on every focus; explicit refresh and source selection remain available.
+
+Validation: full `make cloudflare-check`, portable/native production builds, the focused Go image boundary test and actual workerd RPC delegation check passed. The uploaded control bundle matched the local SHA256. Live T3 validation decoded all nine Vite README images in the dark theme and its alternate light-theme logo; the sponsor SVG retained 21 embedded raster images, with no active elements or external references. A deliberately held tab-focus access response retained the exact tree and logo DOM nodes visibly, with zero additional source/image RPCs. The README made no direct browser requests to the Vite/sponsor/badge hosts. Browser regression fixtures were updated but not run through standalone Playwright; live T3 checks provide the browser evidence. Native folders exceeding 100 direct entries and cold path-history performance remain open. No new execution jobs were started; the demo retains its 17:41:18 UTC cleanup deadline. Private import and live validation evidence is under `.tmp/cloudflare-forge/golf-native-20261009-3322fac6/`.
+
+Additional public-repository qualification (2026-10-09): Rancher, Docker CLI, uv and Moby/Docker Engine were imported at default-branch history depth 20. OpenCode and Kubernetes were added through verified bare depth-one Git uploads after the import endpoint refused OpenCode above its observed 40 MB import limit and Kubernetes imports failed. These are actual upstream commit/tree snapshots, with licenses retained, not full mirrors. Exact provider identity and branch heads were read back before native enrollment; all temporary Git tokens were revoked and local upload snapshots removed. The six new repository roots and READMEs rendered in the signed-in T3 browser, and real Kubernetes/OpenCode source files were read through Golf's immutable RPC. Unsupported/oversized README images remain explicit placeholders.
+
+Additive native D1 migration0007 preserves each imported default branch without assuming main or trusting the provider import's default-branch metadata. Metadata, empty-state detection, source resolution, default commit history and settings/revision use the enrolled branch. Optional folder change projections now omit unproven history when a shallow parent object is absent, while preserving current source and explicit history/diff completeness checks. Regression cases cover master/dev, stale settings revisions and shallow source without invented entry history. Full `make cloudflare-check` (101 native tests plus its other suites), the 68-test core suite, actual workerd RPC checks and final bundle/source/deployed-byte comparison passed. Cleanup preflight still passed with three existing terminal jobs and four existing previews; no new execution jobs were started and the 17:41:18 UTC timer remains active. Evidence: `.tmp/cloudflare-forge/golf-native-20261009-3322fac6/more-repos-validation.json`.
+
+The [Gitea Runner 5.0 assessment](ACTIONS_COMPATIBILITY_IMPLEMENTATION.md#gitea-runner-50-assessment-2026-10-09) records the official release and exact tagged checkout/exec/library sources. Upstream execution reuse, broader checkout and a native Kubernetes executor deserve comparison with Golf's pinned act engine, under existing coordinator/authority contracts. No runner upgrade, new executor, scheduler enablement or CI compatibility claim was made.
+
+
+## Cloudflare repository metadata and hardening (2026-10-09)
+
+Native licenses/languages now come from canonical Artifacts Git at the exact displayed commit. Root license text yields conservative observed identifiers and actual immutable file links; unknown licenses retain their source paths. Durable per-repository SQLite jobs report indexing progress, resume through alarms, reuse immutable blob sizes, exclude binary/generated/vendor content, recheck current authority and obey an indexing allocation/deadline. The pinned Linguist filename map supports root attributes and stable ambiguous-suffix defaults; full content heuristics, nested attributes and the complete license corpus are not claimed. A classifier rollout refuses incompatible partial totals instead of republishing them under the current classifier.
+
+Read-only operator priming independently verified the ten demo repository snapshots through supported Artifacts Git, revoked all short-lived read tokens and removed temporary clones. In the signed-in T3 browser, all eight imported public-repository overviews returned AVAILABLE languages/licenses and their exact enrolled commits: React, Vite, Rancher, Docker CLI, uv, Moby/Docker, OpenCode and Kubernetes. Vite displayed MIT, seventeen classified languages and2,848 indexed files; Kubernetes displayed Apache-2.0 and9 languages. Demo-only repositories with no classifiable source/license remain legitimate empty observations. Evidence: `.tmp/cloudflare-hardening-metadata-browser.json` and `.tmp/hardening-live-metadata-seed-v3.log`; these private runtime files are not committed product state.
+
+Repository read coordination is sharded separately from the workspace mutation/identity owner. Private reads use current primary authority and a final workspace access receipt; cached immutable observations never confer permissions. Additive native D1 migrations0008/0009 supply replaceable digest-bound indexes and metadata allocation. Directory pagination supports100 entries per response from inventories bounded at10,000 immediate entries. Immutable first-parent history caches preserve the500-commit/shallow-history bounds. The actual workerd RPC check caught an observer-proxy mistake: RPC handles cannot delegate through remote `.apply`; direct named delegation now passes real commit/tree/blob/log calls and coalescing checks.
+
+Private browser navigation retains materialized snapshot queries for ten minutes with64-query/8-MiB inactive retention bounds. Missing images no longer purge the entire repository, and disabled offscreen history placeholders do not displace materialized source. Logout, explicit repository denial and authentication loss still cancel and clear the appropriate private observations. RPC redirects are treated as expired authority without following login URLs; the shared login UI provides a reload/sign-in action and an Access-specific path when the installation reports Access. The expired live Access session was observed separately from ordinary network failures.
+
+Release tooling binds identities, source/UI bytes, schema9, the exact live predecessor and original dispatch. Old generic UI assets are retained privately in R2 before upload, conditional writes/readback recover a lost acknowledgement under the same key, and uncertain Worker deployment is never blindly replayed. Old chunks returned200 without Golf D1 lookup stages; an unknown hash returned404. Existing tabs remain on their original immutable UI bytes. Guarded code rollback is implemented and source-tested; live canary/rollback and quarantined backup/restore remain unqualified. Owned cleanup recognizes the retained asset/index journal and refuses unrelated objects.
+
+Hosted evidence reconciliation rechecks original queued jobs, current writers, enabled policy, attempts and expiry. A lost queue acknowledgement is retried with the same job/Workflow identity; exhausted, expired or revoked jobs cancel allocated running containers before becoming terminal. Failed cancellation acknowledgement retains retryable intent. Controlled lost-response/duplicate/expiry tests pass; this increment did not start additional hosted CI/AI jobs. General import retry/recovery, dead-letter inspection and fleet fairness remain open.
+
+The human browser additionally followed Vite’s actual LICENSE link to its full-SHA blob and read the MIT text with no alerts. All nine README images decoded, including lazy images below the viewport. A controlled folder/root round trip reused source/image responses, but took1,609/1,005 ms and still issued optional shallow-history retries; that observation does not meet the UI readiness budget. A later visible-browser sample on the final shared UI measured warm folder/root readiness at159/118 ms with no repeated source/image reads on that pass. Optional history failures still retried when visibility enabled a newly mounted observer; a follow-up keeps already settled observations enabled from their first mount, preserving `retryOnMount: false`. That final retry correction needs a separate settled hosted sample. Evidence: `.tmp/cloudflare-hardening-final-navigation.json`.
+
+The maintained authenticated browser benchmark passed48 exact-snapshot root/overview reads across eight repositories, concurrency4, one enrolled user/workspace, outer region EWR. First-pass p50/p95/p99:582/2,152/2,152 ms; subsequent-pass:258/322/360 ms, zero failures. Mixed compatible Worker/DO releases were observed during rollout. This meets the small warm-read budget but misses the cold1.5-second target; it is not arbitrary file/UI readiness, global latency, multi-tenant throughput or cost qualification. Evidence: `.tmp/cloudflare-hardening-benchmark.json`.
+
+The generated [capability inventory](CLOUDFLARE_CAPABILITY_INVENTORY.md) covers all five shared protobuf files:296 procedures,44 bounded native adapters and252 missing adapters. An adapter is not full behavior or hosted acceptance. Portable identity/admin, general workflows, protected merge, advanced review, attachments, releases/wiki/packages, migration and recovery remain explicit native gaps; full local parity is unfinished.
+
+Validation: complete `make cloudflare-check`, native/portable frontend typecheck/build, guarded release tests, actual workerd UI/session/spoof/disabled-user checks, actual RPC cache/delegation checks and D1/DO/Queues/Workflows/R2/revocation runtime checks pass. Focused portable browser-input/source-head Go tests pass; real PostgreSQL browser integration and standalone Playwright fixtures were not rerun in this increment. Regression cases cover metadata retries, shared-blob byte counts, current-access loss, binary classification, indexing allocation/deadline, classifier rollout and redirect/cache purging. The independent demo cleanup deadline remains17:41:18 UTC; a preflight confirms its three original jobs/four original previews and owned storage, without creating new execution allocations. Scheduling the timer does not prove its later teardown.
+
+Final hosted readback at17:40 UTC returned AVAILABLE licenses/languages and the exact canonical commits for all eight imported repositories, with Worker/repository-object release agreement at `4247a74ec719bf8c3a44806987356f8cc7e35a19cf42a43f7b6319c7bd0f4d79` (Worker version `5ad6bf2a-2ebb-4702-84a0-2f7a6415f390`). Final native/portable builds, twelve focused metadata/auth/cache regressions, actual UI runtime and diff checks pass. The final cleanup preflight includes562 owned retained UI assets and the registered repository indexes; the independent17:41:18 UTC timer remains scheduled. Evidence: `.tmp/cloudflare-hardening-final-metadata.json` and `.tmp/hardening-retained-history-cleanup-check.log`.
+
+The17:41:18 UTC stop timer actually fired but failed before effects because the user service manager could not find the NVM-installed CLI. Manual recovery then encountered the owned preview-to-control service binding. The cleaner now rejects missing CLI paths before provider effects, resumes the already-deleted domains/workflow after verifying absence, retires preview/outbound Workers before the control Worker, and deletes validated R2 objects with eight bounded workers. An independent recovery service with an explicit CLI/node PATH completed teardown by17:48 UTC. Its private journal reports all20 owned resource groups absent, including Workers, container applications/image, dispatch, queue/workflow/gateway, R2/D1/Artifacts, demo Access resources and management credential; its recovery credential was revoked in `finally`. The receipt is stopped, and the recovery service is inactive. The demo is no longer available. The five cleanup supervisor/recovery tests pass. Later partial-deletion recovery remains an operator reconciliation boundary; this correction is not a general automatic recovery guarantee.

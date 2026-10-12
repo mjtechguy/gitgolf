@@ -1,6 +1,7 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { GetAuthenticationOptionsResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema, SourceEntryType } from '../src/gen/golf/v1/golf_pb';
+import { GetRepositoryAccessResponseSchema, GetAuthenticationOptionsResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema, SourceEntryType } from '../src/gen/golf/v1/golf_pb';
 import { resolveSourceFixture, reject, request, respond } from './rpc';
 
 const commit = 'a'.repeat(40);
@@ -10,8 +11,9 @@ async function backend(page: Page) {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '123', login: 'alex' } });
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { id: state.repositoryId, name: 'demo', fullName: 'alex/demo', defaultBranch: 'main', private: true } });
+    if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: { repositoryId: state.repositoryId } });
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, { branches: [{ name: 'main', commitId: commit }] });
     if (method === 'ResolveRepositorySource') return resolveSourceFixture(route, state.repositoryId, { owner: 'alex', name: 'demo' }, 'main', { main: commit });
     if (method === 'GetContents') {
@@ -28,7 +30,7 @@ async function backend(page: Page) {
       return respond(route, GetContentsResponseSchema, { repositoryId: state.repositoryId, commitId: !input.path && state.wrongCommit ? 'b'.repeat(40) : commit, path: input.path, kind: directory ? SourceEntryType.DIRECTORY : SourceEntryType.FILE,
         entries: directory ? entries : [], file: directory ? undefined : { entry: { name: input.path.split('/').at(-1), path: input.path, type: SourceEntryType.FILE, sha: commit, size: 20n }, content: 'export const demo = 1;' } });
     }
-    return reject(route, 'not_found', 'Fixture procedure is unavailable.');
+    return reject(route, 'unimplemented', 'Fixture procedure is unavailable: ' + method);
   });
   return state;
 }

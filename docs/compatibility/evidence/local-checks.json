@@ -1,0 +1,277 @@
+{
+  "format": "golf.compatibility.local-evidence.v1",
+  "packet": "F0/F1/initial F2",
+  "recorded_at": "2026-10-07",
+  "source_commit": "6e35c3d30f317e11fe00f9dadf4578436bb27e29",
+  "source_dirty": true,
+  "schema": "202610050091",
+  "source_files": {
+    "internal/workflowpath/path.go": "c27c5b90c51d3ef780521bced64e25e24c12de27e75288ab1fba1910dfadc06b",
+    "internal/server/workflows.go": "adb8aa29c1c97ef5f7ec2e13b59c563fe0bb238f4c0ff5bfb41bc5f2013357c6",
+    "internal/server/workflow_runs.go": "cfaab1b36dd02e3bc5e0022e09cb1f4bfca0aaeb2d3a5b0b9f98538dbb721b03",
+    "internal/server/server.go": "07a56f97653c3507adb09a94d1502cd6b33b5515117b3a90927a225061ffe21e",
+    "internal/server/execution_policy.go": "c23c57e52c963a7347da46e0c5fc76d30394f15bf6e08f83499ef35bc7fa59e9",
+    "internal/server/workflow_directories_test.go": "ec94451c9b8e03b06668bec273d73092caa7fc43cb4907423961e8541239200a",
+    "engines/act/profile.go": "d889b75e68fec51bd925f6954c69a2d5d44499a38116294bf8ec89e398b417e1",
+    "engines/act/compatibility_test.go": "d9e66d675834c854298c1a64c8a8372af24b9eb72e279b7be1beac092f6e69f6",
+    "scripts/compatibility/inventory.py": "a9aeee48dab6c9ae884be857f20e3a37a367a9db48cbd7618b34ddf7d15d4312",
+    "scripts/compatibility/check.py": "98a3750cf1247c7cd4cf4a4217061b188792a6fb8bca796a22104eb544f097df",
+    "docs/compatibility/profile.json": "0c7a3e19d526413aad1896c91d3717381b444c2a1af2c8e6f5a8c9b5b3b368c6"
+  },
+  "deployed": false,
+  "checks": [
+    {
+      "id": "compatibility.source",
+      "layer": "source",
+      "outcome": "passed",
+      "private_receipt_sha256": "930b0741d8c7d8506df8e5599dce19bc65dd1bdfb3dbad05ff979c974cf119ed",
+      "cases": [
+        {
+          "id": "inventory.pins_and_drift",
+          "command": [
+            "python3",
+            "scripts/compatibility/inventory.py",
+            "--check"
+          ],
+          "layer": "source",
+          "expected": "exit 0",
+          "exit_code": 0,
+          "outcome": "passed",
+          "log_sha256": "ecccb68a56489b43a5036f356c5b1b8c5299d54503102d1b891fb474ff7b0c03"
+        },
+        {
+          "id": "inventory.generator",
+          "command": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "scripts/compatibility",
+            "-p",
+            "test_*.py"
+          ],
+          "layer": "source",
+          "expected": "exit 0",
+          "exit_code": 0,
+          "outcome": "passed",
+          "log_sha256": "33060fd73862c5e1af97335504d5b45211fce6d229657f556d8deceeadc52ce4"
+        },
+        {
+          "id": "F1.source_selection",
+          "command": [
+            "go",
+            "test",
+            "-p",
+            "1",
+            "./internal/workflowpath",
+            "./internal/server",
+            "-run",
+            "^(TestPathsAndDirectoryConfiguration|TestActionsWorkflowDirectorySelection|TestWorkflowDefinitionUsesSelectedDirectory|TestExecutionWorkflowPath|TestExecutionPolicyDenyDominance)$",
+            "-count=1"
+          ],
+          "layer": "source",
+          "expected": "exit 0",
+          "exit_code": 0,
+          "outcome": "passed",
+          "log_sha256": "b3c96d3473200d32c540aebbbf2aa13d99c603d0ebc64f100460da678028a416"
+        },
+        {
+          "id": "F2.unchanged_refusal_and_native_path",
+          "command": [
+            "go",
+            "-C",
+            "engines/act",
+            "test",
+            "-p",
+            "1",
+            "-run",
+            "^(TestPinnedRequestsLintRefusal|TestGiteaWorkflowPlanBinding)$",
+            "-count=1",
+            "./..."
+          ],
+          "layer": "source",
+          "expected": "exit 0",
+          "exit_code": 0,
+          "outcome": "passed",
+          "log_sha256": "fa5fdff36868e1a7fc7fadeb51b0dd7fc435df540086e117e772bf118a9fcece"
+        }
+      ]
+    },
+    {
+      "id": "compatibility.database",
+      "layer": "database",
+      "outcome": "passed",
+      "private_receipt_sha256": "c5170e529d56479a9986f9ce156061504c11a9ab9c6857b1efccf104833a9e86",
+      "cases": [
+        {
+          "id": "inventory.pins_and_drift",
+          "command": [
+            "python3",
+            "scripts/compatibility/inventory.py",
+            "--check"
+          ],
+          "layer": "source",
+          "expected": "exit 0",
+          "exit_code": 0,
+          "outcome": "passed",
+          "log_sha256": "cdc6f109c9b7fe5407fb3299873d6a4dfeade6a23b7ef4e0ee4e72a27cb558c5"
+        },
+        {
+          "id": "inventory.generator",
+          "command": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "scripts/compatibility",
+            "-p",
+            "test_*.py"
+          ],
+          "layer": "source",
+          "expected": "exit 0",
+          "exit_code": 0,
+          "outcome": "passed",
+          "log_sha256": "33060fd73862c5e1af97335504d5b45211fce6d229657f556d8deceeadc52ce4"
+        },
+        {
+          "id": "F1.source_selection",
+          "command": [
+            "go",
+            "test",
+            "-p",
+            "1",
+            "./internal/workflowpath",
+            "./internal/server",
+            "-run",
+            "^(TestPathsAndDirectoryConfiguration|TestActionsWorkflowDirectorySelection|TestWorkflowDefinitionUsesSelectedDirectory|TestExecutionWorkflowPath|TestExecutionPolicyDenyDominance)$",
+            "-count=1"
+          ],
+          "layer": "source",
+          "expected": "exit 0",
+          "exit_code": 0,
+          "outcome": "passed",
+          "log_sha256": "e942a714a7f6b0cb4152a214b42641d17af1bbe52f1ec27d107d74baf29be96b"
+        },
+        {
+          "id": "F2.unchanged_refusal_and_native_path",
+          "command": [
+            "go",
+            "-C",
+            "engines/act",
+            "test",
+            "-p",
+            "1",
+            "-run",
+            "^(TestPinnedRequestsLintRefusal|TestGiteaWorkflowPlanBinding)$",
+            "-count=1",
+            "./..."
+          ],
+          "layer": "source",
+          "expected": "exit 0",
+          "exit_code": 0,
+          "outcome": "passed",
+          "log_sha256": "fa5fdff36868e1a7fc7fadeb51b0dd7fc435df540086e117e772bf118a9fcece"
+        },
+        {
+          "id": "F1.database_authority",
+          "command": [
+            "go",
+            "test",
+            "-p",
+            "1",
+            "./internal/server",
+            "-run",
+            "^(TestWorkflowDiscoveryPostgres|TestWorkflowPostWaitDenialPostgres|TestWorkflowRunDurableIntentPostgres|TestWorkflowRunConcurrentDispatchAndCancelPostgres|TestWorkflowRunSourceWaitRechecksPostgres|TestWorkflowPlannerFailureClassificationPostgres)$",
+            "-count=1"
+          ],
+          "layer": "database",
+          "expected": "exit 0",
+          "exit_code": 0,
+          "outcome": "passed",
+          "log_sha256": "8dc63d9cecca852d7466bb4801a9cd0927561e7afc537235d042f2f5783da110"
+        }
+      ]
+    },
+    {
+      "id": "repository.required_checks",
+      "layer": "source",
+      "outcome": "passed",
+      "private_log_sha256": "1db2bc2ff6815e374f9507c63f9a9891f9c6db992f5a51c87703233622ff0b14",
+      "private_log": ".tmp/compatibility/make-check-attempt3.log"
+    },
+    {
+      "id": "workflow_authority.focused_postgres",
+      "layer": "database",
+      "outcome": "passed",
+      "private_log_sha256": "ab4df613fbf2ee1abcc30901d57f964c312c45e6f993257d38ce1447d7ec38ba",
+      "private_log": ".tmp/compatibility/focused-postgres.log"
+    },
+    {
+      "id": "workflow_authority.focused_race",
+      "layer": "database/race",
+      "outcome": "passed",
+      "private_log_sha256": "c7626038dacb45640157a3c3b366370db6806b79712b887d12c78bcdd50ae88a",
+      "private_log": ".tmp/compatibility/focused-race-attempt1.log"
+    },
+    {
+      "id": "planner.refusal_availability",
+      "layer": "database",
+      "outcome": "passed",
+      "private_log_sha256": "b1176c36b3c42470a47289635a5a9f41fc7c56039b7b8d31b2f81191b9cdda9b",
+      "private_log": ".tmp/compatibility/diagnostics-postgres-attempt1.log"
+    },
+    {
+      "id": "workflow_consumers.169_cases",
+      "layer": "browser",
+      "outcome": "passed",
+      "private_log_sha256": "056e204cbac6c4323401086841d1dfade48e09c4a3b2720823eff724a35df141",
+      "private_log": ".tmp/compatibility/browser-attempt4.log"
+    },
+    {
+      "id": "core_worker_frontend_build",
+      "layer": "build",
+      "outcome": "passed",
+      "private_log_sha256": "7901a99b201b0d7bc26f902d71ecc7c019be132f299874fb7b75287ae72ba683",
+      "private_log": ".tmp/compatibility/build-attempt2.log"
+    },
+    {
+      "id": "helm.operator_directory_and_profiles",
+      "layer": "render/lint",
+      "outcome": "passed",
+      "command": [
+        "python3",
+        "deploy/helm/golf/check.py"
+      ],
+      "observed": "Bundled/external/OAuth/ingress/replica/webhook profiles passed; 25 invalid configurations rejected, including unsupported directories."
+    }
+  ],
+  "preserved_failures": [
+    {
+      "private_log": ".tmp/compatibility/make-check-attempt1.log",
+      "private_log_sha256": "5b65f9aee1ada3b6637e16f7db7802356906a5e0936bddaf75e94aca5e912d6a",
+      "reason": "Introduced star fixture used wrong protobuf field; corrected to a bound RepositoryStarPreference."
+    },
+    {
+      "private_log": ".tmp/compatibility/browser-attempt2.log",
+      "private_log_sha256": "2ef09fe786f128b3056010baac94c69e9374f6fa1e5ce22ad017769a0b9ee925",
+      "reason": "Two mobile table-position failures; compact Actions heading fixed the actual layout and retained the original bound."
+    },
+    {
+      "private_log": ".tmp/compatibility/browser-attempt3.log",
+      "private_log_sha256": "4a514720fe343f0060087d0028fdb8619d09fae6f276480f8fd7ebd04e3aa4a6",
+      "reason": "Read-only five-second fallback re-read page two; pagination expectation now permits legitimate revalidation and still checks page boundaries and denial cleanup."
+    }
+  ],
+  "limitations": [
+    "Source/database/browser checks are independent layers; no reference differential comparison or complete feature claim.",
+    "Ordinary make check database skips are not integration evidence; named database checks below use a fresh owned PostgreSQL instance.",
+    "The native/manual/push receipt is separate; the full plan remains incomplete."
+  ],
+  "owned_test_database_cleanup": {
+    "passed": true,
+    "credentials_disposed": true,
+    "private_receipt_sha256": "d3cc6b94eb428f601f36969edd73ecfe0baf0d9f749c37a9495cbe3eae7b3c3b"
+  }
+}

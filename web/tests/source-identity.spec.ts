@@ -1,7 +1,8 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
 import {
   GetAuthenticationOptionsResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema,
-  GetRepositoryImageRequestSchema, GetRepositoryImageResponseSchema, GetRepositoryResponseSchema,
+  GetRepositoryImageRequestSchema, GetRepositoryImageResponseSchema, GetRepositoryResponseSchema, GetRepositoryAccessResponseSchema,
   GetSessionResponseSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema,
   LogoutResponseSchema, RepositorySourceResolution, RepositorySourceRefKind, ResolveRepositorySourceRequestSchema, ResolveRepositorySourceResponseSchema,
   SourceEntryType,
@@ -12,9 +13,9 @@ const repositoryId = '9007199254740993', head = 'a'.repeat(40), feature = 'b'.re
 const repository = { id: repositoryId, name: 'identity', fullName: 'alex/identity', defaultBranch: 'main', private: true };
 const body = '# PRIVATE source\n![Private badge](./badge.svg)\n';
 const blob = 'e'.repeat(40);
-async function fixture(page: Page) {
+async function fixture(page: Page, native = false) {
   const state = {
-    signedIn: true, userId: '17', metadataReads: 0, metadataWait: undefined as Promise<void> | undefined, metadataDenied: false, badSource: '', badSourcePath: undefined as string | undefined, badResolver: '', badImage: '', deniedResolver: '', holdResolver: false,
+    signedIn: true, userId: '17', accessReads: 0, accessWait: undefined as Promise<void> | undefined, accessDenied: false, bootstrapWrong: false, metadataReads: 0, metadataWait: undefined as Promise<void> | undefined, metadataDenied: false, badSource: '', badSourcePath: undefined as string | undefined, badResolver: '', badImage: '', deniedResolver: '', holdResolver: false,
     held: [] as (() => void)[], resolverReads: [] as ReturnType<typeof request<typeof ResolveRepositorySourceRequestSchema>>[],
     reads: [] as ReturnType<typeof request<typeof GetContentsRequestSchema>>[], images: [] as ReturnType<typeof request<typeof GetRepositoryImageRequestSchema>>[],
   };
@@ -23,9 +24,10 @@ async function fixture(page: Page) {
     if (method === 'GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user: { id: state.userId, login: 'alex' } }) : reject(route, 'unauthenticated', 'Signed out.');
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, native ? { runtimeProfile: 'cloudflare-native', capabilities: [] } : portableRuntimeFixture);
+    if (method === 'GetRepositoryAccess') { state.accessReads++; if(state.accessWait)await state.accessWait; return state.accessDenied ? reject(route,'not_found','Repository access removed.') : respond(route, GetRepositoryAccessResponseSchema, {access:{repositoryId}}); }
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
-    if (method === 'GetRepository') { state.metadataReads++; if(state.metadataWait)await state.metadataWait; return state.metadataDenied ? reject(route,'permission_denied','Repository access removed.') : respond(route, GetRepositoryResponseSchema, { repository }); }
+    if (method === 'GetRepository') { state.metadataReads++; if(state.metadataWait)await state.metadataWait; return state.metadataDenied ? reject(route,'permission_denied','Repository access removed.') : respond(route, GetRepositoryResponseSchema, { repository, sourceSelection: native ? {kind:RepositorySourceRefKind.DEFAULT_BRANCH,name:state.bootstrapWrong?'other':'main',commitId:head} : undefined }); }
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, { repositoryId, branches: [{ name: 'main', commitId: head }, { name: 'feature/UI', commitId: feature }] });
     if (method === 'ResolveRepositorySource') {
       const input = request(route, ResolveRepositorySourceRequestSchema); state.resolverReads.push(input);
@@ -260,11 +262,53 @@ test('immutable source and decoded image survive authority checks without collap
  release();state.metadataWait=undefined;await expect(image).toBeVisible();
  expect(await image.evaluate((node,previous)=>node===previous,retained)).toBe(true);expect(state.reads).toHaveLength(sources);expect(state.images).toHaveLength(images);
  const beforeVisibility=state.metadataReads;
+ state.metadataWait=new Promise<void>(resolve=>release=resolve);
  await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange',{bubbles:true}));Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});document.dispatchEvent(new Event('visibilitychange',{bubbles:true}));});
  await expect.poll(()=>state.metadataReads).toBeGreaterThan(beforeVisibility);
  await expect(image).toBeVisible();expect(state.reads).toHaveLength(sources);expect(state.images).toHaveLength(images);
+ expect(await image.evaluate((node,previous)=>node===previous,retained)).toBe(true);
+ release();state.metadataWait=undefined;
  await page.evaluate(()=>{delete (document as unknown as Record<string,unknown>).visibilityState;});
  state.metadataDenied=true;await page.getByRole('button',{name:'Refresh repository access',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('Repository access removed');await expect(page.getByRole('img',{name:'Private badge',exact:true})).toHaveCount(0);await expect(page.locator('.source-tree')).toHaveCount(0);
  await retained?.dispose();
+});
+
+
+test('native bootstrap removes resolver and cold authority waterfall; prefetched bytes wait for a fresh grant', async ({page}) => {
+ const state=await fixture(page,true);
+ await page.goto('/alex/identity'); await expect(page.locator('.source-tree')).toBeVisible();
+ expect(state.resolverReads).toHaveLength(0); expect(state.accessReads).toBe(0);
+ await expect(page.getByRole('img',{name:'Private badge'})).toBeVisible();
+ const rootReads=state.reads.filter(read=>read.path==='').length;
+ const fileReads=state.reads.filter(read=>read.path==='README.md').length;
+ const link=page.getByRole('link',{name:/^README.md File/});
+ await link.hover(); expect(state.reads.filter(read=>read.path==='README.md')).toHaveLength(fileReads);
+ let release!:()=>void;state.accessWait=new Promise<void>(resolve=>release=resolve);
+ await link.click(); await expect.poll(()=>state.accessReads).toBeGreaterThan(0);
+ await expect(page).toHaveURL(/blob\/main\/README.md/);
+ await expect(page.getByRole('img',{name:'Private badge'})).toHaveCount(0);
+ release();state.accessWait=undefined;await expect(page.getByRole('img',{name:'Private badge'})).toBeVisible();
+ expect(state.reads.filter(read=>read.path==='README.md')).toHaveLength(fileReads);
+ expect(state.reads.filter(read=>read.path==='')).toHaveLength(rootReads);
+ state.accessDenied=true;
+ await page.getByRole('navigation',{name:'Source path'}).getByRole('link',{name:'identity',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Repository access removed');
+ await expect(page.locator('.source-tree')).toHaveCount(0);
+});
+
+test('a malformed default source observation cannot seed a source read or resolver', async ({page}) => {
+ const state=await fixture(page,true);state.bootstrapWrong=true;
+ await page.goto('/alex/identity');await expect(page.getByRole('alert')).toContainText('default source observation');
+ expect(state.reads).toHaveLength(0);expect(state.resolverReads).toHaveLength(0);
+});
+
+test('hover prefetches an unopened folder once and clicking reuses it only after fresh native authority', async ({page}) => {
+ const state=await fixture(page,true);await page.goto('/alex/identity');await expect(page.locator('.source-tree')).toBeVisible();
+ const folder=page.getByRole('link',{name:/^src Directory/});await folder.hover();
+ await expect.poll(()=>state.reads.filter(read=>read.path==='src').length).toBeGreaterThan(0);
+ const before=state.reads.filter(read=>read.path==='src').length;
+ await folder.click();await expect(page.getByRole('link',{name:/^file.ts File/})).toBeVisible();
+ expect(state.reads.filter(read=>read.path==='src')).toHaveLength(before);expect(state.accessReads).toBeGreaterThan(0);
+ expect(state.reads.filter(read=>read.path==='src').every(read=>read.ref===head&&read.repositoryId===repositoryId)).toBe(true);
 });

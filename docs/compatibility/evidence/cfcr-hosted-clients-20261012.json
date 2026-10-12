@@ -1,0 +1,104 @@
+{
+  "run": "golf-native-20261012-a205a6ae",
+  "scope": "Disposable hosted native Golf and separate CFCR. Registry client subset passed. Full profile failed at guarded rollback D1 preflight (HTTP 403/API 7403); native scanner startup separately failed.",
+  "checks": {
+    "registry_ci": {
+      "image": {
+        "registry": "https://qual-1012b-registry.mjtechguy.com",
+        "repository": "alice/canonical",
+        "tag": "ci-8fa2e49f-ccd4-473d-a0cf-32e6c46c8599",
+        "digest": "sha256:cf6234a7bd7ed0741a5997c55957659d7092ed49a050952f17bf8d95e1c65929",
+        "commitId": "99fed29e05e7783748f2c2269131032d95cfe8be"
+      },
+      "manifestBytes": 401,
+      "independentDigestVerified": true,
+      "containerCleanup": "destroyed"
+    },
+    "registry_clients": {
+      "scriptSha256": "4155f9315c32a52d497906dafbb2002a14d35361c2a9fb63e539cb6a52a2b503",
+      "passed": true,
+      "origin": "https://qual-1012b-registry.mjtechguy.com",
+      "name": "alice/registry-clients",
+      "checks": {
+        "nativeCIPull": {
+          "image": "qual-1012b-registry.mjtechguy.com/alice/canonical@sha256:cf6234a7bd7ed0741a5997c55957659d7092ed49a050952f17bf8d95e1c65929",
+          "sourceCommit": "99fed29e05e7783748f2c2269131032d95cfe8be",
+          "imageId": "sha256:cf6234a7bd7ed0741a5997c55957659d7092ed49a050952f17bf8d95e1c65929"
+        },
+        "docker": {
+          "bytes": 7340032,
+          "imageId": "sha256:0881ea44448d7e29ccb1d6596b2574de7267320c1479417028439ef650b0c9e7",
+          "roundTrip": true
+        },
+        "chunked": {
+          "bytes": 134217728,
+          "imageId": "sha256:139265cd22c101f27661fed4d645ca949d7b0a8a416bd7918aa208bbe1a50a10",
+          "roundTrip": true
+        },
+        "signing": {
+          "subject": "sha256:0881ea44448d7e29ccb1d6596b2574de7267320c1479417028439ef650b0c9e7",
+          "state": "verified",
+          "attestations": 1
+        },
+        "policy": {
+          "immutableTags": true,
+          "promotion": true,
+          "heldDeleteDenied": true,
+          "readOnlyPushDenied": true,
+          "readStillWorks": true,
+          "crossRepositoryDenied": true
+        },
+        "oci": {
+          "specification": "v1.1.1",
+          "sourceCommit": "a139cc423184af6078077b9b7ee336eddbd03f8f",
+          "binarySha256": "d6050dd29cf4032422e4667d73d7649365325ac3cb12db0df7b66cd3964944ae",
+          "passed": true,
+          "summary": "71 Passed | 0 Failed | 0 Pending | 8 Skipped",
+          "crossRepositoryMount": "Not exercised: Golf issues one-repository credentials"
+        }
+      },
+      "cleanup": true,
+      "remainingImages": []
+    },
+    "registry_live_authority": {
+      "downgradeDeniesPush": true,
+      "downgradePreservesPull": true,
+      "revocationDeniesExistingToken": true,
+      "revocationDeniesExchange": true,
+      "grantRestored": true
+    },
+    "registry_credential_revocation": true
+  },
+  "fullProfileState": "failed",
+  "fullProfileFailure": "guarded release rollback failed",
+  "cleanup": {
+    "test_tasks": "absent",
+    "managed_apps": "absent",
+    "preview_domain": "absent",
+    "control_domain": "absent",
+    "queue_consumer": "absent",
+    "workflow": "absent",
+    "registry_retired": "absent",
+    "preview_worker": "absent",
+    "worker": "absent",
+    "durable_object_namespaces": "absent",
+    "registry_resources": "absent",
+    "app_outbound": "absent",
+    "dispatch": "absent",
+    "test_applications": "absent",
+    "test_image": "absent",
+    "queue": "absent",
+    "gateway": "absent",
+    "bucket": "absent",
+    "preview_access": "absent",
+    "control_access": "absent",
+    "preview_service_token": "absent",
+    "namespace": "absent",
+    "database": "absent",
+    "secret_store": "absent",
+    "analytics_token": "absent",
+    "cleanup_token": "absent",
+    "management_token": "absent"
+  },
+  "finishedAt": "2026-10-12T02:11:23.791245+00:00"
+}

@@ -173,6 +173,10 @@ func runLocalAccount(parent context.Context, options localAccountOptions, input 
 	if os.Getenv("DATABASE_URL") == "" {
 		return errors.New("DATABASE_URL is required")
 	}
+	forgeConfig, err := server.NormalizeForgeConfig(serverConfig())
+	if err != nil {
+		return err
+	}
 	var db *sql.DB
 	if options.action == "inspect" {
 		db, err = sql.Open("pgx", os.Getenv("DATABASE_URL"))
@@ -193,7 +197,12 @@ func runLocalAccount(parent context.Context, options localAccountOptions, input 
 		}
 	}
 	defer db.Close()
-	result, err := server.ManageLocalAccount(ctx, db, keys, env("GITEA_URL", "http://gitea:3000"), options.action, account)
+	if options.action != "inspect" {
+		if err := server.BindForgeInstallation(ctx, db, forgeConfig); err != nil {
+			return err
+		}
+	}
+	result, err := server.ManageLocalAccount(ctx, db, keys, forgeConfig.GiteaURL, options.action, account)
 	// Credentials never appear in operator output, argv or logs.
 	account.Password, account.ForgeToken = "", ""
 	if err != nil {

@@ -683,7 +683,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .source-panel-heading .source-actions { flex-shrink:0; }
 .ref-inventory-button { color:var(--muted); min-height:32px; }
 @media(max-width:720px) {
- .repository-latest-commit { flex-wrap:wrap; gap:4px 8px; }
+ .source-panel-heading { flex-wrap:wrap; }
+ .repository-latest-commit { flex-basis:100%; flex-wrap:wrap; gap:4px 8px; }
  .latest-commit-author { max-width:100px; }
  .latest-commit-message { flex-basis:calc(100% - 110px); }
  .latest-commit-sha { display:none; }
@@ -767,7 +768,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .clone-options { left:auto; right:0; }
 .copy-field { display:flex; align-items:center; gap:6px; min-width:0; }
 .copy-field input { flex:1; min-width:0; font:.8125rem/1.6 var(--mono); padding:8px; }
-.copy-action { display:inline-flex; flex-shrink:0; }
+.copy-action { position:relative; display:inline-flex; flex-shrink:0; }
 .copy-action .icon-button { width:32px; height:32px; }
 .branch-search { margin-top:12px; min-height:36px; }
 .clone-options .content-view-controls { margin:12px 0 8px; justify-content:flex-start; }
@@ -977,6 +978,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 /* Source and path-history controls share the work toolbar and native disclosure. */
 .source-actions { margin-left:auto; }
 .source-action-menu { position:relative; }
+.source-action-options,.diff-options-content,.pull-action-menu-content { translate:var(--disclosure-shift,0px) 0; }
 .source-action-menu > summary { display:grid; list-style:none; }
 .source-action-menu > summary::-webkit-details-marker { display:none; }
 .source-action-options { position:absolute; top:calc(100% + 6px); right:0; z-index:12; display:grid; gap:12px; width:250px; max-width:calc(100vw - 32px); max-height:50vh; overflow:auto; padding:12px; border:1px solid var(--line-strong); background:var(--raised); border-radius:6px; box-shadow:0 8px 24px #0004; font-size:.875rem; }
@@ -1159,6 +1161,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .workflow-jobs-disclosure>summary,.workflow-log-search-toggle { display:none; }
 .workflow-jobs-content { display:flex; flex-direction:column; gap:8px; }
 @media(max-width:700px) {
+ .repository-intro.actions-intro { flex-direction:row; align-items:center; gap:12px; }
  .actions-workspace { grid-template-columns:minmax(0,1fr); gap:16px; }
  .workflow-navigation-panel h2 { display:none; }
  .workflow-navigation { flex-direction:row; overflow-x:auto; padding:4px; }
@@ -1284,3 +1287,65 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 
 .checkbox-field { display: flex; align-items: center; gap: 8px; }
 .checkbox-field input[type="checkbox"] { width: auto; flex: 0 0 auto; }
+/* Shared native forge views use the same panels, forms and inventories. */
+.native-proposals { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr)); gap:20px; }
+.native-evidence-code { white-space:pre-wrap; overflow-wrap:anywhere; max-height:32rem; overflow:auto; font-size:.8125rem; }
+.native-browser-snapshot { display:block; max-width:100%; height:auto; }
+
+@media(max-width:720px) { .native-workspace-label { grid-column:2; grid-row:1; min-width:0; } .native-workspace-label span { overflow-wrap:anywhere; } }
+
+/* Repository navigation owns the frame; route panels replace only its content. */
+.repository-workspace .topbar { display:flex; min-height:60px; height:60px; padding:8px 24px; gap:16px; }
+.repository-workspace .workspace-heading { display:flex; flex:1; gap:14px; min-width:0; }
+.compact-brand { flex-shrink:0; }
+.repository-context { display:flex; align-items:center; gap:10px; min-width:0; margin:0; font-size:1rem; line-height:1.4; font-weight:600; }
+.repository-context > span:first-child { font-weight:400; }
+.repository-context > span:first-child,.repository-context > a { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.repository-context > span:nth-child(2) { color:var(--muted); }
+.repository-context > a { color:var(--text); }
+.global-menu { flex-shrink:0; }
+.global-menu > summary { border:1px solid var(--line); border-radius:6px; }
+.global-menu .account-dropdown { left:0; right:auto; width:280px; max-width:calc(100vw - 32px); }
+.global-menu .account-dropdown > strong { display:block; padding:10px 12px; }
+.global-menu .workspace-switcher { padding:8px 12px; }
+.global-menu .workspace-switcher-dropdown { position:static; max-width:100%; width:auto; }
+.repository-workspace .workspace-content main { padding:0 24px; }
+.repository-navigation { display:flex; align-items:center; gap:16px; border-bottom:1px solid var(--line); margin:0 -24px 24px; padding:0 24px; }
+.repository-navigation > .repository-tabs { flex:1; min-width:0; margin:0; border:0; flex-wrap:nowrap; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; }
+.repository-navigation > .repository-tabs a { flex-shrink:0; min-height:44px; }
+.repository-navigation-actions { flex-shrink:0; min-width:0; max-width:100%; flex-wrap:wrap; justify-content:flex-end; }
+.repository-settings-layout { max-width:1280px; margin:0 auto; grid-template-columns:240px minmax(0,1fr); gap:32px; }
+.settings-navigation-group + .settings-navigation-group { border-top:1px solid var(--line); margin-top:12px; padding-top:12px; }
+.settings-navigation-group h2 { font-size:.75rem; color:var(--muted); font-weight:600; padding:8px 12px; }
+.settings-navigation-group a[aria-current="page"] { border-left:3px solid var(--accent); }
+.settings-navigation-label { min-width:0; }
+.settings-navigation-label small { display:block; color:var(--muted); font-size:.7rem; font-weight:400; }
+.settings-section-picker { display:none; }
+.settings-diagnostics { margin-top:24px; border-top:1px solid var(--line); padding-top:16px; }
+.settings-diagnostics > summary { color:var(--muted); cursor:pointer; padding:8px 0; }
+.settings-diagnostics > section { margin-top:12px; }
+.repository-access-check { position:static; }
+@media(max-width:900px) {
+  .repository-navigation { flex-wrap:wrap; gap:0; }
+  .repository-navigation > .repository-tabs { flex-basis:100%; }
+  .repository-navigation-actions { margin-left:auto; padding:4px 0; }
+}
+@media(max-width:720px) {
+  .repository-workspace .topbar { padding:8px 12px; gap:8px; }
+  .repository-workspace .workspace-heading { gap:8px; }
+  .repository-context { font-size:.875rem; gap:6px; }
+  .repository-workspace .compact-brand .brand-mark { width:26px; height:26px; font-size:1.25rem; }
+  .repository-workspace .topbar-controls { gap:0; }
+  .repository-workspace .workspace-content main { padding:0 16px; }
+  .repository-navigation { margin-inline:-16px; padding-inline:16px; margin-bottom:16px; }
+  .repository-settings-layout { grid-template-columns:minmax(0,1fr); gap:16px; }
+  .repository-settings-layout > .account-navigation { display:none; }
+  .settings-section-picker { display:grid; gap:6px; font-size:.8125rem; color:var(--muted); }
+  .settings-section-picker select { width:100%; min-height:44px; }
+}
+
+@media(max-width:380px) { .repository-context > span { display:none; } }
+
+.file-finder-results { list-style: none; padding: 0; margin: 0; max-height: min(50dvh, 28rem); overflow: auto; }
+.file-finder-results a { display: block; padding: .55rem .75rem; border-radius: .35rem; overflow-wrap: anywhere; }
+.file-finder-results a:hover, .file-finder-results a:focus-visible { background: var(--hover); }

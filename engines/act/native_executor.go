@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	protocol "github.com/mjtechguy/golf-git/internal/runner"
 	"github.com/nektos/act/pkg/common"
@@ -53,7 +54,12 @@ func executeNativePlan(ctx context.Context, plan *model.Plan, config *act.Config
 					// Do not leak the earlier variant's aggregate into this instance's
 					// job/status context. Publish the completed aggregate before next stage.
 					run.Job().Result = ""
-					rc := &act.RunContext{Config: config, Run: run, EventJSON: eventJSON, Matrix: matrix, StepResults: make(map[string]*model.StepResult), Name: run.String(), JobName: run.String()}
+					jobConfig := *config
+					jobConfig.Secrets = make(map[string]string, len(config.Secrets))
+					for k, v := range config.Secrets {
+						jobConfig.Secrets[k] = v
+					}
+					rc := &act.RunContext{Config: &jobConfig, Run: run, EventJSON: eventJSON, Matrix: matrix, StepResults: make(map[string]*model.StepResult), Name: run.String(), JobName: run.String()}
 					if len(variants) > 1 {
 						rc.Name += "-" + strconv.Itoa(index+1)
 					}
@@ -61,11 +67,35 @@ func executeNativePlan(ctx context.Context, plan *model.Plan, config *act.Config
 					if !ok {
 						return ErrExecution
 					}
-					own := common.WithJobErrorContainer(ctx)
+					if observer.jobGit != nil {
+						observer.mu.Lock()
+						observer.contexts[instance.InstanceID] = rc
+						observer.mu.Unlock()
+						rc.BeforeStep = func(ctx context.Context) error {
+							if err := ctx.Err(); err != nil {
+								return err
+							}
+							observer.mu.Lock()
+							defer observer.mu.Unlock()
+							if err := observer.renewJobGit(instance.InstanceID); err != nil {
+								observer.fail()
+								return err
+							}
+							rc.ExprEval = rc.NewExpressionEvaluator(ctx)
+							return nil
+						}
+					}
+					jobCtx := ctx
+					stop := func() {}
+					if instance.TimeoutSeconds != 0 {
+						jobCtx, stop = context.WithTimeout(ctx, time.Duration(instance.TimeoutSeconds)*time.Second)
+					}
+					own := common.WithJobErrorContainer(jobCtx)
 					own = act.WithJobLogger(own, run.JobID, rc.String(), config, &rc.Masks, matrix)
 					rc.ExprEval = rc.NewExpressionEvaluator(own)
 					executionErr := execute(own, rc)
 					state, err := observer.completeInstance(instance, executionErr, common.JobError(own))
+					stop()
 					if err != nil {
 						return err
 					}

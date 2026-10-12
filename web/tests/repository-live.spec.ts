@@ -1,4 +1,5 @@
-import { ListActionRunsResponseSchema, InspectWorkflowsResponseSchema, ListWorkflowRunsResponseSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
+import { portableRuntimeFixture } from './runtime-fixture';
+import { ListRepositoryLabelsResponseSchema, ListActionRunsResponseSchema, InspectWorkflowsResponseSchema, ListWorkflowRunsResponseSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import {expect,test,type Page,type Route} from '@playwright/test';
 import {create,toJson} from '@bufbuild/protobuf';
 import {resolveSourceFixture,respond,reject,request} from './rpc';
@@ -8,7 +9,7 @@ import {GetRepositoryAccessResponseSchema,GetSessionResponseSchema,GetRepository
 const head='a'.repeat(40);
 function envelope(flag:number,body:unknown){const text=Buffer.from(JSON.stringify(body));const size=Buffer.alloc(5);size[0]=flag;size.writeUInt32BE(text.length,1);return Buffer.concat([size,text]);}
 async function fixture(page:Page){
- const state={workflowName:'Original CI',manualAllowed:true,inspections:0,dispatches:0,cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0,issuesEnabled:undefined as boolean|undefined,metadataReads:0,eventCursor:undefined as string|undefined};
+ const state={labelName:'Original label',labelReads:0,workflowName:'Original CI',manualAllowed:true,inspections:0,dispatches:0,cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0,issuesEnabled:undefined as boolean|undefined,metadataReads:0,eventCursor:undefined as string|undefined};
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='WatchRepository'){
@@ -25,7 +26,7 @@ async function fixture(page:Page){
   if(method==='GetRepositoryStar')return reject(route,'unimplemented','Optional Star fixture is unavailable.');
   if(method==='GetRepositoryAccess')return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:'11',ownerId:'42',currentPermission:'write'}});
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user});
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});
   if(method==='GetRepository'){state.metadataReads++;return respond(route,GetRepositoryResponseSchema,{repository:{...repository,issuesEnabled:state.issuesEnabled}});}
   if(method==='ResolveRepositorySource')return resolveSourceFixture(route,'11',{owner:'alex',name:'demo'},'main',{main:head});
@@ -34,6 +35,7 @@ async function fixture(page:Page){
   if(method==='ListActionRuns')return respond(route,ListActionRunsResponseSchema,{repositoryId:'11'});
   if(method==='ListWorkflowRuns')return respond(route,ListWorkflowRunsResponseSchema,{});
   if(method==='DispatchWorkflow'){state.dispatches++;return reject(route,'permission_denied','Unexpected dispatch.');}
+  if(method==='ListRepositoryLabels'){state.labelReads++;return respond(route,ListRepositoryLabelsResponseSchema,{labels:[{id:'9',name:state.labelName,color:'abcdef',revision:'a'.repeat(64)}]});}
   if(method==='ListBranches')return respond(route,ListBranchesResponseSchema,{branches:[{name:'main',commitId:head}]});
   if(method==='GetPullRequest'){state.pullReads++;return respond(route,GetPullRequestResponseSchema,{pullRequest:{id:'4',number:1,title:'Live contribution',state:IssueState.OPEN,user,base:{repositoryId:'11',ref:'main',commitId:'b'.repeat(40)},head:{repositoryId:'11',ref:'feature',commitId:state.pullHead}}});}
   if(method==='ListPullRequestCommits'){state.commitReads++;const input=request(route,ListPullRequestCommitsRequestSchema);return respond(route,ListPullRequestCommitsResponseSchema,{selection:input.selection,commits:[{sha:input.selection!.headCommitId,message:'Pinned private commit',authorName:'Alex',authoredAt:'2026-10-03T00:00:00Z'}]});}
@@ -41,7 +43,8 @@ async function fixture(page:Page){
   if(method==='GetIssue')return respond(route,GetIssueResponseSchema,{issue:{id:'3',number:1,title:state.title,state:IssueState.OPEN,user,createdAt:'2026-10-03T00:00:00Z'}});
   if(method==='ListIssueComments')return respond(route,ListIssueCommentsResponseSchema,{});
   if(method==='ListIssues')return respond(route,ListIssuesResponseSchema,{issues:[{id:'3',number:1,title:state.title,state:IssueState.OPEN,user,createdAt:'2026-10-03T00:00:00Z'}]});
-  return reject(route,'not_found','Unimplemented fixture method.');
+  if(['GetDiscussionEngagement','ListDiscussionTimeline'].includes(method))return reject(route,'unimplemented','Optional discussion fixture is unavailable.');
+  return reject(route,'not_found',`Unimplemented fixture method: ${method}.`);
  });return state;
 }
 
@@ -69,7 +72,7 @@ test('live issue changes revalidate access without discarding an open private dr
  await page.getByRole('button',{name:'Add a comment',exact:true}).click();await page.getByLabel('Comment, plain text',{exact:true}).fill('Unsent private draft');
  state.title='Updated issue title';state.topics=['issues'];state.cursor++;
  await expect(page.getByRole('heading',{name:'Updated issue title #1'})).toBeVisible();await expect(page.getByLabel('Comment, plain text',{exact:true})).toHaveValue('Unsent private draft');
- state.denied=true;await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByLabel('Comment, plain text',{exact:true})).toHaveCount(0);
+ state.denied=true;await expect(page.getByRole('alert').filter({hasText:'Repository access removed'})).toBeVisible();await expect(page.getByLabel('Comment, plain text',{exact:true})).toHaveCount(0);
 });
 
 
@@ -97,6 +100,22 @@ test('PR commit pages remain pinned across pull activity and only move after exp
  await expect(page.getByRole('link',{name:'Pinned private commit',exact:true})).toHaveAttribute('href',`/alex/demo/commit/${state.pullHead}`);
  state.denied=true;await expect(page.getByRole('alert')).toContainText('Repository access removed');
  await expect(page.getByRole('link',{name:'Pinned private commit',exact:true})).toHaveCount(0);
+});
+
+test('returning to a PR check tab resumes authorized live updates without moving its selected commit',async({page})=>{
+ const state=await fixture(page);await page.goto('/alex/demo/pull/1/checks');
+ await expect(page.getByRole('cell',{name:'Pending',exact:true})).toBeVisible();
+ await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});document.dispatchEvent(new Event('visibilitychange'));});
+ await expect(page.getByText('Reconnecting…',{exact:true})).toBeVisible();
+ const reads=state.pullReads,cursors=state.cursors.length;
+ state.pullHead='c'.repeat(40);
+ await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'));});
+ await expect.poll(()=>state.cursors.length).toBeGreaterThan(cursors+1);
+ expect(state.pullReads).toBe(reads);
+ await expect(page.locator('.panel-actions code')).toHaveAttribute('title',head);
+ state.denied=true;await expect(page.getByRole('alert')).toContainText('Repository access removed');
+ await expect(page.getByRole('cell',{name:'Pending',exact:true})).toHaveCount(0);
 });
 
 
@@ -187,4 +206,22 @@ test('live cursor cannot regress a positive observation to zero',async({page})=>
  await expect.poll(()=>state.cursors).toContain('1');state.eventCursor='0';
  await expect(page.getByRole('button',{name:'Reconnect live updates',exact:true})).toBeVisible();
  expect(state.cursors.slice(1).every(value=>value==='1')).toBe(true);
+});
+
+test('hidden tabs stop live requests and resume their last authorized cursor without moving source',async({page})=>{
+ const state=await fixture(page);await page.goto('/alex/demo');await expect(page.getByText('Live',{exact:true})).toBeVisible();await expect(page.locator('.source-tree')).toBeVisible();
+ await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});document.dispatchEvent(new Event('visibilitychange'));});
+ await expect(page.getByText('Reconnecting…',{exact:true})).toBeVisible();
+ const paused=state.cursors.length;await page.waitForTimeout(500);expect(state.cursors).toHaveLength(paused);
+ state.cursor=2;state.topics=['source'];
+ await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'));});
+ await expect(page.getByRole('status').filter({hasText:'This source snapshot stays pinned'})).toBeVisible();
+ expect(state.cursors[paused]).toBe('1');await expect(page.locator('.source-tree')).toBeVisible();
+});
+
+test('live resource changes refresh an open label inventory without reloading source',async({page})=>{
+ const state=await fixture(page);await page.goto('/alex/demo/issues');await page.getByRole('button',{name:'Labels',exact:true}).click();
+ const panel=page.getByRole('region',{name:'labels administration'});await expect(panel).toContainText('Original label');await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ const reads=state.labelReads,sources=state.sources;state.labelName='Renamed externally';state.topics=['issues','pulls'];state.cursor++;
+ await expect(panel).toContainText('Renamed externally');expect(state.labelReads).toBeGreaterThan(reads);expect(state.sources).toBe(sources);
 });

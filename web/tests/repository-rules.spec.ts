@@ -1,19 +1,22 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
-import { GetSessionResponseSchema, GetRepositoryAccessResponseSchema, GetRepositoryRulesRequestSchema, GetRepositoryRulesResponseSchema, MutateRepositoryRulesRequestSchema, MutateRepositoryRulesResponseSchema, GetRepositoryRuleMutationResponseSchema, type MutateRepositoryRulesRequest, type RepositoryRuleMutation, type GetRepositoryRulesResponse } from '../src/gen/golf/v1/golf_pb';
+import { ListCapabilitiesResponseSchema, GetSessionResponseSchema, GetRepositoryAccessResponseSchema, GetRepositoryRulesRequestSchema, GetRepositoryRulesResponseSchema, MutateRepositoryRulesRequestSchema, MutateRepositoryRulesResponseSchema, GetRepositoryRuleMutationResponseSchema, type MutateRepositoryRulesRequest, type RepositoryRuleMutation, type GetRepositoryRulesResponse } from '../src/gen/golf/v1/golf_pb';
 import { create, clone } from '@bufbuild/protobuf';
 import { reject, request, respond } from './rpc';
 const timestamp = '2026-10-04T00:00:00Z';
 const initial = create(GetRepositoryRulesResponseSchema, { repositoryId: '9007199254740993', ownerId: '42', accessRevision: 'a'.repeat(64), rulesRevision: 'b'.repeat(64), branchProtections: [{ ruleName: 'release/**', priority: '-2', requiredApprovals: '9007199254740993', statusCheckContexts: ['test / matrix-a'], enableStatusCheck: true, requireSignedCommits: true, blockAdminMergeOverride: true, pushUsernames: ['alice'], protectedFilePatterns: '.github/workflows/**', createdAt: timestamp, updatedAt: timestamp }, { ruleName: 'main', priority: '10', requiredApprovals: '1', enablePush: true, createdAt: timestamp, updatedAt: timestamp }], tagProtections: [{ id: '9007199254740994', namePattern: 'v*', allowedUsernames: ['alice'], createdAt: timestamp, updatedAt: timestamp }], mergeConfiguration: { allowMergeCommits: true, allowSquashMerge: true, defaultMergeStyle: 'squash', defaultUpdateStyle: 'merge' } });
-async function backend(page: Page, main = false, deniedAccess = false, canManage = false) {
+async function backend(page: Page, main = false, deniedAccess = false, canManage = false, native = false) {
  const state = { response: initial, denied: false, calls: 0, barrier: undefined as Promise<void> | undefined, posts: [] as MutateRepositoryRulesRequest[], statusReads: 0, receipt: undefined as RepositoryRuleMutation | undefined, reads: [] as unknown[] };
  await page.route('**/rpc/**', async route => {
   const method = route.request().url().split('/').at(-1);
+  if(main && method === 'ListCapabilities') return respond(route,ListCapabilitiesResponseSchema,native?{runtimeProfile:'cloudflare-native',capabilities:[{id:'settings.repository-rules',state:3,label:'Repository rules',reason:'Git broker enforcement'}]}:portableRuntimeFixture);
   if(main && method === 'GetSession') return respond(route, GetSessionResponseSchema, {user:{id:'42',login:'alice'}});
   if(main && method === 'GetRepositoryAccess') { if(deniedAccess) return reject(route,'permission_denied','Current repository access is unavailable.'); return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:initial.repositoryId,ownerId:initial.ownerId,owner:{id:'42',login:'alice'},revision:initial.accessRevision,currentPermission:'owner',canManage}}); }
   if (method === 'MutateRepositoryRules') {
    const input = request(route, MutateRepositoryRulesRequestSchema); state.posts.push(input);
    expect(input).toMatchObject({ repository: { owner: 'alice', name: 'example' }, repositoryId: initial.repositoryId, ownerId: initial.ownerId, expectedAccessRevision: initial.accessRevision, expectedRulesRevision: state.response.rulesRevision });
    const current = clone(GetRepositoryRulesResponseSchema, state.response); current.rulesRevision = 'e'.repeat(64);
+   if (input.desiredBranch) current.branchProtections.push({...input.desiredBranch,createdAt:timestamp,updatedAt:timestamp});
    if (input.desiredTag) current.tagProtections.push({ ...input.desiredTag, id: '53', createdAt: timestamp, updatedAt: timestamp });
    state.response = current;
    const response = create(MutateRepositoryRulesResponseSchema, { operation: { operationId: input.operationId, actorId: main ? '42' : '17', repository: input.repository, repositoryId: input.repositoryId, ownerId: input.ownerId, action: input.action, expectedAccessRevision: input.expectedAccessRevision, expectedRulesRevision: input.expectedRulesRevision, inputFingerprint: 'd'.repeat(64), phase: 'SUCCEEDED', observedRulesRevision: current.rulesRevision, createdAt: timestamp, updatedAt: timestamp }, currentRules: current }); state.receipt = response.operation; return respond(route, MutateRepositoryRulesResponseSchema, response);
@@ -106,4 +109,30 @@ for (const failure of ['denied', 'malformed'] as const) test(`verified success r
 for (const action of ['Fixture sign out', 'Fixture target refresh', 'Fixture switch account'] as const) test(`own verified refresh ${action} clears private receipt before a late inventory response`, async ({ page }) => {
  const state = await backend(page); await open(page); const before = state.calls; let release!: () => void; state.barrier = new Promise<void>(resolve => release = resolve); await saveProductTag(page); await expect.poll(() => state.calls).toBe(before + 1); await page.getByRole('button', { name: action, exact: true }).click(); release(); await expect(page.getByText('SUCCEEDED', { exact: true })).toHaveCount(0); await expect(page.getByText('Historical verified readback; current configuration may change independently.', { exact: true })).toHaveCount(0); expect(state.posts).toHaveLength(1); expect(state.statusReads).toBe(0);
  if (action === 'Fixture target refresh') { await page.getByRole('button', { name: action, exact: true }).click(); await expect(page.getByText('Status not inspected', { exact: true })).toBeVisible(); await expect(page.getByText('SUCCEEDED', { exact: true })).toHaveCount(0); expect(state.posts).toHaveLength(1); expect(state.statusReads).toBe(0); }
+});
+
+for (const width of [390, 1440]) test(`Cloudflare rules route ${width} exposes enforced controls and saves through shared contracts`, async ({page}) => {
+ const state=await backend(page,true,false,true,true);
+ state.response=copy(r=>{r.branchProtections=[];r.tagProtections=[];r.mergeConfiguration!.allowMergeCommits=false;r.mergeConfiguration!.allowSquashMerge=false;r.mergeConfiguration!.defaultMergeStyle='merge';});
+ await page.setViewportSize({width,height:1000});await page.goto('/alice/example/settings/rules');
+ await expect(page.getByRole('heading',{name:'Configure rules',exact:true})).toBeVisible();
+ if(width===390) await expect(page.getByRole('combobox',{name:'Settings section',exact:true})).toBeVisible();
+ else await expect(page.getByRole('navigation',{name:'Repository settings',exact:true})).toHaveCount(1);
+ await expect(page.getByRole('button',{name:'Edit merge configuration'})).toHaveCount(0);
+ await page.getByRole('button',{name:'Branch rule',exact:true}).click();
+ await expect(page.getByLabel('Required approvals',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('Advanced protection configuration',{exact:true})).toHaveCount(0);
+ await page.getByLabel('Branch pattern',{exact:true}).fill('release/*');
+ await page.getByRole('button',{name:'Save configuration',exact:true}).click();
+ await expect(page.getByText('SUCCEEDED',{exact:true})).toBeVisible();
+ expect(state.posts[0]).toMatchObject({ruleName:'release/*',desiredBranch:{ruleName:'release/*',priority:'1',requiredApprovals:'0',blockAdminMergeOverride:true,enablePush:false,enableForcePush:false,enableStatusCheck:false,blockOnRejectedReviews:false}});
+ await expect(page.getByRole('table',{name:'Branch protection rules',exact:true})).toContainText('release/*');
+ await page.getByRole('button',{name:'Tag rule',exact:true}).click();
+ await expect(page.getByLabel('Allowed teams (organization repositories only)',{exact:true})).toHaveCount(0);
+ await page.getByLabel('Tag pattern',{exact:true}).fill('frozen*');
+ await page.getByRole('button',{name:'Save configuration',exact:true}).click();
+ await expect.poll(()=>state.posts.length).toBe(2);
+ expect(state.posts[1]).toMatchObject({desiredTag:{namePattern:'frozen*',allowedUsernames:[],allowedTeams:[]}});
+ await expect(page.getByRole('table',{name:'Tag protection rules',exact:true})).toContainText('frozen*');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });

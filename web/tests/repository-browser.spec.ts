@@ -1,8 +1,9 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
-  ResolveRepositorySourceRequestSchema, RepositorySourceRefKind, GetAuthenticationOptionsResponseSchema, GetRepositoryImageRequestSchema, GetRepositoryImageResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
+  GetRepositoryAccessResponseSchema, GetDiscussionEngagementResponseSchema, ListDiscussionTimelineResponseSchema, ResolveRepositorySourceRequestSchema, RepositorySourceRefKind, GetAuthenticationOptionsResponseSchema, GetRepositoryImageRequestSchema, GetRepositoryImageResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
   GetSessionResponseSchema, GetRepositoryStarResponseSchema, IssueSchema, IssueState, ListBranchesRequestSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema,
   ListCommitsRequestSchema, ListCommitsResponseSchema, ListTagsRequestSchema, ListTagsResponseSchema, ListIssueCommentsResponseSchema, ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema,
   LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntrySchema, SourceEntryType, UserSchema,
@@ -40,9 +41,12 @@ async function backend(page: Page) {
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (method === 'GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user }) : error(401, 'Sign in required.');
     if (!state.signedIn) return error(401, 'Your session expired.');
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { capabilities: [] });
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
+    if (method === 'WatchRepository') return reject(route, 'unimplemented', 'Live activity is tested in repository-live.spec.ts.');
+    if (method === 'GetRepositoryOverview') return reject(route, 'unimplemented', 'Overview is tested in repository-sidebar.spec.ts.');
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepositoryStar') return respond(route,GetRepositoryStarResponseSchema,{preference:{repository:{owner:'alex',name:'design-system'},repositoryId:repository.id,ownerId:user.id,nativeUserId:user.id,starred:false}});
+    if (method === 'GetRepositoryAccess') return state.metadataStatus===200 ? respond(route, GetRepositoryAccessResponseSchema, {access:{repositoryId:repository.id}}) : error(state.metadataStatus,'Repository not found or inaccessible.');
     if (method === 'GetRepository') return state.metadataStatus === 200 ? respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty, issuesEnabled: state.issuesEnabled, pullRequestsEnabled: state.pullRequestsEnabled } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, request(route, ListBranchesRequestSchema).page?.page === 2 ? { branches: [{ name: 'feature/UI', commitId: feature }] } : { branches: [{ name: 'main', commitId: head, protected: true }], page: { nextPage: 2 } });
     if(method==='GetRepositoryImage') { const image=request(route,GetRepositoryImageRequestSchema);return respond(route,GetRepositoryImageResponseSchema,{repositoryId:repository.id,commitId:image.commitId,documentPath:image.documentPath,imageUrl:image.imageUrl,mediaType:'image/svg+xml',content:new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 30"><path fill="green" d="M0 0h100v30H0z"/><script>window.executed=true</script><image href="https://tracker.invalid/pixel"/></svg>')});}
@@ -69,6 +73,8 @@ async function backend(page: Page) {
       const sha = input.ref === feature ? feature : head;
       return respond(route, ListCommitsResponseSchema, input.page?.page === 2 ? { commits: [{ sha: older, message: 'Initial repository', authorName: 'Alex', authoredAt: '2026-09-30T12:00:00Z' }] } : { commits: [{ sha, message: 'Improve keyboard navigation\n\nKeep focus visible everywhere.', authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' }], page: { nextPage: 2 } });
     }
+    if(method==='GetDiscussionEngagement')return respond(route,GetDiscussionEngagementResponseSchema,{});
+    if(method==='ListDiscussionTimeline')return respond(route,ListDiscussionTimelineResponseSchema,{});
     if (method === 'ListIssueComments') return respond(route, ListIssueCommentsResponseSchema, {});
     if (method === 'ListIssues' || method === 'GetIssue') {
       if (state.issueStatus !== 200) return error(state.issueStatus, state.issueStatus === 403 ? 'Issue browsing requires read:issue.' : 'Issue not found or inaccessible.');
@@ -107,6 +113,8 @@ test('repository navigation pins snapshots, paginates branches, supports slash r
   expect(state.sourceRequests.filter((input) => input.path).every((input) => input.ref === head)).toBe(true);
   await page.locator('.branch-picker > summary').click();
   await page.getByRole('button', { name: 'Load more branches' }).click();
+  await expect(page.getByRole('searchbox',{name:'Search loaded branches',exact:true})).toBeFocused();
+  await expect(page.locator('.branch-picker')).toHaveAttribute('open','');
   await page.getByRole('link', { name: `feature/UI Listed at ${feature.slice(0, 12)}` }).click();
   await expect(page).toHaveURL(new RegExp('tree/feature/UI\\?refKind=branch&refName=feature%2FUI'));
   await expect(page.getByRole('link', { name: 'README.md File 128 B', exact: true })).toBeVisible();
@@ -169,6 +177,7 @@ test.describe('compact commit history', () => {
       ] } : { commits: [{ sha: head, message: 'First\n\n<script>private literal message</script>', authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' }, second], page: { nextPage: 2 } });
     });
     await page.goto('/alex/design-system/commits');
+    await expect(page.getByRole('heading',{name:'Commit history',exact:true})).toBeVisible();
     await expect(page.locator('.commit-date-group')).toHaveCount(1);
     await page.getByRole('button', { name: `Full commit message ${head.slice(0, 12)}` }).click();
     await expect(page.locator('.commit-message pre')).toHaveText('First\n\n<script>private literal message</script>');
@@ -389,18 +398,21 @@ test('README renders GFM, highlights code, pins relative links and blocks active
 });
 
  test('HTML logos, heading anchors and image bytes render safely without external browser requests',async({page})=>{
- const state=await backend(page);state.readme='<div align="center"><img src="logo.svg" alt="Example logo" height="150"></div>\n\n# Example\n\n## Install\n\n[Jump](#install)\n\n## Install\n';
+ const state=await backend(page);state.readme='<div align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="https://vite.dev/vite-light.svg"><source media="(prefers-color-scheme: light)" srcset="https://vite.dev/vite-dark.svg"><img src="https://vite.dev/vite-dark.svg" alt="Example logo" height="150"></picture></div>\n\n# Example\n\n## Install\n\n[Jump](#install)\n\n## Install\n';
  const external:string[]=[];page.on('request',r=>{if(r.url().includes('tracker.invalid'))external.push(r.url());});
  await page.goto(`/alex/design-system/tree/${head}`);
  const readme=page.getByRole('region',{name:'Repository README'});
  await expect(readme.getByRole('img',{name:'Example logo'})).toBeVisible();
  await expect(readme.getByRole('img',{name:'Example logo'})).toHaveAttribute('height','150');
+ await readme.getByRole('img',{name:'Example logo'}).evaluate((image:HTMLImageElement)=>image.decode());
+ expect(await readme.getByRole('img',{name:'Example logo'}).evaluate((image:HTMLImageElement)=>image.naturalWidth)).toBeGreaterThan(0);
+ await expect(readme.locator('source[srcset]')).toHaveCount(0);
  expect((await readme.getByRole('img',{name:'Example logo'}).boundingBox())?.height).toBe(150);
  await expect(readme.locator('.markdown-align-center')).toBeVisible();
  await expect(readme.locator('#user-content-install')).toBeVisible();await expect(readme.locator('#user-content-install-1')).toBeVisible();
  await expect(readme.getByRole('link',{name:'Jump'})).toHaveAttribute('href','#user-content-install');
  await expect(readme.locator('script,[onerror],iframe')).toHaveCount(0);expect(external).toEqual([]);expect(await page.evaluate(()=> 'executed' in window)).toBe(false);
- await expect(page.getByRole('navigation',{name:'Breadcrumb'})).toContainText('alex');
+ await expect(page.locator('.repository-context')).toHaveAttribute('aria-label','alex/design-system');
  });
 
 
@@ -487,6 +499,46 @@ for(const theme of ['dark','light'])for(const width of [1280,390])test(`source l
 test('path history rejects mismatched binding and denied source hides its actions',async({page})=>{
  const state=await backend(page);state.historyBinding=false;await page.goto(`/alex/design-system/commits/${head}/src/index.ts`);await expect(page.getByRole('alert')).toContainText('returned history does not match');await expect(page.getByRole('link',{name:'Exact file change',exact:true})).toHaveCount(0);
  state.historyBinding=true;state.historyStatus=404;await page.getByRole('button',{name:'Try again',exact:true}).click();await expect(page.getByRole('alert')).toContainText('History not found');state.sourceStatus=403;await page.goto(`/alex/design-system/blob/${head}/src/index.ts`);await expect(page.getByRole('alert')).toContainText('permission');await expect(page.getByLabel('Source actions',{exact:true})).toHaveCount(0);await expect(page.getByRole('link',{name:'History',exact:true})).toHaveCount(0);
+});
+
+test('cold source reads avoid duplicate metadata; cached returns still check access',async({page})=>{
+ const state=await backend(page);
+ await page.goto(`/alex/design-system/blob/${head}/src/index.ts`);
+ await expect(page.getByLabel('Plain text preview of index.ts')).toContainText('PRIVATE_SOURCE');
+ // Development StrictMode aborts and restarts the enclosing metadata query.
+ expect(state.methods.filter(method=>method==='GetRepository')).toHaveLength(2);
+ const reads=state.sourceRequests.length;
+ await page.getByRole('link',{name:'History',exact:true}).click();
+ await expect(page.getByRole('link',{name:'Exact file change',exact:true})).toBeVisible();
+ state.metadataStatus=404;
+ await page.getByRole('link',{name:'Back to source',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Repository not found or inaccessible');
+ await expect(page.getByLabel('Plain text preview of index.ts')).toHaveCount(0);
+ expect(state.sourceRequests).toHaveLength(reads);
+ expect(state.methods.filter(method=>method==='GetRepository').length).toBeGreaterThan(2);
+});
+
+for (const native of [false,true]) test(`returning to immutable file history reuses content after access verification and clears it on denial (${native?'native':'portable'})`,async({page})=>{
+ const state=await backend(page);
+ if(native) await page.route('**/rpc/golf.v1.CapabilityService/ListCapabilities',route=>respond(route,ListCapabilitiesResponseSchema,{...portableRuntimeFixture,runtimeProfile:'cloudflare-native'}));
+ const authorityMethod=native?'GetRepositoryAccess':'GetRepository';
+ await page.goto(`/alex/design-system/commits/${head}/src/index.ts`);
+ await expect(page.getByRole('link',{name:'Exact file change',exact:true})).toBeVisible();
+ const reads=state.historyRequests.length;
+ await page.getByRole('link',{name:'Back to source',exact:true}).click();
+ await expect(page.getByLabel('Plain text preview of index.ts')).toBeVisible();
+ const metadata=state.methods.filter(method=>method===authorityMethod).length;
+ await page.getByRole('link',{name:'History',exact:true}).click();
+ await expect(page.getByRole('link',{name:'Exact file change',exact:true})).toBeVisible();
+ expect(state.historyRequests).toHaveLength(reads);
+ expect(state.methods.filter(method=>method===authorityMethod).length).toBeGreaterThan(metadata);
+ await page.getByRole('link',{name:'Back to source',exact:true}).click();
+ await expect(page.getByLabel('Plain text preview of index.ts')).toBeVisible();
+ state.metadataStatus=404;
+ await page.getByRole('link',{name:'History',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Repository not found or inaccessible');
+ await expect(page.getByRole('link',{name:'Exact file change',exact:true})).toHaveCount(0);
+ expect(state.historyRequests).toHaveLength(reads);
 });
 
 test('invalid line fragments and empty/large preview limits',async({page})=>{

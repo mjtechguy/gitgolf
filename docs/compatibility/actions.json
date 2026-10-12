@@ -1,0 +1,432 @@
+{
+  "format": "golf.compatibility.catalog.v1",
+  "profile": "actions-act-v0.2.89-linux",
+  "reference": "profile.json#actions",
+  "features": [
+    {
+      "id": "workflow.directories",
+      "packet": "F1",
+      "state": "runtime-tested",
+      "tests": [
+        "internal/server/workflow_directories_test.go"
+      ],
+      "limitations": [
+        "First existing configured .forgejo/.gitea/.github directory, direct literal files only. Forgejo uses its explicit three-directory profile; legacy order stays unchanged. Owned manual/signed-push proof and Forgejo shell dispatch; nested/custom locations and retained deployment remain unqualified."
+      ],
+      "native_evidence": [
+        "docs/compatibility/evidence/native-gitea-paths.json",
+        "docs/compatibility/evidence/forgejo-local.json"
+      ],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/native-gitea-paths.json",
+        "docs/compatibility/evidence/forgejo-local.json",
+        "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "source.exact_objects",
+      "packet": "A1",
+      "state": "runtime-tested",
+      "tests": [
+        "internal/server/workflow_source_test.go",
+        "cmd/golf-runner/git_execution_test.go",
+        "internal/server/runner_git_source_capability_test.go",
+        "internal/server/runner_git_source_test.go",
+        "engines/act/git_source_test.go"
+      ],
+      "limitations": [
+        "Exact-H/depth1: trusted preparation v0 and genuine action checkout bounded v2, independently verified native source/tree/workflow; no retained rollout. Full history/tags/sparse/submodule/LFS remain unavailable."
+      ],
+      "native_evidence": [
+        "docs/compatibility/evidence/native-gitea-paths.json",
+        "docs/compatibility/evidence/native-historical-git.json"
+      ],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/native-gitea-paths.json",
+        "docs/compatibility/evidence/native-historical-git.json",
+        "docs/compatibility/evidence/actual-git-engine.json",
+        "docs/compatibility/evidence/requests-local.json",
+        "docs/compatibility/evidence/requests-review-20261011.json",
+        "docs/compatibility/evidence/requests-forgejo-deep-20261011.json",
+        "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "graph.needs_static_matrix",
+      "packet": "A3",
+      "state": "source-tested",
+      "tests": [
+        "engines/act/profile_test.go"
+      ],
+      "limitations": [
+        "Bounded static matrices with fail-fast=false and independent instances; dynamic matrices/aggregate outputs remain missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "manual.typed_inputs",
+      "packet": "A5",
+      "state": "source-tested",
+      "tests": [
+        "engines/act/profile_test.go"
+      ],
+      "limitations": [
+        "Separate v2 manual input catalog; push on input-declaring workflows stays refused."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "actions.local_composite",
+      "packet": "A2",
+      "state": "source-tested",
+      "tests": [
+        "engines/act/profile_test.go"
+      ],
+      "limitations": [
+        "Bounded local composites in legacy catalogs; the separate remote catalog admits only operator-cached public Node24 actions."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "events.manual_literal_push",
+      "packet": "A5",
+      "state": "runtime-tested",
+      "tests": [
+        "internal/server/workflow_execution_test.go"
+      ],
+      "limitations": [
+        "Owned input-free two-job manual and default-branch signed push; exact path/source/grant binding and zero duplicate triggers. PR/tag/glob/path/reuse and retained deployment remain unqualified."
+      ],
+      "native_evidence": [
+        "docs/compatibility/evidence/native-gitea-paths.json"
+      ],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/native-gitea-paths.json",
+        "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "attempt.fences_cancellation",
+      "packet": "O1",
+      "state": "runtime-tested",
+      "tests": [
+        "internal/server/runner_transport_test.go",
+        "scripts/compatibility/requests-proof.py"
+      ],
+      "limitations": [
+        "Actual running cancellation, failed command, timeout and exact-owned teardown in the remote profile; historical worker-death proof is separate. Broader fault/multitenant matrix remains open."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/native-gitea-paths.json",
+        "docs/compatibility/evidence/requests-local.json",
+        "docs/compatibility/evidence/requests-review-20261011.json",
+        "docs/compatibility/evidence/requests-forgejo-deep-20261011.json",
+        "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "source.full_checkout",
+      "packet": "A1",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Genuine exact-H/depth1 checkout now passes in the remote profile. Full history/tags/sparse/submodule/LFS checkout remains missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "workspace.disk_quota",
+      "packet": "A1",
+      "state": "runtime-tested",
+      "tests": [
+        "cmd/golf-runner/git_execution_test.go",
+        "scripts/actions-git-source-smoke.py",
+        "scripts/actions-two-job-smoke.py"
+      ],
+      "limitations": [
+        "Opt-in Git source jobs only: read-only root and fixed byte/inode tmpfs bounds. Actual exhaustion/cancellation/lost-create/worker-death recovery; legacy archive jobs retain their prior storage profile."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/actual-git-engine.json",
+        "docs/compatibility/evidence/native-historical-git.json",
+        "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "actions.remote_resolution",
+      "packet": "A2",
+      "state": "runtime-tested",
+      "tests": [
+        "internal/runner/action_bundles.go",
+        "engines/act/remote_actions_test.go",
+        "scripts/compatibility/acquire-actions.py"
+      ],
+      "limitations": [
+        "Operator-acquired public full-commit bundles, native Git tree/commit reconstruction and frozen execution identities. Private actions, floating refs, nested remote dependencies and source-selected resolution remain refused."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/requests-local.json",
+        "docs/compatibility/evidence/requests-review-20261011.json",
+        "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "actions.javascript_node24",
+      "packet": "A2",
+      "state": "runtime-tested",
+      "tests": [
+        "engines/act/remote_actions_test.go",
+        "engines/act/execute_test.go"
+      ],
+      "limitations": [
+        "Genuine checkout and setup-python Node24 main/post phases on the approved Linux/amd64 Ubuntu image. This fixture has no pre phase; broad command-file and lifecycle parity remains unqualified."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/requests-local.json",
+        "docs/compatibility/evidence/requests-review-20261011.json",
+        "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "actions.checkout",
+      "packet": "A2",
+      "state": "runtime-tested",
+      "tests": [
+        "cmd/golf-runner/job_git_test.go",
+        "internal/server/job_git_capability_test.go",
+        "internal/server/runner_git_source_test.go"
+      ],
+      "limitations": [
+        "Actual private exact-H/depth1 checkout using scoped short-lived read-only job Git capsules, different TLS control/public origins and bounded v2 service advertisement. Long-step refresh and broader checkout inputs remain unsupported."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/requests-local.json",
+        "docs/compatibility/evidence/requests-review-20261011.json",
+        "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "network.dependency_egress",
+      "packet": "A2",
+      "state": "runtime-tested",
+      "tests": [
+        "internal/runner/dependency_access_test.go",
+        "internal/runner/dependency_firewall.go",
+        "scripts/compatibility/requests-proof.py"
+      ],
+      "limitations": [
+        "Authenticated HTTPS CONNECT to selected public GitHub/PyPI ecosystem hosts; DNS public-address checks and pinned dialing, owned IPv4/IPv6 firewall. Actual private/metadata/other-host/direct-egress refusal plus public downloads. Aggregate byte quotas and denied-request audit remain open."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/requests-local.json",
+        "docs/compatibility/evidence/requests-review-20261011.json",
+        "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "graph.dynamic_matrix",
+      "packet": "A3",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Dynamic matrix, aggregate outputs, fail-fast and max-parallel are not qualified."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "graph.continue_on_error",
+      "packet": "A3",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Outcome/conclusion propagation is not qualified."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "expressions.full_contexts",
+      "packet": "A3",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Provider/token/vars/runner contexts remain bounded or rejected."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "controls.permissions_timeout_concurrency",
+      "packet": "A3",
+      "state": "runtime-tested",
+      "tests": [
+        "engines/act/remote_actions_test.go",
+        "scripts/compatibility/requests-proof.py"
+      ],
+      "limitations": [
+        "Remote catalog accepts contents:read only, enforces job timeout (actual one-minute cutoff), and cancellation. Provider-wide permission intersection, concurrency groups and full controls parity remain missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/requests-local.json",
+        "docs/compatibility/evidence/requests-review-20261011.json",
+        "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    },
+    {
+      "id": "services.containers_docker_actions",
+      "packet": "A4",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Source-selected services/container options are refused; isolation and health/network proof are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "services.artifacts_cache",
+      "packet": "A4",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Golf object endpoints do not implement upstream action protocols."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "tokens.job_api_oidc",
+      "packet": "A4",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Truthful Golf OIDC and selected GitHub API token endpoint contracts are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "deployment.environments",
+      "packet": "A4",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Protected environment/deployment approval requires exact artifact/source authority."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "events.pull_requests_filters",
+      "packet": "A5",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "PR/fork contexts and provider glob/path filters are missing; Requests requires pull_request."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "events.schedules_chaining_merge_group",
+      "packet": "A5",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Schedules, chaining, merge-group candidate contexts remain missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "workflows.reusable",
+      "packet": "A5",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Local/remote reusable workflows and narrowed permission/secret propagation are missing."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "attempts.rerun_failed_jobs",
+      "packet": "A5",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Explicit causal reruns/failed-job reruns need new admitted attempts."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "platform.windows_macos",
+      "packet": "A5",
+      "state": "missing",
+      "tests": [],
+      "limitations": [
+        "Only bounded Linux profiles exist; no qualified Windows/macOS pools."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [],
+      "deployment_evidence": []
+    },
+    {
+      "id": "source.requests_unchanged",
+      "packet": "A2",
+      "state": "runtime-tested",
+      "tests": [
+        "engines/act/compatibility_test.go",
+        "scripts/compatibility/requests-proof.py"
+      ],
+      "limitations": [
+        "Exact pinned original bytes succeed through sponsor-authored signed push with genuine actions and nine pre-commit checks. Declared pull_request remains unchanged but actual PR/fork execution is missing. Linux/amd64 only; no retained deployment."
+      ],
+      "native_evidence": [],
+      "runtime_evidence": [
+        "docs/compatibility/evidence/requests-local.json",
+        "docs/compatibility/evidence/requests-review-20261011.json",
+        "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
+      ],
+      "deployment_evidence": []
+    }
+  ]
+}

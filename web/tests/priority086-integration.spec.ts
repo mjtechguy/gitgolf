@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import {test,expect,type Page} from '@playwright/test';
 import {create,toBinary} from '@bufbuild/protobuf';
 import {createHash} from 'node:crypto';
@@ -19,7 +20,7 @@ async function fixture(page:Page){
   if(method==='LoginWithPassword'){s.signed=true;s.user='18';return respond(route,p.LoginWithPasswordResponseSchema,{user:{id:'18',login:'bob'}})}
   if(!s.signed)return reject(route,'unauthenticated','Signed out.');
   switch(method){
-   case'ListCapabilities':return respond(route,p.ListCapabilitiesResponseSchema,{});
+   case'ListCapabilities':return respond(route,p.ListCapabilitiesResponseSchema, portableRuntimeFixture);
    case'ListRepositories':return respond(route,p.ListRepositoriesResponseSchema,{repositories:[repository]});
    case'ListOrganizations':return respond(route,p.ListOrganizationsResponseSchema,{});
    case'GetOrganization':return respond(route,p.GetOrganizationResponseSchema,{organization:{id:'23',name:'team',visibility:3}});
@@ -52,7 +53,7 @@ async function fixture(page:Page){
  });return s;
 }
 const providers=(page:Page)=>page.getByRole('table',{name:'provider connections',exact:true});
-async function signOut(page:Page){await page.locator('.account-menu summary').click();await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.getByRole('heading',{name:'Welcome to Golf',exact:true})).toBeVisible()}
+async function signOut(page:Page){await page.getByLabel('Your account',{exact:true}).click();await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.getByRole('heading',{name:'Welcome to Golf',exact:true})).toBeVisible()}
 async function importPreview(page:Page){await page.goto('/');await page.getByRole('button',{name:'New connected import'}).click();await page.getByLabel('Connection',{exact:true}).selectOption(connectionId);await page.getByLabel('Exact source project URL').fill('https://github.com/source-owner/private-project');await page.getByLabel('Private destination name').fill('imported-demo');await page.getByRole('button',{name:'Preview exact project'}).click();await expect(page.getByRole('button',{name:'Review import',exact:true})).toBeEnabled()}
 async function packageEditor(page:Page){await page.goto('/alex/demo/packages');await page.getByRole('button',{name:'Publish new generic package'}).click();await page.getByLabel('Fresh package name').fill('fresh-package');await page.getByLabel('File, at most 256 KiB').setInputFiles({name:'hello.txt',mimeType:'text/plain',buffer:Buffer.from('hello')});await page.getByLabel("I acknowledge that this owner's package namespace").check()}
 

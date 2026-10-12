@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect,test,type Locator,type Page,type Route } from '@playwright/test';
 
 // Read xterm's own screen-reader rows, excluding only blank viewport padding.
@@ -24,7 +25,7 @@ async function backend(page:Page){
   }
   if(method==='GetRepositoryStar')return reject(route,'unimplemented','Optional stars fixture unavailable.');
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'42',login:'alex'}});
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:'11',name:'demo',fullName:'alex/demo',private:true,defaultBranch:'main'}});
   if(method==='ListAgentTasks')return disabledAgentTasks(route);

@@ -21,7 +21,7 @@ func run() error {
 		return errors.New("invalid engine command")
 	}
 	input := bufio.NewReaderSize(os.Stdin, 64<<10)
-	line, err := readLine(input, 24<<20)
+	line, err := readLine(input, 64<<20)
 	if err != nil {
 		return err
 	}
@@ -50,19 +50,30 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return engine.Execute(ctx, req, func(event protocol.ActionFrame) error {
-		if json.NewEncoder(os.Stdout).Encode(event) != nil {
-			return errors.New("engine observation refused")
-		}
-		line, err := readLine(input, 128)
-		if err != nil {
-			return err
-		}
+	exchange := func(event protocol.ActionFrame) (protocol.ActionAck, error) {
 		var ack protocol.ActionAck
-		if decode(line, &ack) != nil || ack.Sequence != event.Sequence {
-			return errors.New("engine observation refused")
+		if json.NewEncoder(os.Stdout).Encode(event) != nil {
+			return ack, errors.New("engine observation refused")
 		}
-		return nil
+		bound := 128
+		if event.Kind == "job_git_credential" && req.JobGit != nil {
+			bound = 8192
+		}
+		line, err := readLine(input, bound)
+		if err != nil {
+			return ack, err
+		}
+		if decode(line, &ack) != nil || ack.Sequence != event.Sequence || (ack.JobGit != nil) != (event.Kind == "job_git_credential") {
+			return protocol.ActionAck{}, errors.New("engine observation refused")
+		}
+		return ack, nil
+	}
+	return engine.ExecuteAcknowledged(ctx, req, func(event protocol.ActionFrame) error {
+		_, err := exchange(event)
+		return err
+	}, func(event protocol.ActionFrame) (*protocol.JobGitCredential, error) {
+		ack, err := exchange(event)
+		return ack.JobGit, err
 	})
 }
 func readLine(r *bufio.Reader, max int) ([]byte, error) {

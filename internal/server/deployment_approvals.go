@@ -539,6 +539,9 @@ func (s *Server) activateRepositoryDeployment(ctx context.Context, r *connect.Re
 	if !proto.Equal(a, d.wire.Artifact) || site.ManifestSHA256 != d.wire.ManifestSha256 {
 		return nil, errDeployment
 	}
+	if e = s.qualifyCloudflarePreview(ctx, d); e != nil {
+		return nil, deploymentError(e)
+	}
 	h, _ := sessionHash(s.cookieValue(r.Header()))
 	e = s.deploymentFence(ctx, d, h, u.ID, func(tx *sql.Tx, current *deploymentRecord, deadline time.Time) error {
 		if current.wire.State == "READY" {

@@ -32,6 +32,7 @@ services:
       GITEA__security__ALLOWED_HOST_LIST: 'external,golf'
       GITEA__service__DISABLE_REGISTRATION: 'true'
       GITEA__actions__ENABLED: 'false'
+      GITEA__actions__WORKFLOW_DIRS: ${GOLF_GITEA_WORKFLOW_DIRS:-.gitea/workflows,.github/workflows}
     ports:
       - '127.0.0.1:3001:3000'
       - '127.0.0.1:2222:2222'
@@ -48,13 +49,15 @@ services:
       GOLF_PUSH_CI_ENABLED: ${GOLF_PUSH_CI_ENABLED:-false}
       GOLF_REPOSITORY_EVENT_CONNECTIONS: ${GOLF_REPOSITORY_EVENT_CONNECTIONS:-}
       GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:-http://localhost:8080}
-      GOLF_ALLOW_INSECURE_COOKIES: "true"
+      GOLF_DEPLOYMENT_RUNTIME: docker
+      GOLF_ALLOW_INSECURE_COOKIES: ${GOLF_ALLOW_INSECURE_COOKIES:-true}
       GOLF_WEB_DIR: /app/web/dist
       GOLF_ENCRYPTION_KEY: ${GOLF_ENCRYPTION_KEY:-}
       GOLF_ENCRYPTION_KEYS: ${GOLF_ENCRYPTION_KEYS:-}
       GOLF_ACTIVE_ENCRYPTION_KEY: ${GOLF_ACTIVE_ENCRYPTION_KEY:-}
       DATABASE_URL: postgres://golf:${GOLF_DB_PASSWORD:?Run scripts/init-env.sh}@postgres:5432/golf?sslmode=disable
       GITEA_URL: http://gitea:3000
+      GOLF_GITEA_WORKFLOW_DIRS: ${GOLF_GITEA_WORKFLOW_DIRS:-.gitea/workflows,.github/workflows}
       GITEA_PUBLIC_URL: ${GITEA_PUBLIC_URL:-}
       GITEA_OAUTH_CLIENT_ID: ${GITEA_OAUTH_CLIENT_ID:-}
       GITEA_OAUTH_CLIENT_SECRET: ${GITEA_OAUTH_CLIENT_SECRET:-}

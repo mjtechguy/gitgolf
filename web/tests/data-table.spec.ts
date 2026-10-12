@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import {
@@ -12,7 +13,7 @@ async function inventory(page: Page, count = 55) {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '17', login: 'owner', isInstanceAdmin: true } });
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListLocalAccounts') {
       const input = request(route, ListLocalAccountsRequestSchema);
       const number = input.page?.page || 1;

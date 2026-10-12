@@ -70,7 +70,7 @@ func (s *Server) oauthAvailable(ctx context.Context) bool {
 }
 func (s *Server) GetAuthenticationOptions(ctx context.Context, _ *connect.Request[golfv1.GetAuthenticationOptionsRequest]) (*connect.Response[golfv1.GetAuthenticationOptionsResponse], error) {
 	enabled := s.oauthAvailable(ctx)
-	return connect.NewResponse(&golfv1.GetAuthenticationOptionsResponse{GiteaOauthEnabled: enabled, ProviderLabel: "Gitea", LocalPasswordEnabled: s.db != nil, Scopes: append([]string(nil), oauthScopes...)}), nil
+	return connect.NewResponse(&golfv1.GetAuthenticationOptionsResponse{GiteaOauthEnabled: enabled, ProviderLabel: s.forgeLabel(), LocalPasswordEnabled: s.db != nil, Scopes: append([]string(nil), oauthScopes...)}), nil
 }
 func (s *Server) oauthCookie(value string, expires time.Time, maxAge int) *http.Cookie {
 	return &http.Cookie{Name: oauthCookieName, Value: value, Path: oauthCallbackPath, HttpOnly: true, Secure: !s.config.AllowInsecureCookies, SameSite: http.SameSiteLaxMode, Expires: expires, MaxAge: maxAge}

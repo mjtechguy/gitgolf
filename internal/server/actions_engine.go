@@ -42,6 +42,11 @@ func (s *Server) validateActionsEngineConfig() error {
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
 		return errors.New("Actions helper must be an installed executable")
 	}
+	if s.config.ActionsEngineCatalog == runner.ActionsRemoteCatalog {
+		if _, e := runner.ReadActionBundles(s.config.ActionsRemoteBundles); e != nil {
+			return errors.New("remote Actions require verified operator-acquired immutable bundles")
+		}
+	}
 	return nil
 }
 
@@ -67,6 +72,9 @@ func (s *Server) planActions(ctx context.Context, path, blob, event, ref string,
 	if s.config.ActionsEngineCatalog == runner.ActionsAgentCatalog {
 		input.Catalog = runner.ActionsAgentCatalog
 	}
+	if s.config.ActionsEngineCatalog == runner.ActionsRemoteCatalog {
+		input.Catalog = runner.ActionsRemoteCatalog
+	}
 	return s.planActionsInput(ctx, input)
 }
 
@@ -79,11 +87,21 @@ func (s *Server) planActionsManual(ctx context.Context, path, blob, ref string, 
 }
 
 func (s *Server) planActionsInput(ctx context.Context, input runner.ActionPlanInput) (*runner.ActionPlan, error) {
+	if input.Catalog == runner.ActionsRemoteCatalog {
+		if s.config.ActionsEngineCatalog != runner.ActionsRemoteCatalog {
+			return nil, errActionsEngine
+		}
+		var e error
+		input.RemoteActions, e = runner.ReadActionBundles(s.config.ActionsRemoteBundles)
+		if e != nil {
+			return nil, errActionsEngine
+		}
+	}
 	if !s.actionsEngineConfigured() || !runner.IsActionsCatalog(input.Catalog) || input.Catalog == runner.ActionsInputsCatalog && s.config.ActionsEngineCatalog != runner.ActionsInputsCatalog || input.Catalog == runner.ActionsAgentCatalog && (s.config.ActionsEngineCatalog != runner.ActionsAgentCatalog || !s.agentACPAvailable(ctx)) {
 		return nil, errActionsEngine
 	}
 	body, err := json.Marshal(input)
-	if err != nil || len(body) > 24<<20 {
+	if err != nil || len(body) > 64<<20 {
 		return nil, errActionsEngine
 	}
 	body = append(body, '\n')
@@ -140,6 +158,28 @@ func validateActionPlan(plan runner.ActionPlan, input runner.ActionPlanInput) er
 		deps[d.MetadataPath] = d.MetadataSHA256
 	}
 	encoded, _ := json.Marshal(deps)
+	if input.Catalog == runner.ActionsRemoteCatalog {
+		if len(plan.RemoteActions) != len(input.RemoteActions) {
+			return errActionsEngine
+		}
+		seen := map[string]bool{}
+		for _, identity := range plan.RemoteActions {
+			found := false
+			for _, bundle := range input.RemoteActions {
+				found = found || identity.Uses == bundle.Uses && identity.CommitID == bundle.CommitID && identity.ArchiveSHA256 == bundle.ArchiveSHA256 && bytes.HasPrefix(bundle.Commit, []byte("tree "+identity.TreeID+"\n"))
+			}
+			if !found || !actionSHA.MatchString(identity.MetadataSHA256) || seen[identity.Uses] {
+				return errActionsEngine
+			}
+			seen[identity.Uses] = true
+		}
+		encoded, _ = json.Marshal(struct {
+			Local  map[string]string             `json:"local"`
+			Remote []runner.ActionRemoteIdentity `json:"remote"`
+		}{deps, plan.RemoteActions})
+	} else if len(plan.RemoteActions) != 0 {
+		return errActionsEngine
+	}
 	if sourceArchiveHash(encoded) != plan.ActionsSHA256 {
 		return errActionsEngine
 	}
@@ -147,6 +187,9 @@ func validateActionPlan(plan runner.ActionPlan, input runner.ActionPlanInput) er
 	jobIDs := map[string]bool{}
 	steps := 0
 	for _, j := range plan.Jobs {
+		if j.TimeoutSeconds > 900 || j.TimeoutSeconds != 0 && (input.Catalog != runner.ActionsRemoteCatalog || j.TimeoutSeconds%60 != 0) {
+			return errActionsEngine
+		}
 		if !attemptIdentifier.MatchString(j.InstanceID) || ids[j.InstanceID] || !workflowJobID.MatchString(j.JobID) || !boundedActionLabel(j.Name) || len(j.Matrix) > 8 || len(j.Needs) > 8 || len(j.Steps) < 1 || len(j.Steps) > 32 {
 			return errActionsEngine
 		}

@@ -1,0 +1,46 @@
+{
+  "format": "golf.compatibility.report.v1",
+  "gitea_profile": "gitea-1.27.3",
+  "denominator": 482,
+  "assessed": 5,
+  "states": {
+    "blocked-upstream": 0,
+    "deployed": 0,
+    "missing": 2,
+    "native-tested": 2,
+    "runtime-tested": 0,
+    "source-tested": 1,
+    "unassessed": 477
+  },
+  "implemented_complete": 0,
+  "qualified_complete": 0,
+  "deployed_complete": 0,
+  "catalogs": {
+    "actions": {
+      "missing": 13,
+      "runtime-tested": 11,
+      "source-tested": 3
+    },
+    "connected": {
+      "missing": 15
+    },
+    "gitlab": {
+      "missing": 28,
+      "runtime-tested": 1
+    }
+  },
+  "protocols": {
+    "git": {
+      "unassessed": 4
+    },
+    "registry": {
+      "unassessed": 23
+    },
+    "webhook": {
+      "native-tested": 1,
+      "unassessed": 27
+    }
+  },
+  "full_compatibility": false,
+  "installed_spec_comparison": "Fresh owned Gitea 1.27.3 paths/definitions/security match; retained installation comparison still required."
+}

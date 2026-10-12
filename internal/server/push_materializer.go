@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/mjtechguy/golf-git/internal/runner"
 )
 
 var errPushQueueCapacity = errors.New("repository push queue capacity reached")
@@ -230,7 +229,7 @@ func (s *Server) preparePushMaterialization(ctx context.Context, m pushMateriali
 	run.SourceSHA256 = sourceArchiveHash(source)
 	run.EngineCatalog = workflowExecutionCatalog
 	if plan.Actions != nil {
-		run.EngineCatalog = runner.ActionsCatalog
+		run.EngineCatalog = plan.Actions.Catalog
 	}
 	approval, err := s.executionApprovalForSource(ctx, run)
 	if err != nil {

@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { test, expect, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListLocalAccountsResponseSchema, ListGolfUserAccessRequestSchema, ListGolfUserAccessResponseSchema, ChangeGolfUserAccessRequestSchema, ChangeGolfUserAccessResponseSchema, GetGolfUserAccessOperationRequestSchema, GetGolfUserAccessOperationResponseSchema, UserSchema, GolfUserAccessSchema } from '../src/gen/golf/v1/golf_pb';
@@ -9,7 +10,7 @@ async function backend(page: Page) {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.actor });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListLocalAccounts') return respond(route, ListLocalAccountsResponseSchema, {});
     if (method === 'ListGolfUserAccess') {
       const input = request(route, ListGolfUserAccessRequestSchema); state.reads.push(input.page?.page ?? 1);

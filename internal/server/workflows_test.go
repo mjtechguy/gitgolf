@@ -1,6 +1,8 @@
 package server
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
@@ -236,6 +238,19 @@ func newWorkflowFixture(t *testing.T) (*workflowFixture, loginResult) {
 			kinds[".github/workflows"] = "symlink"
 		}
 		objects := workflowSourceObjects(commit, files, kinds)
+		if r.URL.Path == base+"/archive/"+commit+".tar.gz" {
+			headers := []*tar.Header{{Name: "pax_global_header", Typeflag: tar.TypeXGlobalHeader, PAXRecords: map[string]string{"comment": commit}, Format: tar.FormatPAX}, {Name: "example/", Typeflag: tar.TypeDir}}
+			bodies := [][]byte{nil, nil}
+			for name, data := range files {
+				headers = append(headers, &tar.Header{Name: "example/" + name, Typeflag: tar.TypeReg, Mode: 0644})
+				bodies = append(bodies, []byte(data))
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			compressed := gzip.NewWriter(w)
+			compressed.Write(workflowRunTar(t, headers, bodies))
+			compressed.Close()
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, base+"/git/blobs/") {
 			f.contentReads.Add(1)
 			if mode == "wait" {
@@ -334,6 +349,10 @@ func TestWorkflowDiscoveryPostgres(t *testing.T) {
 	f.contentReads.Store(0)
 	if response := workflowRequest(f.s, session, "main"); response.Code != 429 || f.contentReads.Load() != 0 {
 		t.Fatal("aggregate size", response.Code)
+	}
+	var runs, grants int
+	if err := f.s.db.QueryRowContext(t.Context(), "SELECT (SELECT count(*) FROM golf_workflow_runs), (SELECT count(*) FROM golf_automation_grants)").Scan(&runs, &grants); err != nil || runs != 0 || grants != 0 {
+		t.Fatal("source discovery activated execution or created automation authority", err)
 	}
 }
 

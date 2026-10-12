@@ -62,7 +62,23 @@ func classifyExecution(stage string, err error) error {
 // acknowledgements are synchronous; a missing/refused durable acknowledgement
 // cancels execution and cannot be interpreted as a successful run.
 func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe func(protocol.ActionFrame) error) (err error) {
+	if input.JobGit != nil {
+		return ErrExecution
+	}
+	return ExecuteAcknowledged(ctx, input, observe, nil)
+}
+
+func ExecuteAcknowledged(ctx context.Context, input protocol.ActionExecutionInput, observe func(protocol.ActionFrame) error, credentials func(protocol.ActionFrame) (*protocol.JobGitCredential, error)) (err error) {
 	phase := "engine_input_validation"
+	if len(input.JobTLSCA) > 64<<10 || len(input.JobTLSCA) > 0 && (input.JobGit == nil || !validJobCA(input.JobTLSCA)) {
+		return ErrExecution
+	}
+	if input.DependencyAccess.Validate() != nil || input.DependencyAccess != nil && input.JobGit == nil {
+		return ErrExecution
+	}
+	if input.JobGit != nil && (input.JobGit.Validate() != nil || input.GitSource == nil || credentials == nil) {
+		return ErrExecution
+	}
 	defer func() { err = classifyExecution(phase, err) }()
 	limits := protocol.DefaultJobLimits()
 	if input.JobResources != nil {
@@ -84,6 +100,9 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	phase = "engine_plan_binding"
 	plan, native, files, err := admit(input.Input)
 	if err != nil || !reflect.DeepEqual(plan, input.Plan) {
+		return ErrExecution
+	}
+	if plan.Catalog == protocol.ActionsRemoteCatalog && (input.JobGit == nil || input.DependencyAccess == nil) {
 		return ErrExecution
 	}
 	if plan.Catalog == protocol.ActionsAgentCatalog {
@@ -171,6 +190,12 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 		if err = root.MkdirAll(filepath.Dir(name), 0755); err != nil {
 			return ErrExecution
 		}
+		if entry.mode == 0120000 {
+			if root.Symlink(string(entry.body), name) != nil {
+				return ErrExecution
+			}
+			continue
+		}
 		f, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.FileMode(entry.mode))
 		if err != nil {
 			return ErrExecution
@@ -199,6 +224,12 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 			}
 			continue
 		}
+		if entry.mode == 0120000 {
+			if copyRoot.Symlink(string(entry.body), name) != nil {
+				return ErrExecution
+			}
+			continue
+		}
 		f, e := copyRoot.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.FileMode(entry.mode))
 		if e != nil {
 			return ErrExecution
@@ -210,6 +241,9 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 		}
 	}
 	options := "--user=1000:1000 --security-opt=no-new-privileges " + strings.Join(limits.DockerOptions(), " ")
+	if gitSource != nil {
+		options += " --read-only --tmpfs=/tmp:" + jobTemporaryTmpfs
+	}
 	for _, dir := range protected {
 		options += " --mount=type=bind,source=" + workspace + "/" + dir + ",target=" + workspace + "/" + dir + ",readonly"
 	}
@@ -218,9 +252,53 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 		return ErrExecution
 	}
 	observer := &engineObserver{ctx: ctx, cancel: cancel, send: observe, plan: plan, resolved: resolved, prepared: map[string]bool{}, volumes: map[string]bool{}, started: map[string]bool{}, finished: map[string]bool{}, nativeResults: map[string]string{}, limits: limits, gitSource: gitSource}
+	observer.jobGit, observer.commit, observer.credentials = input.JobGit, input.CommitID, credentials
+	observer.contexts = map[string]*act.RunContext{}
+	observer.access = input.DependencyAccess
+	observer.jobTLSCA = input.JobTLSCA
 	logrus.SetOutput(io.Discard)
 	logrus.SetLevel(logrus.DebugLevel)
 	config := &act.Config{Actor: "unavailable", Workdir: workspace, EventName: input.Input.Event, EventPath: "/golf/event.json", Env: map[string]string{"SHA_REF": input.CommitID, "GITHUB_REF": input.Input.Ref, "GITHUB_RUN_ID": "unavailable", "GITHUB_RUN_NUMBER": "unavailable", "GITHUB_SERVER_URL": "urn:golf:platform-context-unavailable", "GITHUB_API_URL": "urn:golf:github-rest-unavailable", "GITHUB_GRAPHQL_URL": "urn:golf:github-graphql-unavailable"}, Platforms: resolved, GitHubInstance: "golf.invalid", ContainerDaemonSocket: "-", ContainerNetworkMode: "none", BindWorkdir: false, ActionOfflineMode: true, ForcePull: false, Privileged: false, AutoRemove: true, ConcurrentJobs: 2, ContainerCapDrop: []string{"ALL"}, ContainerOptions: options}
+	config.ContainerCopyViaExec = gitSource != nil
+	if plan.Catalog == protocol.ActionsRemoteCatalog {
+		remoteActions, e := admitRemoteActions(input.Input)
+		if e != nil {
+			return ErrExecution
+		}
+		config.ActionCache = immutableActionCache{actions: remoteActions}
+		for uses := range remoteActions {
+			parts := protocol.RemoteActionReference.FindStringSubmatch(uses)
+			config.ReplaceGheActionWithGithubCom = append(config.ReplaceGheActionWithGithubCom, parts[1]+"/"+parts[2])
+		}
+		config.Env["HOME"] = "/var/run/act/home"
+		config.Env["XDG_CACHE_HOME"] = "/var/run/act/home/.cache"
+		config.Env["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
+	}
+	if input.JobGit != nil {
+		config.Actor = input.JobGit.Actor
+		config.Env["GITHUB_SERVER_URL"] = input.JobGit.Origin
+		config.Env["GITHUB_REPOSITORY"] = input.JobGit.Repository
+		config.Env["GITHUB_REPOSITORY_OWNER"] = strings.Split(input.JobGit.Repository, "/")[0]
+		config.NoSkipCheckout = true
+	}
+	if input.DependencyAccess != nil {
+		config.ContainerNetworkMode = "bridge"
+		for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
+			config.Env[name] = input.DependencyAccess.ProxyURL()
+		}
+		config.Env["NO_PROXY"], config.Env["no_proxy"] = "", ""
+	}
+	if len(input.JobTLSCA) > 0 {
+		for _, key := range []string{"GIT_SSL_CAINFO", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "NODE_EXTRA_CA_CERTS"} {
+			config.Env[key] = "/var/run/act/home/ca.crt"
+		}
+	}
+	if gitSource != nil {
+		config.ContainerVolumeOptions = map[string]map[string]string{}
+		for _, destination := range []string{workspace, "/var/run/act", "/opt/hostedtoolcache"} {
+			config.ContainerVolumeOptions[destination] = jobVolumeOptionsProfile(destination, plan.Catalog == protocol.ActionsRemoteCatalog)
+		}
+	}
 	if err = applyRepositoryEnvironment(config, input.ExecutionEnvironment); err != nil {
 		return err
 	}
@@ -264,7 +342,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 }
 
 func validatedManualInputs(input protocol.ActionExecutionInput, files map[string]file) bool {
-	if input.Input.Catalog == protocol.ActionsCatalog {
+	if input.Input.Catalog == protocol.ActionsCatalog || input.Input.Catalog == protocol.ActionsRemoteCatalog {
 		return input.ManualInputs == nil
 	}
 	m := input.ManualInputs
@@ -327,6 +405,12 @@ func dispatchEventInputs(body []byte, commitID string) (map[string]string, bool)
 }
 
 type engineObserver struct {
+	jobTLSCA                                   []byte
+	access                                     *protocol.ActionDependencyAccess
+	jobGit                                     *protocol.JobGitContext
+	commit                                     string
+	credentials                                func(protocol.ActionFrame) (*protocol.JobGitCredential, error)
+	contexts                                   map[string]*act.RunContext
 	gitSource                                  *engineGitSource
 	limits                                     protocol.JobLimits
 	mu                                         sync.Mutex
@@ -422,11 +506,20 @@ func (o *engineObserver) Fire(entry *logrus.Entry) error {
 		return nil
 	}
 	ids, _ := entry.Data["stepID"].([]string)
-	if entry.Data["raw_output"] == true {
+	_, stepReceipt := entry.Data["stepResult"]
+	_, jobReceipt := entry.Data["jobResult"]
+	nativeError := entry.Level == logrus.ErrorLevel && o.started[job.InstanceID] && !stepReceipt && !jobReceipt
+	if entry.Data["raw_output"] == true || nativeError {
+		if o.gitSource != nil && !o.started[job.InstanceID] {
+			return nil
+		}
 		// Every pinned raw producer forwards NewLineWriter's bytes, including
 		// its existing LF. Preserve blank lines, CR progress and partial ANSI;
 		// do not synthesize a second line ending. Charge sanitized wire bytes.
 		text := strings.ReplaceAll(strings.ToValidUTF8(entry.Message, "�"), "\x00", "�")
+		if nativeError && entry.Data["raw_output"] != true {
+			text += "\n"
+		}
 		if text == "" {
 			return nil
 		}
@@ -485,6 +578,9 @@ func (o *engineObserver) Fire(entry *logrus.Entry) error {
 			return nil
 		}
 		o.started[job.InstanceID] = true
+		if o.jobGit != nil && o.renewJobGit(job.InstanceID) != nil {
+			o.fail()
+		}
 		return nil
 	}
 	if len(ids) != 1 {
@@ -569,7 +665,8 @@ type inspected struct {
 	}
 	HostConfig struct {
 		NetworkMode                         string
-		Privileged                          bool
+		Privileged, ReadonlyRootfs          bool
+		Tmpfs                               map[string]string
 		Binds, CapAdd, CapDrop, SecurityOpt []string
 		Memory, MemorySwap, NanoCpus        int64
 		PidsLimit                           *int64
@@ -608,7 +705,17 @@ func (o *engineObserver) prepare() (err error) {
 			allowedImage = allowedImage || image == r.Image
 		}
 		phase = "engine_job_shape"
-		if !allowedImage || r.ID != id || r.Config.User != "1000:1000" || r.HostConfig.NetworkMode != "none" || r.HostConfig.Privileged || len(r.HostConfig.Binds) > 0 || len(r.HostConfig.CapAdd) > 0 || len(r.HostConfig.Devices) > 0 || r.HostConfig.Memory != o.jobLimits().Memory() || r.HostConfig.MemorySwap != o.jobLimits().Memory() || r.HostConfig.NanoCpus != int64(o.jobLimits().CPUMillis)*1000000 || r.HostConfig.PidsLimit == nil || *r.HostConfig.PidsLimit != int64(o.jobLimits().Pids) || !contains(r.HostConfig.CapDrop, "ALL") || !contains(r.HostConfig.SecurityOpt, "no-new-privileges") {
+		network := "none"
+		if o.access != nil {
+			network = "bridge"
+			if !engineDependencyFirewall(o.ctx, o.access) {
+				return ErrExecution
+			}
+		}
+		if !allowedImage || r.ID != id || r.Config.User != "1000:1000" || r.HostConfig.NetworkMode != network || r.HostConfig.Privileged || len(r.HostConfig.Binds) > 0 || len(r.HostConfig.CapAdd) > 0 || len(r.HostConfig.Devices) > 0 || r.HostConfig.Memory != o.jobLimits().Memory() || r.HostConfig.MemorySwap != o.jobLimits().Memory() || r.HostConfig.NanoCpus != int64(o.jobLimits().CPUMillis)*1000000 || r.HostConfig.PidsLimit == nil || *r.HostConfig.PidsLimit != int64(o.jobLimits().Pids) || !contains(r.HostConfig.CapDrop, "ALL") || !contains(r.HostConfig.SecurityOpt, "no-new-privileges") {
+			return ErrExecution
+		}
+		if o.gitSource != nil && (!r.HostConfig.ReadonlyRootfs || len(r.HostConfig.Tmpfs) != 1 || r.HostConfig.Tmpfs["/tmp"] != jobTemporaryTmpfs) {
 			return ErrExecution
 		}
 		phase = "engine_job_environment"
@@ -619,11 +726,29 @@ func (o *engineObserver) prepare() (err error) {
 		}
 		protected := protectedActionDirs(o.plan)
 		phase = "engine_job_mounts"
-		if !validJobMounts(r, protected) || !o.bindJobVolumes(r) {
+		mountShape := r
+		if o.gitSource != nil {
+			mountShape.Mounts = nil
+			for _, mount := range r.Mounts {
+				if mount.Type == "tmpfs" && mount.Destination == "/tmp" {
+					continue
+				}
+				mountShape.Mounts = append(mountShape.Mounts, mount)
+				if mount.Type == "volume" && (!mount.RW || verifyJobVolumeProfile(o.ctx, path.Base(path.Dir(mount.Source)), mount.Destination, o.plan.Catalog == protocol.ActionsRemoteCatalog) != nil) {
+					return ErrExecution
+				}
+			}
+		}
+		if !validJobMounts(mountShape, protected) || !o.bindJobVolumes(mountShape) {
 			return ErrExecution
 		}
 		phase = "engine_job_source_transfer"
-		if _, err = docker(o.ctx, nil, "cp", jobSource+"/.", id+":"+workspace); err != nil {
+		if o.gitSource != nil {
+			err = transferJobSource(o.ctx, id)
+		} else {
+			_, err = docker(o.ctx, nil, "cp", jobSource+"/.", id+":"+workspace)
+		}
+		if err != nil {
 			return ErrExecution
 		}
 		if o.gitSource != nil && o.gitSource.transfer(o.ctx, id) != nil {
@@ -637,7 +762,12 @@ func (o *engineObserver) prepare() (err error) {
 				continue
 			}
 			phase = "engine_job_volume_ownership"
-			if err = ownVolume(o.ctx, mount.Source); err != nil {
+			if (o.plan.Catalog == protocol.ActionsRemoteCatalog || len(o.jobTLSCA) > 0) && mount.Destination == "/var/run/act" {
+				if os.MkdirAll(filepath.Join(mount.Source, "home"), 0755) != nil {
+					return ErrExecution
+				}
+			}
+			if err = ownVolumeProfile(o.ctx, mount.Source, o.plan.Catalog == protocol.ActionsRemoteCatalog && mount.Destination == workspace); err != nil {
 				return err
 			}
 			phase = "engine_job_action_ancestors"
@@ -647,6 +777,17 @@ func (o *engineObserver) prepare() (err error) {
 			o.volumes[mount.Source] = true
 		}
 		phase = "engine_job_source_readback"
+		if len(o.jobTLSCA) > 0 {
+			if _, e := docker(o.ctx, bytes.NewReader(o.jobTLSCA), "exec", "-i", id, "/bin/sh", "-ec", "cat /etc/ssl/certs/ca-certificates.crt > /var/run/act/home/ca.crt; cat >> /var/run/act/home/ca.crt; chmod 0444 /var/run/act/home/ca.crt"); e != nil {
+				return ErrExecution
+			}
+		}
+		if o.plan.Catalog == protocol.ActionsRemoteCatalog {
+			version, e := docker(o.ctx, nil, "exec", id, "/usr/local/bin/node", "--version")
+			if e != nil || !regexp.MustCompile(`^v24\.[0-9]+\.[0-9]+\n$`).Match(version) {
+				return ErrExecution
+			}
+		}
 		if o.gitSource != nil && o.gitSource.verifyJob(o.ctx, id) != nil {
 			return ErrExecution
 		}
@@ -670,12 +811,15 @@ func (o *engineObserver) prepare() (err error) {
 	return nil
 }
 func ownVolume(ctx context.Context, directory string) error {
+	return ownVolumeProfile(ctx, directory, false)
+}
+func ownVolumeProfile(ctx context.Context, directory string, links bool) error {
 	root, err := os.OpenRoot(directory)
 	if err != nil {
 		return ErrExecution
 	}
 	defer root.Close()
-	names, err := ownedVolumeNames(ctx, root)
+	names, err := ownedVolumeNamesProfile(ctx, root, links)
 	if err != nil {
 		return err
 	}
@@ -692,14 +836,32 @@ func ownVolume(ctx context.Context, directory string) error {
 	return nil
 }
 func ownedVolumeNames(ctx context.Context, root *os.Root) ([]string, error) {
+	return ownedVolumeNamesProfile(ctx, root, false)
+}
+func ownedVolumeNamesProfile(ctx context.Context, root *os.Root, links bool) ([]string, error) {
 	var names []string
 	total := 0
 	err := fs.WalkDir(root.FS(), ".", func(name string, d fs.DirEntry, err error) error {
 		total += len(name)
-		if err != nil || ctx.Err() != nil || len(names) >= 8192 || total > 1<<20 || d.Type()&os.ModeSymlink != 0 {
+		if err != nil || ctx.Err() != nil || len(names) >= 8192 || total > 1<<20 || !links && d.Type()&os.ModeSymlink != 0 {
 			return ErrExecution
 		}
 		info, err := root.Lstat(name)
+		if err == nil && links && info.Mode()&os.ModeSymlink != 0 {
+			target, e := root.Readlink(name)
+			if e != nil || !protocol.ValidGitSourceLink(name, target) {
+				return ErrExecution
+			}
+			resolved := path.Clean(path.Join(path.Dir(name), target))
+			for p := resolved; p != "."; p = path.Dir(p) {
+				v, e := root.Lstat(p)
+				if e != nil || v.Mode()&os.ModeSymlink != 0 || p != resolved && !v.IsDir() {
+					return ErrExecution
+				}
+			}
+			names = append(names, name)
+			return nil
+		}
 		if err != nil || info.Mode()&os.ModeSymlink != 0 || (!info.Mode().IsRegular() && !info.IsDir()) {
 			return ErrExecution
 		}

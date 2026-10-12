@@ -7,6 +7,7 @@
 *.key
 node_modules/
 dist/
+/web/dist-native/
 bin/
 coverage/
 *.test
@@ -17,4 +18,8 @@ tmp/
 data/
 playwright-report/
 test-results/
+cloudflare/**/wrangler.jsonc
+cloudflare/**/.wrangler/
 __pycache__/
+/.cloudflare/
+.wrangler/

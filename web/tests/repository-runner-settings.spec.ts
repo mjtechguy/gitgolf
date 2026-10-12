@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect,test,type Page } from '@playwright/test';
 import { request,respond,reject } from './rpc';
 import { GetRepositoryAccessRequestSchema,GetRepositoryAccessResponseSchema,InspectWorkflowsRequestSchema,InspectWorkflowsResponseSchema,GetRepositoryRunnersRequestSchema,GetRepositoryRunnersResponseSchema,GetInstanceRunnersResponseSchema,GetSessionResponseSchema,GetProfileResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,WorkflowFormat,WorkflowInspectionState,RunnerControlState } from '../src/gen/golf/v1/golf_pb';
@@ -11,7 +12,7 @@ async function backend(page:Page,admin=false){
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'1',login:'alex',isInstanceAdmin:admin}});
   if(method==='GetProfile')return respond(route,GetProfileResponseSchema,{profile:{userId:'1',login:'alex',revision:'c'.repeat(64)}});
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
   if(method==='GetRepositoryAccess'){
    state.accessReads++;const input=request(route,GetRepositoryAccessRequestSchema);expect(input.repository?.owner).toBe('alice');expect(['example','replacement']).toContain(input.repository?.name);

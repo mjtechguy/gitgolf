@@ -26,6 +26,8 @@ type NewContainerInput struct {
 	Privileged     bool
 	UsernsMode     string
 	Platform       string
+	VolumeOptions  map[string]map[string]string // Golf: local-driver options keyed by mount destination
+	CopyViaExec    bool                         // Golf: copy through actual writable mounts on read-only job roots
 	Options        string
 	NetworkAliases []string
 	ExposedPorts   nat.PortSet

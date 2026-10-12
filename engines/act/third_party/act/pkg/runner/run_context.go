@@ -30,6 +30,8 @@ import (
 
 // RunContext contains info about current job
 type RunContext struct {
+	// Golf: refresh scoped job values before native step expression/env setup.
+	BeforeStep          func(context.Context) error
 	Name                string
 	Config              *Config
 	Matrix              map[string]interface{}
@@ -408,6 +410,8 @@ func (rc *RunContext) startJobContainer() common.Executor {
 			Privileged:     rc.Config.Privileged,
 			UsernsMode:     rc.Config.UsernsMode,
 			Platform:       rc.Config.ContainerArchitecture,
+			VolumeOptions:  rc.Config.ContainerVolumeOptions,
+			CopyViaExec:    rc.Config.ContainerCopyViaExec,
 			Options:        rc.options(ctx),
 		})
 		if rc.JobContainer == nil {

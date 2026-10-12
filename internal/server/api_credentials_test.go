@@ -123,6 +123,7 @@ func TestApiCredentialBoundary(t *testing.T) {
 		golfv1connect.RepositoryServiceListCommitsProcedure:                  true,
 		golfv1connect.RepositoryServiceListTagsProcedure:                     true,
 		golfv1connect.RepositoryServiceGetContentsProcedure:                  true,
+		golfv1connect.RepositoryServiceGetRepositoryFileIndexProcedure:       true,
 		golfv1connect.RepositoryServiceResolveRepositorySourceProcedure:      true,
 		golfv1connect.RepositoryServiceGetCommitDiffProcedure:                true,
 		golfv1connect.RepositoryServiceGetPullRequestDiffProcedure:           true,
@@ -432,12 +433,8 @@ SELECT $1,sha256(convert_to('fixture-'||n,'UTF8')),'quota fixture', $2,$3,$4 FRO
 	otherConfig := f.s.config
 	otherConfig.GiteaURL += "/different-forge"
 	otherConfig.GiteaPublicURL = otherConfig.GiteaURL
-	otherServer, err := New(otherConfig, f.db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response := apiRequest(otherServer, created.Token, golfv1connect.SessionServiceGetSessionProcedure, `{}`); response.Code != 401 {
-		t.Fatal("cross-forge authority escaped", response.Code)
+	if _, err := New(otherConfig, f.db); err == nil {
+		t.Fatal("cross-forge startup accepted an existing installation binding")
 	}
 	if err := f.s.logoutSession(context.Background(), source.Value); err != nil {
 		t.Fatal(err)

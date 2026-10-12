@@ -50,3 +50,48 @@ func TestCapabilityProviderSeparation(t *testing.T) {
 		t.Fatal("missing explicit independent capability states")
 	}
 }
+
+func TestRuntimeCapabilityManifest(t *testing.T) {
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		respond(w, http.StatusOK, map[string]string{"version": "1.27.3"})
+	}))
+	defer forge.Close()
+	for _, profile := range []string{"", "local", "docker", "kubernetes", "cloudflare-bridge"} {
+		config := testConfig(forge.URL)
+		config.RuntimeProfile = profile
+		s, err := New(config, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := s.ListCapabilities(context.Background(), connect.NewRequest(&golfv1.ListCapabilitiesRequest{}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := profile
+		if expected == "" {
+			expected = "portable"
+		}
+		if response.Msg.RuntimeProfile != expected {
+			t.Fatal("runtime profile not reported")
+		}
+		settings := 0
+		for _, c := range response.Msg.Capabilities {
+			if strings.HasPrefix(c.Id, "settings.") {
+				settings++
+				if c.State != golfv1.CapabilityState_CAPABILITY_STATE_READY {
+					t.Fatal("implemented portable editor not reported")
+				}
+			}
+		}
+		if settings != 5 {
+			t.Fatal("missing portable settings capabilities")
+		}
+	}
+	for _, profile := range []string{"cloudflare-native", "k8s", "unknown"} {
+		config := testConfig(forge.URL)
+		config.RuntimeProfile = profile
+		if _, err := New(config, nil); err == nil {
+			t.Fatal("unrecognized runtime accepted")
+		}
+	}
+}

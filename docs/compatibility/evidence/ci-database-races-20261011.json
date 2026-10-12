@@ -1,0 +1,41 @@
+{
+  "profile": "disposable-postgres-race",
+  "count": 3,
+  "passed": true,
+  "cleanupComplete": true,
+  "tests": [
+    "TestRunnerPoolPinnedAdmissionCapacityPostgres",
+    "TestRunnerPoolPlacementLockSerializesChangePostgres",
+    "TestRunnerPoolRevocationLockRechecksCurrentControlPostgres",
+    "TestRunnerResourceCurrentGenerationNotRepeatableSnapshotPostgres",
+    "TestRunnerResourceTighteningFencesPrivateTransportPostgres",
+    "TestRunnerControlLockSerializesClaimPostgres",
+    "TestWorkflowRunConcurrentDispatchAndCancelPostgres",
+    "TestWorkflowRunRecoveryQuarantinePostgres",
+    "TestActionsEngineConcurrentAckAndSQLFaultPostgres",
+    "TestActionsEngineLeaseLossRestartCannotReexecutePostgres",
+    "TestRunnerGitPreparationReadAndLateRevocationPostgres",
+    "TestWorkflowArtifactsUploadFinishDownloadAndPrivacyPostgres"
+  ],
+  "schema": "golf.ci.database-races.v1",
+  "date": "2026-10-11",
+  "raceDetector": true,
+  "executions": 36,
+  "sourceDirty": true,
+  "sourceRevision": "6e35c3d30f317e11fe00f9dadf4578436bb27e29",
+  "binarySha256": "9b7fd8c10961c82f9a6fbf8790b82d288c3be69481474c01f49efe493cf791e0",
+  "logSha256": "41b69d74443be4f72651111042ef08caa1208c98de8ec6f833d056174d3a7109",
+  "limitations": [
+    "Actual disposable PostgreSQL coordination tests with native HTTP fixtures; not a real forge, runner workload or production load benchmark.",
+    "Twelve test families, three repetitions; this does not establish an availability SLO."
+  ],
+  "sourceFiles": {
+    "internal/server/workflow_artifacts_test.go": "65f0061aadc0e54dec6fab9b5e2eaf596df6a7a5c4c37ada1f1cc7bbba8aef5b",
+    "internal/server/runner_pool_policy_test.go": "2b8d48dc4ae78cc27fe90adc77fdeb8b0cda08960b2afcd37c636647c1cbaf0e",
+    "internal/server/runner_git_source_test.go": "454731591577ac12b79e95a281d7321b2aeed7971b7831927dd88fd9bc568662",
+    "internal/server/actions_engine_test.go": "d81814773f5fb910d1b65f0f884eaf166daddc60ccb27546b8f5b5ce66e520b4",
+    "internal/server/runner_job_limits_test.go": "51aa324ec3d4657b665b20908aaf5082784285070d780e79bcaea105fc79f250",
+    "internal/server/runner_controls_test.go": "ed8475b338103c61c43b8f7abf47e743f3485ff85d1cc97b08acc7d5503f5eee",
+    "internal/server/workflow_runs_test.go": "2ef093702537e5dcb29b661313d3dcaaad33eb28aec44f0d2ab027d50c307d0b"
+  }
+}

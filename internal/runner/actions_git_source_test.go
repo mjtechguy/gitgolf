@@ -1,13 +1,11 @@
 package runner
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,7 +60,7 @@ func TestActionsGitSourceFixedFileStreamAndClosedReceipt(t *testing.T) {
 			if mode == "cancel_hash" {
 				hashCommand = ": > " + stageQuote(ready) + "; exec /bin/sleep 60"
 			}
-			script := "#!/bin/sh\nif [ \"$1\" = container ]; then\n [ \"$2\" = cp ] && [ \"$3\" = '-' ] && [ \"$4\" = '" + strings.Repeat("c", 64) + ":/golf' ] || exit 2\n " + copyCommand + "\nelif [ \"$1\" = exec ]; then\n [ \"$2\" = '" + strings.Repeat("c", 64) + "' ] && [ \"$3\" = sha256sum ] && [ \"$4\" = /golf/git-source.tar ] || exit 3\n " + hashCommand + "\nelse exit 4; fi\n"
+			script := "#!/bin/sh\nif [ \"$1\" = exec ] && [ \"$2\" = -i ]; then\n [ \"$3\" = '" + strings.Repeat("c", 64) + "' ] && [ \"$4\" = /bin/sh ] && [ \"$5\" = -c ] && [ \"$6\" = 'umask 077; cat > /golf/git-source.tar && chmod 0444 /golf/git-source.tar' ] || exit 2\n " + copyCommand + "\nelif [ \"$1\" = exec ]; then\n [ \"$2\" = '" + strings.Repeat("c", 64) + "' ] && [ \"$3\" = sha256sum ] && [ \"$4\" = /golf/git-source.tar ] || exit 3\n " + hashCommand + "\nelse exit 4; fi\n"
 			if os.WriteFile(binary, []byte(script), 0700) != nil {
 				t.Fatal("fixture")
 			}
@@ -119,17 +117,8 @@ func TestActionsGitSourceFixedFileStreamAndClosedReceipt(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				reader := tar.NewReader(bytes.NewReader(raw))
-				header, err := reader.Next()
-				if err != nil || header.Name != "git-source.tar" || header.Typeflag != tar.TypeReg || header.Size != int64(len(body)) || header.Mode != 0444 || header.Uid != 0 || header.Gid != 0 || header.Linkname != "" || len(header.PAXRecords) != 0 {
-					t.Fatal("fixed staging file grammar changed")
-				}
-				copied, err := io.ReadAll(reader)
-				if err != nil || !bytes.Equal(copied, body) {
+				if !bytes.Equal(raw, body) {
 					t.Fatal("metadata changed or became shell text")
-				}
-				if _, err = reader.Next(); err != io.EOF {
-					t.Fatal("extra staging path")
 				}
 			}
 		})

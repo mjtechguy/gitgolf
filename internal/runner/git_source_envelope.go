@@ -28,6 +28,10 @@ func ValidGitSourcePath(name string) bool {
 	return true
 }
 
+func ValidGitSourceLink(name, target string) bool {
+	return ValidGitSourcePath(name) && target != "" && len(target) <= 1024 && path.Clean(target) == strings.TrimSuffix(target, "/") && !strings.HasPrefix(target, "/") && !strings.ContainsAny(target, "\\\x00\r\n") && ValidGitSourcePath(path.Clean(path.Join(path.Dir(name), target)))
+}
+
 // Compare the admitted ordinary archive against the fetched H tree, without
 // extracting source or running checkout filters. ls-tree must be produced by
 // the hermetic trusted Git process, not a coordinator-supplied file inventory.
@@ -54,7 +58,7 @@ func VerifyGitSourceSnapshot(archive, listing []byte, archiveSHA, commit, workfl
 	for _, row := range bytes.Split(listing[:len(listing)-1], []byte{0}) {
 		meta, name, ok := bytes.Cut(row, []byte{'\t'})
 		fields := strings.Split(string(meta), " ")
-		if !ok || len(fields) != 3 || fields[1] != "blob" || fields[0] != "100644" && fields[0] != "100755" || !commitPattern.MatchString(fields[2]) || len(fields[2]) != len(commit) || (!ValidGitSourcePath(string(name)) || !canonical(string(name))) || len(files)+len(directories) >= 4096 {
+		if !ok || len(fields) != 3 || fields[1] != "blob" || fields[0] != "100644" && fields[0] != "100755" && fields[0] != "120000" || !commitPattern.MatchString(fields[2]) || len(fields[2]) != len(commit) || (!ValidGitSourcePath(string(name)) || !canonical(string(name))) || len(files)+len(directories) >= 4096 {
 			return ErrSource
 		}
 		if _, duplicate := files[string(name)]; duplicate {
@@ -74,7 +78,7 @@ func VerifyGitSourceSnapshot(archive, listing []byte, archiveSHA, commit, workfl
 			directories[parent] = true
 		}
 	}
-	if files[workflowPath].id != workflowBlob {
+	if files[workflowPath].id != workflowBlob || files[workflowPath].mode == "120000" {
 		return ErrSource
 	}
 	for name := range files {
@@ -95,7 +99,7 @@ func VerifyGitSourceSnapshot(archive, listing []byte, archiveSHA, commit, workfl
 			return ErrSource
 		}
 		name := header.Name
-		if !ValidGitSourcePath(name) || seen[name] || len(seen) >= 4096 || header.Linkname != "" || header.Size < 0 || header.Size > 8<<20 {
+		if !ValidGitSourcePath(name) || seen[name] || len(seen) >= 4096 || header.Size < 0 || header.Size > 8<<20 {
 			return ErrSource
 		}
 		seen[name] = true
@@ -106,7 +110,8 @@ func VerifyGitSourceSnapshot(archive, listing []byte, archiveSHA, commit, workfl
 			continue
 		}
 		file, ok := files[name]
-		if !ok || header.Typeflag != tar.TypeReg || (header.Mode&0111 != 0) != (file.mode == "100755") {
+		link := header.Typeflag == tar.TypeSymlink && file.mode == "120000" && header.Size == 0 && ValidGitSourceLink(name, header.Linkname)
+		if !ok || !link && (header.Typeflag != tar.TypeReg || header.Linkname != "" || file.mode == "120000" || (header.Mode&0111 != 0) != (file.mode == "100755")) {
 			return ErrSource
 		}
 		payload += header.Size
@@ -117,8 +122,13 @@ func VerifyGitSourceSnapshot(archive, listing []byte, archiveSHA, commit, workfl
 		if len(commit) == 40 {
 			objectHash = sha1.New()
 		}
-		_, _ = io.WriteString(objectHash, "blob "+strconv.FormatInt(header.Size, 10)+"\x00")
-		if _, err := io.CopyN(objectHash, tr, header.Size); err != nil || hex.EncodeToString(objectHash.Sum(nil)) != file.id {
+		size := header.Size
+		var body io.Reader = tr
+		if link {
+			size, body = int64(len(header.Linkname)), strings.NewReader(header.Linkname)
+		}
+		_, _ = io.WriteString(objectHash, "blob "+strconv.FormatInt(size, 10)+"\x00")
+		if _, err := io.CopyN(objectHash, body, size); err != nil || hex.EncodeToString(objectHash.Sum(nil)) != file.id {
 			return ErrSource
 		}
 		delete(files, name)
@@ -212,19 +222,34 @@ func ValidateGitSource(manifest *GitSourceManifest, metadata, archive []byte, co
 // Reject materialization aliases before source bytes are copied. This remains a
 // conservative Linux-container profile, not general cross-filesystem checkout.
 func validateGitSourceArchivePaths(archive []byte) error {
+	return ValidateGitSourceArchive(archive)
+}
+
+// Links must terminate at an admitted ordinary file/directory without traversing
+// another link. This avoids cycles and lexical-versus-native path escapes.
+func ValidateGitSourceArchive(archive []byte) error {
+	if len(archive) == 0 || len(archive) > 16<<20 {
+		return ErrSource
+	}
 	reader := tar.NewReader(bytes.NewReader(archive))
 	seen := map[string]bool{}
+	kinds, links := map[string]byte{}, map[string]string{}
 	spellings := map[string]string{}
 	entries := 0
 	for {
 		h, err := reader.Next()
 		if err == io.EOF {
-			return nil
+			break
 		}
-		if err != nil || !ValidGitSourcePath(h.Name) || seen[h.Name] || h.Linkname != "" || h.Size < 0 || h.Size > 8<<20 || (h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeDir) || h.Typeflag == tar.TypeDir && h.Size != 0 || len(h.PAXRecords) > 1 || len(h.PAXRecords) == 1 && h.PAXRecords["path"] != h.Name {
+		link := h != nil && h.Typeflag == tar.TypeSymlink && h.Size == 0 && ValidGitSourceLink(h.Name, h.Linkname)
+		if err != nil || !ValidGitSourcePath(h.Name) || seen[h.Name] || h.Linkname != "" && !link || h.Size < 0 || h.Size > 8<<20 || (h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeDir && !link) || h.Typeflag == tar.TypeDir && h.Size != 0 || len(h.PAXRecords) > 1 || len(h.PAXRecords) == 1 && h.PAXRecords["path"] != h.Name {
 			return ErrSource
 		}
 		seen[h.Name] = true
+		kinds[h.Name] = h.Typeflag
+		if link {
+			links[h.Name] = path.Clean(path.Join(path.Dir(h.Name), h.Linkname))
+		}
 		entries++
 		if entries > 4096 {
 			return ErrSource
@@ -240,4 +265,23 @@ func validateGitSourceArchivePaths(archive []byte) error {
 			}
 		}
 	}
+	for name, kind := range kinds {
+		for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
+			if k, exists := kinds[parent]; exists && k != tar.TypeDir {
+				return ErrSource
+			}
+		}
+		if kind == tar.TypeSymlink {
+			target := links[name]
+			if !seen[target] || kinds[target] == tar.TypeSymlink {
+				return ErrSource
+			}
+			for parent := path.Dir(target); parent != "."; parent = path.Dir(parent) {
+				if k, exists := kinds[parent]; exists && k != tar.TypeDir {
+					return ErrSource
+				}
+			}
+		}
+	}
+	return nil
 }

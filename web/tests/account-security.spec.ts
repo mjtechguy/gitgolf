@@ -1,3 +1,5 @@
+import { GetOwnPasswordRecoveryEnrollmentResponseSchema } from '../src/gen/golf/v1/password_recovery_enrollment090_pb';
+import { portableRuntimeFixture } from './runtime-fixture';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, GetAccountSecurityResponseSchema, GetOwnMFAResponseSchema, ChangeOwnPasswordRequestSchema, ChangeOwnPasswordResponseSchema, ChangeOwnLoginEmailRequestSchema, ChangeOwnLoginEmailResponseSchema, LogoutResponseSchema } from '../src/gen/golf/v1/golf_pb';
@@ -8,8 +10,9 @@ async function fixture(page: Page) {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, state.signedOut ? {} : { user: { id: '9007199254740993', login: 'alex' } });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'Logout') { state.logouts++; state.signedOut = true; return respond(route, LogoutResponseSchema, {}); }
+    if (method === 'GetOwnPasswordRecoveryEnrollment') return respond(route, GetOwnPasswordRecoveryEnrollmentResponseSchema, { enrollment: {userId:'31',nativeUserId:'9007199254740993',localAccountId:'9007199254740995',credentialVersion:'9007199254740997',contactVersion:'0',version:'0',loginEmail:'alex@example.invalid'} });
     if (method === 'GetOwnMFA') return respond(route, GetOwnMFAResponseSchema, {mfa:{accountId:'9007199254740995',userId:'9007199254740993',version:'0'}});
     if (method === 'GetAccountSecurity') return state.denied ? reject(route, 'permission_denied', 'Account access denied.') : respond(route, GetAccountSecurityResponseSchema, { security: { accountId: '9007199254740995', userId: '9007199254740993', username: 'alex', loginEmail: 'alex@example.invalid', credentialVersion: '9007199254740997', canManage: true } });
     if (method === 'ChangeOwnPassword' || method === 'ChangeOwnLoginEmail') {

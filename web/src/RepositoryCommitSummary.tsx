@@ -4,12 +4,12 @@ import { Code, ConnectError } from '@connectrpc/connect';
 import { repositoryClient } from './api';
 import { repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
-import { DateLabel, privateSnapshotQuery, shortSHA } from './RepositoryUI';
+import { DateLabel, privateNavigationQuery, shortSHA } from './RepositoryUI';
 
 export function RepositoryCommitSummary({ location, repositoryId, commitId, userId }: {
   location: RepositoryLocation; repositoryId: string; commitId: string; userId: string;
 }) {
-  const query = useQuery({ ...privateSnapshotQuery, retry: false,
+  const query = useQuery({ ...privateNavigationQuery, retry: false,
     queryKey: ['repository', userId, location.owner, location.name, 'latest-commit', repositoryId, commitId],
     queryFn: async ({ signal }) => {
       const response = await repositoryClient.listCommits({ repository: { owner: location.owner, name: location.name }, repositoryId,

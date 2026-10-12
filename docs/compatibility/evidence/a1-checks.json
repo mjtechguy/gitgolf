@@ -1,0 +1,257 @@
+{
+  "format": "golf.compatibility.database-evidence.v1",
+  "scope": "Owned PostgreSQL source/race authority tests; controlled native responses, not deployed job token delivery",
+  "sourceRevision": "6e35c3d30f317e11fe00f9dadf4578436bb27e29",
+  "plannerSHA256": "8eebfdd85f23323509b40873e97815609a25a629dc5951da2d2ca381d11b7949",
+  "sourceFiles": {
+    "internal/server/runner_transport.go": "00adaf3f43c814debd2ef4ebe6d50d224df15ad5f15859a6b8839ddef12668b8",
+    "internal/server/runner_git_source.go": "1b66d3ee1d9ffa7d4e68cf1480a92f95bec4d5f5e597961c292448ac9fc2f449",
+    "internal/server/runner_git_source_capability_test.go": "fa2ea1557599eab9420989d9073ed2c5935e697d03214eb935705b71a414eb97",
+    "internal/server/job_git_capability.go": "432eb269b9a939ffcd7035ddc11ed109844bca96e0b2c818947cf676ae53e56f",
+    "internal/server/job_git_capability_test.go": "2beef3258bf76625e0ce6ba5d9b8e2a1a54e3b581666fcf4270bf42fe20fccaa"
+  },
+  "exitCode": 0,
+  "skipped": false,
+  "passed": true,
+  "cleanupComplete": true,
+  "testNames": [
+    "  TestJobGitIndependentApproverLateRevocationPostgres",
+    "  TestJobGitIndependentApproverLateRevocationPostgres/unchanged",
+    "  TestJobGitIndependentApproverLateRevocationPostgres/approver-lost",
+    "  TestJobGitSealedScopeAndLifecycle",
+    "  TestJobGitSealedScopeAndLifecycle/expiry",
+    "  TestJobGitSealedScopeAndLifecycle/future",
+    "  TestJobGitSealedScopeAndLifecycle/overlong",
+    "  TestJobGitSealedScopeAndLifecycle/attempt",
+    "  TestJobGitSealedScopeAndLifecycle/lease",
+    "  TestJobGitSealedScopeAndLifecycle/worker",
+    "  TestJobGitSealedScopeAndLifecycle/cancel",
+    "  TestJobGitSealedScopeAndLifecycle/finished",
+    "  TestJobGitSealedScopeAndLifecycle/source",
+    "  TestJobGitSealedScopeAndLifecycle/blob",
+    "  TestJobGitSealedScopeAndLifecycle/repository",
+    "  TestJobGitSealedScopeAndLifecycle/owner",
+    "  TestJobGitSealedScopeAndLifecycle/archive",
+    "  TestJobGitSealedScopeAndLifecycle/catalog",
+    "  TestJobGitSealedScopeAndLifecycle/job",
+    "  TestJobGitSealedScopeAndLifecycle/workflow",
+    "  TestJobGitCanonicalReadOnlyRoute",
+    "  TestJobGitCanonicalReadOnlyRoute/tls",
+    "  TestJobGitCanonicalReadOnlyRoute/host",
+    "  TestJobGitCanonicalReadOnlyRoute/rawpath",
+    "  TestJobGitCanonicalReadOnlyRoute/query",
+    "  TestJobGitCanonicalReadOnlyRoute/userinfo",
+    "  TestJobGitCanonicalReadOnlyRoute/force-query",
+    "  TestJobGitCanonicalReadOnlyRoute/receive",
+    "  TestJobGitCanonicalReadOnlyRoute/wiki",
+    "  TestJobGitCanonicalReadOnlyRoute/other-repo",
+    "  TestJobGitCanonicalReadOnlyRoute/v2",
+    "  TestJobGitCanonicalReadOnlyRoute/gzip",
+    "  TestJobGitCanonicalReadOnlyRoute/cookie",
+    "  TestJobGitCanonicalReadOnlyRoute/origin",
+    "  TestJobGitCanonicalReadOnlyRoute/runner",
+    "  TestJobGitCanonicalReadOnlyRoute/attempt",
+    "  TestJobGitCanonicalReadOnlyRoute/duplicate-auth",
+    "  TestJobGitCanonicalReadOnlyRoute/duplicate-mime",
+    "  TestJobGitCanonicalReadOnlyRoute/human-user",
+    "  TestJobGitCanonicalReadOnlyRoute/method",
+    "  TestJobGitIssuerCanonicalBoundary",
+    "  TestJobGitIssuerCanonicalBoundary/userinfo",
+    "  TestJobGitIssuerCanonicalBoundary/opaque",
+    "  TestJobGitIssuerCanonicalBoundary/tls",
+    "  TestJobGitIssuerCanonicalBoundary/host",
+    "  TestJobGitIssuerCanonicalBoundary/method",
+    "  TestJobGitIssuerCanonicalBoundary/rawpath",
+    "  TestJobGitIssuerCanonicalBoundary/query",
+    "  TestJobGitIssuerCanonicalBoundary/forced-query",
+    "  TestJobGitIssuerCanonicalBoundary/cookie",
+    "  TestJobGitIssuerCanonicalBoundary/origin",
+    "  TestJobGitIssuerCanonicalBoundary/duplicate-worker",
+    "  TestJobGitIssuerCanonicalBoundary/duplicate-attempt",
+    "  TestJobGitIssuerCanonicalBoundary/duplicate-auth",
+    "  TestJobGitCurrentGraphAndLateRevocationPostgres",
+    "  TestJobGitCurrentGraphAndLateRevocationPostgres/success",
+    "  TestJobGitCurrentGraphAndLateRevocationPostgres/job-finish",
+    "  TestJobGitCurrentGraphAndLateRevocationPostgres/attempt-revoke",
+    "  TestJobGitCurrentGraphAndLateRevocationPostgres/policy-revision",
+    "  TestJobGitCurrentGraphAndLateRevocationPostgres/native-denial",
+    "  TestJobGitCurrentGraphAndLateRevocationPostgres/workflow-drift",
+    "  TestJobGitCurrentGraphAndLateRevocationPostgres/redirect",
+    "  TestRunnerGitSourceCapabilityPostgres",
+    "  TestRunnerGitSourceCapabilityPostgres/0x0000",
+    "  TestRunnerGitSourceCapabilityPostgres/TLS_1.2",
+    "  TestRunnerGitSourceCapabilityPostgres/TLS_1.3",
+    "  TestRunnerGitPreparationRouteAndExactNegotiation",
+    "  TestRunnerGitPreparationActualGitDepthOne",
+    "  TestRunnerGitPreparationReadAndLateRevocationPostgres",
+    "  TestRunnerGitPreparationReadAndLateRevocationPostgres/#00",
+    "  TestRunnerGitPreparationReadAndLateRevocationPostgres/native-denial",
+    "  TestRunnerGitPreparationReadAndLateRevocationPostgres/workflow-drift",
+    "  TestRunnerGitPreparationReadAndLateRevocationPostgres/lease-revocation",
+    "  TestRunnerGitPreparationReadAndLateRevocationPostgres/policy-revision",
+    "  TestRunnerGitPreparationReadAndLateRevocationPostgres/redirect",
+    "  TestRunnerGitPreparationReadAndLateRevocationPostgres/push-logout",
+    "  TestRunnerGitPreparationReadAndLateRevocationPostgres/push-grant-expiry",
+    "  TestRunnerGitPreparationReadAndLateRevocationPostgres/push-role-change",
+    "  TestRunnerLeasesResultsAndRevocationPostgres"
+  ],
+  "private_receipt_sha256": "4235a0a81d26544a5a075753c86e975ae2bfaceaa77e3e5f6a2046a665af0e12",
+  "recorded_at": "2026-10-07",
+  "evidence_layers": [
+    "source",
+    "real-PostgreSQL",
+    "race"
+  ],
+  "deployed": false,
+  "checks": {
+    "make-check": {
+      "exitCode": 0,
+      "logSHA256": "29e0750f36cc64c56d44f5ed829ac9acf7d13f22b8969eb4ace7ce4776912e7a"
+    },
+    "runner-race": {
+      "exitCode": 0,
+      "logSHA256": "4fd159991f21b801eae18881ce3e908046d02b99e7528634b623e391a8d9fc41"
+    },
+    "native-adversarial-source": {
+      "exitCode": 0,
+      "logSHA256": "a78459f4f86363e29711808efe982c4155d8f39809cfd64ba205054a2d6c70cd",
+      "sourceFile": "cmd/golf-runner/git_snapshot_test.go",
+      "sourceSHA256": "a58dc7dcf7ab54d6329d136d561919a82afda091020faca682027f4dd611d967",
+      "cases": [
+        "nested",
+        "export_ignore",
+        "export_subst",
+        "symlink",
+        "submodule",
+        "lfs_pointer",
+        "hostile_local_config",
+        "git_metadata_path"
+      ],
+      "scope": "Installed native Git and ordinary source archive projection; no Docker or private job-token transport."
+    }
+  },
+  "preserved_attempts": [
+    {
+      "identity": "a1-git-engine-attempt1",
+      "private_receipt_sha256": "c286086d09f24f0822a8721966ca519fc896dffd6a7ef65f55ed02c0997013fe",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-git-engine-attempt2",
+      "private_receipt_sha256": "e2da692f1433dec9b387f479b78e6c46e6dcd92d105685b24ed55a9003bc85c8",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-git-engine-attempt3",
+      "private_receipt_sha256": "585349b7e23106f52336fdf4e3119ea97f3982fec33327a9ec306ea9480e5e2e",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-git-engine-attempt4",
+      "private_receipt_sha256": "02b283206f79f2599fd18be4dc26bc71c5e05c4b4f8d7e35d3db730395f9d34a",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-git-engine-attempt5",
+      "private_receipt_sha256": "8fa9ae1b34e3cdf8b8559c650634482d2b8159a6697697115d47a91bfe9c5be0",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-git-engine-attempt6",
+      "private_receipt_sha256": "5cc2805f07ff43e097bf72970d150784d22f30680db27c9f745acadaf043adfb",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-git-engine-attempt7",
+      "private_receipt_sha256": "671af6424e56020e70b17f1790f6813345ffb9028357536906fad9658684bd9a",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-git-engine-attempt8",
+      "private_receipt_sha256": "8e233dd666f345358a89ae6425442fa3bbba2625870f8c4b22c7d69e92691f9c",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-git-engine-attempt9",
+      "private_receipt_sha256": "13c118720cab356f372698de4da548a414aa783f6cdd021233c5234db6b2924a",
+      "originalPassed": true,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-git-engine-attempt10",
+      "private_receipt_sha256": "64d31fe78fc590e314bd78dd53d5b9eec408068c2871f9d96f523f04a22824c2",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-git-engine-attempt11",
+      "private_receipt_sha256": "18770c3ac5cc8010c2c9274dfea2d0fb364b7f0ab3a2ce60dc9ce99353765379",
+      "originalPassed": true,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-native-history-attempt1",
+      "private_receipt_sha256": "75416aaf73e921e792efad33a597e9cc09c9e81c355aaaf508aec0e1a9e54b90",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-native-history-attempt2",
+      "private_receipt_sha256": "235403467334d385d357fe0da24359f5b3c53b029db6f5f7a471db66fef1465d",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-native-history-attempt3",
+      "private_receipt_sha256": "cd46bd0bcc498c779bbb02a8b9d8d84cd354746691064eb30677f624f96fd03d",
+      "originalPassed": false,
+      "cleanupComplete": false
+    },
+    {
+      "identity": "a1-native-history-attempt4",
+      "private_receipt_sha256": "e7842feb9231579e9b6f69f9f39ef9c707c3f4bec75625d463efb25305167fda",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-native-history-attempt5",
+      "private_receipt_sha256": "2a7a3af5d878e7cd7548f36c2f1a88e6b154ebf106ef31f6697232e983f731b7",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-native-history-attempt6",
+      "private_receipt_sha256": "156ba7230dba198298bb6a88b4511861fafd9a606cc32aebd89bb22866963661",
+      "originalPassed": true,
+      "cleanupComplete": true,
+      "disposition": "Excluded from tree proof: REST commit.tree.sha aliases H; independent native Git proof added in subsequent attempts."
+    },
+    {
+      "identity": "a1-native-history-attempt7",
+      "private_receipt_sha256": "3451cea513ae9404ac8be9ee824005754027cba44af1b137ee384d203ff174ca",
+      "originalPassed": false,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-native-history-attempt8",
+      "private_receipt_sha256": "9c7b9a93d2c9f1f490a5c0ab0fc6a2c547032ace1381ce460963c72379fac04d",
+      "originalPassed": true,
+      "cleanupComplete": true
+    },
+    {
+      "identity": "a1-authority-pg",
+      "private_receipt_sha256": "b1119a5593fae1a0cd82182221145b279616c0f772a242e1a97760d85cd7b48a",
+      "originalPassed": false,
+      "cleanupComplete": false,
+      "disposition": "Excluded from complete credential authority proof: planner-dependent database cases skipped."
+    }
+  ]
+}

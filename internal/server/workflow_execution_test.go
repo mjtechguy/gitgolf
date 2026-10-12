@@ -1,6 +1,7 @@
 package server
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -40,6 +41,55 @@ func TestCompileWorkflowExecutionGitLabSharedShell(t *testing.T) {
 		}
 		if plan.Stage != "verify" || plan.JobID != "check" || plan.ImageDigest != image || plan.RunnerLabel != "" || len(plan.Steps) != 1 || plan.Steps[0].Run != script.want || plan.Steps[0].Shell != "sh" {
 			t.Fatal("GitLab script must preserve order and shared shell state")
+		}
+	}
+}
+
+func TestCompileGitLabBeforeScript(t *testing.T) {
+	base := "check:\n  image: example.test/build@sha256:" + strings.Repeat("a", 64) + "\n"
+	for _, setup := range []string{"[]", "'export LOCAL=ready'", "[export LOCAL=ready, 'cd work']"} {
+		plan, err := compileWorkflowExecution(golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI, []byte(base+"  before_script: "+setup+"\n  script: echo done\n"))
+		if err != nil || len(plan.Steps) != 1 || !strings.HasSuffix(plan.Steps[0].Run, "echo done") {
+			t.Fatalf("setup and script did not compile into one shell: %v", err)
+		}
+	}
+	for _, fail := range []bool{false, true} {
+		setup := "  before_script:\n    - export LOCAL=ready\n    - mkdir work\n    - cd work\n    - 'hello() { printf \"%s:%s\" \"$LOCAL\" \"${PWD##*/}\"; }'\n"
+		if fail {
+			setup += "    - 'exit 7'\n"
+		}
+		data := []byte(base + setup + "  script: hello\n")
+		plan, err := compileWorkflowExecution(golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command("/bin/sh", "-e", "-c", plan.Steps[0].Run)
+		cmd.Dir = t.TempDir()
+		output, err := cmd.CombinedOutput()
+		if fail {
+			if cmd.ProcessState.ExitCode() != 7 || len(output) != 0 {
+				t.Fatalf("failed setup ran script: %q, %v", output, err)
+			}
+		} else if err != nil || string(output) != "ready:work" {
+			t.Fatalf("shell state lost: %q, %v", output, err)
+		}
+	}
+	for _, setup := range []string{"null", "{}", "[[]]", "[true]", "['']", "[" + strings.Repeat("echo setup,", 50) + "echo setup]"} {
+		plan, err := compileWorkflowExecution(golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI, []byte(base+"  before_script: "+setup+"\n  script: echo done\n"))
+		if plan != nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+			t.Fatalf("unsupported setup admitted: %s", setup)
+		}
+	}
+	for _, count := range []int{49, 50} {
+		data := []byte(base + "  before_script:\n" + strings.Repeat("    - echo setup\n", count) + "  script: echo done\n")
+		plan, err := compileWorkflowExecution(golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI, data)
+		if (count == 49) != (plan != nil && err == nil) {
+			t.Fatal("combined command limit changed")
+		}
+		inspection := &golfv1.WorkflowConfiguration{Format: golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI}
+		inspectWorkflow(inspection, data)
+		if (inspection.State == golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET) != (count == 49) {
+			t.Fatal("inspection and execution disagree")
 		}
 	}
 }
@@ -97,6 +147,11 @@ func TestCompileWorkflowExecutionStepBounds(t *testing.T) {
 			plan, err := compileWorkflowExecution(format, []byte(data))
 			if count == 50 && (plan == nil || err != nil) || count == 51 && (plan != nil || connect.CodeOf(err) != connect.CodeFailedPrecondition) {
 				t.Fatal("execution step bound was not enforced")
+			}
+			inspection := &golfv1.WorkflowConfiguration{Format: format}
+			inspectWorkflow(inspection, []byte(data))
+			if (inspection.State == golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET) != (count == 50) {
+				t.Fatal("inspection accepted commands the shell executor refuses")
 			}
 		}
 	}

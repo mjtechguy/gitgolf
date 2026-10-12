@@ -7,6 +7,7 @@ import (
 	"errors"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/internal/server/database"
+	"github.com/mjtechguy/golf-git/internal/workflowpath"
 	"net/http"
 	"sort"
 	"strconv"
@@ -27,29 +28,7 @@ type executionPolicyState struct {
 // A workflow source is an exact path, not a glob or a policy program. Selection
 // of every workflow is a distinct explicit boolean; an empty list denies all.
 func executionWorkflowPath(path string) bool {
-	if len(path) > 255 {
-		return false
-	}
-	if path == ".gitlab-ci.yml" {
-		return true
-	}
-	const prefix = ".github/workflows/"
-	if !strings.HasPrefix(path, prefix) {
-		return false
-	}
-	name := strings.TrimPrefix(path, prefix)
-	if name == "" || strings.ContainsAny(name, "/\\\x00\r\n\t") || strings.Contains(name, "..") || strings.ContainsAny(name, "*?[]{}") {
-		return false
-	}
-	if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
-		return false
-	}
-	for _, c := range name {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-' || c == '.') {
-			return false
-		}
-	}
-	return true
+	return workflowpath.Valid(path)
 }
 
 func executionPolicyAllows(policy executionPolicyState, repositoryID, ownerID int64, event, path string) bool {

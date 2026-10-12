@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import {expect, test} from '@playwright/test';
 import type {Page} from '@playwright/test';
 import {create} from '@bufbuild/protobuf';
@@ -16,7 +17,7 @@ async function backend(page:Page) {
     const method=new URL(route.request().url()).pathname.split('/').at(-1);
     if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{});
     if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user});
-    if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+    if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});
     if(method==='GetRepository')return state.denied?reject(route,'permission_denied','Repository access revoked.'):respond(route,GetRepositoryResponseSchema,{repository});
     if(method==='ListIssues')return respond(route,ListIssuesResponseSchema,{issues:[issue]});
@@ -86,7 +87,7 @@ for(const theme of ['dark','light'])for(const width of [1280,390])test(`create p
   await page.setViewportSize({width,height:900});
   await page.goto(newURL);
   await expect(page.getByRole('region',{name:'New issue',exact:true})).toBeVisible();
-  await expect(page.getByRole('navigation',{name:'Breadcrumb'})).toContainText('New issue');
+  await expect(page.getByRole('navigation',{name:'Repository',exact:true}).getByRole('link',{name:'Issues',exact:true})).toHaveAttribute('aria-current','page');
   await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
   await page.getByLabel('Issue title').focus();await page.keyboard.press('Tab');
   await expect(page.getByRole('button',{name:'Write',exact:true})).toBeFocused();

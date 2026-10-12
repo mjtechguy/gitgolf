@@ -9,17 +9,20 @@ import (
 	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -44,9 +47,13 @@ type coordinator struct {
 	origin, id, key string
 	client          *http.Client
 	actions         *runner.ActionsExecutor
+	executor        *runner.Executor
+	gitPrepImage    string
 	verifiedTLS     atomic.Bool
 }
 type assignment struct {
+	JobGit               *runner.JobGitContext        `json:"jobGit,omitempty"`
+	GitSourceProfile     string                       `json:"gitSourceProfile,omitempty"`
 	ArtifactPaths        []string                     `json:"artifactPaths,omitempty"`
 	JobResources         *runner.JobResourceBinding   `json:"jobResources"`
 	RunID                string                       `json:"runId"`
@@ -370,11 +377,18 @@ func report(a assignment, state string) {
 		State     string `json:"state"`
 	}{a.RunID, a.AttemptID, state})
 }
-func run(ctx context.Context) error {
+func run(ctx context.Context) (err error) {
+	phase := "coordinator_configuration"
+	defer func() {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Golf runner operation failure: stage="+phase)
+		}
+	}()
 	origin, err := coordinatorURL(os.Getenv("GOLF_RUNNER_URL"))
 	if err != nil {
 		return err
 	}
+	phase = "worker_configuration"
 	id, key := os.Getenv("GOLF_RUNNER_ID"), os.Getenv("GOLF_RUNNER_KEY")
 	if !safeID.MatchString(id) || !tokenOK(key) {
 		return errTransport
@@ -383,22 +397,49 @@ func run(ctx context.Context) error {
 	if json.Unmarshal([]byte(os.Getenv("GOLF_RUNNER_APPROVED_IMAGES")), &images) != nil {
 		return errTransport
 	}
+	phase = "docker_configuration"
 	executor, err := runner.New(runner.Config{WorkerID: id, DockerBinary: os.Getenv("GOLF_RUNNER_DOCKER_BINARY"), ApprovedImages: images})
 	if err != nil {
 		return err
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
+	phase = "coordinator_tls_configuration"
 	transport.TLSClientConfig, err = runnerTLSConfig(origin, os.Getenv("GOLF_RUNNER_TLS_CA_FILE"))
 	if err != nil {
 		return err
 	}
 	defer transport.CloseIdleConnections()
 	c := &coordinator{origin: origin, id: id, key: key, client: &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	phase = "actions_engine_configuration"
 	if binary := os.Getenv("GOLF_RUNNER_ACTIONS_ENGINE_BINARY"); binary != "" {
 		c.actions, err = runner.NewActions(executor, binary)
 		if err != nil {
 			return err
+		}
+	}
+	phase = "git_source_configuration"
+	c.executor = executor
+	if image := os.Getenv("GOLF_RUNNER_GIT_PREPARATION_IMAGE"); image != "" {
+		if c.actions == nil || !c.verifyingHTTPS() || !slices.Contains(images, image) || !runner.RegistryDigestMatches(image, image) {
+			return errTransport
+		}
+		c.gitPrepImage = image
+	}
+	phase = "job_git_configuration"
+	jobGit, bundles := os.Getenv("GOLF_RUNNER_JOB_GIT"), os.Getenv("GOLF_RUNNER_ACTIONS_REMOTE_BUNDLES")
+	if jobGit != "" && jobGit != "1" || bundles != "" && jobGit != "1" {
+		return errTransport
+	}
+	if jobGit == "1" {
+		access := runner.ActionDependencyAccess{Network: os.Getenv("GOLF_RUNNER_ACTIONS_EGRESS_NETWORK"), Address: net.JoinHostPort(os.Getenv("GOLF_RUNNER_ACTIONS_EGRESS_HOST"), "1024"), Password: strings.Repeat("0", 64)}
+		if c.gitPrepImage == "" || !c.verifyingHTTPS() || access.Validate() != nil {
+			return errTransport
+		}
+		if bundles != "" {
+			if _, err := runner.ReadActionBundles(bundles); err != nil {
+				return errTransport
+			}
 		}
 	}
 	if len(os.Args) > 1 {
@@ -419,12 +460,14 @@ func run(ctx context.Context) error {
 		report(assignment{}, "recovered")
 		return nil
 	}
+	phase = "worker_residue_check"
 	if c.actions != nil {
 		if err = executor.RequireCleanWorker(ctx); err != nil {
 			return err
 		}
 	}
 	for ctx.Err() == nil {
+		phase = "coordinator_poll"
 		a, err := c.poll(ctx)
 		if errors.Is(err, errUnauthorized) {
 			return err
@@ -477,7 +520,7 @@ func (c *coordinator) pollCapabilities() any {
 		Catalogs     []string `json:"catalogs"`
 		Capabilities []string `json:"capabilities,omitempty"`
 	}{Capabilities: []string{runner.JobLimitsCapability}}
-	if c.actions != nil {
+	if c.actions != nil && (c.gitPrepImage == "" || c.gitSourceReady()) {
 		out.Catalogs = []string{runner.ActionsCatalog}
 	}
 	if c.actions != nil && strings.HasPrefix(c.origin, "https://") {
@@ -490,12 +533,39 @@ func (c *coordinator) pollCapabilities() any {
 		}
 		out.Capabilities = append(out.Capabilities, runner.ManualInputsCapability)
 	}
+	if c.gitSourceReady() {
+		out.Capabilities = append(out.Capabilities, runner.GitSourceProfile)
+		if os.Getenv("GOLF_RUNNER_JOB_GIT") == "1" {
+			out.Capabilities = append(out.Capabilities, runner.JobGitCapability)
+			if os.Getenv("GOLF_RUNNER_ACTIONS_REMOTE_BUNDLES") != "" {
+				out.Catalogs = append(out.Catalogs, runner.ActionsRemoteCatalog)
+			}
+		}
+	}
 	if c.manualInputsReady() {
 		out.Capabilities = append(out.Capabilities, runner.ArtifactCapability)
 	}
 	return out
 }
+func (c *coordinator) gitSourceReady() bool {
+	return c.actions != nil && c.executor != nil && c.gitPrepImage != "" && c.manualInputsReady()
+}
 func (c *coordinator) validAssignment(a assignment) bool {
+	if a.ActionsPlan != nil && os.Getenv("GOLF_RUNNER_JOB_GIT") == "1" && a.JobGit == nil {
+		return false
+	}
+	if a.EngineCatalog == runner.ActionsRemoteCatalog && (a.JobGit == nil || os.Getenv("GOLF_RUNNER_ACTIONS_REMOTE_BUNDLES") == "") {
+		return false
+	}
+	if a.JobGit != nil && (a.JobGit.Validate() != nil || !c.gitSourceReady() || a.GitSourceProfile != runner.GitSourceProfile || os.Getenv("GOLF_RUNNER_JOB_GIT") != "1" || a.ActionsPlan == nil) {
+		return false
+	}
+	if c.gitPrepImage != "" && a.ActionsPlan != nil && a.GitSourceProfile == "" {
+		return false
+	}
+	if a.GitSourceProfile != "" && (a.GitSourceProfile != runner.GitSourceProfile || !c.gitSourceReady() || a.ActionsPlan == nil) {
+		return false
+	}
 	if a.EngineCatalog == runner.ActionsAgentCatalog && (os.Getenv("GOLF_RUNNER_ACTIONS_AGENTS088") != "1" || !c.manualInputsReady()) {
 		return false
 	}
@@ -564,11 +634,69 @@ func (c *coordinator) executeActions(ctx context.Context, a assignment, source s
 		return runner.Result{}, errTransport
 	}
 	input := actionsExecutionInput(a, archive, images)
+	input.JobGit = a.JobGit
+	if a.JobGit != nil && os.Getenv("GOLF_RUNNER_TLS_CA_FILE") != "" {
+		input.JobTLSCA, err = os.ReadFile(os.Getenv("GOLF_RUNNER_TLS_CA_FILE"))
+		if err != nil || len(input.JobTLSCA) == 0 || len(input.JobTLSCA) > 64<<10 {
+			return runner.Result{}, errTransport
+		}
+	}
+	if input.Plan.Catalog == runner.ActionsRemoteCatalog {
+		input.Input.RemoteActions, err = runner.ReadActionBundles(os.Getenv("GOLF_RUNNER_ACTIONS_REMOTE_BUNDLES"))
+		if err != nil {
+			return runner.Result{}, err
+		}
+	}
+	var proxyCleanup func()
+	if a.JobGit != nil {
+		input.DependencyAccess, proxyCleanup, err = runner.StartActionsDependencyProxy(ctx, os.Getenv("GOLF_RUNNER_ACTIONS_EGRESS_NETWORK"), os.Getenv("GOLF_RUNNER_ACTIONS_EGRESS_HOST"), a.JobGit)
+		if err != nil {
+			return runner.Result{}, err
+		}
+		defer proxyCleanup()
+	}
+	var metadata []byte
+	if a.GitSourceProfile != "" {
+		if !c.validAssignment(a) {
+			return runner.Result{}, errTransport
+		}
+		input.GitSource, metadata, err = c.prepareActionsGitSource(ctx, c.executor, a, archive, c.gitPrepImage)
+		if err != nil {
+			return runner.Result{}, err
+		}
+	}
 	var acknowledgementFailure error
-	result, err := c.actions.Execute(ctx, a.AttemptID, input, func(ctx context.Context, frame runner.ActionFrame) error {
+	transcript := &jobGitTranscript{}
+	if input.DependencyAccess != nil {
+		transcript.secrets = map[string]string{"proxy": input.DependencyAccess.Password, "proxyBasic": base64.StdEncoding.EncodeToString([]byte("golf-job:" + input.DependencyAccess.Password))}
+	}
+	observe := func(ctx context.Context, frame runner.ActionFrame) error {
+		if a.JobGit != nil && frame.Kind == "log" {
+			return transcript.append(frame)
+		}
+		if a.JobGit != nil && frame.Kind == "complete" {
+			if e := transcript.release(ctx, forward); e != nil {
+				acknowledgementFailure = e
+				return e
+			}
+		}
 		acknowledgementFailure = c.acknowledgeActionFrame(ctx, a, forward, frame)
 		return acknowledgementFailure
-	})
+	}
+	var result runner.Result
+	if input.JobGit != nil {
+		result, err = c.actions.ExecuteGitCredentials(ctx, a.AttemptID, input, metadata, observe, func(ctx context.Context, job string) (*runner.JobGitCredential, error) {
+			credential, e := c.issueJobGit(ctx, a, job)
+			if e == nil {
+				transcript.issued(credential)
+			}
+			return credential, e
+		})
+	} else if input.GitSource != nil {
+		result, err = c.actions.ExecuteGit(ctx, a.AttemptID, input, metadata, observe)
+	} else {
+		result, err = c.actions.Execute(ctx, a.AttemptID, input, observe)
+	}
 	// The executor intentionally returns a closed infrastructure error on failure.
 	// Retain only our bounded acknowledgement classification beside that policy.
 	if err != nil && acknowledgementFailure != nil {

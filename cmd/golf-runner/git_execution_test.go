@@ -104,7 +104,7 @@ func executionSourceFixture(t *testing.T, format string, scripts ...string) (str
 	if len(scripts) > 0 {
 		script = scripts[0]
 	}
-	files := []struct{ name, body string }{{"workflow.yml", "name: Original source\non: workflow_dispatch\njobs:\n  check:\n    runs-on: owned\n    steps:\n      - shell: sh\n        run: " + script + "\n"}, {"README.md", "original ordinary source\n"}}
+	files := []struct{ name, body string }{{"workflow.yml", "name: Original source\non: workflow_dispatch\njobs:\n  check:\n    runs-on: owned\n    steps:\n      - shell: sh\n        run: " + strconv.Quote(script) + "\n"}, {"README.md", "original ordinary source\n"}}
 	var archive bytes.Buffer
 	writer := tar.NewWriter(&archive)
 	for _, file := range files {
@@ -143,13 +143,19 @@ func TestActionsGitActualEngine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"success", "wrong_tree", "cancel"} {
+	for _, mode := range []string{"success", "wrong_tree", "cancel", "disk_full", "inode_full", "lost_create"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 			defer cancel()
 			script := "git rev-parse HEAD"
 			if mode == "cancel" {
 				script += "; sleep 30"
+			}
+			if mode == "disk_full" {
+				script = "if dd if=/dev/zero of=full bs=1048576 count=129 2>/dev/null; then exit 42; fi; test -f workflow.yml; echo DISK_BOUND_ENFORCED"
+			}
+			if mode == "inode_full" {
+				script = "mkdir entries; i=0; while test $i -lt 9000; do if ! ( : > entries/$i ) 2>/dev/null; then break; fi; i=$((i+1)); done; test $i -lt 9000; echo INODE_BOUND_ENFORCED"
 			}
 			root, h, blob, archive := executionSourceFixture(t, "sha1", script)
 			in := runner.ActionPlanInput{Catalog: runner.ActionsCatalog, Archive: archive, WorkflowPath: "workflow.yml", WorkflowBlobID: blob, Event: "workflow_dispatch", Ref: h, Images: map[string]string{"owned": image}}
@@ -162,7 +168,19 @@ func TestActionsGitActualEngine(t *testing.T) {
 			if err != nil || len(out) > 1<<20 || json.Unmarshal(out, &plan) != nil || plan.ArchiveSHA256 == "" {
 				t.Fatal("actual maintained engine original-YAML admission refused")
 			}
-			e, err := runner.New(runner.Config{WorkerID: worker, DockerBinary: "docker", ApprovedImages: []string{image}})
+			docker := "docker"
+			if mode == "lost_create" {
+				nativeDocker, lookupErr := exec.LookPath("docker")
+				if lookupErr != nil {
+					t.Fatal(lookupErr)
+				}
+				docker = filepath.Join(t.TempDir(), "lost-create-docker")
+				script := "#!/bin/sh\nif [ \"$1\" = container ] && [ \"$2\" = create ]; then\n " + strconv.Quote(nativeDocker) + " \"$@\" >/dev/null || exit 1\n exit 9\nfi\nexec " + strconv.Quote(nativeDocker) + " \"$@\"\n"
+				if os.WriteFile(docker, []byte(script), 0700) != nil {
+					t.Fatal("owned acknowledgement fixture")
+				}
+			}
+			e, err := runner.New(runner.Config{WorkerID: worker, DockerBinary: docker, ApprovedImages: []string{image}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -203,6 +221,16 @@ func TestActionsGitActualEngine(t *testing.T) {
 			defer transport.CloseIdleConnections()
 			c := &coordinator{origin: server.URL, id: worker, key: strings.Repeat("k", 43), client: &http.Client{Transport: transport}, actions: actions}
 			manifest, metadata, err := c.prepareActionsGitSource(ctx, e, a, archive, image)
+			if mode == "lost_create" {
+				if !errors.Is(err, runner.ErrInfrastructure) || manifest != nil || len(metadata) != 0 || !errors.Is(e.RequireCleanWorker(ctx), runner.ErrCleanup) {
+					t.Fatal("lost create response was guessed or worker reuse was permitted")
+				}
+				if e.CleanupWorker(ctx) != nil || e.RequireCleanWorker(ctx) != nil {
+					t.Fatal("exact owned recovery failed")
+				}
+				t.Logf("ACTUAL_GIT_JOB case=lost_create H=%s withheldMetadata=true workerReuseRefused=true ownedCleanup=true", h)
+				return
+			}
 			if err != nil {
 				t.Fatal("actual native-container preparation refused", err)
 			}
@@ -233,10 +261,10 @@ func TestActionsGitActualEngine(t *testing.T) {
 				}
 				return nil
 			})
-			if mode == "success" && (executionErr != nil || result.ExitCode != 0 || !started || !finished || !complete || !strings.Contains(logs.String(), h)) {
+			if (mode == "success" || mode == "disk_full" || mode == "inode_full") && (executionErr != nil || result.ExitCode != 0 || !started || !finished || !complete || !(strings.Contains(logs.String(), h) || mode == "disk_full" && strings.Contains(logs.String(), "DISK_BOUND_ENFORCED") || mode == "inode_full" && strings.Contains(logs.String(), "INODE_BOUND_ENFORCED"))) {
 				t.Fatal("actual Git job/log/graph proof failed", runner.ActionsFailureStage(executionErr))
 			}
-			if mode != "success" && executionErr == nil {
+			if mode != "success" && mode != "disk_full" && mode != "inode_full" && executionErr == nil {
 				t.Fatal("actual refusal/cancellation became success")
 			}
 			if mode == "cancel" && (!started || !strings.Contains(logs.String(), h) || ctx.Err() == nil) {
@@ -289,7 +317,7 @@ func actualGitJobProfile(t *testing.T, ctx context.Context, worker, attempt stri
 		t.Fatal("actual native inner inspect receipt invalid")
 	}
 	r := rows[0]
-	if r.Config.User != "1000:1000" || r.HostConfig.NetworkMode != "none" || r.HostConfig.Privileged || r.HostConfig.Memory != 268435456 || r.HostConfig.MemorySwap != 268435456 || r.HostConfig.NanoCpus != 1000000000 || r.HostConfig.PidsLimit == nil || *r.HostConfig.PidsLimit != 64 || len(r.Mounts) != 3 {
+	if r.Config.User != "1000:1000" || r.HostConfig.NetworkMode != "none" || r.HostConfig.Privileged || r.HostConfig.Memory != 268435456 || r.HostConfig.MemorySwap != 268435456 || r.HostConfig.NanoCpus != 1000000000 || r.HostConfig.PidsLimit == nil || *r.HostConfig.PidsLimit != 64 || !r.HostConfig.ReadonlyRootfs || len(r.Mounts) < 3 || len(r.Mounts) > 4 {
 		t.Fatal("actual job resource/mount profile differs")
 	}
 	encoded, _ := json.Marshal(r)

@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { ChangeRepositoryArchiveStateRequestSchema, ChangeRepositoryArchiveStateResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryLifecycleOperationRequestSchema, GetRepositoryLifecycleOperationResponseSchema, GetRepositoryLifecycleResponseSchema, GetRepositoryResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, LogoutResponseSchema, RepositoryFeatureMode, RepositoryLifecycleSchema, RepositorySettingsSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
@@ -11,7 +12,7 @@ async function backend(page:Page){
   if(method==='Logout'){state.signedIn=false;return respond(route,LogoutResponseSchema,{});}
   if(!state.signedIn)return reject(route,'unauthenticated','Sign in again.');
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:state.user});
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:repoId,name:state.metadataWrong?'another':'example',fullName:'alice/example',defaultBranch:'main'}});
   if(method==='GetRepositorySettings')return respond(route,GetRepositorySettingsResponseSchema,{settings:create(RepositorySettingsSchema,{repositoryId:repoId,ownerId:'42',revision:'a'.repeat(64),defaultBranch:'main',generalEditImplemented:true,issuesMode:RepositoryFeatureMode.INTERNAL,wikiMode:RepositoryFeatureMode.INTERNAL,hasIssues:true,hasWiki:true})});

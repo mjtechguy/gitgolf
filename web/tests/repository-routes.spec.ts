@@ -1,7 +1,8 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import {
-  GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema,
+  GetRepositoryMirrorStatusResponseSchema, GetRepositoryLifecycleResponseSchema, RepositoryFeatureMode, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema,
   GetRepositorySettingsResponseSchema, GetRepositoryAccessResponseSchema, ListRepositoryCollaboratorsResponseSchema,
   InspectWorkflowsResponseSchema, GetRepositoryResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema,
   ListBranchesResponseSchema, ListCommitsRequestSchema, ListCommitsResponseSchema, ResolveRepositorySourceRequestSchema, SourceEntryType,
@@ -11,8 +12,8 @@ import { resolveSourceFixture, disabledAgentUsage, disabledAgentTasks, reject, r
 const snapshot = 'a'.repeat(40), other = 'b'.repeat(40);
 const user = { id: '17', login: 'alex', fullName: 'Alex' };
 const repository = { id: '19', owner: user, name: 'demo', fullName: 'alex/demo', defaultBranch: 'main' };
-async function fixture(page: Page) {
-  const state = { denied: false, signedIn: true, methods: [] as string[], authorityURLs: [] as string[], canonicalBodies: [] as {method:string;repository:unknown}[], refs: [] as string[], selections: [] as ReturnType<typeof request<typeof ResolveRepositorySourceRequestSchema>>[] };
+async function fixture(page: Page, profile = 'docker') {
+  const state = { capabilitiesFailed: false, capabilitiesBarrier: undefined as Promise<void> | undefined, nativeCapabilities: [{id:'settings.repository-general',label:'General settings',state:3,reason:'Available'}, {id:'settings.repository-access',label:'Repository access',state:3,reason:'Available'}, {id:'settings.repository-rules',label:'Rules and merge policy',state:1,reason:'Protected merge enforcement is not implemented on Cloudflare native.'}], denied: false, signedIn: true, methods: [] as string[], authorityURLs: [] as string[], canonicalBodies: [] as {method:string;repository:unknown}[], refs: [] as string[], selections: [] as ReturnType<typeof request<typeof ResolveRepositorySourceRequestSchema>>[] };
   await page.route('**/rpc/**', async route => {
     const method = route.request().url().split('/').at(-1)!;
     state.methods.push(method);
@@ -22,10 +23,12 @@ async function fixture(page: Page) {
     if (['GetRepository', 'GetRepositorySettings', 'GetRepositoryLifecycle', 'GetRepositoryAccess', 'InspectWorkflows'].includes(method)) state.authorityURLs.push(page.url());
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (method === 'GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user }) : reject(route, 'unauthenticated', 'Signed out.');
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') { if (state.capabilitiesBarrier) await state.capabilitiesBarrier; return state.capabilitiesFailed ? reject(route, 'unavailable', 'Capabilities temporarily unavailable.') : respond(route, ListCapabilitiesResponseSchema, profile === 'cloudflare-native' ? {runtimeProfile:profile,capabilities:state.nativeCapabilities} : {...portableRuntimeFixture,runtimeProfile:profile}); }
     if (state.denied) return reject(route, 'permission_denied', 'Current repository access denied.');
+    if(method==='GetRepositoryLifecycle') return respond(route,GetRepositoryLifecycleResponseSchema,{lifecycle:{repository:{owner:'alex',name:'demo'},repositoryId:repository.id,ownerId:user.id,revision:'a'.repeat(64),canManage:false,blockedReason:'ownership_required'}});
+    if(method==='GetRepositoryMirrorStatus') return respond(route,GetRepositoryMirrorStatusResponseSchema,{repository:{owner:'alex',name:'demo'},repositoryId:repository.id});
     if (method === 'GetRepositorySettings') return respond(route, GetRepositorySettingsResponseSchema, { settings: {
-      repositoryId: repository.id, ownerId: user.id, description: 'PRIVATE route settings', defaultBranch: 'main', canEdit: true, revision: 'settings-v1', hasIssues: true, hasPullRequests: true,
+      repositoryId: repository.id, ownerId: user.id, description: 'PRIVATE route settings', defaultBranch: 'main', canEdit: true, revision: 'a'.repeat(64), generalEditImplemented:true, issuesMode:RepositoryFeatureMode.INTERNAL, wikiMode:RepositoryFeatureMode.DISABLED, hasIssues: true, hasPullRequests: true,
     } });
     if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: {
       repositoryId: repository.id, ownerId: user.id, owner: user, canManage: true, currentPermission: 'admin', revision: 'access-v1',
@@ -53,10 +56,60 @@ async function fixture(page: Page) {
 }
 
 const settingsPages = [
-  ['settings', 'Repository settings', 'GetRepositorySettings'],
+  ['settings', 'General settings', 'GetRepositorySettings'],
   ['settings/access', 'Repository access', 'GetRepositoryAccess'],
   ['settings/workflows', 'Workflow configuration', 'InspectWorkflows'],
 ] as const;
+
+for (const profile of ['local', 'docker', 'kubernetes', 'cloudflare-native']) for (const width of [320, 1440]) test(`persistent repository frame and settings navigation ${profile} ${width}`, async ({page}) => {
+  const state = await fixture(page, profile);
+  await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme), profile==='local'||profile==='kubernetes'?'dark':'light');
+  await page.setViewportSize({width, height:900});
+  await page.goto('/alex/demo');
+  const tabs = page.getByRole('navigation', {name:'Repository',exact:true});
+  await expect(tabs.getByRole('link',{name:'Code',exact:true})).toHaveAttribute('aria-current','page');
+  const header = await page.locator('.topbar').elementHandle(), navigation = await tabs.elementHandle();
+  await page.getByLabel('Open workspace navigation',{exact:true}).click();
+  await expect(page.getByRole('navigation',{name:'Workspace',exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('navigation',{name:'Workspace',exact:true})).toBeHidden();
+  await expect(page.getByLabel('Open workspace navigation',{exact:true})).toBeFocused();
+  await tabs.getByRole('link',{name:'Settings',exact:true}).click();
+  await expect(page.getByText('PRIVATE route settings',{exact:true})).toBeVisible();
+  await expect(tabs.getByRole('link',{name:'Settings',exact:true})).toHaveAttribute('aria-current','page');
+  await expect(tabs.locator('[aria-current="page"]')).toHaveCount(1);
+  expect(await header!.evaluate(node=>node.isConnected)).toBe(true);
+  expect(await navigation!.evaluate(node=>node.isConnected)).toBe(true);
+  await expect(page.getByRole('heading',{name:'Settings coverage',exact:true})).toHaveCount(0);
+  const sidebar = await page.locator('.repository-settings-layout > .account-navigation').elementHandle();
+  const picker = page.getByRole('combobox',{name:'Settings section',exact:true});
+  if(width===320) await expect(picker).toBeVisible(); else await expect(picker).toBeHidden();
+  if(profile!=='cloudflare-native') {
+    if(width===320) await picker.selectOption('/$owner/$name/settings/access');
+    else await page.getByRole('navigation',{name:'Repository settings',exact:true}).getByRole('link',{name:'Access',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'Repository access',exact:true})).toBeVisible();
+    expect(await sidebar!.evaluate(node=>node.isConnected)).toBe(true);
+    expect(await navigation!.evaluate(node=>node.isConnected)).toBe(true);
+    await page.goBack();
+    await expect(page.getByText('PRIVATE route settings',{exact:true})).toBeVisible();
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:`test-results/repository-shell-${profile}-${width}.png`,fullPage:true});
+  await tabs.getByRole('link',{name:'Code',exact:true}).click();
+  await expect(tabs.getByRole('link',{name:'Code',exact:true})).toHaveAttribute('aria-current','page');
+  expect(await header!.evaluate(node=>node.isConnected)).toBe(true);
+  expect(await navigation!.evaluate(node=>node.isConnected)).toBe(true);
+  // Revoke at the settings read, so concurrent source revalidation cannot
+  // correctly remove the navigation before this test clicks it.
+  await page.route('**/rpc/**/GetRepositorySettings', route => {
+    state.denied=true;
+    return reject(route, 'permission_denied', 'Current repository access denied.');
+  });
+  await tabs.getByRole('link',{name:'Settings',exact:true}).click();
+  await expect(page.getByRole('alert').filter({hasText:'Current repository access denied.'}).first()).toBeVisible();
+  await expect(page.getByText('PRIVATE route settings',{exact:true})).toHaveCount(0);
+  expect(state.methods.some(method=>/^(Update|Set|Create|Delete|Dispatch|Save|Activate|Remove)/.test(method))).toBe(false);
+});
 for (const [tail, heading, method] of settingsPages) test(`legacy ${tail} normalizes before reading the canonical settings page`, async ({ page }) => {
   const state = await fixture(page);
   await page.goto(`/repositories/alex/demo/${tail}#route-fragment`);
@@ -195,4 +248,64 @@ test('path-owned selectors normalize once while preserving deliberate issue retu
   expect(url.searchParams.get('branch')).toBe('feature/UI');
   expect(url.hash).toBe('#comment-2');
   expect(state.methods).not.toContain('GetContents');
+});
+
+for (const width of [320, 1440]) test(`native settings retain the full sidebar and explain unavailable sections at ${width}px`, async ({ page }) => {
+  const state = await fixture(page, 'cloudflare-native');
+  await page.setViewportSize({width, height:900});
+  await page.goto('/alex/demo/settings');
+  await expect(page.getByText('PRIVATE route settings', {exact:true})).toBeVisible();
+  const nav = page.locator('.repository-settings-layout > .account-navigation');
+  const picker = page.getByRole('combobox', {name:'Settings section', exact:true, includeHidden:true});
+  const sections = ['General', 'Access', 'Git credentials', 'Rules and merge policy', 'Workflows', 'Runners', 'Secrets and variables', 'Environments', 'Webhooks'];
+  await expect(nav.getByRole('link', {includeHidden:true})).toHaveCount(sections.length);
+  await expect(picker.locator('option')).toHaveCount(sections.length);
+  for (const section of sections) await expect(nav.getByRole('link', {includeHidden:true}).filter({hasText:section})).toHaveCount(1);
+  const sidebar = await page.locator('.repository-settings-layout > .account-navigation').elementHandle();
+  const tabs = page.getByRole('navigation', {name:'Repository', exact:true});
+  const frame = await tabs.elementHandle();
+  const methods = state.methods.length;
+  if (width === 320) await picker.selectOption('/$owner/$name/settings/rules');
+  else await nav.getByRole('link', {includeHidden:true}).filter({hasText:'Rules and merge policy'}).click();
+  await expect(page.getByRole('heading', {name:'Rules and merge policy', exact:true})).toBeVisible();
+  await expect(page.getByText('Protected merge enforcement is not implemented on Cloudflare native.', {exact:true})).toBeVisible();
+  await expect(nav.locator('[aria-current="page"]')).toContainText('Rules and merge policy');
+  await expect(tabs.getByRole('link', {name:'Settings', exact:true})).toHaveAttribute('aria-current','page');
+  expect(await sidebar!.evaluate(node=>node.isConnected)).toBe(true);
+  expect(await frame!.evaluate(node=>node.isConnected)).toBe(true);
+  expect(state.methods.slice(methods).filter(method=>!['GetRepository','ListCapabilities','WatchRepository'].includes(method))).toEqual([]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.goBack();
+  await expect(page.getByText('PRIVATE route settings', {exact:true})).toBeVisible();
+});
+
+test('native settings wait for capabilities, retain navigation on failure and recover explicitly', async ({page}) => {
+  const state = await fixture(page, 'cloudflare-native');
+  let release!: () => void;
+  state.capabilitiesBarrier = new Promise<void>(resolve=>{release=resolve;});
+  await page.goto('/alex/demo/settings/workflows');
+  await expect(page.getByRole('heading', {name:'Checking settings availability…',exact:true})).toBeVisible();
+  expect(state.methods).not.toContain('InspectWorkflows');
+  await expect(page.getByRole('navigation', {name:'Repository settings',exact:true}).getByRole('link')).toHaveCount(9);
+  state.capabilitiesFailed = true; release();
+  await expect(page.getByText('Settings availability could not be checked. Retry to load the current installation capabilities.',{exact:true})).toBeVisible();
+  expect(state.methods).not.toContain('InspectWorkflows');
+  state.capabilitiesFailed = false;
+  state.nativeCapabilities.push({id:'settings.repository-workflows',label:'Workflows',state:3,reason:'Available'});
+  await page.getByRole('button', {name:'Refresh availability',exact:true}).click();
+  await expect(page.getByRole('heading', {name:'Workflow configuration',exact:true})).toBeVisible();
+  await expect.poll(() => state.methods).toContain('InspectWorkflows');
+});
+
+
+test('each unavailable native settings route keeps its selected sidebar without probing unsupported APIs', async ({page}) => {
+  const state = await fixture(page, 'cloudflare-native');
+  for (const suffix of ['git','rules','workflows','runners','secrets','environments','webhooks']) {
+    await page.goto(`/alex/demo/settings/${suffix}`);
+    await expect(page.getByRole('heading', {name:'Settings unavailable',exact:true})).toBeVisible();
+    const nav = page.getByRole('navigation', {name:'Repository settings',exact:true});
+    await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('href', `/alex/demo/settings/${suffix}`);
+    await expect(nav.getByRole('link')).toHaveCount(9);
+  }
+  expect(state.methods.filter(method=>!['GetSession','GetAuthenticationOptions','ListCapabilities','GetRepository'].includes(method))).toEqual([]);
 });

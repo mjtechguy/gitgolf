@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { test,expect,type Page } from '@playwright/test';
 import { reject,request,respond } from './rpc';
 import { AgentEventBodyState,ActionRunKind,GetActionRunResponseSchema,GetAuthenticationOptionsResponseSchema,GetRepositoryResponseSchema,GetSessionResponseSchema,ListAgentTaskEventsResponseSchema,ListCapabilitiesResponseSchema } from '../src/gen/golf/v1/golf_pb';
@@ -9,7 +10,7 @@ async function fixture(page:Page){
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
   if(method==='GetSession')return state.ended?respond(route,GetSessionResponseSchema,{}):respond(route,GetSessionResponseSchema,{user:{id:actor,login:'alex'}});
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:repo,name:'private',fullName:'alex/private',defaultBranch:'main',private:true}});
   if(method==='GetActionRun'){const task={id,repository:{owner:'alex',name:'private'},state:'running',commitId:commit,version:'1',createdAt:'2026-10-01T12:00:00Z',workerId:'worker-1',attemptId:attempt,modelId:'opencode-go/model',tokens:'0',summary:'Private retained proposal'};return respond(route,GetActionRunResponseSchema,{repositoryId:repo,summary:{ref:{kind:ActionRunKind.CODING_TASK,id},repositoryId:repo,ownerId:actor,title:'Coding task',state:task.state,commitId:commit,createdAt:task.createdAt,workerId:task.workerId,attemptId:attempt,modelId:task.modelId},detail:{case:'task',value:task}});}
   if(method==='ListAgentTaskEvents')return respond(route,ListAgentTaskEventsResponseSchema,{repositoryId:repo,taskId:id,attemptId:attempt,commitId:commit,nativeInitiatorId:actor,bodyState:AgentEventBodyState.WITHHELD,events:[]});

@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
 import { GetAuthenticationOptionsResponseSchema, GetOrganizationRequestSchema, GetOrganizationResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListOrganizationsRequestSchema, ListOrganizationsResponseSchema, ListRepositoriesResponseSchema, ListTeamsResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
@@ -12,7 +13,7 @@ async function backend(page: Page) {
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { id: '17', fullName: 'lab/project', name: 'project', private: true, empty: true } });
     if (method === 'GetOrganization') return respond(route, GetOrganizationResponseSchema, { organization: { id: '19', name: request(route, GetOrganizationRequestSchema).organization } });

@@ -189,7 +189,7 @@ func TestJobGitSealedScopeAndLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	claims, err := s.openJobGitCredential(credential.GitToken)
-	if err != nil || s.jobGitCurrentClaims(claims, run, now) != nil || claims.Expires != now.Add(45*time.Second).Unix() || credential.RepositoryURL != "https://golf.invalid/alice/example" || credential.JobInstanceID != job {
+	if err != nil || s.jobGitCurrentClaims(claims, run, now) != nil || claims.Expires != now.Add(5*time.Minute).Unix() || credential.RepositoryURL != "https://golf.invalid/alice/example" || credential.JobInstanceID != job {
 		t.Fatal("exact job/origin/lease binding", err)
 	}
 	if strings.Contains(credential.GitToken, "worker-control-credential") || strings.Contains(credential.GitToken, "attempt-control-credential") || strings.Contains(credential.GitToken, run.CommitID) {
@@ -315,8 +315,13 @@ func TestJobGitCanonicalReadOnlyRoute(t *testing.T) {
 		if route, err := s.jobGitRoute(jobGitRequest(credential.GitToken, suffix, body), claims); err != nil || route.Service != "git-upload-pack" {
 			t.Fatal("canonical route", err)
 		}
+		v2 := jobGitRequest(credential.GitToken, suffix, body)
+		v2.Header.Set("Git-Protocol", "version=2")
+		if route, err := s.jobGitRoute(v2, claims); err != nil || route.Service != "git-upload-pack" {
+			t.Fatal("canonical v2 route", err)
+		}
 	}
-	for _, name := range []string{"tls", "host", "rawpath", "query", "userinfo", "force-query", "receive", "wiki", "other-repo", "v2", "gzip", "cookie", "origin", "runner", "attempt", "duplicate-auth", "duplicate-mime", "human-user", "method"} {
+	for _, name := range []string{"tls", "host", "rawpath", "query", "userinfo", "force-query", "receive", "wiki", "other-repo", "duplicate-v2", "future-protocol", "gzip", "cookie", "origin", "runner", "attempt", "duplicate-auth", "duplicate-mime", "human-user", "method"} {
 		t.Run(name, func(t *testing.T) {
 			r := jobGitRequest(credential.GitToken, "git-upload-pack", runnerGitFetch(run.CommitID))
 			switch name {
@@ -338,8 +343,10 @@ func TestJobGitCanonicalReadOnlyRoute(t *testing.T) {
 				r.URL.Path = "/alice/example.wiki/git-upload-pack"
 			case "other-repo":
 				r.URL.Path = "/alice/other/git-upload-pack"
-			case "v2":
-				r.Header.Set("Git-Protocol", "version=2")
+			case "future-protocol":
+				r.Header.Set("Git-Protocol", "version=3")
+			case "duplicate-v2":
+				r.Header["Git-Protocol"] = []string{"version=2", "version=2"}
 			case "gzip":
 				r.Header.Set("Content-Encoding", "gzip")
 			case "cookie":
@@ -384,6 +391,11 @@ func TestJobGitIssuerCanonicalBoundary(t *testing.T) {
 	}
 	if !s.jobGitIssuerRoute(makeRequest(), run.AttemptID) {
 		t.Fatal("canonical issuer rejected")
+	}
+	control := makeRequest()
+	control.URL.Host, control.Host = "worker-control.invalid:9443", "worker-control.invalid:9443"
+	if !s.jobGitIssuerRoute(control, run.AttemptID) {
+		t.Fatal("independent authenticated TLS control origin rejected")
 	}
 	for _, name := range []string{"userinfo", "opaque", "tls", "host", "method", "rawpath", "query", "forced-query", "cookie", "origin", "duplicate-worker", "duplicate-attempt", "duplicate-auth"} {
 		t.Run(name, func(t *testing.T) {
@@ -439,165 +451,198 @@ func jobGitIssue(t *testing.T, f *workflowRunFixture, lease engineLease, job str
 // Real PostgreSQL/real admitted planner graph, with a controlled supported native
 // API/Git transport. No Docker engine, enrolled local worker or checkout proof.
 func TestJobGitCurrentGraphAndLateRevocationPostgres(t *testing.T) {
-	for _, scenario := range []string{"success", "job-finish", "attempt-revoke", "policy-revision", "native-denial", "workflow-drift", "redirect"} {
-		t.Run(scenario, func(t *testing.T) {
-			f := engineRunFixture(t)
-			if _, err := f.dispatch(t, originalDispatchKey); err != nil {
-				t.Fatal(err)
-			}
-			lease := engineAssigned(t, f)
-			f.server.config.PublicURL = "https://golf.invalid"
-			job := lease.ActionsPlan.Jobs[0]
-			if w := jobGitIssue(t, f, lease, job.InstanceID); w.Code != 403 {
-				t.Fatal("pending job issued capability", w.Code)
-			}
-			if w := jobGitIssue(t, f, lease, strings.Repeat("f", 32)); w.Code != 403 {
-				t.Fatal("caller invented job", w.Code)
-			}
-			if w := engineWorkerCall(f, lease, "graph", map[string]any{"sequence": 1, "jobInstanceId": job.InstanceID, "kind": "job_started"}); w.Code != 204 {
-				t.Fatal("genuine graph", w.Code)
-			}
-			issued := jobGitIssue(t, f, lease, job.InstanceID)
-			var credential jobGitCredentialResponse
-			if issued.Code != 200 || json.Unmarshal(issued.Body.Bytes(), &credential) != nil || credential.GitToken == "" || issued.Header().Get("Cache-Control") != "no-store" {
-				t.Fatal("current job issuance", issued.Code)
-			}
-			base := f.server.client.Transport
-			if base == nil {
-				base = http.DefaultTransport
-			}
-			forwards := 0
-			f.server.client.Transport = creationRoundTripper(func(r *http.Request) (*http.Response, error) {
-				if r.URL.Path != "/alice/example.git/git-upload-pack" && r.URL.Path != "/alice/example.git/info/refs" {
-					response, err := base.RoundTrip(r)
-					if err != nil || response.StatusCode != 200 || (r.URL.Path != "/api/v1/user" && r.URL.Path != "/api/v1/repos/alice/example") {
-						return response, err
-					}
-					var row map[string]any
-					decoder := json.NewDecoder(response.Body)
-					decoder.UseNumber()
-					if decoder.Decode(&row) != nil {
-						t.Fatal("native JSON fixture")
-					}
-					response.Body.Close()
-					if r.URL.Path == "/api/v1/user" {
-						row["is_admin"] = false
-					} else {
-						row["has_actions"] = false
-						row["permissions"] = map[string]bool{"pull": true, "push": true, "admin": true}
-					}
-					data, _ := json.Marshal(row)
-					response.Body = io.NopCloser(bytes.NewReader(data))
-					response.ContentLength = int64(len(data))
-					return response, nil
+	for _, version := range []string{"0", "2"} {
+		for _, scenario := range []string{"success", "job-finish", "attempt-revoke", "policy-revision", "native-denial", "workflow-drift", "redirect"} {
+			t.Run("protocol_"+version+"/"+scenario, func(t *testing.T) {
+				f := engineRunFixture(t)
+				if _, err := f.dispatch(t, originalDispatchKey); err != nil {
+					t.Fatal(err)
 				}
-				forwards++
-				user, pass, ok := r.BasicAuth()
-				if !ok || user != "alice" || pass != "run-fixture" || strings.Contains(r.Header.Get("Authorization"), credential.GitToken) || r.Header.Get("Golf-Attempt-Token") != "" || r.Header.Get("Golf-Runner-ID") != "" || r.Header.Get("Cookie") != "" {
-					t.Fatal("credential namespace leak")
+				lease := engineAssigned(t, f)
+				f.server.config.PublicURL = "https://golf.invalid"
+				job := lease.ActionsPlan.Jobs[0]
+				if w := jobGitIssue(t, f, lease, job.InstanceID); w.Code != 403 {
+					t.Fatal("pending job issued capability", w.Code)
 				}
-				body, _ := io.ReadAll(r.Body)
-				if r.Method == http.MethodPost && !bytes.Equal(body, runnerGitFetch(f.commit)) {
-					t.Fatal("request changed")
+				if w := jobGitIssue(t, f, lease, strings.Repeat("f", 32)); w.Code != 403 {
+					t.Fatal("caller invented job", w.Code)
 				}
-				switch scenario {
-				case "job-finish":
-					for index, event := range []map[string]any{
-						{"stepId": job.Steps[0].ID, "kind": "step_started"},
-						{"stepId": job.Steps[0].ID, "kind": "step_finished", "state": "failure"},
-						{"kind": "job_finished", "state": "failure"},
-					} {
-						event["sequence"] = index + 2
-						event["jobInstanceId"] = job.InstanceID
-						if w := engineWorkerCall(f, lease, "graph", event); w.Code != 204 {
-							t.Fatal("genuine job terminal receipt", w.Code, w.Body.String())
+				if w := engineWorkerCall(f, lease, "graph", map[string]any{"sequence": 1, "jobInstanceId": job.InstanceID, "kind": "job_started"}); w.Code != 204 {
+					t.Fatal("genuine graph", w.Code)
+				}
+				issued := jobGitIssue(t, f, lease, job.InstanceID)
+				var credential jobGitCredentialResponse
+				if issued.Code != 200 || json.Unmarshal(issued.Body.Bytes(), &credential) != nil || credential.GitToken == "" || issued.Header().Get("Cache-Control") != "no-store" {
+					t.Fatal("current job issuance", issued.Code)
+				}
+				fetchBody := runnerGitFetch(f.commit)
+				if version == "2" {
+					fetchBody = encodeGitPacket([]byte("command=fetch\n"))
+					fetchBody = append(fetchBody, encodeGitPacket([]byte("object-format=sha1\n"))...)
+					fetchBody = append(fetchBody, []byte("0001")...)
+					for _, row := range []string{"want " + f.commit, "deepen 1", "done"} {
+						fetchBody = append(fetchBody, encodeGitPacket([]byte(row+"\n"))...)
+					}
+					fetchBody = append(fetchBody, []byte("0000")...)
+				}
+				jobRequest := func(suffix string, body []byte) *http.Request {
+					r := jobGitRequest(credential.GitToken, suffix, body)
+					if version == "2" {
+						r.Header.Set("Git-Protocol", "version=2")
+					}
+					return r
+				}
+				base := f.server.client.Transport
+				if base == nil {
+					base = http.DefaultTransport
+				}
+				forwards := 0
+				f.server.client.Transport = creationRoundTripper(func(r *http.Request) (*http.Response, error) {
+					if r.URL.Path != "/alice/example.git/git-upload-pack" && r.URL.Path != "/alice/example.git/info/refs" {
+						response, err := base.RoundTrip(r)
+						if err != nil || response.StatusCode != 200 || (r.URL.Path != "/api/v1/user" && r.URL.Path != "/api/v1/repos/alice/example") {
+							return response, err
 						}
+						var row map[string]any
+						decoder := json.NewDecoder(response.Body)
+						decoder.UseNumber()
+						if decoder.Decode(&row) != nil {
+							t.Fatal("native JSON fixture")
+						}
+						response.Body.Close()
+						if r.URL.Path == "/api/v1/user" {
+							row["is_admin"] = false
+						} else {
+							row["has_actions"] = false
+							row["permissions"] = map[string]bool{"pull": true, "push": true, "admin": true}
+						}
+						data, _ := json.Marshal(row)
+						response.Body = io.NopCloser(bytes.NewReader(data))
+						response.ContentLength = int64(len(data))
+						return response, nil
 					}
-				case "attempt-revoke":
-					if _, err := f.server.db.ExecContext(t.Context(), `UPDATE golf_workflow_runs SET cancel_requested=true WHERE id=$1`, lease.RunID); err != nil {
-						t.Fatal(err)
+					forwards++
+					user, pass, ok := r.BasicAuth()
+					if !ok || user != "alice" || pass != "run-fixture" || strings.Contains(r.Header.Get("Authorization"), credential.GitToken) || r.Header.Get("Golf-Attempt-Token") != "" || r.Header.Get("Golf-Runner-ID") != "" || r.Header.Get("Cookie") != "" {
+						t.Fatal("credential namespace leak")
 					}
-				case "policy-revision":
-					if _, err := f.server.db.ExecContext(t.Context(), `UPDATE golf_execution_policies SET revision=revision+1 WHERE forge_url=$1 AND scope='instance'`, f.server.config.GiteaURL); err != nil {
-						t.Fatal(err)
+					body, _ := io.ReadAll(r.Body)
+					if r.Method == http.MethodPost && !bytes.Equal(body, fetchBody) {
+						t.Fatal("request changed")
 					}
-				case "native-denial":
-					f.mu.Lock()
-					f.denied = true
-					f.mu.Unlock()
-				case "workflow-drift":
-					f.mu.Lock()
-					f.workflow = []byte("different workflow")
-					f.mu.Unlock()
+					switch scenario {
+					case "job-finish":
+						for index, event := range []map[string]any{
+							{"stepId": job.Steps[0].ID, "kind": "step_started"},
+							{"stepId": job.Steps[0].ID, "kind": "step_finished", "state": "failure"},
+							{"kind": "job_finished", "state": "failure"},
+						} {
+							event["sequence"] = index + 2
+							event["jobInstanceId"] = job.InstanceID
+							if w := engineWorkerCall(f, lease, "graph", event); w.Code != 204 {
+								t.Fatal("genuine job terminal receipt", w.Code, w.Body.String())
+							}
+						}
+					case "attempt-revoke":
+						if _, err := f.server.db.ExecContext(t.Context(), `UPDATE golf_workflow_runs SET cancel_requested=true WHERE id=$1`, lease.RunID); err != nil {
+							t.Fatal(err)
+						}
+					case "policy-revision":
+						if _, err := f.server.db.ExecContext(t.Context(), `UPDATE golf_execution_policies SET revision=revision+1 WHERE forge_url=$1 AND scope='instance'`, f.server.config.GiteaURL); err != nil {
+							t.Fatal(err)
+						}
+					case "native-denial":
+						f.mu.Lock()
+						f.denied = true
+						f.mu.Unlock()
+					case "workflow-drift":
+						f.mu.Lock()
+						f.workflow = []byte("different workflow")
+						f.mu.Unlock()
+					}
+					if (r.Header.Get("Git-Protocol") == "version=2") != (version == "2") {
+						t.Fatal("job Git protocol was changed before native forwarding")
+					}
+					response := &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/x-git-upload-pack-result"}}, Body: io.NopCloser(strings.NewReader("private job pack")), Request: r}
+					if r.Method == http.MethodGet {
+						data := append(encodeGitPacket([]byte("# service=git-upload-pack\n")), []byte("0000")...)
+						data = append(data, encodeGitPacket([]byte(f.commit+" refs/heads/main\x00shallow ofs-delta no-progress\n"))...)
+						data = append(data, encodeGitPacket([]byte(strings.Repeat("f", 40)+" refs/heads/other-private-branch\n"))...)
+						data = append(data, []byte("0000")...)
+						if version == "2" {
+							data = encodeGitPacket([]byte("version 2\n"))
+							for _, capability := range []string{"agent=git/fixture", "ls-refs=unborn", "fetch=shallow filter", "object-format=sha1"} {
+								data = append(data, encodeGitPacket([]byte(capability+"\n"))...)
+							}
+							data = append(data, []byte("0000")...)
+						}
+						response.Header.Set("Content-Type", "application/x-git-upload-pack-advertisement")
+						response.Body = io.NopCloser(bytes.NewReader(data))
+					}
+					if scenario == "redirect" {
+						response.StatusCode = 302
+						response.Header.Set("Location", "https://other.invalid/")
+					}
+					return response, nil
+				})
+				w := httptest.NewRecorder()
+				f.server.ServeHTTP(w, jobRequest("git-upload-pack", fetchBody))
+				if forwards != 1 {
+					t.Fatal("native effects", forwards, w.Code, w.Body.String())
 				}
-				response := &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/x-git-upload-pack-result"}}, Body: io.NopCloser(strings.NewReader("private job pack")), Request: r}
-				if r.Method == http.MethodGet {
-					data := append(encodeGitPacket([]byte("# service=git-upload-pack\n")), []byte("0000")...)
-					data = append(data, encodeGitPacket([]byte(f.commit+" refs/heads/main\x00shallow ofs-delta no-progress\n"))...)
-					data = append(data, encodeGitPacket([]byte(strings.Repeat("f", 40)+" refs/heads/other-private-branch\n"))...)
-					data = append(data, []byte("0000")...)
-					response.Header.Set("Content-Type", "application/x-git-upload-pack-advertisement")
-					response.Body = io.NopCloser(bytes.NewReader(data))
+				if scenario == "success" {
+					if w.Code != 200 || w.Body.String() != "private job pack" || w.Header().Get("Golf-Job-Instance") != job.InstanceID || w.Header().Get("Golf-Source-Commit") != f.commit {
+						t.Fatal("job read receipt", w.Code, w.Body.String())
+					}
+					// The initial capability explicitly includes native repository ref
+					// discovery. Seeing a different object ID does not grant its fetch.
+					discovery := httptest.NewRecorder()
+					f.server.ServeHTTP(discovery, jobRequest("info/refs?service=git-upload-pack", nil))
+					foreign := strings.Repeat("f", 40)
+					expectedDiscovery := foreign + " refs/heads/other-private-branch"
+					if version == "2" {
+						expectedDiscovery = "fetch=shallow\n"
+					}
+					if discovery.Code != 200 || !strings.Contains(discovery.Body.String(), expectedDiscovery) || forwards != 2 {
+						t.Fatal("native ref discovery scope", discovery.Code, forwards)
+					}
+					wrong := httptest.NewRecorder()
+					f.server.ServeHTTP(wrong, jobRequest("git-upload-pack", bytes.ReplaceAll(fetchBody, []byte(f.commit), []byte(foreign))))
+					if wrong.Code != 400 || forwards != 2 || strings.Contains(wrong.Body.String(), "private job pack") {
+						t.Fatal("foreign object fetch escaped admitted H", wrong.Code, forwards)
+					}
+					other := jobRequest("info/refs?service=git-upload-pack", nil)
+					other.URL.Path = "/alice/other/info/refs"
+					cross := httptest.NewRecorder()
+					f.server.ServeHTTP(cross, other)
+					if cross.Code != 400 || forwards != 2 || strings.Contains(cross.Body.String(), "other-private-branch") {
+						t.Fatal("cross repository discovery", cross.Code, forwards)
+					}
+					// Read-only credential never authenticates enrolled-worker control.
+					r := httptest.NewRequest(http.MethodPost, "/internal/ci/attempt/"+lease.AttemptID+"/heartbeat", strings.NewReader("{}"))
+					r.SetBasicAuth("x-access-token", credential.GitToken)
+					denied := httptest.NewRecorder()
+					f.server.ServeHTTP(denied, r)
+					if denied.Code != 401 {
+						t.Fatal("job token authorized worker control", denied.Code)
+					}
+				} else if w.Code == 200 || strings.Contains(w.Body.String(), "private job pack") || w.Header().Get("Golf-Source-Commit") != "" {
+					t.Fatal("revoked private output released", w.Code, w.Body.String())
 				}
-				if scenario == "redirect" {
-					response.StatusCode = 302
-					response.Header.Set("Location", "https://other.invalid/")
+				if w.Header().Get("Cache-Control") != "no-store" {
+					t.Fatal("failure caching")
 				}
-				return response, nil
+				if scenario == "job-finish" {
+					if refused := jobGitIssue(t, f, lease, job.InstanceID); refused.Code != 403 {
+						t.Fatal("finished job reissued", refused.Code)
+					}
+					refused := httptest.NewRecorder()
+					f.server.ServeHTTP(refused, jobRequest("git-upload-pack", fetchBody))
+					if refused.Code != 401 || forwards != 1 || strings.Contains(refused.Body.String(), "private job pack") {
+						t.Fatal("finished job reached native Git", refused.Code, forwards)
+					}
+				}
 			})
-			w := httptest.NewRecorder()
-			f.server.ServeHTTP(w, jobGitRequest(credential.GitToken, "git-upload-pack", runnerGitFetch(f.commit)))
-			if forwards != 1 {
-				t.Fatal("native effects", forwards, w.Code, w.Body.String())
-			}
-			if scenario == "success" {
-				if w.Code != 200 || w.Body.String() != "private job pack" || w.Header().Get("Golf-Job-Instance") != job.InstanceID || w.Header().Get("Golf-Source-Commit") != f.commit {
-					t.Fatal("job read receipt", w.Code, w.Body.String())
-				}
-				// The initial capability explicitly includes native repository ref
-				// discovery. Seeing a different object ID does not grant its fetch.
-				discovery := httptest.NewRecorder()
-				f.server.ServeHTTP(discovery, jobGitRequest(credential.GitToken, "info/refs?service=git-upload-pack", nil))
-				foreign := strings.Repeat("f", 40)
-				if discovery.Code != 200 || !strings.Contains(discovery.Body.String(), foreign+" refs/heads/other-private-branch") || forwards != 2 {
-					t.Fatal("native ref discovery scope", discovery.Code, forwards)
-				}
-				wrong := httptest.NewRecorder()
-				f.server.ServeHTTP(wrong, jobGitRequest(credential.GitToken, "git-upload-pack", runnerGitFetch(foreign)))
-				if wrong.Code != 400 || forwards != 2 || strings.Contains(wrong.Body.String(), "private job pack") {
-					t.Fatal("foreign object fetch escaped admitted H", wrong.Code, forwards)
-				}
-				other := jobGitRequest(credential.GitToken, "info/refs?service=git-upload-pack", nil)
-				other.URL.Path = "/alice/other/info/refs"
-				cross := httptest.NewRecorder()
-				f.server.ServeHTTP(cross, other)
-				if cross.Code != 400 || forwards != 2 || strings.Contains(cross.Body.String(), "other-private-branch") {
-					t.Fatal("cross repository discovery", cross.Code, forwards)
-				}
-				// Read-only credential never authenticates enrolled-worker control.
-				r := httptest.NewRequest(http.MethodPost, "/internal/ci/attempt/"+lease.AttemptID+"/heartbeat", strings.NewReader("{}"))
-				r.SetBasicAuth("x-access-token", credential.GitToken)
-				denied := httptest.NewRecorder()
-				f.server.ServeHTTP(denied, r)
-				if denied.Code != 401 {
-					t.Fatal("job token authorized worker control", denied.Code)
-				}
-			} else if w.Code == 200 || strings.Contains(w.Body.String(), "private job pack") || w.Header().Get("Golf-Source-Commit") != "" {
-				t.Fatal("revoked private output released", w.Code, w.Body.String())
-			}
-			if w.Header().Get("Cache-Control") != "no-store" {
-				t.Fatal("failure caching")
-			}
-			if scenario == "job-finish" {
-				if refused := jobGitIssue(t, f, lease, job.InstanceID); refused.Code != 403 {
-					t.Fatal("finished job reissued", refused.Code)
-				}
-				refused := httptest.NewRecorder()
-				f.server.ServeHTTP(refused, jobGitRequest(credential.GitToken, "git-upload-pack", runnerGitFetch(f.commit)))
-				if refused.Code != 401 || forwards != 1 || strings.Contains(refused.Body.String(), "private job pack") {
-					t.Fatal("finished job reached native Git", refused.Code, forwards)
-				}
-			}
-		})
+		}
 	}
 }

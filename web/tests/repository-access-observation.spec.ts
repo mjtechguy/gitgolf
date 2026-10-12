@@ -1,7 +1,8 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
-  GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositoryLifecycleResponseSchema,
+  GetRepositoryMirrorStatusResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositoryLifecycleResponseSchema,
   GetRepositoryResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema,
   ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ListRepositoryCollaboratorsResponseSchema,
   ListRepositoryDeployKeysResponseSchema, ListRepositoryInvitationsResponseSchema, ListRepositoryTeamAccessResponseSchema,
@@ -31,9 +32,10 @@ async function backend(page: Page) {
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {localPasswordEnabled:true});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, state.signedOut ? {} : {user:state.user});
     if (method === 'Logout') { state.signedOut=true; return route.fulfill({status:200,json:{}}); }
-    if (method === 'ListCapabilities') return respond(route,ListCapabilitiesResponseSchema,{});
+    if (method === 'ListCapabilities') return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route,ListRepositoriesResponseSchema,{});
     if (method === 'GetRepositorySettings') { if(state.generalBarrier)await state.generalBarrier; return respond(route,GetRepositorySettingsResponseSchema,{settings:state.settings}); }
+    if (method === 'GetRepositoryMirrorStatus') return respond(route, GetRepositoryMirrorStatusResponseSchema, {repository:{owner,name},repositoryId});
     if (method === 'GetRepositoryLifecycle') return respond(route,GetRepositoryLifecycleResponseSchema,{lifecycle:{repository:{owner,name},repositoryId,ownerId,revision:rev(),blockedReason:'ownership_required'}});
     if (method === 'GetRepository') return respond(route,GetRepositoryResponseSchema,{repository:{id:state.nativeID,name:state.nativeName,fullName:state.nativeFullName,defaultBranch:'main'}});
     if (state.barrier && (inventories.includes(method) || method === 'GetRepositoryAccess')) await state.barrier;
@@ -57,6 +59,7 @@ async function backend(page: Page) {
 }
 async function open(page: Page) {
   await page.goto('/alex/demo/settings');
+  await page.locator('.settings-diagnostics > summary').click();
   await expect(page.getByRole('button',{name:'Inspect access',exact:true})).toBeVisible();
 }
 const table = (page: Page) => page.getByRole('table',{name:'Current repository access observation',exact:true});
@@ -100,38 +103,38 @@ test('organization grants/keys, organization-owner teams and local invitation is
 for(const field of ['nativeID','nativeName','nativeFullName'] as const) test(`native ${field} mismatch refuses access probing`,async({page})=>{
   const state=await backend(page); state[field]='replacement'; await open(page);
   await page.getByRole('button',{name:'Inspect access',exact:true}).click();
-  await expect(page.getByRole('alert')).toContainText('could not be verified');
+  await expect(page.getByRole('region',{name:'Current access',exact:true}).getByRole('alert')).toContainText('could not be verified');
   expect(state.accessCalls).toBe(0); expect(state.reads.filter(r=>inventories.includes(r.method))).toEqual([]);
 });
 
 for(const field of ['repositoryId','ownerId','revision','currentPermission'] as const) test(`access ${field} mismatch fails before fanout`,async({page})=>{
   const state=await backend(page); state.access[field]='invalid'; await open(page);
   await page.getByRole('button',{name:'Inspect access',exact:true}).click();
-  await expect(page.getByRole('alert')).toContainText('could not be verified');
+  await expect(page.getByRole('region',{name:'Current access',exact:true}).getByRole('alert')).toContainText('could not be verified');
   expect(state.reads.filter(r=>inventories.includes(r.method))).toEqual([]);
 });
 
 test('final current revision drift and child receipt mismatch never release a success table',async({page})=>{
   const state=await backend(page); state.finalChange=true; await open(page);
   await page.getByRole('button',{name:'Inspect access',exact:true}).click();
-  await expect(page.getByRole('alert')).toContainText('could not be verified'); await expect(table(page)).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Current access',exact:true}).getByRole('alert')).toContainText('could not be verified'); await expect(table(page)).toHaveCount(0);
   state.finalChange=false; state.childRevision=rev('f');
   await page.getByRole('button',{name:'Refresh access observation',exact:true}).click();
-  await expect(page.getByRole('alert')).toContainText('could not be verified'); await expect(table(page)).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Current access',exact:true}).getByRole('alert')).toContainText('could not be verified'); await expect(table(page)).toHaveCount(0);
 });
 
 test('loaded-page status never claims totals and invalid next page is refused',async({page})=>{
   const state=await backend(page); state.nextPage=2; await open(page); await inspect(page);
   await expect(table(page)).toContainText('1 loaded · more available');
   state.nextPage=3; await page.getByRole('button',{name:'Refresh access observation',exact:true}).click();
-  await expect(page.getByRole('alert')).toContainText('could not be verified'); await expect(table(page)).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Current access',exact:true}).getByRole('alert')).toContainText('could not be verified'); await expect(table(page)).toHaveCount(0);
 });
 
 for(const denied of ['permission_denied','not_found'] as const) test(`${denied} on refresh clears prior observations and action link`,async({page})=>{
   const state=await backend(page); await open(page); await inspect(page);
   state.deny=denied; state.denyMethod='ListRepositoryDeployKeys';
   await page.getByRole('button',{name:'Refresh access observation',exact:true}).click();
-  await expect(page.getByRole('alert')).toContainText('unavailable'); await expect(table(page)).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Current access',exact:true}).getByRole('alert')).toContainText('unavailable'); await expect(table(page)).toHaveCount(0);
   await expect(page.getByRole('link',{name:'Open access settings',exact:true})).toHaveCount(0);
 });
 

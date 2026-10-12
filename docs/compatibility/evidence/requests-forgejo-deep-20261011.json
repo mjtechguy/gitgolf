@@ -1,0 +1,136 @@
+{
+  "complete": true,
+  "passed": true,
+  "proofKind": "unchanged-requests-native-push",
+  "sourceRevision": "6e35c3d30f317e11fe00f9dadf4578436bb27e29",
+  "sourceDirty": true,
+  "sourceFiles": {
+    "internal/workflowpath/path.go": "e29e095b38a7ee99bdcc4ba55a672139da639b9bbc4fa6f999962a4d578c9b87",
+    "internal/server/workflows.go": "a07a5c2227e8ccc03d116ccb3148af028231b3c6bf21d2ecd92ee7df9a70a9bc",
+    "internal/server/workflow_runs.go": "6261010d46ce8ebc416333e40ad78222548fa8d403f00643dd27e37f21b797e9",
+    "internal/server/server.go": "da712747a6bf64914bf8cccc17abe42237a1b77f782f0a9d958d8b782f753df5",
+    "internal/server/repository_events.go": "826338967a896101cedbb60a93cb09e0d0746fb2c58c64b7744924d3d5624a2d",
+    "internal/server/execution_policy.go": "c23c57e52c963a7347da46e0c5fc76d30394f15bf6e08f83499ef35bc7fa59e9",
+    "scripts/actions-two-job-smoke.py": "5e6eee58145889f42bc7d66f4a7fe77bcf2874909348a7d4a511b4a50d5d9faa",
+    "compose.forgejo.yaml": "48b347dcea43fddffb4d5fd75ce04ebf15b7e73f504f204e52c0fa52577e8de0",
+    "deploy/postgres/forgejo-init.sh": "d16c708568aee50653a846453e537114a9947edab5e6269429c55a359e804c08",
+    "compose.actions-engine.yaml": "b2e7173353cad239726c887fa039c7c2e73e55de6bdb0a11a7c7d60601079236",
+    "cmd/golf-runner/main.go": "c0ccd830997079817d20bef265669bb5b5bd6b50e1a2abcd24b941bf1de912d3",
+    "cmd/golf-runner/git_execution.go": "1098aabf4fff0760288c1139413cd84fb36e4986df8effa41cc3deb09fb61b26",
+    "internal/server/runner_transport.go": "f3d27af632e87824b1f4bad2f2b73750506c7217450b574b14bdd8655d8308a7",
+    "internal/runner/actions_git_source.go": "1534276a57cec23095622825ed005e9fa3009798c9481d61b11589655e474d14",
+    "engines/act/execute.go": "66b516cfa9ee49db47a1fd7979e4dbb0bd16a84e22bcb8443b1c9eac23cf03eb",
+    "engines/act/git_source.go": "67db30a41bfadc46098cb9c3235ecc5731ba96010b92d1890134e52eaf339d2e",
+    "engines/act/job_disk.go": "aa3aa82e0cded1395195e569f16789f80c42f20468ebc4b2657e2b70c41209b5",
+    "engines/act/upstream_source_manifest.json": "df4323e753823175c390625bde94ce780d488a939d6f790f740f753ea9555dd8",
+    "internal/runner/action_bundles.go": "8c082d4f0a97bf60d099fc65f8c64862a68776c97c2f4e436fc563e5cebcbf5d",
+    "internal/runner/dependency_access.go": "49728d79541092a45cc30033d414ff701cd99e37fc4a91451e32accfe9aa8f99",
+    "internal/runner/dependency_firewall.go": "6c4586dee21d72d8d5989438d215a41bcd015208f6cb904fbf13b2645957d319",
+    "internal/runner/job_git.go": "0898eb75538efe213a009de820f6138f9a81574b72e55a62a824b84cac0d09d1",
+    "internal/runner/masked_output.go": "e4e775c92f3c77af5da38e70e52e9012180a3d288080ece9daece17d41d05453",
+    "internal/runner/git_source_envelope.go": "678efe671453b26fcb4579de95c160e579a3d022388f449e3cc48b42a628dc46",
+    "cmd/golf-runner/job_git.go": "7588fde80fe2f75774e0cddcdd69e9a3fad0d8ea59bee7237704159529f9add0",
+    "internal/server/job_git_capability.go": "8eb2cdff6ee79068a369b2bb6a8d92a8027ea8a9c8ef3e00eeab1ee9cef46e47",
+    "internal/server/runner_git_source.go": "8287d07d131f31a4555cb7a6d698a69eaf56b98a394151356d111bf13e5029a4",
+    "internal/server/actions_engine.go": "f6bd379a40d235fa62e11fc55371370c422d1ab8c5cd9256e37eddf6e994a0e3",
+    "internal/server/push_materializer.go": "de6368cf38d400413b58f244b181090a71f5632b4730655a4d4850dafc77a0d1",
+    "internal/server/database/migrations/202610070092_remote_actions.sql": "5d65bf5631ed35705259458962e9004f43faf576cb99ce1294e12a35458d9add",
+    "engines/act/remote_actions.go": "2e612b91a486f548003d10bf71f6c4929786faa688452da3298f9342a459dc4a",
+    "engines/act/job_git.go": "954113c9847e151b9b09ce8cd26ab684dde1a6c0ad6fdde6ff47e0c05384953f",
+    "engines/act/native_executor.go": "aaeab865c885306378b0ab746cc9cc3bacd6152c47394a64ade086a5eeed1139",
+    "deploy/docker/actions/Dockerfile": "05806aff94ac1b933906bc14a32ee50908a1b84862714191dbd4ea49f256abd9",
+    "scripts/compatibility/requests-proof.py": "40234111b151e68491dc961b54bffccbc9f9b4209e4ab27eff395a374482f6f6",
+    "compose.actions-remote.yaml": "eec0cbb8b6c439065a80ca26c413c89866ec34167befb00854b6bd1eb4445df6"
+  },
+  "workflowPath": ".github/workflows/lint.yml",
+  "fixtureSha256": {
+    ".github/workflows/lint.yml": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99"
+  },
+  "images": {
+    "golf": "sha256:fb78f6fbaa8ed6f553e24e3f24dd737650cac3ed949ef23f5c3b1951c96e32c1",
+    "runner": "sha256:ee036ac90db0460a4c09da117872e36d6afff009a9248551094739159a5169f7",
+    "native": "sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413",
+    "postgres": "sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15",
+    "daemon": "sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0"
+  },
+  "binarySha256": {
+    "golf/golf": "78dcde93b698be53efb10ca09aa8f3c9e868dfafd92b73225e9342479d7f950a",
+    "runner/golf-runner": "49ef9e74dc3895cb56ec85bd81ce8271ec363a6a698fc41e121ae85c003d4312",
+    "golf/golf-actions-engine": "c98a509cf33a1fa227572556c3d3f72465ba39bf6a2153e3c834b1f0045d69e5",
+    "runner/golf-actions-engine": "c98a509cf33a1fa227572556c3d3f72465ba39bf6a2153e3c834b1f0045d69e5"
+  },
+  "fixture": {
+    "commit": "414f0513c33883adf6f2b46901d4f0b38a455851",
+    "tree": "8200a428693556ae1a42021422cf62a143cda1f4",
+    "workflowBlob": "9d968108ff76d7c014afddb52896ce9d8c02c2ca",
+    "workflowSHA256": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99",
+    "sourceUnmodified": true,
+    "independentNativeGitReadback": true
+  },
+  "unchangedRequestsPassed": true,
+  "originalCheckout": true,
+  "immutableRemoteActions": true,
+  "dependencyDownloads": true,
+  "jobTokensMasked": true,
+  "actualDockerCleanup": {
+    "attemptContainersAbsent": true,
+    "attemptVolumesAbsent": true
+  },
+  "controlAndPublicOriginsIndependent": true,
+  "runtimeBoundaryCases": [
+    {
+      "id": "dependency-boundary-failure",
+      "commit": "b8b56a74018e2842014b7635342e25fcb7efa866",
+      "runId": "8671f5d0-bc36-4d56-8f48-05b6298937bc",
+      "state": "WORKFLOW_RUN_STATE_FAILED",
+      "step": {
+        "id": "boundary",
+        "name": "Step 1",
+        "state": "WORKFLOW_STEP_STATE_FAILED",
+        "startedAt": "2026-10-11T23:40:12.002661Z",
+        "finishedAt": "2026-10-11T23:40:17.43953Z"
+      },
+      "elapsedSeconds": 38.562,
+      "ownedContainersAndVolumesAbsent": true
+    },
+    {
+      "id": "job-timeout",
+      "commit": "f25ca3cb74b8cff2a9ef10525fea0295bbbced9d",
+      "runId": "4bf8e799-9046-4ae4-8774-eeebae7b8269",
+      "state": "WORKFLOW_RUN_STATE_FAILED",
+      "step": {
+        "id": "boundary",
+        "name": "Step 1",
+        "state": "WORKFLOW_STEP_STATE_FAILED",
+        "startedAt": "2026-10-11T23:40:51.383919Z",
+        "finishedAt": "2026-10-11T23:41:49.145983Z"
+      },
+      "elapsedSeconds": 91.01,
+      "ownedContainersAndVolumesAbsent": true
+    },
+    {
+      "id": "running-cancellation",
+      "commit": "78f31f4bf580398b99a0e9b0603a6fd6d10a34f1",
+      "runId": "a6367c43-87af-40f1-8cfd-520aff39c004",
+      "state": "WORKFLOW_RUN_STATE_CANCELLED",
+      "step": {
+        "id": "boundary",
+        "name": "Step 1",
+        "state": "WORKFLOW_STEP_STATE_INTERRUPTED",
+        "startedAt": "2026-10-11T23:42:33.462176Z"
+      },
+      "elapsedSeconds": 46.807,
+      "ownedContainersAndVolumesAbsent": true
+    }
+  ],
+  "cleanupPassed": true,
+  "foreignIdentityUnchanged": true,
+  "limitations": [
+    "Selected public Node24 actions and sponsor-authored push profile; no PR/fork, private remote action or broad Actions parity claim."
+  ],
+  "date": "2026-10-11",
+  "profile": "forgejo-maintained-actions-requests",
+  "forgeKind": "forgejo",
+  "nativeWebhookDialect": "gitea",
+  "nativeSpecSHA256": "657cfc907353f1182b2a85c906d0ad2e48e71367454411685246a387a3fbfc1e"
+}

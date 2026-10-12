@@ -75,6 +75,9 @@ func (s *Server) PrepareStaticDeployment(ctx context.Context, r *connect.Request
 	out := &golfv1.PrepareStaticDeploymentResponse{Target: r.Msg.Target, Artifact: a, ManifestSha256: site.ManifestSHA256, Available: s.previewAvailable(), Reason: "target_unavailable"}
 	if s.previewAvailable() {
 		out.TargetFingerprint = s.preview.fingerprint
+		if s.preview.cloudflare != nil {
+			out.ReservedDeploymentId = s.preview.cloudflare.DeploymentID
+		}
 		out.Reason = ""
 	}
 	for _, root := range site.Roots() {
@@ -110,7 +113,7 @@ func scanDeployment(row interface{ Scan(...any) error }) (*deploymentRecord, err
 	if e != nil {
 		return nil, errStorageUnavailable
 	}
-	if proto.Unmarshal(raw, d.wire) != nil || d.wire.Contract != deploymentContract || d.wire.Target == nil || d.wire.Artifact == nil || validateEnvironmentPolicy(d.wire.Policy) != nil || validateSourceSelector(d.wire.Source) != nil {
+	if proto.Unmarshal(raw, d.wire) != nil || (d.wire.Contract != deploymentContract && d.wire.Contract != cloudflarePreviewContract) || d.wire.Target == nil || d.wire.Artifact == nil || validateEnvironmentPolicy(d.wire.Policy) != nil || validateSourceSelector(d.wire.Source) != nil {
 		return nil, errStorageUnavailable
 	}
 
@@ -202,7 +205,7 @@ func (s *Server) createRepositoryDeployment(ctx context.Context, r *connect.Requ
 	if e != nil {
 		return nil, deploymentError(e)
 	}
-	if !s.previewAvailable() || m.TargetFingerprint != s.preview.fingerprint {
+	if !s.previewAvailable() || m.TargetFingerprint != s.preview.fingerprint || s.preview.cloudflare != nil && m.DeploymentId != s.preview.cloudflare.DeploymentID {
 		return nil, errDeployment
 	}
 	if !deploymentUUID(m.DeploymentId) || !deploymentUUID(m.EnvironmentId) || !attemptIdentifier.MatchString(m.AttemptId) || !deploymentSHA.MatchString(m.ArchiveSha256) || !deploymentSHA.MatchString(m.ManifestSha256) || !objectID.MatchString(m.CommitId) || validateSourceSelector(m.Source) != nil || len(m.ProtoReflect().GetUnknown()) != 0 {
@@ -279,7 +282,11 @@ func (s *Server) createRepositoryDeployment(ctx context.Context, r *connect.Requ
 		if e != nil {
 			return e
 		}
-		d := &golfv1.RepositoryDeployment{Contract: deploymentContract, Id: m.DeploymentId, ActorId: strconv.FormatInt(user.ID, 10), Target: m.Target, Artifact: a, ManifestSha256: m.ManifestSha256, EnvironmentId: m.EnvironmentId, EnvironmentVersion: m.EnvironmentVersion, EnvironmentName: env.Name, Policy: env.Policy, Source: m.Source, StaticRoot: m.StaticRoot, TargetFingerprint: m.TargetFingerprint, ArtifactStorage: run.SourceStorage, ArtifactStorageFingerprint: run.SourceFingerprint}
+		contract := deploymentContract
+		if s.preview.cloudflare != nil {
+			contract = cloudflarePreviewContract
+		}
+		d := &golfv1.RepositoryDeployment{Contract: contract, Id: m.DeploymentId, ActorId: strconv.FormatInt(user.ID, 10), Target: m.Target, Artifact: a, ManifestSha256: m.ManifestSha256, EnvironmentId: m.EnvironmentId, EnvironmentVersion: m.EnvironmentVersion, EnvironmentName: env.Name, Policy: env.Policy, Source: m.Source, StaticRoot: m.StaticRoot, TargetFingerprint: m.TargetFingerprint, ArtifactStorage: run.SourceStorage, ArtifactStorageFingerprint: run.SourceFingerprint}
 		if run.SourceProfileID.Valid {
 			d.ArtifactProfileId = run.SourceProfileID.String
 			d.ArtifactProfileVersion = strconv.FormatInt(run.SourceProfileVersion.Int64, 10)

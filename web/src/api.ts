@@ -1,3 +1,4 @@
+import { OperationsService } from './gen/golf/v1/golf_pb';
 import {AgentControlService} from './gen/golf/v1/agent_control088_pb';
 import {PasswordRecoveryEnrollmentService} from './gen/golf/v1/password_recovery_enrollment090_pb';
 import {PasswordRecoveryService} from './gen/golf/v1/password_recovery090_pb';
@@ -5,6 +6,7 @@ import {ProviderImportService,PackagePublicationService} from './gen/golf/v1/gol
 import {MirrorObservationService} from './gen/golf/v1/golf_pb';
 import { createClient, ConnectError } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
+import { rpcFetch } from './rpcFetch';
 import { DiscussionCollaborationService, RepositoryReleaseManagementService, RepositoryRefMutationService, RepositoryFileMutationService } from './gen/golf/v1/golf_pb';
 import { PullReviewRequestService } from './gen/golf/v1/golf_pb';
 
@@ -15,8 +17,10 @@ import { RepositoryDeploymentService, RepositoryReleasePublicationService, Workf
 const transport = createConnectTransport({
   baseUrl: '/rpc',
   useBinaryFormat: false,
-  fetch: (input, init) => fetch(input, { ...init, credentials: 'same-origin', cache: 'no-store' }),
+  fetch: rpcFetch,
 });
+
+export const operationsClient = createClient(OperationsService, transport);
 
 export const discussionCollaborationClient = createClient(DiscussionCollaborationService, transport);
 

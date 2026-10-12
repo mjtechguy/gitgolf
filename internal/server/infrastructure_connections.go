@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/internal/cloudflare"
 	"github.com/mjtechguy/golf-git/internal/objectstore"
 	"github.com/mjtechguy/golf-git/internal/server/database"
 )
@@ -32,8 +33,9 @@ var errInfrastructureConflict = errors.New("Infrastructure connection changed; r
 type infrastructureConnectionConfig struct {
 	Label, Kind, DatabaseRole, Backend, Endpoint, Region, Bucket, TLSMode, DatabaseName, DatabaseUser, Prefix string
 	PathStyle, AllowInsecure                                                                                  bool
+	CloudflareAccountID, ArtifactsNamespace                                                                   string
 }
-type infrastructureConnectionSecret struct{ DatabasePassword, AccessKeyID, SecretAccessKey, SessionToken string }
+type infrastructureConnectionSecret struct{ DatabasePassword, AccessKeyID, SecretAccessKey, SessionToken, CloudflareAPIToken string }
 type infrastructureConnectionRecord struct {
 	ID                                     string
 	Version                                int64
@@ -67,18 +69,22 @@ func (s *Server) loadInfrastructureConnection(ctx context.Context, id string, ve
 }
 func wireInfrastructureConnection(row infrastructureConnectionRecord) *golfv1.InfrastructureConnection {
 	c := row.Config
-	return &golfv1.InfrastructureConnection{Id: row.ID, Version: strconv.FormatInt(row.Version, 10), Label: c.Label, Kind: c.Kind, DatabaseRole: c.DatabaseRole, Backend: c.Backend, Endpoint: c.Endpoint, Region: c.Region, Bucket: c.Bucket, PathStyle: c.PathStyle, TlsMode: c.TLSMode, DatabaseName: c.DatabaseName, DatabaseUser: c.DatabaseUser, HasCredential: true, ActivationState: "saved_not_active", Prefix: c.Prefix, AllowInsecure: c.AllowInsecure, CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339Nano)}
+	return &golfv1.InfrastructureConnection{Id: row.ID, Version: strconv.FormatInt(row.Version, 10), Label: c.Label, Kind: c.Kind, DatabaseRole: c.DatabaseRole, Backend: c.Backend, Endpoint: c.Endpoint, Region: c.Region, Bucket: c.Bucket, PathStyle: c.PathStyle, TlsMode: c.TLSMode, DatabaseName: c.DatabaseName, DatabaseUser: c.DatabaseUser, HasCredential: true, ActivationState: "saved_not_active", Prefix: c.Prefix, AllowInsecure: c.AllowInsecure, CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339Nano), CloudflareAccountId: c.CloudflareAccountID, ArtifactsNamespace: c.ArtifactsNamespace}
 }
 func validateInfrastructureConnection(p *golfv1.InfrastructureConnection) (infrastructureConnectionConfig, error) {
 	if p == nil {
 		return infrastructureConnectionConfig{}, invalid("Provide connection configuration.")
 	}
 	c := infrastructureConnectionConfig{Label: p.Label, Kind: p.Kind, DatabaseRole: p.DatabaseRole, Backend: p.Backend, Endpoint: p.Endpoint, Region: p.Region, Bucket: p.Bucket, TLSMode: p.TlsMode, DatabaseName: p.DatabaseName, DatabaseUser: p.DatabaseUser, Prefix: p.Prefix, PathStyle: p.PathStyle, AllowInsecure: p.AllowInsecure}
+	c.CloudflareAccountID, c.ArtifactsNamespace = p.CloudflareAccountId, p.ArtifactsNamespace
 	clean := func(value string, max int) bool {
 		return len(value) <= max && strings.IndexFunc(value, unicode.IsControl) < 0
 	}
 	if c.Label == "" || !clean(c.Label, 120) || !clean(c.Endpoint, 1024) || !clean(c.DatabaseName, 128) || !clean(c.DatabaseUser, 128) || !clean(c.Region, 128) || !clean(c.Bucket, 128) || !clean(c.Prefix, 255) {
 		return c, invalid("Connection metadata exceeds its safe bounds.")
+	}
+	if c.Kind != "CLOUDFLARE" && (c.CloudflareAccountID != "" || c.ArtifactsNamespace != "") {
+		return c, invalid("Cloudflare account fields require a Cloudflare management profile.")
 	}
 	if c.Kind == "DATABASE" {
 		if c.Backend != "POSTGRESQL" || c.DatabaseRole != "GOLF" && c.DatabaseRole != "NATIVE" || c.DatabaseName == "" || c.DatabaseUser == "" || c.Bucket != "" || c.Region != "" || c.Prefix != "" || c.PathStyle {
@@ -108,8 +114,12 @@ func validateInfrastructureConnection(p *golfv1.InfrastructureConnection) (infra
 		if err := objectstore.ValidateConfig(objectstore.Config{Endpoint: c.Endpoint, Bucket: c.Bucket, Region: c.Region, Prefix: c.Prefix, PathStyle: c.PathStyle, AllowHTTP: c.AllowInsecure}); err != nil {
 			return c, invalid("Object storage configuration is invalid.")
 		}
+	} else if c.Kind == "CLOUDFLARE" {
+		if c.Backend != "CLOUDFLARE" || c.Endpoint != cloudflare.APIOrigin || !cloudflare.ValidManagementTarget(c.CloudflareAccountID, c.ArtifactsNamespace) || c.DatabaseRole != "" || c.DatabaseName != "" || c.DatabaseUser != "" || c.TLSMode != "" || c.Region != "" || c.Bucket != "" || c.Prefix != "" || c.PathStyle || c.AllowInsecure {
+			return c, invalid("Provide a Cloudflare account ID, optional Artifacts namespace and the official HTTPS API origin only.")
+		}
 	} else {
-		return c, invalid("Select DATABASE or OBJECT_STORAGE.")
+		return c, invalid("Select DATABASE, OBJECT_STORAGE or CLOUDFLARE.")
 	}
 	return c, nil
 }
@@ -117,11 +127,20 @@ func validateInfrastructureSecret(c infrastructureConnectionConfig, p *golfv1.In
 	if p == nil {
 		return infrastructureConnectionSecret{}, invalid("Provide credentials or explicitly retain the previous credentials.")
 	}
-	v := infrastructureConnectionSecret{p.DatabasePassword, p.AccessKeyId, p.SecretAccessKey, p.SessionToken}
-	for _, s := range []string{v.DatabasePassword, v.AccessKeyID, v.SecretAccessKey, v.SessionToken} {
+	v := infrastructureConnectionSecret{p.DatabasePassword, p.AccessKeyId, p.SecretAccessKey, p.SessionToken, p.CloudflareApiToken}
+	for _, s := range []string{v.DatabasePassword, v.AccessKeyID, v.SecretAccessKey, v.SessionToken, v.CloudflareAPIToken} {
 		if len(s) > 8192 || strings.ContainsRune(s, 0) {
 			return v, invalid("Credential exceeds its safe bound.")
 		}
+	}
+	if c.Kind == "CLOUDFLARE" {
+		if !cloudflare.ValidAPIToken(v.CloudflareAPIToken) || v.DatabasePassword != "" || v.AccessKeyID != "" || v.SecretAccessKey != "" || v.SessionToken != "" {
+			return v, invalid("Provide only the Cloudflare management API token.")
+		}
+		return v, nil
+	}
+	if v.CloudflareAPIToken != "" {
+		return v, invalid("Cloudflare API tokens require a Cloudflare management profile.")
 	}
 	if c.Kind == "DATABASE" {
 		if v.DatabasePassword == "" || v.AccessKeyID != "" || v.SecretAccessKey != "" || v.SessionToken != "" {
@@ -360,6 +379,9 @@ func (s *Server) SaveInfrastructureConnection(ctx context.Context, req *connect.
 		if old.Config.Kind != c.Kind {
 			return nil, infrastructureRPCError(invalid("Credential kind cannot change while retaining credentials."))
 		}
+		if c.Kind == "CLOUDFLARE" && old.Config.CloudflareAccountID != c.CloudflareAccountID {
+			return nil, infrastructureRPCError(invalid("Changing Cloudflare accounts requires replacement credentials."))
+		}
 		plain, e := s.keyring.open(old.CredentialKeyID, infrastructureConnectionDomain, old.EncryptedCredential, old.CredentialBinding)
 		if e != nil {
 			return nil, infrastructureRPCError(e)
@@ -456,6 +478,7 @@ func (s *Server) TestInfrastructureConnection(ctx context.Context, req *connect.
 	probe, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	scope := "postgresql_ping_no_migrations"
+	var capabilities []*golfv1.InfrastructureCapability
 	if row.Config.Kind == "DATABASE" {
 		u := url.URL{Scheme: "postgres", Host: row.Config.Endpoint, Path: "/" + row.Config.DatabaseName, User: url.UserPassword(row.Config.DatabaseUser, secret.DatabasePassword)}
 		query := url.Values{"sslmode": {row.Config.TLSMode}, "connect_timeout": {"4"}}
@@ -466,6 +489,18 @@ func (s *Server) TestInfrastructureConnection(ctx context.Context, req *connect.
 			db.SetMaxOpenConns(1)
 			err = db.PingContext(probe)
 			db.Close()
+		}
+	} else if row.Config.Kind == "CLOUDFLARE" {
+		scope = "cloudflare_account_service_reads_only"
+		var report cloudflare.Report
+		report, err = cloudflare.InspectManagement(probe, row.Config.CloudflareAccountID, row.Config.ArtifactsNamespace, secret.CloudflareAPIToken)
+		if err == nil {
+			for _, o := range report.Observations {
+				capabilities = append(capabilities, &golfv1.InfrastructureCapability{Service: o.Service, State: o.State, Scope: o.Scope, HttpStatus: uint32(o.HTTPStatus)})
+				if o.State != "accessible" {
+					err = errors.New("Cloudflare service read unavailable")
+				}
+			}
 		}
 	} else {
 		scope = "bucket_head_accessibility_only"
@@ -495,5 +530,5 @@ func (s *Server) TestInfrastructureConnection(ctx context.Context, req *connect.
 	if accessible {
 		code = "accessible"
 	}
-	return connect.NewResponse(&golfv1.TestInfrastructureConnectionResponse{Accessible: accessible, ResultCode: code, CheckedAt: time.Now().UTC().Format(time.RFC3339Nano), QualificationScope: scope}), nil
+	return connect.NewResponse(&golfv1.TestInfrastructureConnectionResponse{Accessible: accessible, ResultCode: code, CheckedAt: time.Now().UTC().Format(time.RFC3339Nano), QualificationScope: scope, Capabilities: capabilities}), nil
 }

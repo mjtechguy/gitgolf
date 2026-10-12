@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -10,7 +11,7 @@ async function backend(page: Page, admin = true) {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListGolfUserAccess') return respond(route, ListGolfUserAccessResponseSchema, {});
     if (method === 'Logout' && state.logoutFail) { await new Promise(resolve => setTimeout(resolve, 200)); return reject(route, 'unavailable', 'Sign out could not be completed.'); }
     if (method === 'DisableLocalAccount') {

@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -27,7 +28,7 @@ async function backend(page: Page) {
   const method = route.request().url().split('/').at(-1);state.methods.push(method!);
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'42',login:'alice'}});
-  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
   if (method === 'GetRepositoryAccess') { if(state.denied)return reject(route,'permission_denied','Current repository permission denied.'); return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:target.repositoryId,ownerId:target.ownerId,currentPermission:'owner',canManage:true,revision:target.accessRevision}}); }
   if (method === 'ListRepositoryExecutionValues') { if(state.denied)return reject(route,'permission_denied','Current repository permission denied.'); if(state.delayed)await state.delayed;return respond(route,ListRepositoryExecutionValuesResponseSchema,{target,brokerRevision:state.revision,values:state.rows,bindings:state.bindings,inheritedValues:state.inherited,maximumValues:64,maximumBindings:20,consumerProfile:'golf.repository-env.v1'}); }
@@ -67,7 +68,7 @@ for(const width of [390,1440])test(`both inventories use bounded shared tables a
 test('product secrets route has one contextual layout and the shared generated client',async({page})=>{
  const state=await backend(page);await page.goto('/alice/example/settings/secrets');
  await expect(page.getByRole('navigation',{name:'Repository settings',exact:true})).toHaveCount(1);
- await expect(page.getByRole('navigation',{name:'Breadcrumb',exact:true})).toContainText('Secrets and variables');
+ await expect(page.getByRole('navigation',{name:'Repository',exact:true}).getByRole('link',{name:'Settings',exact:true})).toHaveAttribute('aria-current','page');
  await expect(page.getByRole('link',{name:'Secrets and variables',exact:true})).toHaveAttribute('data-status','active');
  await expect(page.getByRole('table',{name:'Repository secrets and variables',exact:true})).toBeVisible();
  await newValue(page,'BUILD_REGION','ordinary');await page.getByLabel('Type',{exact:true}).selectOption(String(Kind.VARIABLE));await page.getByRole('button',{name:'Save value',exact:true}).click();

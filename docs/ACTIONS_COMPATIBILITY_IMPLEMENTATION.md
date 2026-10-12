@@ -16,6 +16,8 @@ Native Gitea Actions plus its runner is a serious alternative to evaluate in pac
 
 The official `actions/runner` is another reference and potential later adapter; its availability as source does not provide GitHub's server-side workflow orchestration or authorize registering Golf jobs against GitHub. Proving that protocol and backend service surface is a distinct project. [Official runner](https://github.com/actions/runner).
 
+The 2026-10-07 [compatibility register](compatibility/README.md) supersedes this packet's earlier workflow-location baseline: source now selects direct files in the first existing `.gitea/workflows`/`.github/workflows` directory. It preserves both Requests pins with identical workflow bytes and separate upstream/Golf outcomes. Historical receipts below retain their original scope. The separate [local Node24 profile](ACTIONS_REMOTE.md) adds immutable public actions, genuine job Git checkout and controlled dependencies; its current qualification is recorded in the compatibility register. Broader remote/private/PR behavior remains open.
+
 ## What works today, exactly
 
 Source basis: the existing `workflow_execution.go`, `workflows.go`, `workflow_runs.go`, `workflow_automation.go`, `runner_transport.go`, `workflow_progress.go` and `internal/runner/execute.go`. The recently qualified exact tree/blob workflow reader replaces SHA-shadowable contents reads; the ordinary archive workspace remains its separate supported snapshot contract.
@@ -51,6 +53,16 @@ Pinned dispatch schema requires `ref` and accepts string-valued `inputs`; `retur
 Versioned native 1.27 documentation describes environment, expression, runner-label and annotation gaps, plus different token scopes. Latest unversioned runner/docs can describe newer behavior. Bind tests to **forge version + runner version + engine commit + runtime image + action commit + API profile**, never just a product family name. [Gitea 1.27 comparison](https://docs.gitea.com/1.27/usage/actions/comparison/), [current Gitea Runner docs](https://docs.gitea.com/runner/2/).
 
 Deliverables: short engine ADR, exact pins/licenses/SBOM, enforce/refuse feature table, conformance harness, lifecycle/authority matrix and upgrade policy. If none passes, leave the expanded catalog unavailable and report the failed contract instead of adding a compatibility badge.
+
+### Gitea Runner 5.0 assessment (2026-10-09)
+
+[Runner 5.0.0](https://blog.gitea.com/release-of-runner-5.0.0/) broadens built-in checkout to SSH, LFS/submodules, sparse/partial clones and checkout outputs, uses the Git CLI for action downloads, adds client certificates/proxy headers and builds on the Kubernetes executor introduced in 4.1. The exact [v5.0.0 checkout contract](https://gitea.com/gitea/runner/src/tag/v5.0.0/docs/builtin-actions.md), README, exec source and go.mod were read during this assessment. Its execution library is `gitea.dev/actionslib v1.3.0`; Golf currently embeds a pinned act v0.2.89 runtime, not this runner.
+
+This makes a pinned upstream execution adapter worth evaluating before independently implementing more runner features. The first comparison should use `gitea-runner exec` or the upstream execution library under Golf's coordinator, then qualify Docker and Kubernetes independently. Exec is available without a Gitea coordinator, but its default own-repository checkout copies the local working directory. An exact admitted-commit checkout and unchanged genuine checkout action must be verified explicitly; built-in checkout must not silently replace source-declared actions. Native registered-runner mode instead needs Gitea Actions task scheduling and must pass the existing one-execution-owner/admission/cancellation gates before enabling it.
+
+For portable Golf, a Kubernetes executor could reduce dependence on a per-worker Docker daemon. For Cloudflare-native Golf, Git remains in Artifacts and execution remains in approved Cloudflare containers/sandboxes or a separately enrolled remote executor. Gitea Runner does not acquire a Workers/Artifacts coordinator or Cloudflare container backend merely by upgrading. Golf's current credentials, policy checks, immutable graph/source identities, quotas, logs, cancellation and cleanup remain adapter requirements.
+
+Qualification must pin the runner/library/image/action identities; verify Git >=2.34.1 in runner and checkout images; test network/TLS and per-host credentials, moved tags, clean/persist-credential behavior and read-only volumes; and exercise timeout, cancellation, revocation and provider artifact/cache APIs. Configuration expansion, required `runs-on` and changed metrics need migration checks when using registered runners. No runner dependency, runtime catalog, Gitea scheduler or retained installation was changed by this assessment; broader checkout and Kubernetes execution remain unqualified in Golf.
 
 ## Execution and authority contract to preserve
 

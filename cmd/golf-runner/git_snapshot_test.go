@@ -5,10 +5,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -127,6 +131,144 @@ func TestGitSnapshotBindsRealGitTree(t *testing.T) {
 						t.Fatal("real tree/archive identity boundary failed")
 					}
 				})
+			}
+		})
+	}
+}
+
+// Native Git produces the tree and exported bytes. Only the ordinary archive
+// projection is controlled here; this is source-boundary proof, not Docker or
+// job-token network qualification.
+func TestGitSnapshotNativeAdversarialSource(t *testing.T) {
+	for _, mode := range []string{"nested", "export_ignore", "export_subst", "symlink", "submodule", "lfs_pointer", "hostile_local_config", "git_metadata_path"} {
+		t.Run(mode, func(t *testing.T) {
+			dir := t.TempDir()
+			var requests atomic.Int32
+			foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				w.WriteHeader(http.StatusForbidden)
+			}))
+			defer foreign.Close()
+			git := func(input []byte, args ...string) []byte {
+				t.Helper()
+				// Reuse the same hermetic installed-Git command as preparation.
+				if input == nil {
+					data, err := preparedGitCommand(t.Context(), dir, 4<<20, args...)
+					if err != nil {
+						t.Fatal("owned native source fixture", err)
+					}
+					return data
+				}
+				// Object construction is fixture-only, with no source configuration.
+				cmd := exec.CommandContext(t.Context(), "/usr/bin/git", args...)
+				cmd.Dir = dir
+				cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + dir, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
+				cmd.Stdin = bytes.NewReader(input)
+				data, err := cmd.Output()
+				if err != nil {
+					t.Fatal("owned native object fixture", err)
+				}
+				return data
+			}
+			write := func(name, value string) {
+				t.Helper()
+				if os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0700) != nil || os.WriteFile(filepath.Join(dir, name), []byte(value), 0600) != nil {
+					t.Fatal("owned source fixture")
+				}
+			}
+			git(nil, "init", "--quiet", "--template=")
+			workflow := ".gitea/workflows/proof.yml"
+			write(workflow, "on: workflow_dispatch\n")
+			write("src/nested/message.txt", "$Format:%H$\n")
+			switch mode {
+			case "export_ignore":
+				write(".gitattributes", "src/nested/message.txt export-ignore\n")
+			case "export_subst":
+				write(".gitattributes", "src/nested/message.txt export-subst\n")
+			case "symlink":
+				if os.Symlink("../../.git/config", filepath.Join(dir, "src", "link")) != nil {
+					t.Fatal("owned symlink fixture")
+				}
+			case "lfs_pointer":
+				write(".gitattributes", "src/nested/message.txt filter=lfs diff=lfs merge=lfs -text\n")
+				write(".lfsconfig", "[lfs]\nurl = "+foreign.URL+"/private-lfs\n")
+				write("src/nested/message.txt", "version https://git-lfs.github.com/spec/v1\noid sha256:"+strings.Repeat("a", 64)+"\nsize 100\n")
+			case "submodule":
+				write(".gitmodules", "[submodule \"private\"]\npath = private\nurl = "+foreign.URL+"/other-private.git\n")
+			}
+			git(nil, "add", ".")
+			commit := func() {
+				git(nil, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "owned source")
+			}
+			commit()
+			if mode == "submodule" {
+				h := strings.TrimSpace(string(git(nil, "rev-parse", "HEAD")))
+				git(nil, "update-index", "--add", "--cacheinfo", "160000,"+h+",private")
+				commit()
+			}
+			if mode == "hostile_local_config" {
+				marker := filepath.Join(dir, "callback-ran")
+				write("hooks/post-commit", "#!/bin/sh\ntouch "+marker+"\n")
+				if os.Chmod(filepath.Join(dir, "hooks/post-commit"), 0700) != nil {
+					t.Fatal("owned hook fixture")
+				}
+				git(nil, "config", "--local", "core.hooksPath", filepath.Join(dir, "hooks"))
+				git(nil, "config", "--local", "credential.helper", "!touch "+marker)
+				git(nil, "config", "--local", "remote.origin.url", foreign.URL+"/other-private.git")
+				git(nil, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-qm", "hermetic commit")
+				if _, err := os.Stat(marker); !os.IsNotExist(err) {
+					t.Fatal("native preparation ran a configured callback")
+				}
+			}
+			if mode == "git_metadata_path" {
+				blob := strings.TrimSpace(string(git([]byte("[credential]\nhelper = attacker\n"), "hash-object", "-w", "--stdin")))
+				subtree := strings.TrimSpace(string(git([]byte("100644 blob "+blob+"\tconfig\n"), "mktree")))
+				root := git(append(git(nil, "ls-tree", "HEAD"), []byte("040000 tree "+subtree+"\t.git\n")...), "mktree")
+				h := git([]byte("owned malicious tree\n"), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit-tree", strings.TrimSpace(string(root)))
+				git(nil, "update-ref", "HEAD", strings.TrimSpace(string(h)))
+			}
+			h := strings.TrimSpace(string(git(nil, "rev-parse", "HEAD")))
+			blob := strings.TrimSpace(string(git(nil, "rev-parse", "HEAD:"+workflow)))
+			listing := git(nil, "ls-tree", "-rz", "--full-tree", "HEAD")
+			if mode == "git_metadata_path" {
+				// Native Git itself refuses to archive the forged .git tree;
+				// a failed native export cannot be replaced with another source.
+				if _, err := preparedGitCommand(t.Context(), dir, 4<<20, "archive", "--format=tar", "HEAD"); err == nil || requests.Load() != 0 {
+					t.Fatal("native Git exported source-controlled Git metadata")
+				}
+				return
+			}
+			reader := tar.NewReader(bytes.NewReader(git(nil, "archive", "--format=tar", "HEAD")))
+			var archive bytes.Buffer
+			writer := tar.NewWriter(&archive)
+			for {
+				header, err := reader.Next()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if header.Typeflag == tar.TypeXGlobalHeader {
+					continue // Native provider archive projection omits global metadata.
+				}
+				header.Name = strings.TrimSuffix(header.Name, "/")
+				header.PAXRecords = nil
+				if writer.WriteHeader(header) != nil {
+					t.Fatal("owned archive projection")
+				}
+				if _, err := io.Copy(writer, reader); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if writer.Close() != nil {
+				t.Fatal("owned archive closure")
+			}
+			digest := sha256.Sum256(archive.Bytes())
+			err := verifyGitSnapshot(archive.Bytes(), listing, hex.EncodeToString(digest[:]), h, workflow, blob)
+			want := mode == "nested" || mode == "lfs_pointer" || mode == "hostile_local_config"
+			if (err == nil) != want || requests.Load() != 0 {
+				t.Fatal("native source boundary transformed source or contacted a source-controlled private endpoint")
 			}
 		})
 	}

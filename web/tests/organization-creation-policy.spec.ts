@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, OrganizationCreationMode, OrganizationCreationPolicySchema, GetOrganizationCreationPolicyResponseSchema, UpdateOrganizationCreationPolicyRequestSchema, UpdateOrganizationCreationPolicyResponseSchema } from '../src/gen/golf/v1/golf_pb';
@@ -8,7 +9,7 @@ async function backend(page: Page) {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex', isInstanceAdmin: true } });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'GetOrganizationCreationPolicy') { if (state.denied) return reject(route, 'permission_denied', 'Policy access ended.'); return respond(route, GetOrganizationCreationPolicyResponseSchema, { policy: state.policy }); }
     if (method === 'UpdateOrganizationCreationPolicy') { const input = request(route, UpdateOrganizationCreationPolicyRequestSchema); state.writes.push(input); state.policy = create(OrganizationCreationPolicySchema, { ...state.policy, mode: input.mode, selectedGolfUserIds: input.selectedGolfUserIds, revision: '1', revocationEpoch: '1' }); if (state.lost) return reject(route, 'unavailable', 'Policy receipt lost.'); return respond(route, UpdateOrganizationCreationPolicyResponseSchema, { policy: state.policy }); }
     return reject(route, 'not_found', 'Unsupported creation policy fixture.');

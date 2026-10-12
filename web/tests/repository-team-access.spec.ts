@@ -1,3 +1,4 @@
+import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { AttachRepositoryTeamRequestSchema, AttachRepositoryTeamResponseSchema, DetachRepositoryTeamRequestSchema, DetachRepositoryTeamResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ListRepositoryTeamAccessRequestSchema, ListRepositoryTeamAccessResponseSchema, LogoutResponseSchema, RepositoryAccessSchema, RepositoryTeamAccessSchema, TeamPermission, TeamVisibility, UserSchema } from '../src/gen/golf/v1/golf_pb';
@@ -14,7 +15,7 @@ async function backend(page: Page) {
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'ListRepositoryInvitations') return emptyRepositoryInvitations(route);
     if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: state.access });

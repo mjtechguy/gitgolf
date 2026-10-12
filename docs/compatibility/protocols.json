@@ -1,0 +1,541 @@
+{
+  "format": "golf.compatibility.protocols.v1",
+  "profile": "gitea-1.27.3",
+  "protocols": [
+    {
+      "id": "git.http",
+      "kind": "git",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/git-lfs-setup/",
+      "reason": "Existing bounded consumers need full client, role, revocation and native field/protocol assessment.",
+      "tests": []
+    },
+    {
+      "id": "git.ssh",
+      "kind": "git",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/installation/install-with-docker/",
+      "reason": "Existing bounded consumers need full client, role, revocation and native field/protocol assessment.",
+      "tests": []
+    },
+    {
+      "id": "git.lfs",
+      "kind": "git",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/git-lfs-setup/",
+      "reason": "Existing bounded consumers need full client, role, revocation and native field/protocol assessment.",
+      "tests": []
+    },
+    {
+      "id": "wiki.git",
+      "kind": "git",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/",
+      "reason": "Existing bounded consumers need full client, role, revocation and native field/protocol assessment.",
+      "tests": []
+    },
+    {
+      "id": "registry.alpine",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.arch",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.cargo",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.chef",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.composer",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.conan",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.conda",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.container",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.cran",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.debian",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.generic",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.go",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.helm",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.maven",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.npm",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.nuget",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.pub",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.pypi",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.rpm",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.rubygems",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.swift",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.terraform",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.vagrant",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "webhook.create",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.delete",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.fork",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.push",
+      "kind": "webhook",
+      "state": "native-tested",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "Owned native HMAC-signed default-branch push, exact event/grant/source binding and one automatic run. Full payload fields, role/fault/other-event matrix remain open.",
+      "tests": [
+        "internal/server/repository_events_test.go"
+      ],
+      "native_hook_configuration": true,
+      "category": "native hook event",
+      "native_evidence": [
+        "docs/compatibility/evidence/native-gitea-paths.json"
+      ]
+    },
+    {
+      "id": "webhook.issues",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.issue_assign",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.issue_label",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.issue_milestone",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.issue_comment",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request_assign",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request_label",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request_milestone",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request_comment",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request_review_approved",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request_review_rejected",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request_review_comment",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request_sync",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request_review_request",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.wiki",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.repository",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.release",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.package",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.status",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.pull_request_review",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": false,
+      "category": "review event group"
+    },
+    {
+      "id": "webhook.schedule",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": false,
+      "category": "Actions event only"
+    },
+    {
+      "id": "webhook.workflow_run",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reason": "No full payload consumer qualification in this register.",
+      "tests": [],
+      "native_hook_configuration": true,
+      "category": "Actions event only"
+    },
+    {
+      "id": "webhook.workflow_job",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "Actions event only"
+    }
+  ],
+  "registry_reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+  "webhook_source": "fixtures/gitea-webhook-types.go.txt",
+  "webhook_payload_source": {
+    "source_url": "https://raw.githubusercontent.com/go-gitea/gitea/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/structs/hook.go",
+    "fixture": "fixtures/gitea-hook-payloads.go.txt",
+    "schema_reference": "Pinned public Go structs and JSON field tags; nested common types are referenced by their upstream names. No inferred normalized GitHub/GitLab schema or complete payload consumer qualification.",
+    "declared_types": [
+      "Hook",
+      "CreateHookOption",
+      "EditHookOption",
+      "PayloadUser",
+      "PayloadCommit",
+      "PayloadCommitVerification",
+      "CreatePayload",
+      "DeletePayload",
+      "ForkPayload",
+      "IssueCommentPayload",
+      "ReleasePayload",
+      "PushPayload",
+      "IssuePayload",
+      "ChangesFromPayload",
+      "ChangesPayload",
+      "PullRequestPayload",
+      "ReviewPayload",
+      "WikiPayload",
+      "RepositoryPayload",
+      "PackagePayload",
+      "WorkflowDispatchPayload",
+      "WorkflowCallPayload",
+      "CommitStatusPayload",
+      "WorkflowRunPayload",
+      "WorkflowJobPayload"
+    ]
+  }
+}

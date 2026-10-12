@@ -31,7 +31,7 @@ import (
 
 const help = `Golf — inspect and collaborate on repositories using scoped credentials.
 
-Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
+Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin | --native-token-stdin] COMMAND
 
   mcp                         serve local MCP on stdin/stdout
   issue create --input JSON_FILE
@@ -85,20 +85,23 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
 Success writes JSON: {"schema_version":"golf.cli.v1","data":...}.
 Exit codes: 0 success/help; 1 operation/authentication failure; 2 usage error.
 Data uses the versioned API's Protobuf JSON format. No automatic pagination.
-Pass a Gitea token on stdin with --token-stdin, or set GOLF_GITEA_TOKEN.
+Pass a forge token on stdin with --token-stdin, or set GOLF_FORGE_TOKEN (legacy: GOLF_GITEA_TOKEN).
 Pass a Golf API token on stdin with --api-token-stdin, or set GOLF_API_TOKEN.
-Do not mix Golf API and Gitea token sources. Stdin overrides the same-kind environment token.
+Native workspace credentials use --native-token-stdin or GOLF_NATIVE_TOKEN.
+Native Access deployments also require GOLF_ACCESS_CLIENT_ID and GOLF_ACCESS_CLIENT_SECRET for machine requests.
+Native issue/PR writes use current repository grants; native MCP is not implemented.
+Do not mix Golf API, native workspace and forge token sources. Stdin overrides the same-kind environment token.
 GOLF_URL defaults to http://localhost:8080. Remote origins require HTTPS.
-Credentials/cookies are never saved. Gitea token commands sign in and sign out.
+Credentials/cookies are never saved. Forge token commands sign in and sign out.
 Golf API tokens send bearer-authenticated requests without login/logout.
-Write commands require golf_rw_ credentials explicitly scoped to one repository.
+Portable write commands require golf_rw_ credentials explicitly scoped to one repository.
 Source tools require source:write; retained Actions/task inspection requires
 actions:read/agents:read. These grants do not dispatch, cancel or resume execution.
 JSON files use the corresponding versioned Protobuf JSON request with exact IDs,
 expected revisions and an original UUID v4 idempotencyKey. No generated key or retries.
 Do not place request text or tokens in command arguments.
-They remain bound to the issuing browser session; expiry, revocation or source sign-out denies access.
-MCP takes one token from GOLF_API_TOKEN or GOLF_GITEA_TOKEN; stdin is reserved for the protocol.
+Portable Golf API credentials remain bound to the issuing browser session; expiry, revocation or source sign-out denies access.
+MCP takes one token from GOLF_API_TOKEN or GOLF_FORGE_TOKEN (legacy: GOLF_GITEA_TOKEN); stdin is reserved for the protocol.
 Global flags precede the command; resource flags follow positional arguments.
 Organization reads need read:user and read:organization; code needs read:repository.
 Account activity needs read:user and records successful session lifecycle operations.
@@ -132,6 +135,7 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 	origin := flags.String("url", getenv("GOLF_URL"), "Golf origin")
 	stdin := flags.Bool("token-stdin", false, "read the token from stdin")
 	apiStdin := flags.Bool("api-token-stdin", false, "read a Golf API token from stdin")
+	nativeStdin := flags.Bool("native-token-stdin", false, "read a native workspace credential from stdin")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Fprint(output, help)
@@ -166,20 +170,36 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		fmt.Fprintln(diagnostic, err)
 		return 2
 	}
-	pat, apiToken := getenv("GOLF_GITEA_TOKEN"), getenv("GOLF_API_TOKEN")
-	if (*stdin || pat != "") && (*apiStdin || apiToken != "") {
-		fmt.Fprintln(diagnostic, "Choose one credential kind: Golf API token or Gitea token; mixed sources are not accepted.")
+	pat, apiToken, nativeToken := getenv("GOLF_GITEA_TOKEN"), getenv("GOLF_API_TOKEN"), getenv("GOLF_NATIVE_TOKEN")
+	if neutral := getenv("GOLF_FORGE_TOKEN"); neutral != "" {
+		if pat != "" && pat != neutral {
+			fmt.Fprintln(diagnostic, "Conflicting forge token aliases.")
+			return 2
+		}
+		pat = neutral
+	}
+	kinds := 0
+	for _, present := range []bool{*stdin || pat != "", *apiStdin || apiToken != "", *nativeStdin || nativeToken != ""} {
+		if present {
+			kinds++
+		}
+	}
+	if kinds > 1 {
+		fmt.Fprintln(diagnostic, "Choose one credential kind: Golf API, native workspace or forge; mixed sources are not accepted.")
 		return 2
 	}
-	if mcpMode && (*stdin || *apiStdin) {
-		fmt.Fprintln(diagnostic, "MCP reserves stdin for its protocol; configure one of GOLF_API_TOKEN or GOLF_GITEA_TOKEN in the owner-controlled process environment.")
+	if mcpMode && (*stdin || *apiStdin || *nativeStdin) {
+		fmt.Fprintln(diagnostic, "MCP reserves stdin for its protocol; configure a scoped credential in the owner-controlled process environment.")
 		return 2
 	}
 	auth := credential{token: pat}
 	if *apiStdin || apiToken != "" {
 		auth = credential{token: apiToken, api: true}
 	}
-	if *stdin || *apiStdin {
+	if *nativeStdin || nativeToken != "" {
+		auth = credential{token: nativeToken, api: true, native: true}
+	}
+	if *stdin || *apiStdin || *nativeStdin {
 		data, err := readToken(ctx, input)
 		if err != nil {
 			fmt.Fprintln(diagnostic, "Token input failed or was cancelled.")
@@ -187,16 +207,31 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		}
 		auth.token = strings.TrimSuffix(strings.TrimSuffix(string(data), "\n"), "\r")
 	}
-	if len(auth.token) < 8 || len(auth.token) > 512 || strings.ContainsAny(auth.token, "\r\n\t ") || (auth.api && !validAPIToken(auth.token)) {
+	if len(auth.token) < 8 || len(auth.token) > 512 || strings.ContainsAny(auth.token, "\r\n\t ") || (auth.native && !validNativeToken(auth.token)) || (auth.api && !auth.native && !validAPIToken(auth.token)) {
 		fmt.Fprintln(diagnostic, "Supply one valid token using its matching stdin flag or environment variable. Run golf --help.")
 		return 2
+	}
+	if mcpMode && auth.native {
+		fmt.Fprintln(diagnostic, "Native workspace MCP enrollment is not implemented.")
+		return 2
+	}
+	auth.accessID, auth.accessSecret = getenv("GOLF_ACCESS_CLIENT_ID"), getenv("GOLF_ACCESS_CLIENT_SECRET")
+	if auth.accessID != "" || auth.accessSecret != "" {
+		valid := auth.native
+		for _, value := range []string{auth.accessID, auth.accessSecret} {
+			valid = valid && len(value) >= 8 && len(value) <= 512 && !strings.ContainsFunc(value, func(r rune) bool { return r <= 32 || r >= 127 })
+		}
+		if !valid {
+			fmt.Fprintln(diagnostic, "Access machine authentication requires both credentials and native workspace mode.")
+			return 2
+		}
 	}
 	if mcpMode {
 		return runMCP(ctx, base, auth, input, output, diagnostic)
 	}
 	if command.writeInput != "" {
-		if newWriteRequest(command.name) != nil && (!auth.api || !strings.HasPrefix(auth.token, "golf_rw_")) {
-			fmt.Fprintln(diagnostic, "Writes require an explicitly scoped Golf API credential.")
+		if newWriteRequest(command.name) != nil && !auth.permitsWrite(command.name) {
+			fmt.Fprintln(diagnostic, "Writes require an authorized credential for this command.")
 			return 2
 		}
 		file, openErr := os.Open(command.writeInput)
@@ -566,8 +601,11 @@ func validDiscussionFlags(q *golfv1.DiscussionQuery) bool {
 }
 
 type credential struct {
-	token string
-	api   bool
+	token        string
+	api          bool
+	native       bool
+	accessID     string
+	accessSecret string
 }
 
 func validAPIToken(token string) bool {
@@ -575,11 +613,34 @@ func validAPIToken(token string) bool {
 	if !ok {
 		value, ok = strings.CutPrefix(token, "golf_rw_")
 	}
-	if !ok || len(value) != 43 {
+	return ok && validTokenValue(value)
+}
+func validNativeToken(token string) bool {
+	value, ok := strings.CutPrefix(token, "golf_native_")
+	return ok && validTokenValue(value)
+}
+func validTokenValue(value string) bool {
+	if len(value) != 43 {
 		return false
 	}
 	decoded, err := base64.RawURLEncoding.Strict().DecodeString(value)
 	return err == nil && len(decoded) == 32 && base64.RawURLEncoding.EncodeToString(decoded) == value
+}
+func (auth credential) permitsWrite(name string) bool {
+	if !auth.api {
+		return false
+	}
+	if !auth.native {
+		return strings.HasPrefix(auth.token, "golf_rw_")
+	}
+	if !validNativeToken(auth.token) {
+		return false
+	}
+	switch name {
+	case "issue create", "issue comment", "issue update", "pr create", "pr update", "pr review":
+		return true
+	}
+	return false
 }
 
 func execute(ctx context.Context, origin string, command command, auth credential) (result json.RawMessage, err error) {
@@ -591,6 +652,10 @@ func execute(ctx context.Context, origin string, command command, auth credentia
 			request.Header().Set("Origin", origin)
 			if auth.api {
 				request.Header().Set("Authorization", "Bearer "+auth.token)
+			}
+			if auth.accessID != "" {
+				request.Header().Set("CF-Access-Client-Id", auth.accessID)
+				request.Header().Set("CF-Access-Client-Secret", auth.accessSecret)
 			}
 			return next(ctx, request)
 		}
@@ -624,8 +689,8 @@ func execute(ctx context.Context, origin string, command command, auth credentia
 	audit := golfv1connect.NewAuditServiceClient(client, origin+"/rpc", options...)
 	var message proto.Message
 	if command.writeRequest != nil {
-		if newWriteRequest(command.name) != nil && (!auth.api || !strings.HasPrefix(auth.token, "golf_rw_")) {
-			return nil, errors.New("Writes require an explicitly scoped Golf API credential")
+		if newWriteRequest(command.name) != nil && !auth.permitsWrite(command.name) {
+			return nil, errors.New("Writes require an authorized credential for this command")
 		}
 		if newMachineReadRequest(command.name) != nil || command.name == "source file" || command.name == "source ref" {
 			message, err = command.machine(ctx, client, origin, options...)

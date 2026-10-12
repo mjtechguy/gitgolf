@@ -3,7 +3,7 @@
 
 Uses only existing cached bytes, offline Go builds, a bounded loopback registry
 and isolated labeled runner resources. No external publication/pull, credential
-forwarding, host mounts or broad cleanup. Job volumes have no hard disk quota.
+forwarding, host mounts or broad cleanup. Git job volumes have verified tmpfs quotas.
 """
 import argparse
 import gzip
@@ -30,12 +30,15 @@ CID = re.compile(r'[0-9a-f]{64}\Z')
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--go-binary', default='go', help='Installed Go toolchain; use its direct path for fully offline qualification')
+    parser.add_argument('--source-image', default=SCRATCH, help='Existing bounded Git image; no build/pull by this launcher')
+    parser.add_argument('--registry-image', default=REGISTRY, help='Existing registry image with a recorded RepoDigest')
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.chmod(output, 0o700)
     worker = 'golf-git-job-proof-' + secrets.token_hex(5)
-    receipt = {'passed': False, 'complete': False, 'worker': worker, 'scope': 'Owned native Git HTTP/TLS fixture and actual ExecuteGit/maintained engine; no Golf/Gitea enrollment, job checkout token/origin, remote actions, unchanged Requests CI or activation', 'jobDiskQuota': False, 'failures': []}
+    receipt = {'passed': False, 'complete': False, 'worker': worker, 'scope': 'Owned native Git HTTP/TLS fixture and actual ExecuteGit/maintained engine; no Golf/Gitea enrollment, job checkout token/origin, remote actions, unchanged Requests CI or activation', 'jobDiskQuota': True, 'failures': []}
     registry = None
     tagged = []
     phase = 'preflight'
@@ -49,8 +52,9 @@ def main():
         environment.update(DOCKER_HOST=endpoint, DOCKER_CONFIG=str(config), GOPROXY='off', GOSUMDB='off')
 
         def run(argv, *, limit=1 << 20, timeout=30, cwd=ROOT, extra=None):
+            argv = [args.go_binary, *argv[1:]] if argv[0] == 'go' else argv
             result = subprocess.run(argv, cwd=cwd, env=environment | (extra or {}), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
-            assert result.returncode == 0 and len(result.stdout) <= limit and len(result.stderr) <= limit, 'Bounded native subprocess failed; output withheld'
+            assert result.returncode == 0 and len(result.stdout) <= limit and len(result.stderr) <= limit, 'Bounded native subprocess failed: '+str(argv[:2])+'; output withheld'
             return result.stdout
 
         def inspect(image):
@@ -70,20 +74,22 @@ def main():
                 return response.headers, body
 
         before = inventory()
-        source = inspect(SCRATCH)
-        registry_image = inspect(REGISTRY)
+        source = inspect(args.source_image)
+        source_id = source['Id']
+        registry_image = inspect(args.registry_image)
+        registry_id = registry_image['Id']
         daemon = inspect(DAEMON)
         architecture = run(['go', 'env', 'GOHOSTARCH']).decode().strip()
         native_os = run(['go', 'env', 'GOHOSTOS']).decode().strip()
         assert architecture in ('amd64', 'arm64')
         for image in (source, registry_image, daemon):
             assert image['Os'] == 'linux' and image['Architecture'] == architecture
-        assert source['Id'] == SCRATCH and source['Size'] <= 16 << 20 and not source['Config'].get('Volumes')
-        assert REGISTRY in registry_image.get('RepoDigests', []) or any(r.endswith('@'+REGISTRY) for r in registry_image.get('RepoDigests', []))
+        assert DIGEST.fullmatch(source_id) and source['Size'] <= 16 << 20 and not source['Config'].get('Volumes')
+        assert registry_id in registry_image.get('RepoDigests', []) or any(r.endswith('@'+registry_id) for r in registry_image.get('RepoDigests', []))
         assert any(r.endswith('@'+DAEMON.split('@')[1]) for r in daemon.get('RepoDigests', []))
         receipt['originalSourceImage'] = {k: source.get(k) for k in ('Id', 'RepoDigests', 'Size', 'Architecture')}
         # Do not infer registry provenance from an image-ID-shaped RepoDigest.
-        saved = run(['docker', 'image', 'save', SCRATCH], limit=16 << 20, timeout=60)
+        saved = run(['docker', 'image', 'save', source_id], limit=16 << 20, timeout=60)
         with tarfile.open(fileobj=io.BytesIO(saved)) as archive:
             phase = 'cached OCI index/config/layer linkage'
             def cached_blob(digest):
@@ -91,7 +97,7 @@ def main():
                 data = archive.extractfile('blobs/sha256/'+digest.split(':')[1]).read((16 << 20)+1)
                 assert len(data) <= 16 << 20 and digest == 'sha256:'+hashlib.sha256(data).hexdigest()
                 return data
-            index = json.loads(cached_blob(SCRATCH))
+            index = json.loads(cached_blob(source_id))
             assert index['schemaVersion'] == 2 and len(index['manifests']) <= 4
             platforms = [row for row in index['manifests'] if row.get('platform') == {'architecture': architecture, 'os': 'linux'}]
             assert len(platforms) == 1
@@ -123,15 +129,15 @@ def main():
         run(['go', 'test', '-c', '-o', str(output/'qualification.test'), './cmd/golf-runner'], timeout=120, extra={'GOOS': native_os, 'GOARCH': architecture, 'CGO_ENABLED': '0'})
         receipt['binaries'] = {p: hashlib.sha256((output/p).read_bytes()).hexdigest() for p in ('plan-engine', 'linux-engine', 'qualification.test')}
         receipt['sourceRevision'] = run(['git', 'rev-parse', 'HEAD']).decode().strip()
-        receipt['sourceFiles'] = {p: hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in ('cmd/golf-runner/git_execution.go', 'cmd/golf-runner/git_execution_test.go', 'internal/runner/actions.go', 'internal/runner/actions_git_source.go', 'internal/runner/git_preparation.go', 'internal/runner/git_source_envelope.go', 'engines/act/git_source.go', 'engines/act/execute.go', 'scripts/actions-git-source-smoke.py')}
+        receipt['sourceFiles'] = {p: hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in ('cmd/golf-runner/main.go', 'cmd/golf-runner/git_capability_test.go', 'cmd/golf-runner/git_execution.go', 'cmd/golf-runner/git_execution_test.go', 'internal/runner/actions.go', 'internal/runner/actions_git_source.go', 'internal/runner/git_preparation.go', 'internal/runner/git_source_envelope.go', 'engines/act/git_source.go', 'engines/act/execute.go', 'engines/act/job_disk.go', 'engines/act/upstream_source_manifest.json', 'engines/act/third_party/act/pkg/container/docker_run.go', 'scripts/actions-git-source-smoke.py')}
 
         phase = 'capacity and owned loopback registry'
         # This cached-image probe is disposable, source-free and network-free.
-        space = run(['docker', 'run', '--rm', '--pull=never', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--memory=67108864', '--memory-swap=67108864', '--cpus=0.25', '--pids-limit=16', '--tmpfs', '/var/lib/registry:rw,size=1048576', '--label', 'io.golf.qualification='+worker, '--entrypoint', '/bin/df', REGISTRY, '-Pk', '/'])
+        space = run(['docker', 'run', '--rm', '--pull=never', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--memory=67108864', '--memory-swap=67108864', '--cpus=0.25', '--pids-limit=16', '--tmpfs', '/var/lib/registry:rw,size=1048576', '--label', 'io.golf.qualification='+worker, '--entrypoint', '/bin/df', registry_id, '-Pk', '/'])
         free_kib = int(space.decode().strip().splitlines()[-1].split()[3])
         receipt['dockerFreeKiBBefore'] = free_kib
         assert free_kib >= 2*1024*1024, 'Two-GiB Docker VM reserve required'
-        created = run(['docker', 'container', 'create', '--pull=never', '--name', worker+'-registry', '--label', 'io.golf.qualification='+worker, '--publish', '127.0.0.1::5000', '--memory=134217728', '--memory-swap=134217728', '--cpus=0.5', '--pids-limit=32', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--read-only', '--tmpfs', '/var/lib/registry:rw,size=134217728,mode=0700', '--tmpfs', '/tmp:rw,size=16777216,mode=1777', '--env', 'OTEL_SDK_DISABLED=true', REGISTRY]).decode().strip()
+        created = run(['docker', 'container', 'create', '--pull=never', '--name', worker+'-registry', '--label', 'io.golf.qualification='+worker, '--publish', '127.0.0.1::5000', '--memory=134217728', '--memory-swap=134217728', '--cpus=0.5', '--pids-limit=32', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--read-only', '--tmpfs', '/var/lib/registry:rw,size=134217728,mode=0700', '--tmpfs', '/tmp:rw,size=16777216,mode=1777', '--env', 'OTEL_SDK_DISABLED=true', registry_id]).decode().strip()
         assert CID.fullmatch(created), 'Registry create receipt lost; inspect only named owned residue'
         registry = created
         run(['docker', 'container', 'start', registry])
@@ -154,7 +160,7 @@ def main():
         phase = 'genuine local manifest and cached pull identity'
         repository = '127.0.0.1:'+port+'/golf/git-source-job-proof'
         tag = repository+':'+worker
-        run(['docker', 'image', 'tag', SCRATCH, tag])
+        run(['docker', 'image', 'tag', source_id, tag])
         tagged.append(tag)
         run(['docker', 'image', 'push', tag], timeout=90)
         headers, body = http(origin+'/v2/golf/git-source-job-proof/manifests/'+platform_digest, 'application/vnd.oci.image.manifest.v1+json')
@@ -172,7 +178,7 @@ def main():
         run(['docker', 'image', 'pull', approved], timeout=60)
         tagged.append(approved)
         pulled = inspect(approved)
-        assert pulled['Id'] in (SCRATCH, platform_digest, configuration_sha) and pulled['RootFS']['Layers'] == expected_layers and approved in pulled['RepoDigests']
+        assert pulled['Id'] in (source_id, platform_digest, configuration_sha) and pulled['RootFS']['Layers'] == expected_layers and approved in pulled['RepoDigests']
         receipt.update(qualifiedJobImage=approved, registryManifestSHA256=digest, registryConfigSHA256=configuration_sha, registryContainer=registry, registryTmpfsBytes=134217728)
 
         phase = 'actual ExecuteGit engine/job qualification'
@@ -181,7 +187,7 @@ def main():
             result = subprocess.run([str(output/'qualification.test'), '-test.run=^TestActionsGitActualEngine$', '-test.v', '-test.timeout=240s'], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=250)
         text = (output/'actual-engine.log').read_text()
         receipt['actualTestExitCode'] = result.returncode
-        assert result.returncode == 0 and '--- SKIP' not in text and all('ACTUAL_GIT_JOB case='+case in text for case in ('success', 'wrong_tree', 'cancel')), 'Actual engine qualification failed; bounded log retained'
+        assert result.returncode == 0 and '--- SKIP' not in text and all('ACTUAL_GIT_JOB case='+case in text for case in ('success', 'wrong_tree', 'cancel', 'disk_full', 'inode_full', 'lost_create')), 'Actual engine qualification failed; bounded log retained'
         receipt['cases'] = [line.strip() for line in text.splitlines() if 'ACTUAL_GIT_JOB case=' in line]
         assert set(run(['docker', 'container', 'ls', '-aq', '--filter', 'label=io.golf.runner.worker='+worker]).decode().split()) == set()
         assert not run(['docker', 'volume', 'ls', '-q', '--filter', 'label=io.golf.runner.worker='+worker]).strip()

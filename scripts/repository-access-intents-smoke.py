@@ -5,7 +5,7 @@ Requires an exact cached revision-labelled --image and NEW --output. No builds,
 pulls, retained policy changes, CI, inference, external destination or SQL writes.
 An owned adapter inside the fresh Compose network forwards unchanged native
 requests; direct and invitation collaborator PUTs each lose a response only AFTER a real native204.
-Requires --proxy-binary (precompiled Linux ARM64); only nonce-authenticated control
+Requires --proxy-binary (precompiled Linux AMD64/ARM64); only nonce-authenticated control
 is published on loopback. No host bridge is used for native forwarding. --ui adds12 actual
 inventory/requested-role/original-receipt captures. --self-check is pure.
 """
@@ -87,9 +87,7 @@ def proxy_binary_receipt(path):
     path = path.absolute()
     assert path.stat().st_uid == os.getuid() and path.stat().st_mode & 0o111, 'Owned executable proxy binary required'
     digest = file_sha256(path, 64 << 20)
-    with path.open('rb') as file:
-        header = file.read(64)
-    assert len(header) == 64 and header[:6] == b'\x7fELF\x02\x01' and int.from_bytes(header[18:20], 'little') == 183, 'Compiled Linux ARM64 proxy required; no build occurs here'
+    native_proxy.binary_architecture(path)
     return path, digest
 
 
@@ -106,6 +104,8 @@ def proxy_state(proxy, label):
 
 
 def verify_proxy_runtime(run, command, proxy, binary, binary_sha, image, source):
+    platform = json.loads(run('docker', 'image', 'inspect', image))[0]
+    assert platform['Id'] == image and platform['Os'] == 'linux' and platform['Architecture'] == native_proxy.binary_architecture(binary), 'Proxy binary/image platform mismatch'
     identifier = command('ps', '-q', native_proxy.SERVICE_NAME)
     assert re.fullmatch(r'[a-f0-9]{12,64}', identifier), 'Exact owned proxy container required'
     value = json.loads(run('docker', 'inspect', '--format', '{"image":{{json .Image}},"reference":{{json .Config.Image}},"revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}},"mounts":{{json .Mounts}},"ports":{{json .HostConfig.PortBindings}},"entrypoint":{{json .Config.Entrypoint}},"readOnly":{{json .HostConfig.ReadonlyRootfs}},"composeProject":{{json (index .Config.Labels "com.docker.compose.project")}},"composeService":{{json (index .Config.Labels "com.docker.compose.service")}}}', identifier))
@@ -197,13 +197,21 @@ def proxy_source_check():
             if arguments == ('ps','-q',native_proxy.SERVICE_NAME):return 'c'*64
             assert arguments == ('exec','-T',native_proxy.SERVICE_NAME,'/bin/busybox','sha256sum',destination)
             return digest+'  '+destination
+        platform = {'Id':image, 'Os':'linux', 'Architecture':'arm64'}
         def run(*arguments):
+            if arguments == ('docker','image','inspect',image): return json.dumps([platform])
             assert arguments[:2] == ('docker','inspect') and arguments[-1] == 'c'*64
             return json.dumps(observed)
         prior = dict(PROOF)
         try:
             receipt = verify_proxy_runtime(run,command,proxy,selected,digest,image,revision)
             assert receipt['binarySha256'] == digest and receipt['sourceRevision'] == revision and proxy._nonce not in json.dumps(receipt)
+            for field, value in [('Id','sha256:'+'d'*64),('Os','windows'),('Architecture','amd64')]:
+                previous = platform[field]; platform[field] = value
+                try: verify_proxy_runtime(run,command,proxy,selected,digest,image,revision)
+                except AssertionError: pass
+                else: raise AssertionError('Mismatched proxy image platform accepted')
+                finally: platform[field] = previous
             for field, value in (('image','sha256:'+'d'*64),('reference','mutable-tag'),('readOnly',False),('composeProject','foreign'),
                                  ('mounts',[{'Type':'bind','Source':str(selected),'Destination':destination,'RW':True}]),
                                  ('ports',{'8081/tcp':[{'HostIp':'0.0.0.0','HostPort':'8081'}]})):
@@ -217,6 +225,12 @@ def proxy_source_check():
             else:raise AssertionError('Unmatched mounted binary hash accepted')
         finally:PROOF.clear();PROOF.update(prior)
         header[18:20] = (62).to_bytes(2, 'little'); binary.write_bytes(header)
+        selected, digest = proxy_binary_receipt(binary)
+        platform['Architecture'] = 'amd64'
+        prior = dict(PROOF)
+        try: assert verify_proxy_runtime(run,command,proxy,selected,digest,image,revision)['binarySha256'] == digest
+        finally: PROOF.clear(); PROOF.update(prior)
+        header[18:20] = (40).to_bytes(2, 'little'); binary.write_bytes(header)
         try: proxy_binary_receipt(binary)
         except AssertionError: pass
         else: raise AssertionError('Foreign architecture proxy accepted')

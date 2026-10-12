@@ -100,7 +100,7 @@ func parseActionsEngineFailure(data []byte) string {
 // Native source/declaration authority and engine admission remain independent.
 // No values, source or provider text are ever included in the returned error.
 func ValidateActionManualInputs(plan ActionPlan, inputs *ActionManualInputs, eventJSON []byte, commit string) error {
-	if plan.Catalog == ActionsCatalog {
+	if plan.Catalog == ActionsCatalog || plan.Catalog == ActionsRemoteCatalog {
 		if inputs != nil || plan.ManualInputsContract != "" || plan.ManualInputsSchemaSHA256 != "" {
 			return ErrInvalidJob
 		}
@@ -209,8 +209,27 @@ func (a *ActionsExecutor) ExecuteGit(ctx context.Context, attempt string, input 
 	return a.execute(ctx, attempt, input, metadata, onFrame)
 }
 
+// ExecuteGitCredentials adds an explicit private acknowledgement channel. Only
+// admitted jobs may request job-only capsules; the legacy wire remains closed.
+func (a *ActionsExecutor) ExecuteGitCredentials(ctx context.Context, attempt string, input ActionExecutionInput, metadata []byte, onFrame func(context.Context, ActionFrame) error, issue func(context.Context, string) (*JobGitCredential, error)) (Result, error) {
+	if input.JobGit == nil || input.JobGit.Validate() != nil || input.GitSource == nil || input.JobResources == nil || len(metadata) == 0 || issue == nil {
+		return Result{ExitCode: 255}, ErrInvalidJob
+	}
+	return a.executeWithCredentials(ctx, attempt, input, metadata, onFrame, issue)
+}
+
 func (a *ActionsExecutor) execute(ctx context.Context, attempt string, input ActionExecutionInput, metadata []byte, onFrame func(context.Context, ActionFrame) error) (result Result, err error) {
+	if input.JobGit != nil {
+		return Result{ExitCode: 255}, ErrInvalidJob
+	}
+	return a.executeWithCredentials(ctx, attempt, input, metadata, onFrame, nil)
+}
+
+func (a *ActionsExecutor) executeWithCredentials(ctx context.Context, attempt string, input ActionExecutionInput, metadata []byte, onFrame func(context.Context, ActionFrame) error, issue func(context.Context, string) (*JobGitCredential, error)) (result Result, err error) {
 	result.ExitCode = 255
+	if input.DependencyAccess.Validate() != nil || input.DependencyAccess != nil && input.JobGit == nil {
+		return result, ErrInvalidJob
+	}
 	phase := "input_validation"
 	defer func() {
 		if err != nil {
@@ -318,6 +337,15 @@ func (a *ActionsExecutor) execute(ctx context.Context, attempt string, input Act
 	}
 	args := append([]string{"container", "create"}, labels...)
 	args = append(args, "--network=none", "--privileged", "--memory=1073741824", "--memory-swap=1073741824", "--cpus=2", "--pids-limit=512", "--mount", "type=volume,source="+volume+",target=/var/lib/docker", "--tmpfs", "/golf:rw,size=134217728,mode=0755", "--env", "DOCKER_TLS_CERTDIR=", "--entrypoint", "dockerd-entrypoint.sh", daemonImage[0].ID, "dockerd", "--host=unix:///var/run/docker.sock", "--iptables=false", "--ip-masq=false", "--bridge=none")
+	if input.DependencyAccess != nil {
+		for i, arg := range args {
+			if arg == "--network=none" {
+				args[i] = "--network=" + input.DependencyAccess.Network
+			}
+		}
+		args = args[:len(args)-3]
+		args = append(args, "--iptables=true", "--ip-masq=true", "--bridge=docker0")
+	}
 	phase = "daemon_creation"
 	body, err := e.command(runCtx, nil, args...)
 	if err != nil {
@@ -329,7 +357,7 @@ func (a *ActionsExecutor) execute(ctx context.Context, attempt string, input Act
 		return result, ErrInfrastructure
 	}
 	phase = "daemon_receipt_validation"
-	if err = a.verifyDaemon(runCtx, container, daemonImage[0].ID, volume, attempt, owner); err != nil {
+	if err = a.verifyDaemonAccess(runCtx, container, daemonImage[0].ID, volume, attempt, owner, input.DependencyAccess); err != nil {
 		return result, err
 	}
 	phase = "daemon_start"
@@ -351,6 +379,12 @@ func (a *ActionsExecutor) execute(ctx context.Context, attempt string, input Act
 	}
 	if !ready {
 		return result, ErrInfrastructure
+	}
+	if input.DependencyAccess != nil {
+		phase = "daemon_firewall_validation"
+		if err = a.fenceDependencyNetwork(runCtx, container, *input.DependencyAccess); err != nil {
+			return result, err
+		}
 	}
 	phase = "image_transfer"
 	for _, image := range images {
@@ -408,7 +442,27 @@ func (a *ActionsExecutor) execute(ctx context.Context, attempt string, input Act
 			break
 		}
 		sequence = frame.Sequence
-		if frame.Kind == "agent_requested" {
+		if frame.Kind == "job_git_credential" {
+			known := false
+			for _, job := range input.Plan.Jobs {
+				known = known || job.InstanceID == frame.InstanceID
+			}
+			if issue == nil || input.JobGit == nil || !known || frame.EventSequence != 0 || frame.StepID != "" || frame.Text != "" || frame.State != "" {
+				err = ErrInfrastructure
+				break
+			}
+			phase = "durable_frame_ack"
+			credential, e := issue(runCtx, frame.InstanceID)
+			if e != nil || credential.Validate(input.JobGit, input.CommitID, input.Plan.WorkflowBlobID, frame.InstanceID, time.Now()) != nil {
+				err = ErrInfrastructure
+				break
+			}
+			phase = "helper_ack_write"
+			if err = encoder.Encode(ActionAck{Sequence: frame.Sequence, JobGit: credential}); err != nil {
+				break
+			}
+			continue
+		} else if frame.Kind == "agent_requested" {
 			known := false
 			for _, job := range input.Plan.Jobs {
 				for _, step := range job.Steps {
@@ -536,11 +590,26 @@ func (a *ActionsExecutor) copyImage(ctx context.Context, container, image string
 // Verify the trusted daemon's actual isolation before any source transfer.
 // Privilege is restricted to this disposable engine daemon, never source jobs.
 func (a *ActionsExecutor) verifyDaemon(ctx context.Context, id, image, volume, attempt, owner string) error {
+	return a.verifyDaemonAccess(ctx, id, image, volume, attempt, owner, nil)
+}
+
+func (a *ActionsExecutor) verifyDaemonAccess(ctx context.Context, id, image, volume, attempt, owner string, access *ActionDependencyAccess) error {
 	var rows []actionsDaemonInspect
-	if a.executor.inspect(ctx, "container", id, &rows) != nil || len(rows) != 1 || !validActionsDaemon(rows[0], id, image, volume, a.executor.config.WorkerID, attempt, owner) {
+	if a.executor.inspect(ctx, "container", id, &rows) != nil || len(rows) != 1 || !validActionsDaemonAccess(rows[0], id, image, volume, a.executor.config.WorkerID, attempt, owner, access) {
 		return ErrInfrastructure
 	}
 	return nil
+}
+
+func validActionsDaemonAccess(r actionsDaemonInspect, id, image, volume, worker, attempt, owner string, access *ActionDependencyAccess) bool {
+	if access != nil {
+		if access.Validate() != nil || r.HostConfig.NetworkMode != access.Network || strings.Join(r.Config.Cmd, "\x00") != "dockerd\x00--host=unix:///var/run/docker.sock\x00--iptables=true\x00--ip-masq=true\x00--bridge=docker0" {
+			return false
+		}
+		r.HostConfig.NetworkMode = "none"
+		r.Config.Cmd = []string{"dockerd", "--host=unix:///var/run/docker.sock", "--iptables=false", "--ip-masq=false", "--bridge=none"}
+	}
+	return validActionsDaemon(r, id, image, volume, worker, attempt, owner)
 }
 
 type actionsDaemonInspect struct {

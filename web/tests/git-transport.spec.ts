@@ -1,15 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetSessionResponseSchema, ListOrganizationsResponseSchema, GetRepositoryAccessResponseSchema, GitCredentialMode as Mode, GitCredentialSchema, GetGitTransportResponseSchema, ListGitCredentialsResponseSchema, CreateGitCredentialRequestSchema, CreateGitCredentialResponseSchema, RevokeGitCredentialRequestSchema, RevokeGitCredentialResponseSchema, type GitCredential } from '../src/gen/golf/v1/golf_pb';
+import { ListCapabilitiesResponseSchema, GetSessionResponseSchema, ListOrganizationsResponseSchema, GetRepositoryAccessResponseSchema, GitCredentialMode as Mode, GitCredentialSchema, GetGitTransportResponseSchema, ListGitCredentialsResponseSchema, CreateGitCredentialRequestSchema, CreateGitCredentialResponseSchema, RevokeGitCredentialRequestSchema, RevokeGitCredentialResponseSchema, type GitCredential } from '../src/gen/golf/v1/golf_pb';
 import { request, respond, reject } from './rpc';
+import { portableRuntimeFixture } from './runtime-fixture';
 const secret = `golf_git_${'A'.repeat(43)}`;
 const target={repository:{owner:'alice',name:'example'},repositoryId:'123',ownerId:'42'};
 const stamp='2026-10-04T00:00:00Z';
 const credential=()=>create(GitCredentialSchema,{id:'1',label:'Work laptop',repositoryId:'123',ownerId:'42',mode:Mode.READ,createdAt:stamp,expiresAt:'2026-10-04T01:00:00Z',sourceSessionId:'12',sourceSessionActive:true});
-async function backend(page:Page) {
+async function backend(page:Page, native = false) {
  const state={rows:[] as GitCredential[],create:0,revoke:0,denied:false,enabled:true,lost:false,wrong:false,barrier:undefined as Promise<void>|undefined};
  await page.route('**/rpc/**', async route=>{
   const method=route.request().url().split('/').at(-1);
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,native?{runtimeProfile:'cloudflare-native',capabilities:[{id:'settings.repository-git',label:'Git credentials',state:3}]}:portableRuntimeFixture);
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'42',login:'alice',fullName:'Alice'}});
   if(method==='ListOrganizations')return respond(route,ListOrganizationsResponseSchema,{organizations:[],page:{nextPage:0}});
   if(method==='GetRepositoryAccess'){
@@ -17,15 +19,15 @@ async function backend(page:Page) {
    return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:'123',ownerId:'42',owner:{id:'42',login:'alice'},revision:'a'.repeat(64),canManage:false,currentPermission:'read'}});
   }
   if(state.denied)return reject(route,'permission_denied','Current repository authority is required.');
-  if(method==='GetGitTransport')return respond(route,GetGitTransportResponseSchema,{...target,enabled:state.enabled,cloneUrl:state.enabled?'https://golf.example/git/alice/example.git':'',readCredentialAvailable:state.enabled,writeNotice:'Fresh private-native write qualification has not been enrolled.'});
+  if(method==='GetGitTransport')return respond(route,GetGitTransportResponseSchema,{...target,enabled:state.enabled,cloneUrl:state.enabled?'https://golf.example/git/alice/example.git':'',readCredentialAvailable:state.enabled,writeCredentialAvailable:native&&state.enabled,writeNotice:'Fresh private-native write qualification has not been enrolled.'});
   if(method==='ListGitCredentials')return respond(route,ListGitCredentialsResponseSchema,{credentials:state.rows,page:{nextPage:0}});
   if(method==='CreateGitCredential'){
-   const input=request(route,CreateGitCredentialRequestSchema);expect(input).toMatchObject({...target,mode:Mode.READ,label:'Work laptop'});state.create++;if(state.barrier)await state.barrier;
-   state.rows=[credential()];if(state.lost)return route.abort('failed');
+   const input=request(route,CreateGitCredentialRequestSchema);expect(input).toMatchObject({...target,mode:native?Mode.WRITE:Mode.READ,label:'Work laptop'});state.create++;if(state.barrier)await state.barrier;
+   state.rows=[{...credential(),...(native?{mode:Mode.WRITE,sourceSessionId:'',sourceSessionActive:false,identityBound:true,sourceIdentityActive:true}:{})}];if(state.lost)return route.abort('failed');
    return respond(route,CreateGitCredentialResponseSchema,{credential:{...state.rows[0]!,repositoryId:state.wrong?'999':'123'},secret});
   }
   expect(method).toBe('RevokeGitCredential');const input=request(route,RevokeGitCredentialRequestSchema);expect(input).toMatchObject({...target,credentialId:'1'});state.revoke++;
-  state.rows=[{...credential(),revokedAt:stamp}];return respond(route,RevokeGitCredentialResponseSchema,{credentialId:'1',revoked:true});
+  state.rows=[{...state.rows[0]!,revokedAt:stamp}];return respond(route,RevokeGitCredentialResponseSchema,{credentialId:'1',revoked:true});
  });return state;
 }
 async function open(page:Page){await page.goto('/tests/fixtures/git-transport.html');await expect(page.getByRole('table',{name:'Golf Git credentials',exact:true})).toBeVisible();}
@@ -38,3 +40,23 @@ for(const action of ['Fixture sign out','Fixture switch user','Fixture replace r
 
 test('canonical shared settings route permits own reader credentials without admin delegation',async({page})=>{const s=await backend(page);await page.goto('/alice/example/settings/git');await expect(page.getByRole('heading',{name:'Git access',exact:true})).toBeVisible();await expect(page.getByRole('navigation',{name:'Repository settings'}).getByRole('link',{name:'Git credentials',exact:true})).toHaveAttribute('aria-current','page');await expect(page.getByRole('table',{name:'Golf Git credentials',exact:true})).toBeVisible();await expect(page.getByRole('form')).toHaveCount(0);await expect(page.getByRole('button',{name:'New Git credential',exact:true})).toBeEnabled();expect(s.create).toBe(0);await page.reload();await expect(page.getByRole('heading',{name:'Git access',exact:true})).toBeVisible();expect(s.create).toBe(0);});
 test('shared settings permissions refresh clears old private credential metadata',async({page})=>{const s=await backend(page);s.rows=[credential()];await page.goto('/alice/example/settings/git');await expect(page.getByRole('cell',{name:'Work laptop',exact:true})).toBeVisible();s.denied=true;await page.getByRole('button',{name:'Recheck repository access',exact:true}).click();await expect(page.getByText('Current repository authority is required.')).toBeVisible();await expect(page.getByRole('table',{name:'Golf Git credentials',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'New Git credential',exact:true})).toHaveCount(0);expect(s.create).toBe(0);});
+
+for(const width of [390,1440]) test(`native Git settings ${width} makes binding and enforced write scope explicit`,async({page})=>{
+ const state=await backend(page,true);await page.setViewportSize({width,height:1000});await page.goto('/alice/example/settings/git');
+ await expect(page.getByRole('table',{name:'Golf Git credentials',exact:true})).toBeVisible();
+ await newCredential(page);await expect(page.getByText(/Access sign-out does not revoke it/)).toBeVisible();
+ await page.getByLabel('Access',{exact:true}).selectOption(String(Mode.WRITE));
+ await page.getByRole('button',{name:'Create Git credential',exact:true}).click();
+ await expect(page.getByLabel('Git credential · username golf')).toHaveValue(secret);
+ await expect(page.getByRole('cell',{name:'Write under repository rules',exact:true})).toBeVisible();
+ expect(state.create).toBe(1);expect(await page.evaluate(()=>JSON.stringify([localStorage,sessionStorage]))).not.toContain(secret);
+ await page.getByRole('button',{name:'Revoke Git credential Work laptop'}).click();await page.getByRole('button',{name:'Confirm revoke Git credential',exact:true}).click();
+ await expect(page.getByRole('cell',{name:'Revoked',exact:true})).toBeVisible();expect(state.revoke).toBe(1);
+ await expect(page.getByLabel('Git credential · username golf')).toHaveCount(0);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+test('native inventory refuses a portable session binding instead of presenting it as identity-bound',async({page})=>{
+ const state=await backend(page,true);state.rows=[credential()];await page.goto('/alice/example/settings/git');
+ await expect(page.getByRole('alert')).toContainText('Git credential inventory could not be verified');
+ await expect(page.getByRole('table',{name:'Golf Git credentials',exact:true})).toHaveCount(0);
+});

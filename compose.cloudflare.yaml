@@ -1,0 +1,49 @@
+# Separate bridge installation. Apply last, with compose.runner-tls.yaml.
+# Canonical Go/PostgreSQL/Gitea authority remains on this persistent host.
+services:
+  golf:
+    ports: !reset []
+    environment:
+      GOLF_DEPLOYMENT_RUNTIME: cloudflare-bridge
+      GOLF_ALLOW_INSECURE_COOKIES: 'false'
+      GOLF_OBJECT_ENDPOINT: ${GOLF_OBJECT_ENDPOINT:?Initialize the Cloudflare installation}
+      GOLF_OBJECT_BUCKET: ${GOLF_OBJECT_BUCKET:?Initialize the Cloudflare installation}
+      GOLF_OBJECT_REGION: auto
+      GOLF_OBJECT_PREFIX: ${GOLF_OBJECT_PREFIX:-golf}
+      GOLF_OBJECT_ACCESS_KEY_ID: ${GOLF_OBJECT_ACCESS_KEY_ID:?Configure bucket-scoped R2 credentials}
+      GOLF_OBJECT_SECRET_ACCESS_KEY: ${GOLF_OBJECT_SECRET_ACCESS_KEY:?Configure bucket-scoped R2 credentials}
+      GOLF_OBJECT_SESSION_TOKEN: ${GOLF_OBJECT_SESSION_TOKEN:-}
+      GOLF_OBJECT_PATH_STYLE: 'true'
+      GOLF_OBJECT_ALLOW_HTTP: 'false'
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/readyz]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+  gitea:
+    ports: !reset []
+    environment:
+      GITEA__server__ROOT_URL: ${GITEA_PUBLIC_URL:-http://gitea:3000}/
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.0@sha256:9b49eed8f62806d5d45ddf59ecefb5710429598ea6d3fcccd2af938f621b2b07
+    command: [tunnel, --no-autoupdate, run, --token-file, /run/golf/tunnel-token]
+    user: '${GOLF_CLOUDFLARED_UID:?Initialize the Cloudflare installation}'
+    volumes:
+      - type: bind
+        source: ${GOLF_TUNNEL_TOKEN_FILE:?Configure the dedicated tunnel token file}
+        target: /run/golf/tunnel-token
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${GOLF_INTERNAL_TLS_CERT_FILE:?Initialize the Cloudflare installation}
+        target: /run/golf/origin-ca.crt
+        read_only: true
+        bind: {create_host_path: false}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    depends_on:
+      golf: {condition: service_healthy}
