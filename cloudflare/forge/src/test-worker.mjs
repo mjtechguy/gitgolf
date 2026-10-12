@@ -121,6 +121,7 @@ export class PRTestTask extends DurableObject {
       output = { ...output, ...logs };
     } else output = await run(['python3', '-m', 'unittest', '-v', r.module]);
     if (this.record.stage !== 'test') return;
+    if (Date.now() >= r.deadline) return this.finish('TIMED_OUT', { exitCode: 124, stdout: output.stdout, stderr: output.stderr });
     let image;
     if(output.exitCode===0 && r.registry) {
       const tag='ci-'+r.jobId, response=await this.owner().testRegistry(r.jobId,new Request(r.registry.origin+'/v2/'+r.registry.name+'/manifests/'+tag));
@@ -131,7 +132,7 @@ export class PRTestTask extends DurableObject {
         image={registry:r.registry.origin,repository:r.registry.name,tag,digest:hash,commitId:r.commitId};
       }
     }
-    await this.finish([124, 137].includes(output.exitCode) ? 'TIMED_OUT' : output.exitCode === 0 ? 'PASSED' : 'FAILED',
+    await this.finish(Date.now() >= r.deadline || [124, 137].includes(output.exitCode) ? 'TIMED_OUT' : output.exitCode === 0 ? 'PASSED' : 'FAILED',
       { exitCode: output.exitCode, stdout: output.stdout, stderr: output.stderr, ...(image?{image}:{}) });
   }
   async finish(state, output = {}) {

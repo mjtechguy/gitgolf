@@ -257,3 +257,23 @@ test('native GitLab after_script failure does not change a successful main resul
   assert.equal(f.task.status().exitCode, 0);
   assert.equal(f.commands.filter(args => args[0] === '/bin/sh').length, 2);
 });
+
+test('a shell that exits zero after the hard deadline cannot publish success', async () => {
+  const f = fixture(), now = Date.now;
+  let clock = now();
+  f.input.deadline = clock + 10000;
+  const execute = f.container.exec;
+  f.container.exec = async (args, options) => {
+    const process = await execute(args, options);
+    if (args[0] !== '/bin/sh') return process;
+    return { output: async () => { clock = f.input.deadline + 1; return process.output(); } };
+  };
+  Date.now = () => clock;
+  try {
+    await f.task.create(f.input); await f.task.alarm();
+    assert.equal(f.commands.filter(args => args[0] === '/bin/sh').length, 1);
+    assert.equal(f.task.status().state, 'TIMED_OUT');
+    assert.equal(f.task.status().cleanup, 'destroyed');
+    assert.equal(f.counters().destroyed, 1);
+  } finally { Date.now = now; }
+});
