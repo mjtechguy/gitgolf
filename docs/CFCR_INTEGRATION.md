@@ -6,6 +6,8 @@ An installation adds `registry: {worker: "golf-cfcr", origin: "https://registry.
 
 Repository Settings shows **Packages → Enable packages** to administrators. An enabled repository gets a Packages tab with a bounded tag inventory, registry commands, one-hour credential issuance and revocation. Readers receive pull-only credentials; writers/admins can publish. CFCR calls the actual current D1 authority for every request. UI-supplied identities and permissions are never trusted.
 
+The Packages tab is the current operator UI: it lists tagged and untagged images for one repository, with digest pages for scans, Syft/SPDX/CycloneDX SBOMs, vulnerabilities, signatures, provenance, policy and activity. Native PR reports link their published digest to that page. An installation-wide Harbor-style catalog across repositories and scanner fleet administration are not implemented; an administrator opens each repository's Packages tab.
+
 The binding pins installation origin, native repository ID, Artifacts identity and namespace. Renaming/reusing a namespace cannot silently adopt the previous registry binding. Credentials are returned once, held in component state and cleared on dismissal, expiry, session changes or authorization failure.
 
 Local evidence (2026-10-10): `make cloudflare-check`, native UI build/typecheck, CFCR `check:golf` and `check:build` passed. CFCR's official OCI Distribution v1.1.1 suite passes all four categories with 75 passed and four conditional skips, and a real Docker push/pull passes. Browser automation could not reach the local fixture; visual behavior and hosted integration remain unqualified. See sibling `golf-cfcr/docs/OCI_COMPLIANCE.md` for exact scope, limits and remaining release gates. No production deployment was performed.
@@ -76,6 +78,13 @@ full disposable Golf/CFCR integration; guarded schema18 release, rollback and
 promotion also passed. See the
 [final receipt](compatibility/evidence/cfcr-hosted-rehearsal-20261012.json).
 Production load, migration-bearing rollback and retained rollout remain open.
+
+The [hosted size follow-up](compatibility/evidence/cfcr-managed-size-20261012.json)
+also passed scan-on-publication for the native CI image, a 7 MiB Docker image
+and a 128 MiB regctl image. Each immutable digest received five managed reports;
+the vulnerable CI digest was denied promotion. All 25 owned cleanup categories
+were absent. The image sizes are synthetic single samples, and protected
+previews in this proof were created from source rather than from those images.
 
 ## Hybrid execution work
 

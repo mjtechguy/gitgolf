@@ -481,6 +481,13 @@ through the external transport and the isolation/cleanup negatives pass.
 - [x] Produce hosted five-report proof, current-authority negatives and absence receipts
   for one disposable synthetic workspace; load and broader rollout remain open.
 
+Cloudflare's [Container snapshot API](https://developers.cloudflare.com/containers/guides/snapshots/)
+is available for Durable Object scheduled containers, but snapshots include the
+full filesystem, are tied to an image version and expire after 30 days without
+a restore. The scanner already bakes its public databases into a verified image.
+No snapshot is enabled until a clean pre-tenant snapshot shows a measured startup
+or cost improvement and an expired/incompatible handle safely falls back.
+
 ### P5 — Golf native/general runner adapter
 
 - [ ] Map existing portable job semantics to versioned native execution contract.
@@ -491,6 +498,15 @@ through the external transport and the isolation/cleanup negatives pass.
 - [ ] Show explicit unsupported forms; don't silently reduce workflow semantics.
 - [ ] Test worker loss, duplicate dispatch, cancellation, reboot and cleanup failure.
 - [ ] Qualify container builds without giving customer jobs the supervisor socket.
+
+The first native execution envelope is `golf.native.pr-test.v1`: an approved
+Python module, exact Git commit/tree/branch, policy digest, deadline and optional
+repository-scoped OCI publication destination. Admission rejects unknown fields;
+the result repeats the contract and exact source and is released only after
+container cleanup. Jobs captured before the contract was added can finish during
+rollout. This is the existing managed PR-test recipe with a versioned boundary.
+The portable Actions catalogs, GitLab shell plan, lease generation, pool placement
+and customer runner transport still need their native adapter and acceptance runs.
 
 ### P6 — Complete build/publish/evidence/deploy vertical
 
@@ -788,3 +804,35 @@ Regression evidence: 70 CFCR JavaScript tests, three Python checks, 75 OCI specs
 UI builds and real image activation/rollback passed. General native workflow
 runners, CI-imported evidence, fleet enrollment UI, snapshot/Builds comparison,
 full usage accounting and production load qualification remain open.
+
+## 24. Versioned native test and larger hosted scans — 2026-10-12
+
+New native PR-test admissions carry `golf.native.pr-test.v1`; the worker rejects
+unknown fields and versions, and the cleanup-fenced result repeats the contract
+and exact source. Existing unversioned jobs can finish during rollout. The PR
+report links its published digest to that repository's Packages detail, where
+admins can inspect the scan, SBOM and policy. The current UI has no global
+Harbor-style catalog across repositories.
+
+The [sanitized hosted size receipt](compatibility/evidence/cfcr-managed-size-20261012.json)
+records automatic managed scans for the exact native CI image, a 7 MiB Docker
+fixture and a 128 MiB regctl chunked fixture. All produced Syft, SPDX,
+CycloneDX, Grype and Trivy reports. The CI image had one critical and twenty
+high findings, and policy refused its promotion. The CI and 7 MiB scans
+overlapped and both completed. One sample per size gave:
+
+| Hosted fixture | Scanner input | Job created-to-finished | Download stage | Child peak RSS |
+|---|---:|---:|---:|---:|
+| Docker | 7,342,856 B | 35.783 s | 0.635 s | 197,824,512 B |
+| regctl chunked | 134,259,299 B | 37.756 s | 16.968 s | 187,568,128 B |
+
+The disposable proof passed real registry clients, authority/revocation,
+source-based protected previews and schema18 checks. All 25 owned cleanup
+categories were absent and the independent stop timer was cancelled. An earlier
+otherwise passing run saw a transient dispatch deletion readback; bounded
+absence retries and this repeat confirmed its cleanup. The local 64 MiB
+scanner fixture also passed with the current approved image. These synthetic
+single samples do not establish production percentiles, sustained burst behavior
+or billable cost. The preview is source-based; it is not a deployment of the
+scanned OCI image. General native Actions/GitLab runners, CI evidence import,
+image-backed protected deployment and snapshot/Builds comparison remain open.

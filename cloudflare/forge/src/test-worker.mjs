@@ -2,7 +2,7 @@ import { DurableObject, WorkerEntrypoint } from 'cloudflare:workers';
 import { Files } from '@cloudflare/sandbox';
 import { digest, uuidOK } from './common.mjs';
 import { bounded, sha, validRef } from './git.mjs';
-import { executionDiagnostic, testModuleOK, testTerminal } from './test-policy.mjs';
+import { executionDiagnostic, nativeTestContract, testModuleOK, testTerminal } from './test-policy.mjs';
 
 const trust = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: '/auth',
   GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
@@ -32,10 +32,11 @@ export class PRTestTask extends DurableObject {
   set record(value) { this.ctx.storage.kv.put('test', value); }
   owner() { return this.ctx.exports.Workspace.getByName(this.env.WORKSPACE_SLUG); }
   async create(input) {
-    if (!uuidOK(input?.jobId) || !sha(input.commitId) || !sha(input.treeId) || !validRef('refs/heads/' + input.branch) ||
+    if (!input || input.contract !== undefined && input.contract !== nativeTestContract || Object.keys(input).some(key => !['contract', 'jobId', 'commitId', 'treeId', 'branch', 'module', 'policySha256', 'remote', 'deadline', 'registry'].includes(key)) ||
+        !uuidOK(input.jobId) || !sha(input.commitId) || !sha(input.treeId) || typeof input.branch !== 'string' || !validRef('refs/heads/' + input.branch) ||
         !testModuleOK(input.module) || !/^[a-f0-9]{64}$/.test(input.policySha256 || '') || !Number.isSafeInteger(input.deadline) || input.deadline <= Date.now() || input.deadline > Date.now() + 600000 ||
         typeof input.remote !== 'string' || !/^https:\/\/[a-f0-9]{32}\.artifacts\.cloudflare\.net\/git\/[a-z0-9-]{3,63}\/repo-[a-f0-9]{32}\.git$/.test(input.remote)) throw Error('Invalid test admission');
-    if(input.registry && (this.env.REGISTRY_CI_ENABLED!=='true' || input.registry.origin!==this.env.REGISTRY_ORIGIN || !new RegExp('^'+this.env.WORKSPACE_SLUG+'/[a-z0-9][a-z0-9._-]{0,99}$').test(input.registry.name))) throw Error('Invalid registry admission');
+    if(input.registry && (typeof input.registry !== 'object' || Array.isArray(input.registry) || Object.keys(input.registry).some(key=>!['origin','name'].includes(key)) || this.env.REGISTRY_CI_ENABLED!=='true' || input.registry.origin!==this.env.REGISTRY_ORIGIN || !new RegExp('^'+this.env.WORKSPACE_SLUG+'/[a-z0-9][a-z0-9._-]{0,99}$').test(input.registry.name))) throw Error('Invalid registry admission');
     const hash = await digest(JSON.stringify(input));
     // One task ID admits one process; an uncertain dispatch never starts it again.
     if (this.record) {
@@ -116,7 +117,7 @@ export class PRTestTask extends DurableObject {
   status() {
     const r = this.record;
     if (!r) return { state: 'ABSENT' };
-    return { jobId: r.jobId, commitId: r.commitId, treeId: r.treeId, module: r.module, policySha256: r.policySha256,
+    return { ...(r.contract ? { contract: r.contract } : {}), jobId: r.jobId, commitId: r.commitId, treeId: r.treeId, module: r.module, policySha256: r.policySha256,
       state: r.cleanup === 'failed' ? 'CLEANUP_FAILED' : testTerminal.has(r.state) && !r.cleanup ? 'FINALIZING' : r.state,
       cleanup: r.cleanup, deniedRequests: r.deniedRequests, exitCode: r.exitCode, stdout: r.stdout || '', stderr: r.stderr || '', finishedAt: r.finishedAt,
       ...(r.image && r.state==='PASSED' && r.cleanup==='destroyed'?{image:r.image}:{}),

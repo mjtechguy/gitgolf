@@ -45,12 +45,29 @@ class PublicationTests(unittest.TestCase):
             request.assert_not_called()
 
 class RegistryRequestTests(unittest.TestCase):
+    def test_automatic_scan_policy_is_enabled_only_for_the_ci_repository(self):
+        proof = RegistryProof.__new__(RegistryProof)
+        repository = {'name': 'repo', 'id': '1'}
+        original = {'scanOnPush': False, 'policyMode': 'advisory', 'maxSeverity': 'critical'}
+        http = Mock(side_effect=[{'repositoryId': '1', 'scannerConfigured': True, 'settings': original, 'revision': 4},
+                                 {'repositoryId': '1', 'settings': {**original, 'scanOnPush': True, 'policyMode': 'promotion'}}])
+        proof.enable_automatic_scans(http, repository)
+        self.assertEqual(http.call_args_list[1].args[1]['settings'], {**original, 'scanOnPush': True, 'policyMode': 'promotion'})
+        self.assertEqual(http.call_args_list[1].args[1]['expectedRevision'], 4)
+        http = Mock(side_effect=[{'repositoryId': '1', 'scannerConfigured': True, 'settings': original, 'revision': 4},
+                                 {'repositoryId': '1', 'settings': {**original, 'scanOnPush': True}}])
+        proof.enable_automatic_scans(http, repository, policy='advisory')
+        self.assertEqual(http.call_args_list[1].args[1]['settings']['policyMode'], 'advisory')
+        http = Mock(return_value={'repositoryId': '1', 'scannerConfigured': False, 'settings': original, 'revision': 4})
+        with self.assertRaises(RuntimeError): proof.enable_automatic_scans(http, repository)
+
     def test_registry_enable_waits_on_read_only_binding_receipt(self):
         proof = RegistryProof.__new__(RegistryProof)
         repository = {'name': 'repo', 'id': '1'}
         http = Mock(side_effect=[{'code': 'unimplemented'}, {'repositoryId': '1', 'enabled': False}, {'enabled': True}])
-        with patch('cloudflare_registry_check.time.sleep'):
+        with patch('cloudflare_registry_check.time.sleep') as sleep:
             proof.enable(http, repository)
+        sleep.assert_called_once_with(150)
         self.assertEqual([call.args[1]['action'] for call in http.call_args_list], ['status', 'status', 'enable'])
         for response in [{'repositoryId': '2'}, {'code': 'permission_denied'}]:
             http = Mock(return_value=response)
@@ -58,7 +75,17 @@ class RegistryRequestTests(unittest.TestCase):
             self.assertEqual(http.call_count, 1)
         http = Mock(return_value={'code': 'unimplemented'})
         with patch('cloudflare_registry_check.time.sleep'), self.assertRaises(RuntimeError): proof.enable(http, repository)
-        self.assertEqual(http.call_count, 180)
+        self.assertEqual(http.call_count, 4)
+
+    def test_automatic_scan_requires_one_succeeded_managed_five_report_job(self):
+        proof = RegistryProof.__new__(RegistryProof)
+        repository = {'name': 'repo', 'id': '1'}
+        job = {'state': 'succeeded', 'executor': 'managed', 'reports': dict.fromkeys(['syft', 'spdx', 'cyclonedx', 'grype', 'trivy'])}
+        http = Mock(return_value={'items': [job]})
+        self.assertEqual(proof.completed_scan(http, repository, 'sha256:' + 'a'*64), job)
+        for items in [[job, job], [{**job, 'state': 'failed'}], [{**job, 'executor': 'external'}], [{**job, 'reports': {'syft': None}}]]:
+            with self.subTest(items=items), self.assertRaises(RuntimeError):
+                proof.completed_scan(Mock(return_value={'items': items}), repository, 'sha256:' + 'a'*64)
 
     def test_registry_client_identifies_itself_without_changing_authority(self):
         proof = RegistryProof.__new__(RegistryProof)

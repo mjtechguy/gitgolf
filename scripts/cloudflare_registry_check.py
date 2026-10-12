@@ -79,21 +79,43 @@ class RegistryProof:
                 raise RuntimeError(f'Registry {method} {path.split("?")[0]} returned {response.status}; expected {expected}')
             return response.headers, body
 
-    def package(self, http, repository, action, **values):
+    def package(self, http, repository, action, expected=200, **values):
         return http('/native/repository-packages', {'repository': {'owner': 'alice', 'name': repository['name']},
-                    'repositoryId': repository['id'], 'action': action, **values})
+                    'repositoryId': repository['id'], 'action': action, **values}, expected=expected)
 
     def enable(self, http, repository):
         # Read-only convergence gate after adding the cyclic Golf/CFCR service binding.
-        for attempt in range(180):
+        for attempt in range(4):
             status = http('/native/repository-packages', {'repository': {'owner': 'alice', 'name': repository['name']},
                           'repositoryId': repository['id'], 'action': 'status'}, expected=(200, 501))
             if status.get('repositoryId') == repository['id']:
                 break
-            if status.get('code') != 'unimplemented' or attempt == 179:
+            if status.get('code') != 'unimplemented' or attempt == 3:
                 raise RuntimeError('Golf registry binding did not converge before enablement')
-            time.sleep(1)
+            # Active polling can keep the previous Durable Object code resident during rollout.
+            time.sleep(150)
         self.package(http, repository, 'enable')
+
+    def enable_automatic_scans(self, http, repository, policy='promotion'):
+        current = self.package(http, repository, 'settings')
+        if not current['scannerConfigured'] or current['settings']['scanOnPush']:
+            raise RuntimeError('Fresh hosted scanner policy differs')
+        settings = {**current['settings'], 'scanOnPush': True, 'policyMode': policy}
+        updated = self.package(http, repository, 'updateSettings', settings=settings, expectedRevision=current['revision'])
+        if updated['settings'] != settings:
+            raise RuntimeError('Hosted scan-on-publication policy was not retained')
+
+    def completed_scan(self, http, repository, digest):
+        for _ in range(180):
+            jobs = self.package(http, repository, 'jobs', reference=digest)['items']
+            if len(jobs) > 1: raise RuntimeError('Automatic publication admitted duplicate scans')
+            if jobs and jobs[0]['state'] in ['succeeded', 'failed', 'cancelled']:
+                job = jobs[0]
+                if job['state'] != 'succeeded' or len(job.get('reports', {})) != 5 or job.get('executor') != 'managed':
+                    raise RuntimeError('Hosted native scanner did not produce five managed reports')
+                return job
+            time.sleep(3)
+        raise RuntimeError('Automatic publication scan did not finish')
 
     def qualify(self, http, rpc, repository, tests):
         image = tests.get('image')
@@ -112,6 +134,8 @@ class RegistryProof:
         import uuid
         fixture = rpc('CreateRepository', {'name': 'registry-clients', 'private': True, 'idempotencyKey': str(uuid.uuid4())})['repository']
         self.enable(http, fixture)
+        if self.args.registry_scanner_image:
+            self.enable_automatic_scans(http, fixture, policy='advisory')
         credentials = self.package(http, fixture, 'credential')
         self.redactions.append(credentials['credential'])
         oci = rpc('CreateRepository', {'name': 'registry-conformance', 'private': True, 'idempotencyKey': str(uuid.uuid4())})['repository']
@@ -126,6 +150,14 @@ class RegistryProof:
             self.command('real hosted registry clients', ['node', 'scripts/hosted-clients.mjs', str(path)], cwd=self.root, timeout=900)
             self.state['checks']['registry_clients'] = json.loads(path.with_name('clients-receipt.json').read_text())
         finally: path.unlink(missing_ok=True)
+        if self.args.registry_scanner_image:
+            sizes = {}
+            for name in ['docker', 'chunked']:
+                client = self.state['checks']['registry_clients']['checks'][name]
+                sizes[name] = {'fixtureBytes': client['bytes'], 'digest': client['digest'],
+                               'job': self.completed_scan(http, fixture, client['digest'])}
+                self.state['checks']['registry_scanner_sizes'] = sizes
+                self.save()
         # Mutate only this proof's Golf coordination grant; exercise already-issued tokens.
         _, raw = self.request('/token?service=cfcr&scope=repository:' + image['repository'] + ':pull,push', credential=issued['credential'])
         current_token = json.loads(raw)['token']; self.redactions.append(current_token)
@@ -150,19 +182,17 @@ class RegistryProof:
         self.state['checks']['registry_credential_revocation'] = True
         self.save()
         if self.args.registry_scanner_image:
-            import uuid
-            admitted = self.package(http, repository, 'scan', reference=image['digest'], idempotencyKey=str(uuid.uuid4()))
-            if len(admitted['jobs']) != 1: raise RuntimeError('Unexpected scanner admission count')
-            job_id = admitted['jobs'][0]['id']
-            for _ in range(180):
-                jobs = self.package(http, repository, 'jobs', reference=image['digest'])['items']
-                job = next(row for row in jobs if row['id'] == job_id)
-                if job['state'] in ['succeeded', 'failed', 'cancelled']: break
-                time.sleep(3)
-            self.state['checks']['registry_scanner'] = job
+            job = self.completed_scan(http, repository, image['digest'])
+            self.state['checks']['registry_scanner'] = {'job': job, 'automatic': True}
             self.save()
-            if job['state'] != 'succeeded' or len(job.get('reports', {})) != 5:
-                raise RuntimeError('Hosted native scanner did not produce five completed reports')
+            decision = self.package(http, repository, 'policy', reference=image['digest'])
+            if decision['allowed'] or not any('Vulnerabilities exceed' in reason for reason in decision['reasons']):
+                raise RuntimeError('Vulnerable CI image unexpectedly passed release policy')
+            revision = self.package(http, repository, 'settings')['revision']
+            self.package(http, repository, 'promote', reference=image['digest'], tag='preview', expectedRevision=revision, expected=403)
+            self.state['checks']['registry_ci_policy'] = {'digest': image['digest'], 'automaticScan': True,
+                'vulnerablePromotionDenied': True, 'reasons': decision['reasons']}
+            self.save()
 
     def current_worker(self):
         probe = self.command('registry identity', ['cf', '--profile', self.args.profile, 'workers', 'get', self.name], required=False)

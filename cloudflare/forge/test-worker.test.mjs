@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
-import { testResult } from './src/test-policy.mjs';
+import { nativeTestContract, testResult } from './src/test-policy.mjs';
 
 const hooks = registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'cloudflare:workers') return { url: 'data:text/javascript,' + encodeURIComponent('export class DurableObject {constructor(ctx,env){this.ctx=ctx;this.env=env}} export class WorkerEntrypoint extends DurableObject {}'), shortCircuit: true };
@@ -14,7 +14,7 @@ hooks.deregister();
 function fixture() {
   const store = new Map(), commands = [];
   let destroyed = 0, brokered = 0, authorized = true;
-  const input = { jobId: crypto.randomUUID(), commitId: 'a'.repeat(40), treeId: 'b'.repeat(40), branch: 'feature', module: 'test_calc',
+  const input = { contract: nativeTestContract, jobId: crypto.randomUUID(), commitId: 'a'.repeat(40), treeId: 'b'.repeat(40), branch: 'feature', module: 'test_calc',
     policySha256: 'e'.repeat(64),
     remote: `https://${'c'.repeat(32)}.artifacts.cloudflare.net/git/test-space/repo-${'d'.repeat(32)}.git`, deadline: Date.now() + 600000 };
   const container = { images: { agent: 'image' }, files: { '/workspace/task/stderr': 'Ran 2 tests\nOK\n' }, running: false,
@@ -44,6 +44,7 @@ test('native test task executes once, checks exact source and destroys before pu
   assert.equal(result.stderr, 'Ran 2 tests\nOK\n');
   assert.equal(f.commands.filter(args => args[0] === '/bin/sh').length, 1);
   assert.deepEqual(testResult(result, f.input.jobId, f.input), result);
+  assert.throws(() => testResult({ ...result, contract: 'golf.native.pr-test.v2' }, f.input.jobId, f.input), /Invalid test execution/);
   await f.task.alarm(); await f.task.create(f.input); await f.task.cancel();
   assert.equal(f.commands.filter(args => args[0] === '/bin/sh').length, 1);
 });
@@ -62,6 +63,9 @@ test('a restarted dispatch fails closed, and cancellation denies all later outbo
 
 test('cleanup failures cannot expose success, module injection is rejected before admission', async () => {
   const f = fixture();
+  await assert.rejects(f.task.create({ ...f.input, contract: 'golf.native.pr-test.v2' }));
+  await assert.rejects(f.task.create({ ...f.input, branch: undefined }));
+  await assert.rejects(f.task.create({ ...f.input, shell: '/bin/sh' }));
   await assert.rejects(f.task.create({ ...f.input, module: 'test_calc;curl evil' }));
   await assert.rejects(f.task.create({ ...f.input, branch: '-option' }));
   assert.equal(f.task.record, undefined);
@@ -70,6 +74,14 @@ test('cleanup failures cannot expose success, module injection is rejected befor
   f.container.destroy = async () => {}; await f.task.cancel(); assert.equal(f.task.status().cleanup, 'destroyed');
   const outbound = new TestOutbound({ props: { jobId: 'foreign' } }, {});
   assert.equal((await outbound.fetch(new Request('https://example.com'))).status, 403);
+});
+
+test('an admitted pre-contract task can finish during rollout', async () => {
+  const f = fixture();
+  delete f.input.contract;
+  await f.task.create(f.input); await f.task.alarm();
+  assert.equal(f.task.status().state, 'PASSED');
+  assert.deepEqual(testResult(f.task.status(), f.input.jobId, f.input), f.task.status());
 });
 
 test('changed clone identity and cancellation during execution cannot publish a passing result', async () => {

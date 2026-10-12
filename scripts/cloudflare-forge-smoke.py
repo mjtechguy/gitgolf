@@ -705,6 +705,8 @@ def main():
             git('stage operator-approved native tests', '-C', source, 'add', 'calc.py', 'test_calc.py')
             if registry:
                 registry.enable(http, repository)
+                if args.registry_scanner_image:
+                    registry.enable_automatic_scans(http, repository)
                 publisher = ROOT / 'scripts/fixtures/registry_publish.py'
                 shutil.copyfile(publisher, source/'registry_publish.py')
                 test_file = source/'test_calc.py'
@@ -1156,9 +1158,12 @@ def main():
             save()
 
         def absent(label, *arguments):
-            result = command(label, ['cf', '--profile', args.profile, *map(str, arguments)], required=False)
-            if not result.returncode or b'404 Not Found' not in result.stderr:
-                raise RuntimeError('Provider absence unconfirmed')
+            for attempt in range(6):
+                result = command(label, ['cf', '--profile', args.profile, *map(str, arguments)], required=False)
+                if result.returncode and b'404 Not Found' in result.stderr:
+                    return
+                if attempt < 5: time.sleep(2)
+            raise RuntimeError('Provider absence unconfirmed')
 
         if args.container_tests and state['resources'].get('worker'):
             def stop_tests():

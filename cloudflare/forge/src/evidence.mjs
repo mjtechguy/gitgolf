@@ -1,7 +1,7 @@
 import { collaboration } from './collaboration.mjs';
 import { digest, uuidOK, Fault, deny, invalid, reply, conflict } from './common.mjs';
 import { remote } from './git.mjs';
-import { testPolicy, testResult } from './test-policy.mjs';
+import { nativeTestContract, testPolicy, testResult } from './test-policy.mjs';
 import { agentPolicy } from './agent-policy.mjs';
 import { agentStep, agentSource } from './agents.mjs';
 
@@ -104,7 +104,7 @@ export async function evidenceAPI(db, env, person, row, artifact, body) {
       if (runTests) execution = await artifact(async repo => {
         const commit = await repo.readCommit(s.headCommitId);
         if (!/^[a-f0-9]{40}$/.test(commit?.treeHash || '')) throw Error('Invalid test source');
-        return { commitId: s.headCommitId, treeId: commit.treeHash, branch: observed.pr.head.ref, module: env.TEST_MODULE, policySha256: env.TEST_POLICY_SHA256,
+        return { contract: nativeTestContract, commitId: s.headCommitId, treeId: commit.treeHash, branch: observed.pr.head.ref, module: env.TEST_MODULE, policySha256: env.TEST_POLICY_SHA256,
           ...(env.REGISTRY_CI_ENABLED === 'true' && env.REGISTRY ? { registry: { origin:env.REGISTRY_ORIGIN, name:env.WORKSPACE_SLUG+'/'+row.name } } : {}) };
       });
       const snapshot = JSON.stringify({ selection: s, pullRequest: observed.pr, reviews: reviews.reviews, reportedChecks: checks.checks,
@@ -160,7 +160,7 @@ export async function evidenceStep(db, env, job, context, phase, workflows) {
   if (!context || !evidencePolicy(env) || job.advice_state !== 'NONE' && !(env.EVIDENCE_ALLOW_AI === 'true' && env.AI && env.EVIDENCE_GATEWAY)) return update(db, job, 'REFUSED');
   if (job.expires_at <= time()) return update(db, job, 'EXPIRED');
   const { person, row, artifact } = context, snapshot = JSON.parse(job.snapshot);
-  if (snapshot.execution && (!testPolicy(env) || snapshot.execution.module !== env.TEST_MODULE || snapshot.execution.policySha256 !== env.TEST_POLICY_SHA256)) return update(db, job, 'REFUSED');
+  if (snapshot.execution && (!testPolicy(env) || snapshot.execution.contract !== undefined && snapshot.execution.contract !== nativeTestContract || snapshot.execution.module !== env.TEST_MODULE || snapshot.execution.policySha256 !== env.TEST_POLICY_SHA256)) return update(db, job, 'REFUSED');
   if (snapshot.agent && (!agentPolicy(env) || snapshot.agent.allowedPath !== env.AGENT_PATH || snapshot.agent.policySha256 !== env.AGENT_POLICY_SHA256 || snapshot.agent.module !== env.TEST_MODULE)) return update(db, job, 'REFUSED');
   if (row.write_pending) return update(db, job, 'REFUSED');
   const observed = await current(db, env, person, row, artifact, snapshot.selection);

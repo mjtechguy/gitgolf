@@ -580,6 +580,7 @@ test('PR tests require allocation, deduplicate execution and bind private result
   for (let i = 0; i < 2; i++) assert.equal((await f.advance(job.id, 'tests')).state, 'RUNNING');
   assert.equal(execution.admissions(), 1);
   const task = execution.tasks.get(job.id);
+  assert.equal(task.contract, 'golf.native.pr-test.v1');
   assert.equal(task.commitId, f.selection.headCommitId); assert.equal(task.treeId, 'f'.repeat(40)); assert.equal(task.branch, 'feature');
   const get = new Request(task.remote + '/info/refs?service=git-upload-pack', { headers: { Authorization: 'Bearer attacker', Cookie: 'private', 'Git-Protocol': 'version=2' } });
   const readGit = (url, options) => { assert.equal(options.headers['Git-Protocol'], 'version=2'); assert.equal(options.headers.Cookie, undefined); return f.providerFetch(url, options); };

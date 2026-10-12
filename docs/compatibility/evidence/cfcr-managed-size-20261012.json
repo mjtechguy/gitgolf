@@ -1,0 +1,184 @@
+{
+  "schema": "golf.cfcr.managed-size-qualification.v1",
+  "recordedAt": "2026-10-12T06:24:41.506973+00:00",
+  "golfBaseCommit": "99ec4e586a61aae0b9ea1baadc69faab84bf0148",
+  "cfcrBaseCommit": "f4fca9cf5674cb1c5918c6160d93c8b43d230d58",
+  "sourceSha256": {
+    "scripts/cloudflare-forge-smoke.py": "c6b858f1385efb6a76d4cb0b5b6f3d0b16832d119dac3091352621b12592d64e",
+    "scripts/cloudflare_registry_check.py": "e1d80117c1b20c308cb4e9824be996b0ffae7e1ad8b5851cedeaf7970a622587",
+    "cloudflare/forge/src/test-policy.mjs": "f9406f8ca225a383e30e81fee3ac3059d0b0d6a7946b0870148911d9fee76b9d",
+    "cfcr/scripts/hosted-clients.mjs": "6c9be95b7c33729dede6fed2d31a8daa0e54f5e4249c24e20a05adb5a693f45a"
+  },
+  "runtime": "disposable Cloudflare Worker/DO/D1/R2/Containers/Access; synthetic repository authority",
+  "result": "passed",
+  "integration": {
+    "nativeCIPublishedExactDigest": true,
+    "nativeCIContainerCleanup": "destroyed",
+    "registryClientsPassed": true,
+    "ociConformance": "71 Passed | 0 Failed | 0 Pending | 8 Skipped",
+    "protectedStaticAndWorkerPreviews": true,
+    "schema18": 18,
+    "liveAuthority": {
+      "downgradeDeniesPush": true,
+      "downgradePreservesPull": true,
+      "revocationDeniesExistingToken": true,
+      "revocationDeniesExchange": true,
+      "grantRestored": true
+    },
+    "credentialRevocation": true
+  },
+  "automaticManagedScans": {
+    "nativeCI": {
+      "digest": "sha256:8d6d81b2b04d3b6bc423ba45138b6bb4b50f4c24ec8011edf28a414fbb839e7d",
+      "state": "succeeded",
+      "executor": "managed",
+      "createdAt": "2026-10-12T06:17:47.805Z",
+      "finishedAt": "2026-10-12T06:18:22.617Z",
+      "observedElapsedMs": 34812,
+      "inputBytes": 576,
+      "stagesMs": {
+        "database": 9244,
+        "download": 185,
+        "syft": 1371,
+        "grype": 2422,
+        "trivy": 367,
+        "publish": 3032
+      },
+      "engineUsage": {
+        "cpuUserMs": 2440,
+        "cpuSystemMs": 1683,
+        "peakRssBytes": 198152192
+      },
+      "databaseCacheHit": false,
+      "inventoryCacheHit": false,
+      "reportKinds": [
+        "cyclonedx",
+        "grype",
+        "spdx",
+        "syft",
+        "trivy"
+      ],
+      "severities": {
+        "high": 20,
+        "medium": 19,
+        "critical": 1,
+        "low": 2
+      }
+    },
+    "docker": {
+      "fixtureBytes": 7340032,
+      "digest": "sha256:105cdc451942214044bcfcdd78a1ef98a479138a2e5e5afd078751ab561d3964",
+      "state": "succeeded",
+      "executor": "managed",
+      "createdAt": "2026-10-12T06:17:51.068Z",
+      "finishedAt": "2026-10-12T06:18:26.851Z",
+      "observedElapsedMs": 35783,
+      "inputBytes": 7342856,
+      "stagesMs": {
+        "database": 12974,
+        "download": 635,
+        "syft": 1373,
+        "grype": 2171,
+        "trivy": 316,
+        "publish": 2189
+      },
+      "engineUsage": {
+        "cpuUserMs": 1947,
+        "cpuSystemMs": 1821,
+        "peakRssBytes": 197824512
+      },
+      "databaseCacheHit": false,
+      "inventoryCacheHit": false,
+      "reportKinds": [
+        "cyclonedx",
+        "grype",
+        "spdx",
+        "syft",
+        "trivy"
+      ],
+      "severities": {}
+    },
+    "chunked": {
+      "fixtureBytes": 134217728,
+      "digest": "sha256:51f710f165a10d6d13bc48d7555a15ef3b457f12d7debe4a18c9de5e12ebf463",
+      "state": "succeeded",
+      "executor": "managed",
+      "createdAt": "2026-10-12T06:18:51.435Z",
+      "finishedAt": "2026-10-12T06:19:29.191Z",
+      "observedElapsedMs": 37756,
+      "inputBytes": 134259299,
+      "stagesMs": {
+        "database": 11627,
+        "download": 16968,
+        "syft": 1521,
+        "grype": 2222,
+        "trivy": 366,
+        "publish": 2625
+      },
+      "engineUsage": {
+        "cpuUserMs": 1983,
+        "cpuSystemMs": 1998,
+        "peakRssBytes": 187568128
+      },
+      "databaseCacheHit": false,
+      "inventoryCacheHit": false,
+      "reportKinds": [
+        "cyclonedx",
+        "grype",
+        "spdx",
+        "syft",
+        "trivy"
+      ],
+      "severities": {}
+    },
+    "nativeCIAndSevenMiBOverlap": true,
+    "duplicateDigestJobsObserved": false
+  },
+  "policy": {
+    "digest": "sha256:8d6d81b2b04d3b6bc423ba45138b6bb4b50f4c24ec8011edf28a414fbb839e7d",
+    "automaticScan": true,
+    "vulnerablePromotionDenied": true,
+    "reasons": [
+      "Vulnerabilities exceed the configured severity threshold."
+    ]
+  },
+  "cleanup": {
+    "state": "all owned resources absent",
+    "categories": [
+      "app_outbound",
+      "bucket",
+      "cleanup_token",
+      "control_access",
+      "control_domain",
+      "database",
+      "dispatch",
+      "durable_object_namespaces",
+      "managed_apps",
+      "management_token",
+      "namespace",
+      "preview_access",
+      "preview_domain",
+      "preview_service_token",
+      "preview_worker",
+      "queue",
+      "queue_consumer",
+      "registry_resources",
+      "registry_retired",
+      "secret_store",
+      "test_applications",
+      "test_image",
+      "test_tasks",
+      "worker",
+      "workflow"
+    ],
+    "independentStopTimer": "cancelled after verified cleanup"
+  },
+  "limits": [
+    "One hosted sample for each 7 MiB and 128 MiB synthetic image; no production latency percentile or billable-cost measurement.",
+    "Input padding has no representative package diversity.",
+    "Two overlapping jobs completed; no sustained or quota/burst-load claim.",
+    "Previews use source content, not the scanned OCI image.",
+    "General native Actions/GitLab runner, CI-imported evidence, signed workload provenance and image-backed deployment remain open.",
+    "Collaborative browser could not connect to the local UI fixture."
+  ]
+}
