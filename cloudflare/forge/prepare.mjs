@@ -168,7 +168,8 @@ if (mode === 'retire') {
   if (settings.hostname) config.domains = [settings.hostname];
   const built = await esbuild.build({ entryPoints: [fileURLToPath(new URL(settings.agent_path ? './src/agent-entry.mjs' : settings.tests ? './src/test-entry.mjs' : './src/worker.mjs', import.meta.url))],
     outfile: resolve(bundle, 'worker.mjs'), bundle: true, format: 'esm', platform: 'neutral',
-    define: { GOLF_NATIVE_ASSETS: JSON.stringify(uiAssets) },
+    // Binding changes must also change the bundle so live Durable Objects adopt the new configuration.
+    define: { GOLF_NATIVE_ASSETS: JSON.stringify(uiAssets), GOLF_NATIVE_CONFIGURATION: JSON.stringify(createHash('sha256').update(JSON.stringify(settings)).digest('hex')) },
     nodePaths: [resolve(fileURLToPath(new URL('../agents/node_modules', import.meta.url)))],
     conditions: ['workerd', 'worker', 'browser'], external: ['cloudflare:workers', 'node:*'], metafile: true });
   const exported = Object.values(built.metafile.outputs).flatMap(output => output.exports);

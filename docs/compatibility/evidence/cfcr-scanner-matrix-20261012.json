@@ -1,0 +1,1776 @@
+{
+  "schema": "cfcr.scanner-matrix.v1",
+  "recordedAt": "2026-10-12T04:37:44.765964+00:00",
+  "baseCommit": "e5812ee37845fc780889fdf42e74262fbbff6f47",
+  "local": [
+    {
+      "state": "passed",
+      "at": "2026-10-12T04:23:06.223Z",
+      "runtime": "local workerd + isolated real Docker; not hosted Cloudflare",
+      "fixture": "openssl",
+      "inputBytes": 518,
+      "subject": "sha256:422bb134770c7196a684c2356cf29b59a2e8aba9be0629272465787e52d51a19",
+      "imageId": "sha256:baa411a609b2ab55aacd3c595e5a00462612bc8d6948b48e9b84ee752b710b66",
+      "results": [
+        {
+          "jobId": "a4aa40abc25921ca8a907345b80670305700bbcd3454e42659baace4c32e67aa",
+          "state": "succeeded",
+          "totalElapsedMs": 10934,
+          "elapsedMs": 5293,
+          "databaseVerificationMs": 5540,
+          "databaseVerificationCacheHit": false,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1934,
+              "cpuSystemMs": 986,
+              "peakRssBytes": 182153216
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 84,
+              "syft": 765,
+              "grype": 2220,
+              "trivy": 114,
+              "publish": 383
+            },
+            "inputBytes": 518,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "high": 20,
+            "medium": 19,
+            "critical": 1,
+            "low": 2
+          }
+        },
+        {
+          "jobId": "fc59c82d811a5c2d0ae509f231c84af0dcf7060a28bed2630b52f8c8275257f5",
+          "state": "succeeded",
+          "totalElapsedMs": 5998,
+          "elapsedMs": 5900,
+          "databaseVerificationMs": 0,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 2547,
+              "cpuSystemMs": 1022,
+              "peakRssBytes": 198569984
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 110,
+              "syft": 1221,
+              "grype": 1968,
+              "trivy": 114,
+              "publish": 398
+            },
+            "inputBytes": 518,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "high": 20,
+            "medium": 19,
+            "critical": 1,
+            "low": 2
+          }
+        },
+        {
+          "jobId": "1748df0026a1cfdd3730aa4bf9db77311b06929adf1858e0a8f0667592dc3c7a",
+          "state": "succeeded",
+          "totalElapsedMs": 5695,
+          "elapsedMs": 5592,
+          "databaseVerificationMs": 0,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 2380,
+              "cpuSystemMs": 1003,
+              "peakRssBytes": 193646592
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 88,
+              "syft": 1120,
+              "grype": 1918,
+              "trivy": 114,
+              "publish": 414
+            },
+            "inputBytes": 518,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "high": 20,
+            "medium": 19,
+            "critical": 1,
+            "low": 2
+          }
+        },
+        {
+          "jobId": "ca6c672469a6b36e908e3b1f78e330aae0e2ff79eda39b3416caafac49a84478",
+          "state": "succeeded",
+          "totalElapsedMs": 5537,
+          "elapsedMs": 5439,
+          "databaseVerificationMs": 0,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 2061,
+              "cpuSystemMs": 974,
+              "peakRssBytes": 197828608
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 155,
+              "syft": 915,
+              "grype": 1817,
+              "trivy": 114,
+              "publish": 444
+            },
+            "inputBytes": 518,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "high": 20,
+            "medium": 19,
+            "critical": 1,
+            "low": 2
+          }
+        },
+        {
+          "jobId": "140e1d302a9c792e33b4b57a825e8cb298f29fb09115e27a6df227b7403e5437",
+          "state": "succeeded",
+          "totalElapsedMs": 4792,
+          "elapsedMs": 4690,
+          "databaseVerificationMs": 0,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1963,
+              "cpuSystemMs": 852,
+              "peakRssBytes": 185262080
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 81,
+              "syft": 815,
+              "grype": 1717,
+              "trivy": 114,
+              "publish": 366
+            },
+            "inputBytes": 518,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "high": 20,
+            "medium": 19,
+            "critical": 1,
+            "low": 2
+          }
+        },
+        {
+          "jobId": "0fc7a7a4ae983d798cb8e28f87af20ec132fec9407430361b561023628afa089",
+          "state": "succeeded",
+          "totalElapsedMs": 4360,
+          "elapsedMs": 4250,
+          "databaseVerificationMs": 0,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "inventoryReusedFrom": "140e1d302a9c792e33b4b57a825e8cb298f29fb09115e27a6df227b7403e5437",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1179,
+              "cpuSystemMs": 839,
+              "peakRssBytes": 113901568
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 91,
+              "syft": 115,
+              "grype": 1818,
+              "trivy": 114,
+              "publish": 441
+            },
+            "inputBytes": 518,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": true
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ]
+        }
+      ],
+      "fullEvidenceReuse": {
+        "state": "succeeded",
+        "attempt": 0,
+        "sourceJobId": "140e1d302a9c792e33b4b57a825e8cb298f29fb09115e27a6df227b7403e5437"
+      },
+      "faultChecks": [
+        "cancel after Docker engine start",
+        "SIGKILL supervisor",
+        "independent engine and broker stop",
+        "restart refuses retained journal",
+        "admin reconciles exact terminal cleanup"
+      ],
+      "cleanup": "owned containers and networks absent",
+      "warmForcedScan": {
+        "samples": 4,
+        "p50Ms": 5616.0,
+        "p95NearestRankMs": 5998
+      }
+    },
+    {
+      "state": "passed",
+      "at": "2026-10-12T04:09:23.458Z",
+      "runtime": "local workerd + isolated real Docker; not hosted Cloudflare",
+      "fixture": "java",
+      "inputBytes": 1561149,
+      "subject": "sha256:42b1d20bfa72cfe7814859a2307491cf2b9415c2c1caf3920dc0eab05a816dde",
+      "imageId": "sha256:baa411a609b2ab55aacd3c595e5a00462612bc8d6948b48e9b84ee752b710b66",
+      "results": [
+        {
+          "jobId": "ee00e4d3655f8f1a569f747a0aa1b978f83595a8dd77983f49cedfd30e7cd231",
+          "state": "succeeded",
+          "totalElapsedMs": 8291,
+          "elapsedMs": 4481,
+          "databaseVerificationMs": 3744,
+          "databaseVerificationCacheHit": false,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1530,
+              "cpuSystemMs": 814,
+              "peakRssBytes": 185647104
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 177,
+              "syft": 765,
+              "grype": 1367,
+              "trivy": 114,
+              "publish": 375
+            },
+            "inputBytes": 1561149,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "critical": 2,
+            "high": 1,
+            "medium": 4
+          }
+        },
+        {
+          "jobId": "3fba881d3aba63fb29fa56fd8d2598385c330796ea79afa125902fa19f01acb3",
+          "state": "succeeded",
+          "totalElapsedMs": 4576,
+          "elapsedMs": 4511,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1546,
+              "cpuSystemMs": 814,
+              "peakRssBytes": 191836160
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 171,
+              "syft": 815,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 343
+            },
+            "inputBytes": 1561149,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "critical": 2,
+            "high": 1,
+            "medium": 4
+          }
+        },
+        {
+          "jobId": "545a0efffce0e00aa74feae5796e48c568dd0e5536f15ae7335da38c3510ca4b",
+          "state": "succeeded",
+          "totalElapsedMs": 4514,
+          "elapsedMs": 4446,
+          "databaseVerificationMs": 10,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1500,
+              "cpuSystemMs": 814,
+              "peakRssBytes": 191090688
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 165,
+              "syft": 765,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 380
+            },
+            "inputBytes": 1561149,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "critical": 2,
+            "high": 1,
+            "medium": 4
+          }
+        },
+        {
+          "jobId": "e1f753d94526dcc7bcfa84d9cf865b6b46a935d1d844def6c1dcd998312389e0",
+          "state": "succeeded",
+          "totalElapsedMs": 4512,
+          "elapsedMs": 4449,
+          "databaseVerificationMs": 6,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1475,
+              "cpuSystemMs": 823,
+              "peakRssBytes": 190480384
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 155,
+              "syft": 765,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 364
+            },
+            "inputBytes": 1561149,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "critical": 2,
+            "high": 1,
+            "medium": 4
+          }
+        },
+        {
+          "jobId": "cf305bbffc9ab42e9c610a49b69071d703f54437eb2aed7bef7b215f671f15c4",
+          "state": "succeeded",
+          "totalElapsedMs": 4517,
+          "elapsedMs": 4456,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1512,
+              "cpuSystemMs": 832,
+              "peakRssBytes": 188272640
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 167,
+              "syft": 765,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 385
+            },
+            "inputBytes": 1561149,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "critical": 2,
+            "high": 1,
+            "medium": 4
+          }
+        },
+        {
+          "jobId": "1e656d069d5741988ed7327840c8664068b51f7884c13d36ebda04c438fdf94b",
+          "state": "succeeded",
+          "totalElapsedMs": 3943,
+          "elapsedMs": 3862,
+          "databaseVerificationMs": 6,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "inventoryReusedFrom": "cf305bbffc9ab42e9c610a49b69071d703f54437eb2aed7bef7b215f671f15c4",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 753,
+              "cpuSystemMs": 719,
+              "peakRssBytes": 118095872
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 155,
+              "syft": 123,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 415
+            },
+            "inputBytes": 1561149,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": true
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ]
+        }
+      ],
+      "fullEvidenceReuse": {
+        "state": "succeeded",
+        "attempt": 0,
+        "sourceJobId": "cf305bbffc9ab42e9c610a49b69071d703f54437eb2aed7bef7b215f671f15c4"
+      },
+      "faultChecks": [
+        "cancel after Docker engine start",
+        "SIGKILL supervisor",
+        "independent engine and broker stop",
+        "restart refuses retained journal",
+        "admin reconciles exact terminal cleanup"
+      ],
+      "cleanup": "owned containers and networks absent",
+      "warmForcedScan": {
+        "samples": 4,
+        "p50Ms": 4515.5,
+        "p95NearestRankMs": 4576
+      }
+    },
+    {
+      "state": "passed",
+      "at": "2026-10-12T04:10:30.763Z",
+      "runtime": "local workerd + isolated real Docker; not hosted Cloudflare",
+      "fixture": "clean",
+      "inputBytes": 398,
+      "subject": "sha256:3414dcf1f0b2096fc5263feff63f5fa9c55c7ece460f2c520f8efd5a5cc37736",
+      "imageId": "sha256:baa411a609b2ab55aacd3c595e5a00462612bc8d6948b48e9b84ee752b710b66",
+      "results": [
+        {
+          "jobId": "5319de51936639786c9ebd8084300f0a029a8791fd0a387b505a394b21dcf03b",
+          "state": "succeeded",
+          "totalElapsedMs": 9544,
+          "elapsedMs": 5362,
+          "databaseVerificationMs": 4087,
+          "databaseVerificationCacheHit": false,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1592,
+              "cpuSystemMs": 832,
+              "peakRssBytes": 183181312
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 132,
+              "syft": 815,
+              "grype": 1416,
+              "trivy": 114,
+              "publish": 850
+            },
+            "inputBytes": 398,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {}
+        },
+        {
+          "jobId": "f63df0888c66a774b485a34530a67dcdb6ec299bef84ead4617a5319fbc0f82a",
+          "state": "succeeded",
+          "totalElapsedMs": 5127,
+          "elapsedMs": 5029,
+          "databaseVerificationMs": 12,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1554,
+              "cpuSystemMs": 881,
+              "peakRssBytes": 192397312
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 119,
+              "syft": 815,
+              "grype": 1416,
+              "trivy": 114,
+              "publish": 503
+            },
+            "inputBytes": 398,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {}
+        },
+        {
+          "jobId": "59573e7e6eb9a4f29bb4606bee3aed6d4bbaeac75ac8d4f370d1ad955e2b2fbf",
+          "state": "succeeded",
+          "totalElapsedMs": 4648,
+          "elapsedMs": 4552,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1488,
+              "cpuSystemMs": 870,
+              "peakRssBytes": 184844288
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 127,
+              "syft": 765,
+              "grype": 1416,
+              "trivy": 114,
+              "publish": 345
+            },
+            "inputBytes": 398,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {}
+        },
+        {
+          "jobId": "cb036b22c2524f4a4df43c6364bea02f8e5ab4f73fa2fa91c83442ecec57e8b3",
+          "state": "succeeded",
+          "totalElapsedMs": 4543,
+          "elapsedMs": 4476,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1491,
+              "cpuSystemMs": 845,
+              "peakRssBytes": 194408448
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 86,
+              "syft": 765,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 344
+            },
+            "inputBytes": 398,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {}
+        },
+        {
+          "jobId": "e308c0d79e8ae0495d6df18f8809d3dc87ce51c98b95ec1ee5c9ee61ce276a11",
+          "state": "succeeded",
+          "totalElapsedMs": 4460,
+          "elapsedMs": 4383,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1502,
+              "cpuSystemMs": 847,
+              "peakRssBytes": 179216384
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 88,
+              "syft": 815,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 347
+            },
+            "inputBytes": 398,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {}
+        },
+        {
+          "jobId": "538194bdec3498fafc0071a28426c2b59b5e240daf325c271cda86bc3b7e979d",
+          "state": "succeeded",
+          "totalElapsedMs": 4282,
+          "elapsedMs": 4209,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "inventoryReusedFrom": "e308c0d79e8ae0495d6df18f8809d3dc87ce51c98b95ec1ee5c9ee61ce276a11",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 754,
+              "cpuSystemMs": 786,
+              "peakRssBytes": 113246208
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 149,
+              "syft": 187,
+              "grype": 1417,
+              "trivy": 114,
+              "publish": 448
+            },
+            "inputBytes": 398,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": true
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ]
+        }
+      ],
+      "fullEvidenceReuse": {
+        "state": "succeeded",
+        "attempt": 0,
+        "sourceJobId": "e308c0d79e8ae0495d6df18f8809d3dc87ce51c98b95ec1ee5c9ee61ce276a11"
+      },
+      "faultChecks": [
+        "cancel after Docker engine start",
+        "SIGKILL supervisor",
+        "independent engine and broker stop",
+        "restart refuses retained journal",
+        "admin reconciles exact terminal cleanup"
+      ],
+      "cleanup": "owned containers and networks absent",
+      "warmForcedScan": {
+        "samples": 4,
+        "p50Ms": 4595.5,
+        "p95NearestRankMs": 5127
+      }
+    },
+    {
+      "state": "passed",
+      "at": "2026-10-12T04:15:22.001Z",
+      "runtime": "local workerd + isolated real Docker; not hosted Cloudflare",
+      "fixture": "whiteout",
+      "inputBytes": 700,
+      "subject": "sha256:39adfe08e3a4b2b27909119c266349d0dfce77fcbf987dc13982e59e36146ded",
+      "imageId": "sha256:baa411a609b2ab55aacd3c595e5a00462612bc8d6948b48e9b84ee752b710b66",
+      "results": [
+        {
+          "jobId": "f447d724465088ff10928dd7d807b7bf1b8ac675d3f90524e246c99caa60e3a3",
+          "state": "succeeded",
+          "totalElapsedMs": 9105,
+          "elapsedMs": 5041,
+          "databaseVerificationMs": 3995,
+          "databaseVerificationCacheHit": false,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1571,
+              "cpuSystemMs": 923,
+              "peakRssBytes": 189030400
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 118,
+              "syft": 815,
+              "grype": 1466,
+              "trivy": 114,
+              "publish": 426
+            },
+            "inputBytes": 700,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {}
+        },
+        {
+          "jobId": "515e487c67d97b1848da46c89e9526b8cd93d94d5c8cede7e42734fb871ed1b7",
+          "state": "succeeded",
+          "totalElapsedMs": 4464,
+          "elapsedMs": 4403,
+          "databaseVerificationMs": 6,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1480,
+              "cpuSystemMs": 786,
+              "peakRssBytes": 186736640
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 121,
+              "syft": 715,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 368
+            },
+            "inputBytes": 700,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {}
+        },
+        {
+          "jobId": "091ffdefe0be9999d6c354c8b255ef99a113242c78e291bf0ad9309fe0ed5e03",
+          "state": "succeeded",
+          "totalElapsedMs": 4390,
+          "elapsedMs": 4329,
+          "databaseVerificationMs": 6,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1465,
+              "cpuSystemMs": 797,
+              "peakRssBytes": 179015680
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 123,
+              "syft": 715,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 393
+            },
+            "inputBytes": 700,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {}
+        },
+        {
+          "jobId": "1e580f25df37a2852671f32788b8c0846ce839828d7885c282fbf741dac5d51a",
+          "state": "succeeded",
+          "totalElapsedMs": 4292,
+          "elapsedMs": 4230,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1423,
+              "cpuSystemMs": 796,
+              "peakRssBytes": 197287936
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 116,
+              "syft": 715,
+              "grype": 1316,
+              "trivy": 114,
+              "publish": 367
+            },
+            "inputBytes": 700,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {}
+        },
+        {
+          "jobId": "2916d6edae31000b9147da92f0367b3e15c512372488262070cb47fb15c5ab4e",
+          "state": "succeeded",
+          "totalElapsedMs": 4371,
+          "elapsedMs": 4308,
+          "databaseVerificationMs": 6,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1433,
+              "cpuSystemMs": 814,
+              "peakRssBytes": 193949696
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 118,
+              "syft": 715,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 376
+            },
+            "inputBytes": 700,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {}
+        },
+        {
+          "jobId": "7555aa49adfa7eed2a801d67402f42f99968d1e72c3c36733777129856da3d23",
+          "state": "succeeded",
+          "totalElapsedMs": 3954,
+          "elapsedMs": 3881,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "inventoryReusedFrom": "2916d6edae31000b9147da92f0367b3e15c512372488262070cb47fb15c5ab4e",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 751,
+              "cpuSystemMs": 725,
+              "peakRssBytes": 113115136
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 145,
+              "syft": 126,
+              "grype": 1366,
+              "trivy": 114,
+              "publish": 442
+            },
+            "inputBytes": 700,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": true
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ]
+        }
+      ],
+      "fullEvidenceReuse": {
+        "state": "succeeded",
+        "attempt": 0,
+        "sourceJobId": "2916d6edae31000b9147da92f0367b3e15c512372488262070cb47fb15c5ab4e"
+      },
+      "faultChecks": [
+        "cancel after Docker engine start",
+        "SIGKILL supervisor",
+        "independent engine and broker stop",
+        "restart refuses retained journal",
+        "admin reconciles exact terminal cleanup"
+      ],
+      "cleanup": "owned containers and networks absent",
+      "warmForcedScan": {
+        "samples": 4,
+        "p50Ms": 4380.5,
+        "p95NearestRankMs": 4464
+      }
+    },
+    {
+      "state": "passed",
+      "at": "2026-10-12T04:10:58.441Z",
+      "runtime": "local workerd + isolated real Docker; not hosted Cloudflare",
+      "fixture": "large",
+      "inputBytes": 67130058,
+      "subject": "sha256:0fbfa5ae8cfedb524265c2b1a3493cef88846f26a989c5d79e718e55487b93a1",
+      "imageId": "sha256:baa411a609b2ab55aacd3c595e5a00462612bc8d6948b48e9b84ee752b710b66",
+      "results": [
+        {
+          "jobId": "5bb32c0dc0609e5d3716b79cc68b292d23e665cba0cf1008a8b4016e169a0937",
+          "state": "succeeded",
+          "totalElapsedMs": 12246,
+          "elapsedMs": 8133,
+          "databaseVerificationMs": 4023,
+          "databaseVerificationCacheHit": false,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1883,
+              "cpuSystemMs": 943,
+              "peakRssBytes": 195510272
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 2789,
+              "syft": 815,
+              "grype": 1717,
+              "trivy": 114,
+              "publish": 546
+            },
+            "inputBytes": 67130058,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "high": 20,
+            "medium": 19,
+            "critical": 1,
+            "low": 2
+          }
+        },
+        {
+          "jobId": "22670cddcf2f0498829ff596cee176eeee4d9e4b88d51d4661b71fb739460b9b",
+          "state": "succeeded",
+          "totalElapsedMs": 7734,
+          "elapsedMs": 7643,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1905,
+              "cpuSystemMs": 976,
+              "peakRssBytes": 182165504
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 2665,
+              "syft": 865,
+              "grype": 1767,
+              "trivy": 114,
+              "publish": 378
+            },
+            "inputBytes": 67130058,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "high": 20,
+            "medium": 19,
+            "critical": 1,
+            "low": 2
+          }
+        },
+        {
+          "jobId": "de041dea0fecc20f56d51f2f052573563c07a2c9e5b253b8037abc02ae34f681",
+          "state": "succeeded",
+          "totalElapsedMs": 7647,
+          "elapsedMs": 7588,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1881,
+              "cpuSystemMs": 999,
+              "peakRssBytes": 181137408
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 2601,
+              "syft": 815,
+              "grype": 1767,
+              "trivy": 114,
+              "publish": 495
+            },
+            "inputBytes": 67130058,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "high": 20,
+            "medium": 19,
+            "critical": 1,
+            "low": 2
+          }
+        },
+        {
+          "jobId": "811c9b4bef86c38a611826b02c2ccafc36aeae07759432c3464ac28e2af1fd31",
+          "state": "succeeded",
+          "totalElapsedMs": 7499,
+          "elapsedMs": 7443,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1846,
+              "cpuSystemMs": 899,
+              "peakRssBytes": 181035008
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 2684,
+              "syft": 815,
+              "grype": 1667,
+              "trivy": 114,
+              "publish": 367
+            },
+            "inputBytes": 67130058,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "high": 20,
+            "medium": 19,
+            "critical": 1,
+            "low": 2
+          }
+        },
+        {
+          "jobId": "41ede71cbe66b3246cf3d15d28225e734a65a75b0d949e69d9aee986bc3c2af1",
+          "state": "succeeded",
+          "totalElapsedMs": 7473,
+          "elapsedMs": 7413,
+          "databaseVerificationMs": 7,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1804,
+              "cpuSystemMs": 929,
+              "peakRssBytes": 193511424
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 2574,
+              "syft": 815,
+              "grype": 1667,
+              "trivy": 164,
+              "publish": 374
+            },
+            "inputBytes": 67130058,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": false
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ],
+          "severities": {
+            "high": 20,
+            "medium": 19,
+            "critical": 1,
+            "low": 2
+          }
+        },
+        {
+          "jobId": "00f2e98008cd8cdc209b9d5ae3bc852eb755f53fd57ea989e71d8fefa7b952f2",
+          "state": "succeeded",
+          "totalElapsedMs": 7663,
+          "elapsedMs": 7544,
+          "databaseVerificationMs": 8,
+          "databaseVerificationCacheHit": true,
+          "cleanup": "confirmed",
+          "inventoryReusedFrom": "41ede71cbe66b3246cf3d15d28225e734a65a75b0d949e69d9aee986bc3c2af1",
+          "receipt": {
+            "engineUsage": {
+              "cpuUserMs": 1113,
+              "cpuSystemMs": 821,
+              "peakRssBytes": 115081216
+            },
+            "schema": 1,
+            "databaseBuiltAt": {
+              "grype": "2026-10-09 06:32:32+00:00",
+              "trivy": "2026-10-10T01:03:02.007870471Z",
+              "trivyJava": "2026-10-10T00:59:51.613822988Z"
+            },
+            "databaseValidUntil": 1792132352000,
+            "stagesMs": {
+              "database": 1,
+              "download": 2701,
+              "syft": 181,
+              "grype": 1717,
+              "trivy": 114,
+              "publish": 635
+            },
+            "inputBytes": 67130058,
+            "databaseCacheHit": true,
+            "inventoryCacheHit": true
+          },
+          "reports": [
+            "syft",
+            "spdx",
+            "cyclonedx",
+            "grype",
+            "trivy"
+          ]
+        }
+      ],
+      "fullEvidenceReuse": {
+        "state": "succeeded",
+        "attempt": 0,
+        "sourceJobId": "41ede71cbe66b3246cf3d15d28225e734a65a75b0d949e69d9aee986bc3c2af1"
+      },
+      "faultChecks": [
+        "cancel after Docker engine start",
+        "SIGKILL supervisor",
+        "independent engine and broker stop",
+        "restart refuses retained journal",
+        "admin reconciles exact terminal cleanup"
+      ],
+      "cleanup": "owned containers and networks absent",
+      "warmForcedScan": {
+        "samples": 4,
+        "p50Ms": 7573.0,
+        "p95NearestRankMs": 7734
+      }
+    }
+  ],
+  "managed": [
+    {
+      "passed": true,
+      "instance": "standard-3",
+      "imageId": "sha256:01a1803aeb5684a69f2011a24e3dcda5d385834724e6016693ba05f428da56e0",
+      "deployStartedAt": "2026-10-12T04:24:52.288Z",
+      "deployedAt": "2026-10-12T04:27:04.124Z",
+      "startedAt": "2026-10-12T04:27:04.451Z",
+      "finishedAt": "2026-10-12T04:27:50.704Z",
+      "cleanedAt": "2026-10-12T04:28:04.419Z",
+      "cleanup": {
+        "worker": "absent",
+        "applications": "absent",
+        "images": "absent"
+      },
+      "fixture": "openssl",
+      "result": {
+        "error": null,
+        "receipt": {
+          "schema": 1,
+          "engineUsage": {
+            "cpuUserMs": 3268,
+            "cpuSystemMs": 2469,
+            "peakRssBytes": 198631424
+          },
+          "databaseBuiltAt": {
+            "grype": "2026-10-09 06:32:32+00:00",
+            "trivy": "2026-10-10T01:03:02.007870471Z",
+            "trivyJava": "2026-10-10T00:59:51.613822988Z"
+          },
+          "databaseValidUntil": 1792132352000,
+          "stagesMs": {
+            "database": 13634,
+            "download": 67,
+            "syft": 2121,
+            "grype": 3327,
+            "trivy": 419,
+            "publish": 787
+          },
+          "inputBytes": 518,
+          "databaseCacheHit": false,
+          "inventoryCacheHit": false
+        },
+        "reports": {
+          "report:cyclonedx": {
+            "bytes": 2116,
+            "findings": null
+          },
+          "report:grype": {
+            "bytes": 185867,
+            "findings": 42
+          },
+          "report:spdx": {
+            "bytes": 2877,
+            "findings": null
+          },
+          "report:syft": {
+            "bytes": 7846,
+            "findings": null
+          },
+          "report:trivy": {
+            "bytes": 75678,
+            "findings": 11
+          }
+        }
+      },
+      "instances": [
+        {
+          "started_at": "2026-10-12T04:27:05.897Z",
+          "status": {
+            "state": "stopped",
+            "updated_at": "2026-10-12T04:27:49.204Z",
+            "exit_code": 0
+          },
+          "location": {
+            "name": "iad15",
+            "region": "ENAM"
+          },
+          "configuration": {
+            "vcpu": 2,
+            "memory": 8192,
+            "disk": 16000
+          }
+        }
+      ],
+      "elapsedObservedMs": 46253
+    },
+    {
+      "passed": true,
+      "instance": "standard-4",
+      "imageId": "sha256:01a1803aeb5684a69f2011a24e3dcda5d385834724e6016693ba05f428da56e0",
+      "deployStartedAt": "2026-10-12T04:32:27.778Z",
+      "deployedAt": "2026-10-12T04:34:33.190Z",
+      "startedAt": "2026-10-12T04:34:33.578Z",
+      "finishedAt": "2026-10-12T04:35:22.915Z",
+      "cleanedAt": "2026-10-12T04:35:38.146Z",
+      "cleanup": {
+        "worker": "absent",
+        "applications": "absent",
+        "images": "absent"
+      },
+      "fixture": "java",
+      "result": {
+        "error": null,
+        "receipt": {
+          "schema": 1,
+          "engineUsage": {
+            "cpuUserMs": 2484,
+            "cpuSystemMs": 2253,
+            "peakRssBytes": 201199616
+          },
+          "databaseBuiltAt": {
+            "grype": "2026-10-09 06:32:32+00:00",
+            "trivy": "2026-10-10T01:03:02.007870471Z",
+            "trivyJava": "2026-10-10T00:59:51.613822988Z"
+          },
+          "databaseValidUntil": 1792132352000,
+          "stagesMs": {
+            "database": 17510,
+            "download": 265,
+            "syft": 1680,
+            "grype": 2475,
+            "trivy": 417,
+            "publish": 593
+          },
+          "inputBytes": 1561149,
+          "databaseCacheHit": false,
+          "inventoryCacheHit": false
+        },
+        "reports": {
+          "report:cyclonedx": {
+            "bytes": 2433,
+            "findings": null
+          },
+          "report:grype": {
+            "bytes": 58814,
+            "findings": 7
+          },
+          "report:spdx": {
+            "bytes": 3461,
+            "findings": null
+          },
+          "report:syft": {
+            "bytes": 28178,
+            "findings": null
+          },
+          "report:trivy": {
+            "bytes": 41129,
+            "findings": 7
+          }
+        }
+      },
+      "instances": [
+        {
+          "started_at": "2026-10-12T04:34:34.983Z",
+          "status": {
+            "state": "stopped",
+            "updated_at": "2026-10-12T04:35:21.412Z",
+            "exit_code": 0
+          },
+          "location": {
+            "name": "iad17",
+            "region": "ENAM"
+          },
+          "configuration": {
+            "vcpu": 4,
+            "memory": 12288,
+            "disk": 20000
+          }
+        }
+      ],
+      "elapsedObservedMs": 49337
+    }
+  ],
+  "activation": {
+    "state": "passed",
+    "at": "2026-10-12T04:46:55.986Z",
+    "active": {
+      "imageId": "sha256:307ef63f8c9e7fe05d2b4a6d1f8a29d31c49d3bbf421a02271e3b836cbd71081",
+      "previousImageId": "sha256:01a1803aeb5684a69f2011a24e3dcda5d385834724e6016693ba05f428da56e0",
+      "recipeSha256": "9fbdc9c09421a37cc244a4ec2a46d61dc32bf4361ed32812e5301acd8c199473",
+      "databaseValidUntil": 1792305042000,
+      "state": "activated"
+    },
+    "rollback": {
+      "imageId": "sha256:01a1803aeb5684a69f2011a24e3dcda5d385834724e6016693ba05f428da56e0",
+      "previousImageId": "sha256:307ef63f8c9e7fe05d2b4a6d1f8a29d31c49d3bbf421a02271e3b836cbd71081",
+      "recipeSha256": "110d7f06106a6ec56919928754268c2c418cc44302ec98e8c00b1f1dd9c3acd9",
+      "databaseValidUntil": 1792132352000,
+      "state": "activated"
+    },
+    "cleanup": "Verifier containers auto-removed; owned temporary configuration removed"
+  },
+  "currentSourceSha256": {
+    "src/catalog.mjs": "1c97ed8f72ae0eb88a09952287490008ec559dbbe95fd5ff1ab04e468f92c002",
+    "src/evidence.mjs": "e4e56a092306d0746d6200f6407758e3669815379b0b70feedde92bd87ac21cb",
+    "src/jobs.mjs": "9e29be72f1787318bd0dd9cfb31fc7e9176d1ff1745c87b9f3f20efb2a3d1152",
+    "src/lifecycle.mjs": "0dab95afd9c89b03e01e39f2b492ef225e5b6f807f25da55980ae317171826a6",
+    "src/limits.mjs": "ea31b12db68951b62a3879579488f49e3c51a89bdf5abc4054fc1e152b163342",
+    "src/management.mjs": "2da81d3f86a5a1ffd8e7ecf8f25aa5e7250f9b5b8b43ea4ee6795749bb08afea",
+    "src/policy.mjs": "40c0d7d7586f48988c4d3cbc144fd3730492160988e57aea1746d7ecb669695d",
+    "src/protocol.mjs": "0e5a80e8666836cb2e6c8d5e909798e3f48ac6a26543deba5f315c3f4a4ac99c",
+    "src/runners.mjs": "61bd0881725c18eb91444fc9d945493a7067579aa8c5c6a570c8e231437be9a9",
+    "src/sbom.mjs": "1355de24dc0e7b77a30a0c459152ca99964925767bf635aa9b85bbd429ad58ca",
+    "src/scan-cache.mjs": "33ab4240929fc6e4d5479e21fb1da31c0e8f601bef191fa6e9dd439bca5d2c00",
+    "src/scanner-databases.mjs": "7f2cdd1488b7ca6c80d32c3cc0481153f1c32f3631b50b637dde970f2b54617c",
+    "src/scanner.mjs": "69a2d47fbf6b185c4b6f20151fd92191dbb259882d44c73237d499a753f07692",
+    "src/trust.mjs": "b0679485762bd6e64fdbf5247b2644c857adb6f00277ac6b5e989809028f070b",
+    "src/uploads.mjs": "d57b10c71da5e8bca87ba5702beea529314197b49d260ccdc66c7febac43bd48",
+    "src/verification.mjs": "4d63a3b4706c91c07975579351e7fc7767898ff9bfc41a0354b8e34920f79c4e",
+    "src/worker.mjs": "f0f09ce4e8a79548a565638891bbe2442b9328b208de77da76a0fd6e306535a2",
+    "scripts/build-check.mjs": "36c1f07a932d77d30b8442b7a37c2a7bca6588faecb6caa89588e08df2e474fb",
+    "scripts/cfcr.mjs": "f80f94db44cd65ba8abf7b6ce05e9bf4b121f6db0ea8d5d0732dc6588253bf2c",
+    "scripts/conformance.mjs": "09d2dae60da0e2e303984dbf50984c03e6d57a90ec30a869c51c8d4b11f00e9b",
+    "scripts/database-cache.mjs": "d5dd40a88c46c8ce0f3039e773ab0fe00e12d667b6dd137f3ed5d870029421b4",
+    "scripts/docker-check.mjs": "c4a6cab20205b0da825ac74f4650a0a7c72340281ad03c279cf2c45dd66fedff",
+    "scripts/external-scanner-check.mjs": "441864b2d77b7351325d5461f4eb2ad6c42d646808d7cf321ad434d9864398b9",
+    "scripts/golf-check.mjs": "7fcb3a9dd7292fa6e457e0ddb983408cd10f2796f78800cf87e700964fee5868",
+    "scripts/hosted-clients.mjs": "4155f9315c32a52d497906dafbb2002a14d35361c2a9fb63e539cb6a52a2b503",
+    "scripts/hosted-scanner-check.mjs": "1f93b54dfb3d89f9cc8c12a0afa94ccdd1dfdef62c774d465bd78fd4099a3341",
+    "scripts/large-check.mjs": "642cf515a385ac33fd009976582e4898a1968eb861d8276ef881e19306cf2c5c",
+    "scripts/native-scanner-check.mjs": "0079bf5e991397cd50e5a2d85222b7098cde0fc6987036c91d52824d1fd1b84f",
+    "scripts/prepare.mjs": "fc6be5ea495f034d8b16c263b4649a8368cf3740e0077ea670cd81360128bad6",
+    "scripts/runtime.mjs": "456c5fb8b8b2816e78b6604d120396c60219814c042b897f536ee7408c631f3e",
+    "scripts/scanner-check.py": "ff6a719728a1686d3c74b2cf7366001796461ecbb33f20dd4b2a9231869e7038",
+    "scripts/scanner-image.mjs": "444a9eed78e53d371cb134a8afaf14f1ca05d72f826bb0cc7de9975dbecff5de",
+    "scripts/scanner-install-check.mjs": "f5fc744ddb870fd0d1b9fa2a5577676e1da28343ba032449e949c2f48542fa28",
+    "scripts/scanner-install.mjs": "eb1b804e71dcbbb729ab4bacc65e46fff801ab220043f2770e1935e0c2d74db6",
+    "scripts/scanner-runner.mjs": "f33aa2481684277bfe414a1936722abba5fbccdac28793587582ecd3fd995605",
+    "scripts/scanner-update.mjs": "9963b48d17e8ede9ab61fdf1f225b5ee3d5bdf51ca34abd6c8d45f931a16855f",
+    "scripts/signing-check.mjs": "3cc0f70e65944814c2a57edb7c656329f0c7163b940d18cef5811f53cfa33f4d",
+    "scanner/broker.py": "ff9276b11cb5f07503b4c2fa0eaa3571a22ad027c4821199c2d49f1230ce2b66",
+    "scanner/databases.py": "50a01ae81a14adff3191d7268d889dbced887d52c527af1968485b3c9d1746ef",
+    "scanner/download.py": "35cd52b5f3a81a53ab0ba4ea7fc06f74d3cf171ffd4c467a134b7c7a42846962",
+    "scanner/export-snapshot.py": "1a8db4ca165bf8c5958235aafefdc21b4961e16814ac159510b74fbb048f7ebc",
+    "scanner/scan.py": "6c25eff05fb3e04a24af6e8245397a6c79c37703c16d06b2304a1d6eae280608",
+    "scanner/snapshot.py": "a3d1f0e4eb5c7114f7937a62f3a26555b02ef0a15a055cb93f35d42c97240659",
+    "test/catalog.test.mjs": "cf5180673a7f1bba42fd6c7f0176a939d670ddb0400c0b225d85c2313c678eb2",
+    "test/database-cache.test.mjs": "a7fc80623244966ebc497ed5dac864bf8767bb932260fe598f123f3eb057172b",
+    "test/job-credentials.test.mjs": "98f695837ea7d86d03bd15b9a4e0b19ca895350a12e451555b89ec3878b1c8e4",
+    "test/product.test.mjs": "d36dde87188e2b337380a11b75df82415ace6f4ca075d26bbc700c1e9d4fc421",
+    "test/protocol.test.mjs": "e0b605fc96773d6f6f666953c8f67ffb88e354449543f07e8230d6b4f1b10cd1",
+    "test/registry.test.mjs": "9e9a3ba5a83e293c7e8f5517c90a09643a9cfd47ee11675cd2cecea0d8d973ee",
+    "test/runners.test.mjs": "ecee8b7e7c8db52408d5adfb7140049f6b297d7a5c466a62597f51a58ffb377e",
+    "test/runtime-fixture.mjs": "d4f4abe606af798b45642fc6ff4856e747711982a76ce13a607c5980229cf6c8",
+    "test/scan-cache.test.mjs": "50d78359700e27a4f2259d366e6f7538d9e8e5e3afb6aff6f86dd382a1b0d007",
+    "test/scanner-databases.test.mjs": "c8d5469561f0ab51cdd418ddd7bd98d6935ceeb32a39e3e1aab0cffa07f5f65f",
+    "test/scanner-image.test.mjs": "b7e4819f822e2149e94f99a17e41c30fcce5f2c8f03e9b80b723d439ed9e611c",
+    "test/scanner-install.test.mjs": "915f03efcb49a68b52cfbf3bb88e97aaabee373686d5d516664143c8680e0075",
+    "test/scanner-runner.test.mjs": "15e52337b318e500c7b55c4aaceb5f32862d048e6c49d6d534b974c95d6dcfd0",
+    "test/scanner-update.test.mjs": "682b867a5f5e282fed5969ab983c8e0b3acc1d8ada096f9406c19e44b1709bce",
+    "test/scanner.test.mjs": "6f05ccba9fb09af41792b14e49e274d40e3f8d5d54648df3fe49abd0e7acdbbc",
+    "test/scanner_test.py": "fa1ead980b18248fbf27549d711889a0bbf743bae08a773f72566d82531ae1ab",
+    "test/security.test.mjs": "a9cf1216e0712b35d47d83b5ece52ea304eb485c87f677eebd99711f2f521c70",
+    "test/storage.test.mjs": "6eec4eeb2c3a3f45ac4189a4bcd32cff925980fe2f4f00871cc6ba7476056ed9",
+    "test/transport.test.mjs": "5064f07e504063e4223ac5a1ca3d22f7ab8ce7caa7e0d40c61d04145a79170a1"
+  },
+  "limits": [
+    "Local cold samples include verification but start with image layers installed. They exclude initial download/build.",
+    "Only four warm samples per fixture; nearest-rank p95 is the largest sample, not a production percentile.",
+    "Large fixture is 64 MiB padding, not representative package/filesystem diversity.",
+    "CPU and RSS describe scanner child processes, not all container/provider usage.",
+    "Managed probes use production scanner classes with synthetic repository authority, not the entire registry integration.",
+    "Local clean and large fixture suites overlapped; not multi-tenant load qualification.",
+    "Current source hashes were captured after benchmark runs. Later changes added packaging guards, staged activation and a bounded fixture broker; these timings are not measurements of those updates.",
+    "No filesystem snapshots, general workflow executor, CI evidence import or production scale qualification."
+  ],
+  "updater": {
+    "schema": 1,
+    "image": "cfcr-scanner:update-eabf8453-7aaf-4739-922f-65c51eb0621b",
+    "imageId": "sha256:307ef63f8c9e7fe05d2b4a6d1f8a29d31c49d3bbf421a02271e3b836cbd71081",
+    "expectedImageId": "sha256:01a1803aeb5684a69f2011a24e3dcda5d385834724e6016693ba05f428da56e0",
+    "recipeSha256": "9fbdc9c09421a37cc244a4ec2a46d61dc32bf4361ed32812e5301acd8c199473",
+    "databaseBuiltAt": {
+      "grype": "2026-10-11 06:30:42+00:00",
+      "trivy": "2026-10-12T01:14:57.362085088Z",
+      "trivyJava": "2026-10-12T01:00:58.130815836Z"
+    },
+    "databaseValidUntil": 1792305042000,
+    "qualifiedAt": "2026-10-12T04:43:15.938Z",
+    "fixtures": [
+      "openssl",
+      "clean",
+      "java",
+      "whiteout"
+    ]
+  },
+  "checks": {
+    "npm test": "70 JavaScript and 3 Python checks passed",
+    "npm run conformance": "75 passed, 4 conditional skips",
+    "CFCR_SCANNER_IMAGE=golf-cfcr-scanner:single-manifest npm run check:build": "passed; configuration changes alter Golf bundle, unchanged builds remain identical; no deployment",
+    "Golf make cloudflare-check": "passed",
+    "Golf portable/native frontend builds": "passed"
+  }
+}

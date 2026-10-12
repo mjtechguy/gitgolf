@@ -1,4 +1,5 @@
 export const release = typeof GOLF_NATIVE_RELEASE === 'undefined' ? 'development' : GOLF_NATIVE_RELEASE;
+export const configuration = typeof GOLF_NATIVE_CONFIGURATION === 'undefined' ? 'development' : GOLF_NATIVE_CONFIGURATION;
 
 export function timings() {
   const stages = new Map();

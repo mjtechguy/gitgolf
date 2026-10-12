@@ -8,7 +8,7 @@ import { Loading, PanelError, privateQuery } from './RepositoryUI';
 
 type Props = { userId: string; repository: { owner: string; name: string }; repositoryId: string; canManage: boolean };
 type Settings = { scanOnPush: boolean; immutableTags: boolean; readOnly: boolean; policyMode: string; maxSeverity: string; requireVerifiedSignature: boolean; requiredProvenanceBuilder: string; maxScanAgeHours: number; retentionDays: number };
-type Result = { repositoryId: string; settings: Settings; revision: number; scannerConfigured: boolean };
+type Result = { repositoryId: string; settings: Settings; revision: number; scannerConfigured: boolean; scannerExecutor?: 'managed' | 'external' | null };
 export function NativePackageSettings(p: Props) {
   const [editing, setEditing] = useState(false);
   const cache = useQueryClient(), queryKey = ['native-package-settings', p.userId, p.repositoryId];
@@ -20,10 +20,10 @@ export function NativePackageSettings(p: Props) {
   const mutation = useMutation({ mutationFn: (settings: Settings) => nativeAPI('/native/repository-packages', { repository: p.repository, repositoryId: p.repositoryId, action: 'updateSettings', settings, expectedRevision: result.data!.revision }), onSuccess: async () => { setEditing(false); await cache.invalidateQueries({ queryKey }); } });
   if (result.isError) return <PanelError error={result.error} retry={() => void result.refetch()} />;
   if (!result.data || result.isFetching) return <Loading label="Loading registry policy…" />;
-  return <><h3>Registry policy</h3><p className="field-help">Scans run in a separate Cloudflare Container. Supplied evidence does not satisfy scan or signature policies. Retention changes require reviewing and applying a deletion preview.</p>
+  return <><h3>Registry policy</h3><p className="field-help">Scans use the configured registry scanner. Supplied evidence does not satisfy scan or signature policies. Retention changes require reviewing and applying a deletion preview.</p>
     {editing && p.canManage ? <><PolicyForm key={result.data.revision} settings={result.data.settings} scanner={result.data.scannerConfigured} disabled={mutation.isPending} save={settings => mutation.mutate(settings)} /><button className="button secondary" disabled={mutation.isPending} onClick={() => setEditing(false)}>Cancel editing</button></> : <>
       <dl><dt>Scanner</dt><dd>{result.data.scannerConfigured ? result.data.settings.scanOnPush ? 'Scan on publication' : 'Manual scans' : 'Not configured'}</dd>
-        <dt>Policy enforcement</dt><dd>{result.data.settings.policyMode}</dd><dt>Severity threshold</dt><dd>{result.data.settings.maxSeverity}</dd>
+        <dt>Execution</dt><dd>{result.data.scannerExecutor === 'external' ? 'Operator-hosted runner' : result.data.scannerExecutor === 'managed' ? 'Cloudflare Containers' : 'Not reported'}</dd><dt>Policy enforcement</dt><dd>{result.data.settings.policyMode}</dd><dt>Severity threshold</dt><dd>{result.data.settings.maxSeverity}</dd>
         <dt>Maximum scan age</dt><dd>{result.data.settings.maxScanAgeHours} hours</dd><dt>Trusted signature required</dt><dd>{result.data.settings.requireVerifiedSignature ? 'Yes' : 'No'}</dd>
         <dt>Required SLSA v1 builder</dt><dd>{result.data.settings.requiredProvenanceBuilder || 'Not required'}</dd><dt>Immutable tags</dt><dd>{result.data.settings.immutableTags ? 'Yes' : 'No'}</dd><dt>Read only</dt><dd>{result.data.settings.readOnly ? 'Yes' : 'No'}</dd>
         <dt>Untagged artifact retention</dt><dd>{result.data.settings.retentionDays ? `${result.data.settings.retentionDays} days; apply a preview below` : 'Disabled'}</dd></dl>

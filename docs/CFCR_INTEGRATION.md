@@ -71,8 +71,11 @@ qualification requirements.
 Hosted follow-up (2026-10-12): actual native CI digest publication and Docker pull,
 Docker/regctl roundtrips, Cosign signature/attestation, policy enforcement and live
 Golf permission revocation passed. Hosted OCI v1.1.1: 71 passed, eight conditional
-skips. Native scanner startup still fails before reports; standalone scanner
-success does not close that gate. See the qualification packet for receipts.
+skips. The corrected single-platform scanner image produced five reports in the
+full disposable Golf/CFCR integration; guarded schema18 release, rollback and
+promotion also passed. See the
+[final receipt](compatibility/evidence/cfcr-hosted-rehearsal-20261012.json).
+Production load, migration-bearing rollback and retained rollout remain open.
 
 ## Hybrid execution work
 

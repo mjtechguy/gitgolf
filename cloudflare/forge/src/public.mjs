@@ -1,4 +1,4 @@
-import { release, timings } from './telemetry.mjs';
+import { release, configuration, timings } from './telemetry.mjs';
 import { performanceSample } from './performance.mjs';
 import { bounded } from './git.mjs';
 // Current assets are embedded; older hashes are retained in private R2 across releases.
@@ -20,6 +20,7 @@ export async function publicFetch(request, env, ctx) {
     if (env.OPERATIONS_OBSERVABILITY === 'true') console.log(JSON.stringify({ event: 'golf.request', requestId, release, status: response.status, durationMs: Math.round(performance.now() - start) }));
     headers.set('X-Request-ID', requestId);
     headers.set('X-Golf-Worker-Release', release);
+    headers.set('X-Golf-Worker-Configuration', configuration);
     headers.append('Server-Timing', `worker;dur=${(performance.now() - start).toFixed(1)}`);
     const result = new Response(response.body, { status: response.status, statusText: response.statusText, headers });
     const sample = performanceSample(request, result, performance.now() - start);

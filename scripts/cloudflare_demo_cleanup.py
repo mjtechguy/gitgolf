@@ -105,6 +105,8 @@ def post_demo_cleanup(url, payload, headers):
 
 def retire_workers(resources, retire, detach_control):
     def worker(key):
+        if key not in resources:
+            return
         original = resources[key]
         retire(key, ('workers', 'get', original['name']), ('workers', 'delete', original['id'], '--force'), original, ['id', 'name'])
     # Preview calls the control Worker; control binds the application outbound Worker.
@@ -185,8 +187,15 @@ def recover(receipt, check=False):
     database = cf('d1', 'get', settings['database']['uuid'], missing=True)
     if database is not None:
         same(database, resources['database'], ['uuid', 'name'])
-    for key in ['worker', 'preview_worker', 'app_outbound']:
-        current = cf('workers', 'get', resources[key]['name'], missing=True)
+    for key, target in [('worker', name), ('preview_worker', settings.get('previews', {}).get('worker')), ('app_outbound', name + '-outbound')]:
+        if not target:
+            continue
+        current = cf('workers', 'get', target, missing=True)
+        if key not in resources:
+            if current is not None:
+                raise ValueError('Unrecorded owned Worker requires manual recovery')
+            result['cleanup'][key] = 'absent'; save()
+            continue
         if current is not None:
             same(current, resources[key], ['id', 'name'])
     queue = cf('queues', 'get', resources['queue']['id'], missing=True)
@@ -271,6 +280,12 @@ def recover(receipt, check=False):
             retire_owned('recovery.' + old['id'], lambda: api(path, missing=True), lambda: api(path, 'DELETE', missing=True), old, ['id', 'name'], result['cleanup'], save)
             result['pending_recovery_tokens'].remove(old); save()
         for key in ['control_domain', 'preview_domain']:
+            if key not in resources:
+                hostname = urllib.parse.urlparse(settings['previews']['origin']).hostname if key == 'preview_domain' else urllib.parse.urlparse(settings['origin']).hostname
+                if any(row['hostname'] == hostname for row in api(prefix + '/workers/domains')):
+                    raise ValueError('Unrecorded owned domain requires manual recovery')
+                removed(key)
+                continue
             original = resources[key]; path = prefix + '/workers/domains/' + original['id']
             retire_owned(key, lambda: api(path, missing=True), lambda: api(path, 'DELETE', missing=True), original, ['id', 'hostname', 'service', 'zone_id'], result['cleanup'], save)
         queue = cf('queues', 'get', resources['queue']['id'], missing=True)
@@ -332,6 +347,11 @@ def recover(receipt, check=False):
             list(executor.map(lambda row: cf('r2', 'objects', 'delete', row['key'], '--bucket-name', name, '--force'), keys))
         retire_cf('bucket', ('r2','buckets','get',name), ('r2','buckets','delete',name,'--force'), resources['bucket'], ['name','creation_date'])
         for key, route in [('preview_access', ['zero-trust','access','applications']), ('control_access', ['zero-trust','access','applications']), ('preview_service_token', ['zero-trust','access','service-tokens']), ('demo_idp', ['zero-trust','identity-providers'])]:
+            if key not in resources:
+                if key != 'demo_idp' or not state['demo']['unattended']:
+                    raise ValueError('Unrecorded Access resource requires manual recovery')
+                removed(key)
+                continue
             retire_cf(key, (*route,'get',resources[key]['id']), (*route,'delete',resources[key]['id'],'--force'), resources[key], ['id','name'])
         for row in repositories:
             cf('artifacts', 'namespaces', 'repos', 'delete', row['name'], '--namespace', name, '--force')

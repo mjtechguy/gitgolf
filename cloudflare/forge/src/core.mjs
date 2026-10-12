@@ -13,7 +13,7 @@ import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
 import { rootMetadata } from './repository-metadata.mjs';
-import { timings, timedDatabase, timedResponse, release } from './telemetry.mjs';
+import { timings, timedDatabase, timedResponse, release, configuration } from './telemetry.mjs';
 import { repositoryImage } from './repository-images.mjs';
 import { repositorySettings, repositoryCollaborators, repositoryPackages } from './repository-settings.mjs';
 import { comparison, diff } from './repository-diff.mjs';
@@ -313,7 +313,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const operations = await db.prepare('PRAGMA table_info(operations_maintenance)').all();
       const access = await db.prepare('PRAGMA table_info(repository_access_operations)').all();
       return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
-        runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG });
+        configuration, runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG });
     }
     if (url.pathname === '/native/preview-resume') {
       if (!uuidOK(body.previewId)) invalid('Use a canonical preview ID.');

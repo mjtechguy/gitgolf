@@ -1526,6 +1526,8 @@ test('CFCR enablement is native, administrator-only and never accepts client aut
   assert.equal((await f.call('', {...body, repositoryId: '2'}, ownerToken, path)).status, 404);
   const read = await f.call('', {...body, action: 'credential', canPush: true}, readerToken, path);
   assert.equal(read.status, 200); assert.equal(calls.at(-1).canPush, false);
+  const rescan = await f.call('', {...body, action: 'scan', reference: 'sha256:' + 'a'.repeat(64), force: true, idempotencyKey: crypto.randomUUID()}, ownerToken, path);
+  assert.equal(rescan.status, 200); assert.equal(calls.at(-1).force, true); assert.equal(calls.at(-1).actorId, '1');
 });
 
 test('CFCR inherited authority rejects identity substitution and observes revocation', async t => {

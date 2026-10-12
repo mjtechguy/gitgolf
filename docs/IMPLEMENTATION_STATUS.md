@@ -1,5 +1,16 @@
 # Golf implementation status
 
+## 2026-10-12 — Disposable CFCR integration and guarded release rehearsal
+
+The [sanitized hosted receipt](compatibility/evidence/cfcr-hosted-rehearsal-20261012.json)
+records a complete disposable Golf/CFCR run. Exact native CI image publication,
+registry clients and authority revocation, five managed scanner reports, and the
+schema18 guarded release/served rollback/served promotion passed. The initially
+interrupted image upload was recovered through the partial-setup cleanup path.
+All 26 final owned resource categories were absent and the independent stop timer
+was cancelled. This is one synthetic workspace, not a retained rollout or load
+qualification; migration-bearing rollback remains open.
+
 
 ## 2026-10-12 — Scanner cache reuse and managed requalification
 

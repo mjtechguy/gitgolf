@@ -109,3 +109,10 @@ A dedicated hosted probe with the production scanner class still failed startup 
 The final release rehearsal reached guarded rollback after the baseline and target release converged. Rollback preflight failed on a provider D1 query with HTTP 403 / API error 7403 (account invalid or unauthorized for that service). No successful rollback or promotion is claimed. This supersedes the preliminary suspicion that convergence itself had timed out; the observed mismatch did eventually resolve. The full profile is failed despite passing registry and UI subsets. Owned cleanup proceeded immediately.
 
 Cleanup completed at **02:11:23 UTC**: every recorded resource category is absent, including Workers/DO namespaces, Container applications/images, registry resources, D1/R2, Artifacts namespace, managed previews, queues/workflows, Access apps/service token, Secrets Store and owned API tokens. The independent cleanup timer is inactive. The temporary browser proxy stopped and its private bootstrap file was removed. No retained user demo was replaced. The client receipt and failed-profile receipt include final cleanup.
+
+Later 2026-10-12 follow-up: a separate disposable full integration passed the
+corrected scanner image, guarded schema18 release, served rollback and served
+promotion. This supersedes the open scanner-startup and D1-preflight gates for
+the bounded synthetic profile; the failed attempt above remains historical.
+Its 26 owned resource categories were absent by 05:34 UTC and its stop timer was
+cancelled. [Final receipt](compatibility/evidence/cfcr-hosted-rehearsal-20261012.json).

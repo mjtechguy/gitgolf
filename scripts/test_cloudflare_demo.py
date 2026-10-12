@@ -58,6 +58,12 @@ class DemoSupervisorTest(unittest.TestCase):
         self.assertEqual(events, ['preview_worker', 'detach', 'worker', 'app_outbound'])
         self.assertEqual(remaining, set())
 
+    def test_partial_setup_retires_only_recorded_workers(self):
+        resources = {'worker': {'id': 'owned', 'name': 'owned'}}
+        events = []
+        cloudflare_demo_cleanup.retire_workers(resources, lambda key, *_: events.append(key), lambda: events.append('detach'))
+        self.assertEqual(events, ['detach', 'worker'])
+
     def test_failed_control_retirement_preserves_outbound_authority(self):
         resources = {key: {'id': key, 'name': key} for key in ['preview_worker', 'worker', 'app_outbound']}
         events = []

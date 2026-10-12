@@ -84,6 +84,15 @@ class RegistryProof:
                     'repositoryId': repository['id'], 'action': action, **values})
 
     def enable(self, http, repository):
+        # Read-only convergence gate after adding the cyclic Golf/CFCR service binding.
+        for attempt in range(180):
+            status = http('/native/repository-packages', {'repository': {'owner': 'alice', 'name': repository['name']},
+                          'repositoryId': repository['id'], 'action': 'status'}, expected=(200, 501))
+            if status.get('repositoryId') == repository['id']:
+                break
+            if status.get('code') != 'unimplemented' or attempt == 179:
+                raise RuntimeError('Golf registry binding did not converge before enablement')
+            time.sleep(1)
         self.package(http, repository, 'enable')
 
     def qualify(self, http, rpc, repository, tests):

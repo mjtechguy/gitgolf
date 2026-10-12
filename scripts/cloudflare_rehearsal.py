@@ -6,9 +6,11 @@ import shutil
 import time
 from cloudflare_setup import replace_private_json
 
-def require_converged_diagnostics(value, worker_release):
+def require_converged_diagnostics(value, worker_release, worker_configuration=None):
     if not worker_release or value.get('release') != worker_release:
         raise RuntimeError('Worker and workspace release observations differ')
+    if worker_configuration is not None and value.get('configuration') != worker_configuration:
+        raise RuntimeError('Worker and workspace configuration observations differ')
     return value
 
 

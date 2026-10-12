@@ -22,6 +22,12 @@ resources are removed. Positive human-only hosted coverage, scale qualification
 and full parity remain open. See [the status ledger](docs/IMPLEMENTATION_STATUS.md)
 and [the parity plan](docs/REPOSITORY_PARITY_PLAN.md).
 
+Native Golf/CFCR follow-up (2026-10-12): a disposable full integration passed
+exact CI image publication, hosted five-report managed scanning, registry authority
+revocation, and guarded schema18 release/served rollback/promotion. All owned
+resources were removed. [The receipt](docs/compatibility/evidence/cfcr-hosted-rehearsal-20261012.json)
+keeps this separate from retained rollout, migration-bearing rollback and load.
+
 
 Native webhook delivery (2026-10-10): schema15 release `42fe30e0331a…` adds all
 five shared Webhooks RPCs, encrypted subscriptions, transactional event delivery,

@@ -1,0 +1,94 @@
+{
+  "schema": "golf.cfcr.hosted-integration-rehearsal.v1",
+  "recordedAt": "2026-10-12T05:34:51.972140+00:00",
+  "golfBaseCommit": "5435aa69adbe720c3bcd8709357287fa9868abdf",
+  "runtime": "disposable Cloudflare Worker/DO/D1/R2/Containers/Access; synthetic repository authority",
+  "result": "passed",
+  "integration": {
+    "nativeCIPublishedExactDigest": true,
+    "nativeCIContainerCleanup": "destroyed",
+    "registryClientsPassed": true,
+    "ociConformance": "71 Passed | 0 Failed | 0 Pending | 8 Skipped",
+    "liveAuthorityChecks": [
+      "downgradeDeniesPush",
+      "downgradePreservesPull",
+      "revocationDeniesExistingToken",
+      "revocationDeniesExchange",
+      "grantRestored"
+    ],
+    "credentialRevocation": true,
+    "managedScanner": {
+      "state": "succeeded",
+      "reports": [
+        "cyclonedx",
+        "grype",
+        "spdx",
+        "syft",
+        "trivy"
+      ],
+      "severities": {
+        "high": 20,
+        "medium": 19,
+        "critical": 1,
+        "low": 2
+      },
+      "databaseCacheHit": false
+    },
+    "schema18": 18
+  },
+  "release": {
+    "baseline": "6ec3a1977fb7698f25e07ba75082845f2d46dbc5939d9d72dbe17a20c96b2e7c",
+    "reviewed": "ec3f82d26ad77cc8c545537e5e6939edb0ab619d76f34039ec0703d17b351e49",
+    "servedReviewed": "ec3f82d26ad77cc8c545537e5e6939edb0ab619d76f34039ec0703d17b351e49",
+    "servedRollback": "6ec3a1977fb7698f25e07ba75082845f2d46dbc5939d9d72dbe17a20c96b2e7c",
+    "servedPromotion": "ec3f82d26ad77cc8c545537e5e6939edb0ab619d76f34039ec0703d17b351e49",
+    "retainedAssetsVerified": 111,
+    "unrecordedRollbackDenied": true,
+    "machineAdminDenied": true
+  },
+  "cleanup": {
+    "state": "all owned resources absent",
+    "categories": [
+      "analytics_token",
+      "app_outbound",
+      "bucket",
+      "cleanup_token",
+      "control_access",
+      "control_domain",
+      "database",
+      "dispatch",
+      "durable_object_namespaces",
+      "managed_apps",
+      "management_token",
+      "namespace",
+      "preview_access",
+      "preview_domain",
+      "preview_service_token",
+      "preview_worker",
+      "queue",
+      "queue_consumer",
+      "registry_resources",
+      "registry_retired",
+      "secret_store",
+      "test_applications",
+      "test_image",
+      "test_tasks",
+      "worker",
+      "workflow"
+    ],
+    "independentStopTimer": "cancelled after verified cleanup",
+    "finishedAt": "2026-10-12T05:34:00.780841+00:00"
+  },
+  "interruptedAttempt": {
+    "state": "supervisor exited during scanner image upload",
+    "orphanUpload": "stopped by exact owned tag",
+    "recovery": "all 23 owned categories absent; recovery credential absent; timer cancelled",
+    "fix": "partial-setup recovery checks missing Worker/domain inventory before marking absent"
+  },
+  "limits": [
+    "No retained production rollout or populated human demo.",
+    "Single synthetic workspace, not production load or fleet qualification.",
+    "Guarded schema18 code release/rollback; a migration-bearing rollback and broader failure matrix remain open.",
+    "Native general Actions/GitLab runner and CI-imported scan evidence remain unqualified."
+  ]
+}

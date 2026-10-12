@@ -156,7 +156,7 @@ export async function repositoryPackages(env, person, row, body) {
   if (body.repositoryId !== String(row.id) || !['status', 'enable', 'credential', 'revoke', ...operations].includes(body.action)) invalid('Use the current repository and a supported package action.');
   if (body.action === 'enable' && row.role !== 'admin') deny();
   const binding = { contract: 1, installation: env.PUBLIC_ORIGIN, name: `${env.WORKSPACE_SLUG}/${row.name}`, repositoryId: String(row.id), artifactName: row.artifact_name };
-  const input = Object.fromEntries(['reference', 'kind', 'query', 'cursor', 'limit', 'expectedRevision', 'links', 'attachment', 'blob', 'settings', 'reason', 'enabled', 'tag', 'digests', 'jobId', 'idempotencyKey', 'keys', 'baseline'].filter(key => Object.hasOwn(body, key)).map(key => [key, body[key]]));
+  const input = Object.fromEntries(['reference', 'kind', 'query', 'cursor', 'limit', 'expectedRevision', 'links', 'attachment', 'blob', 'settings', 'reason', 'enabled', 'tag', 'digests', 'jobId', 'idempotencyKey', 'force', 'keys', 'baseline'].filter(key => Object.hasOwn(body, key)).map(key => [key, body[key]]));
   const result = await env.REGISTRY.manage({ ...input, action: body.action, binding, actorId: String(person.id), canPush: ['write', 'admin'].includes(row.role) });
   if (result.registryError) {
     const error = result.registryError;

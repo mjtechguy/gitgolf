@@ -484,6 +484,8 @@ class RehearsalAssetsTest(unittest.TestCase):
         with self.assertRaises(RuntimeError): require_converged_diagnostics({'release':'old','schema':18}, 'new')
         with self.assertRaises(RuntimeError): require_converged_diagnostics({'release':'new','schema':18}, None)
         self.assertEqual(require_converged_diagnostics({'release':'new','schema':18}, 'new')['schema'], 18)
+        with self.assertRaises(RuntimeError): require_converged_diagnostics({'release':'new','configuration':'old'}, 'new', 'new')
+        self.assertEqual(require_converged_diagnostics({'release':'new','configuration':'same'}, 'new', 'same')['configuration'], 'same')
 
     def test_baseline_preserves_asset_inventory_and_original_frontend(self):
         from cloudflare_rehearsal import baseline_assets

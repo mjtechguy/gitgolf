@@ -234,7 +234,7 @@ def main():
             value = data if raw else json.loads(data)
             if path == '/native/diagnostics' and response.status == 200:
                 from cloudflare_rehearsal import require_converged_diagnostics
-                require_converged_diagnostics(value, response.headers.get('X-Golf-Worker-Release'))
+                require_converged_diagnostics(value, response.headers.get('X-Golf-Worker-Release'), response.headers.get('X-Golf-Worker-Configuration'))
             return value
 
     def rpc(method, payload=None, **options):

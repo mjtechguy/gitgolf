@@ -45,6 +45,21 @@ class PublicationTests(unittest.TestCase):
             request.assert_not_called()
 
 class RegistryRequestTests(unittest.TestCase):
+    def test_registry_enable_waits_on_read_only_binding_receipt(self):
+        proof = RegistryProof.__new__(RegistryProof)
+        repository = {'name': 'repo', 'id': '1'}
+        http = Mock(side_effect=[{'code': 'unimplemented'}, {'repositoryId': '1', 'enabled': False}, {'enabled': True}])
+        with patch('cloudflare_registry_check.time.sleep'):
+            proof.enable(http, repository)
+        self.assertEqual([call.args[1]['action'] for call in http.call_args_list], ['status', 'status', 'enable'])
+        for response in [{'repositoryId': '2'}, {'code': 'permission_denied'}]:
+            http = Mock(return_value=response)
+            with self.assertRaises(RuntimeError): proof.enable(http, repository)
+            self.assertEqual(http.call_count, 1)
+        http = Mock(return_value={'code': 'unimplemented'})
+        with patch('cloudflare_registry_check.time.sleep'), self.assertRaises(RuntimeError): proof.enable(http, repository)
+        self.assertEqual(http.call_count, 180)
+
     def test_registry_client_identifies_itself_without_changing_authority(self):
         proof = RegistryProof.__new__(RegistryProof)
         proof.origin = 'https://registry.test'

@@ -36,6 +36,8 @@ export async function buildRelease(directory, executable) {
   for (const file of files) sourceHash.update(file).update(await readFile(resolve(source, file)));
   sourceHash.update(await readFile('cloudflare/forge/data/languages.json'));
   sourceHash.update(await readFile('cloudflare/forge/schema.sql')).update(JSON.stringify(assets));
+  const configuration = hash(JSON.stringify(settings));
+  sourceHash.update(configuration);
   const release = sourceHash.digest('hex'), archive = resolve(root, 'releases');
   let base = hash(previous);
   try {
@@ -64,7 +66,7 @@ export async function buildRelease(directory, executable) {
     if (deadline) config.env.DEMO_STOP_AT = { type: 'text', value: deadline };
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   await esbuild.build({ entryPoints: ['cloudflare/forge/src/' + (settings.agent_path ? 'agent-entry.mjs' : settings.tests ? 'test-entry.mjs' : 'worker.mjs')], outfile: target + '.next', bundle: true, format: 'esm', platform: 'neutral',
-    define: { GOLF_NATIVE_ASSETS: JSON.stringify(assets), GOLF_NATIVE_RELEASE: JSON.stringify(release) }, nodePaths: ['cloudflare/agents/node_modules'],
+    define: { GOLF_NATIVE_ASSETS: JSON.stringify(assets), GOLF_NATIVE_RELEASE: JSON.stringify(release), GOLF_NATIVE_CONFIGURATION: JSON.stringify(configuration) }, nodePaths: ['cloudflare/agents/node_modules'],
     conditions: ['workerd', 'worker', 'browser'], external: ['cloudflare:workers', 'node:*'] });
   const manifest = { format: 1, release, contract: 1, schema: 18, account: settings.account, worker: settings.worker, database: settings.database.uuid,
     namespace: settings.namespace, workspace: settings.workspace, origin: settings.origin, bucket: settings.evidence.bucket,

@@ -57,18 +57,19 @@ from that customer, not hardware attestation or proof of an honest host.
 | Area | Existing evidence | Remaining gate |
 |---|---|---|
 | CFCR distribution | Docker/regctl/Cosign; hosted OCI 71 passed, eight conditional skips | Broader client/version and large-object hosted matrix |
-| Scanner engines | Five real reports in isolated Docker; gzip and zstd fixture | Full hosted scanner startup and resource qualification |
+| Scanner engines | Real Docker matrix; hosted standard-3 OpenSSL and standard-4 Java five-report scans | Full registry release, burst/load and larger hosted images |
 | Native CI publishing | Exact-commit image publication and Docker pull | General container builds and Actions/GitLab native execution |
 | Portable Actions | Maintained engine, actual Requests workflow, Forgejo execution | Broader compatibility catalog and isolated runner enrollment |
 | Native job execution | Approved Python-module tests and lifecycle gates | General Linux workflow executor adapter |
 | Self-hosted runners | Existing portable Docker runner, leases and named pools | Native/CFCR outbound protocol and complete admin UX |
 | Native collaboration | Shared UI with bounded implemented adapters | Full repository parity checklist remains open |
-| Deployment lifecycle | Protected previews, permissions and cleanup checks | Final rollback failure and full release rehearsal |
+| Deployment lifecycle | Protected previews, permissions, cleanup and bounded schema18 release/rollback rehearsal | Migration-bearing rollback and retained rollout |
 | Performance | Warm post-index reads measured; authority admission change tested | Loaded-workspace tail and large-repository scale qualification |
 | Forgejo migration | Fresh-target and workflow qualification | Private pending-review loss gate; no retained cutover |
 
-A green unit suite does not close the right column. In particular, the latest
-hosted scanner failed startup and rollback preflight failed with D1 403/API 7403.
+A green unit suite does not close the right column. Single-platform scanner
+packaging and the earlier D1 rollback-preflight 403/API 7403 now pass in a
+disposable full-integration rehearsal; retained rollout and load remain open.
 
 ## 4. Ownership and topology
 
@@ -441,12 +442,16 @@ through the external transport and the isolation/cleanup negatives pass.
   private analysis cache; test actual pinned Trivy, not just path construction.
 - [x] Verify immutable database installation once in a trusted supervisor lifecycle.
 - [x] Atomically persist image-bound verification under the exclusive private journal.
-- [ ] Implement versioned local cache install with atomic activation and locks.
+- [x] Implement versioned local cache install with atomic activation and locks
+  using Docker's immutable image store and private version receipts.
 - [x] Enforce freshness of all three database feeds without refreshing age on cache hits.
-- [ ] Implement updater integrity/rollback rules and versioned cache installation.
-- [ ] Compare warm and cold scans with vulnerable/clean/Java/multi-layer fixtures.
+- [x] Implement candidate updater integrity/rollback rules and versioned image
+  installation; activation and registry recipe deployment remain explicit approvals.
+- [x] Compare warm and cold scans with vulnerable/clean/Java/multi-layer fixtures
+  and a 64 MiB transfer fixture; cold excludes initial image installation.
 - [ ] Concurrent jobs cannot corrupt DB/analysis caches or see another tenant's files.
-- [ ] Publish p50/p95, bytes transferred, CPU/memory, cache identity and cleanup.
+- [x] Publish bounded-sample p50/p95, input bytes, child CPU/RSS, cache identity
+  and cleanup; total provider usage and production percentiles remain separate.
 
 ### P3 — Inventory/evidence reuse and policy correctness
 
@@ -456,10 +461,12 @@ through the external transport and the isolation/cleanup negatives pass.
 - [ ] Accept CI evidence through separately authorized producer contract.
 - [x] Require exact digest/platform/recipe/trust/freshness and bounded schemas
   for registry-generated evidence reuse (CI import remains separate).
-- [ ] Schedule only missing required scans after push.
+- [x] Reuse current complete evidence and deduplicate compatible active automatic
+  publication scans; missing/stale leaves still require execution.
 - [x] Revoked producer, expired evidence, changed recipe and removed report fail closed,
   including revocation of an upstream inventory producer after admission.
-- [ ] Index approval requires all required platforms; deduplicate DAG traversal.
+- [x] Index approval requires all required platforms; deduplicate DAG traversal,
+  including duplicate edges at the 256-unique-manifest boundary.
 - [ ] UI distinguishes supplied/generated/trusted/current without conflating them.
 
 ### P4 — Cloudflare managed execution qualification
@@ -471,7 +478,8 @@ through the external transport and the isolation/cleanup negatives pass.
 - [ ] Compare Containers/Sandbox and supported Workers Builds path on the same inputs.
 - [ ] Measure sustained and burst load, quota refusal, allocation failure and cleanup.
 - [ ] Bound concurrency/budget/prewarm; teardown independent of test process health.
-- [ ] Produce hosted five-report proof, current-authority negatives and absence receipts.
+- [x] Produce hosted five-report proof, current-authority negatives and absence receipts
+  for one disposable synthetic workspace; load and broader rollout remain open.
 
 ### P5 — Golf native/general runner adapter
 
@@ -698,3 +706,85 @@ records both the passing local checks and failed managed attempt. Operator setup
 and the separately invoked paid helper are documented in CFCR's
 `docs/EXTERNAL_SCANNER.md`. P2/P3/P4 remain partially complete; their remaining
 checkboxes are release gates, not implied capabilities.
+
+
+## 23. Scanner matrix, database rollout and hosted packaging — 2026-10-12
+
+The [sanitized matrix](compatibility/evidence/cfcr-scanner-matrix-20261012.json)
+records five local fixtures, each with five forced scans, inventory reuse, exact
+result reuse, running cancellation, supervisor crash recovery and owned cleanup.
+Java uses a SHA256-pinned Log4j 2.14.1 JAR without executing it. Clean and whiteout
+fixtures return no package findings; vulnerable fixtures require both engines to
+find the known package. Concurrent clean/large runs share only immutable images,
+not private job workspaces. This is not a production multi-tenant load test.
+
+| Local fixture | Input bytes | Cold verification + execution | Warm p50 | Warm nearest-rank p95 |
+|---|---:|---:|---:|---:|
+| OpenSSL | 518 | 10.934 s | 5.616 s | 5.998 s |
+| Log4j Java | 1,561,149 | 8.291 s | 4.516 s | 4.576 s |
+| Clean | 398 | 9.544 s | 4.596 s | 5.127 s |
+| Whiteout | 700 | 9.105 s | 4.381 s | 4.464 s |
+| 64 MiB padding | 67,130,058 | 12.246 s | 7.573 s | 7.734 s |
+
+Each warm row has only four samples; p95 is its largest sample. Images were already
+installed. The padding fixture measures transfer overhead, not representative
+large-image package diversity. CPU/RSS receipts measure child processes, not
+total container peak memory or provider billing. Original measurements and later
+source refinements are distinguished in the packet.
+
+The database candidate updater rebuilds only the database stage with pinned tools,
+verifies checksums/freshness and runs four real-engine fixtures before producing
+an approval. The fresh candidate contains Grype data dated October 11 and both
+Trivy feeds dated October 12. Actual activation and explicitly approved rollback
+to the prior still-fresh image passed. Activation uses an exclusive journal,
+private verification staging, exact prior-image fence and atomic config/cache
+replacement. Failed candidate verification never replaces the active receipt.
+Versions live in Docker's immutable image store; no per-job database download.
+The updater can run from an operator scheduler but does not automatically change
+the registry recipe or activate an unreviewed image.
+
+Publication scheduling now deduplicates active compatible scans for the same
+publisher and reuses current complete evidence. Nested indexes require every
+unique leaf; trailing duplicate edges do not invalidate an otherwise bounded
+graph. All graph traversals retain their 256-node limit and avoid array-shift
+quadratic work. A regression explicitly denies a pull whose first approved
+parent lies beyond the limit. Golf shows scanner execution location, evidence
+reuse and original evidence age, and provides an explicit uncached rescan.
+
+Two paid managed probes used production ScannerTask/ScannerOutbound with synthetic
+repository authority: OpenSSL on standard-3 and Java on standard-4. Both produced
+five reports and real findings; observed request-to-completion times were 46.253 s
+and 49.337 s. Database verification alone took 13.634 s and 17.510 s. No warm
+managed database cache or snapshot acceleration is claimed. Workers, Container
+applications and uploaded images were removed and verified absent.
+
+The successful scanner image is a single-platform manifest. Earlier attested OCI
+indexes failed startup on both sizes. Preparation now refuses that unqualified
+scanner packaging and documents the exact Docker flags. CFCR continues to accept
+multi-platform artifacts. The compressed-database prototype was removed instead
+of adding an unnecessary per-start restore.
+
+Full integration also exposed stale workspace bindings after a configuration-only
+deployment. Prepared bundles now embed a configuration fingerprint, release IDs
+include it, and diagnostics compare Worker/workspace observations. A bounded
+read-only registry readiness check precedes enablement. Two failed disposable
+rehearsals were completely removed before the corrected repeat. An interrupted
+third attempt was also recovered after its supervisor exited during image upload;
+partial-setup recovery now checks unrecorded Worker and domain absence before
+marking them removed.
+
+The [final hosted receipt](compatibility/evidence/cfcr-hosted-rehearsal-20261012.json)
+records the corrected repeat: exact native CI image publication, Docker/regctl,
+Cosign and OCI clients, authority/revocation checks, five managed scanner reports,
+and a guarded schema18 release with served rollback and promotion all passed.
+The unrecorded rollback predecessor and machine-admin access were denied; 111
+retained assets had their bytes verified. All 26 owned cleanup categories were absent
+and the independent stop timer was cancelled. Durable Object code briefly lagged
+the public Worker after release changes, so convergence checked both identities.
+No retained rollout, migration-bearing rollback or production load is claimed.
+
+Regression evidence: 70 CFCR JavaScript tests, three Python checks, 75 OCI specs
+(four conditional skips), production preparation, Golf Cloudflare checks, both
+UI builds and real image activation/rollback passed. General native workflow
+runners, CI-imported evidence, fleet enrollment UI, snapshot/Builds comparison,
+full usage accounting and production load qualification remain open.
