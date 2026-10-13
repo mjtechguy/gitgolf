@@ -49,3 +49,16 @@ test('final-authority queue and database timings reach Operations without accept
     assert.equal(metrics.find(m => m.id === 'performance.authority_d1.mean').value, 20);
   } finally { db.close(); }
 });
+
+
+test('workspace timings include source percentiles and bounded native routes without request data', t => {
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  const history=new PerformanceHistory({exec(query,...args){return query.startsWith('SELECT')?db.prepare(query).all(...args):db.prepare(query).run(...args);}});
+  for(const duration of [10,20,30,100])history.record({method:'GetContents',status:200,duration,timing:{}});
+  const sample=performanceSample(new Request('https://golf.test/native/pr-evidence?secret=PRIVATE',{method:'POST',body:'PRIVATE'}),new Response('{}'),50);
+  assert.equal(sample.method,'NativeEvidence');assert.ok(!JSON.stringify(sample).includes('PRIVATE'));history.record(sample);
+  assert.equal(performanceSample(new Request('https://golf.test/native/not-a-metric'),new Response('{}'),1),null);
+  const metrics=history.metrics(), value=id=>metrics.find(m=>m.id==='performance.'+id)?.value;
+  assert.equal(value('source.p50'),20);assert.equal(value('source.p95'),100);assert.equal(value('evidence.p50'),50);
+  assert.equal(metrics.find(m=>m.id==='performance.preview.p50').state,'unknown');
+});

@@ -14,14 +14,14 @@ import type { DataTableColumn } from './DataTable';
 import { type RuntimeManifest } from './runtimeCapabilities';
 import { NativeRunnerPlacement } from './NativeRunners';
 
-type Config = { runtimeProfile: string; workspace: string; canCreate: boolean; accessLogin: boolean; evidence: boolean; tests: boolean; agents: boolean; advice: boolean; previews: boolean; apps: boolean; automaticCI: boolean; appPath: string; browser: boolean; agentPath: string; previewPath: string; testModule: string; testWorkflowFormat: string; testWorkflowPath: string; dailyLimit: number; previewTTL: number; appTTL: number };
+export type Config = { runtimeProfile: string; workspace: string; canCreate: boolean; accessLogin: boolean; evidence: boolean; tests: boolean; agents: boolean; advice: boolean; previews: boolean; apps: boolean; automaticCI: boolean; appPath: string; browser: boolean; agentPath: string; previewPath: string; testModule: string; testWorkflowFormat: string; testWorkflowPath: string; dailyLimit: number; previewTTL: number; appTTL: number };
 type Repository = { id: string; name: string; fullName: string; cloneUrl: string; description: string };
-type Pull = { id: string; number: number; title: string; body: string; state: string; revision: string; head: { commitId: string; ref: string }; base: { commitId: string; ref: string } };
-type Job = { id: string; idempotencyKey: string; state: string; agentState: string; testState: string; adviceState: string; stale: boolean; selection: { headCommitId: string } };
-type Preview = { kind: 'STATIC' | 'WORKER' | 'IMAGE_STATIC'; imageDigest?: string; id: string; jobId: string; url: string; state: string; expiresAt: string; commitId: string; purged: boolean; captureState: string };
+export type Pull = { id: string; number: number; title: string; body: string; state: string; merged: boolean; draft: boolean; revision: string; head: { commitId: string; ref: string }; base: { commitId: string; ref: string } };
+export type Job = { id: string; idempotencyKey: string; state: string; agentState: string; testState: string; adviceState: string; stale: boolean; createdAt: string; updatedAt: string; selection: { repositoryId: string; pullRequestId: string; number: number; baseCommitId: string; headCommitId: string } };
+export type Preview = { kind: 'STATIC' | 'WORKER' | 'IMAGE_STATIC'; imageDigest?: string; id: string; jobId: string; url: string; state: string; expiresAt: string; commitId: string; purged: boolean; captureState: string };
 type Report = { execution?: { workflow?: { format: string; path: string; jobId?: string; catalog?: string } }; agentResult: { state: string; patch?: string; proposalCommitId?: string; tests?: { exitCode: number; stdout: string; stderr: string }; calls?: number; tokens?: number }; tests: { state: string; producer?: { kind: string; machineId: string; generation: number }; build?: { digest: string; bytes: number; sourceCommit: string }; image?: { registry: string; repository: string; tag: string; digest: string; commitId: string }; stdout?: string; stderr?: string; exitCode?: number }; advice: { state: string; answers?: { next: { choice: string } } }; limitations: string[] };
-type ReportValue = { job: Job; report: Report };
-function NativePreviewLink({ preview }: { preview: Preview }) {
+export type ReportValue = { job: Job; report: Report };
+export function NativePreviewLink({ preview }: { preview: Preview }) {
   const expires = Date.parse(preview.expiresAt), [now, setNow] = useState(Date.now);
   useEffect(() => {
     if (!Number.isFinite(expires) || expires <= Date.now()) return;

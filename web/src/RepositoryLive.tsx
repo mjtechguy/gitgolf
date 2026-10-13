@@ -28,6 +28,7 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
     const key=query.queryKey;
     if(key[0]==='native-repository'&&key[1]===repositoryId)return topics.some(topic=>['source','pulls','actions','agents'].includes(topic));
     if(!scoped(key))return false;
+    if(key[4]==='agent-workspace')return topics.some(topic=>['source','pulls','actions','agents'].includes(topic));
     if(key[0]==='repository'&&key[4]==='metadata'&&key[5]==='sidebar')return revalidateMetadata&&topics.some(topic=>['source','issues','pulls'].includes(topic));
     if(key[0]==='repository'&&key[4]==='metadata')return revalidateMetadata && topics.some(topic=>['source','issues','pulls'].includes(topic));
     if(key[0]==='repository'&&pin.current&&key[4]==='branches')return topics.includes('source')||topics.includes('pulls');

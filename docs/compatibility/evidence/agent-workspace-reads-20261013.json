@@ -1,0 +1,1166 @@
+{
+  "observabilityEnabled": true,
+  "repositories": [
+    {
+      "id": "12",
+      "name": "fastapi",
+      "owner": "mj",
+      "ref": "f5c6e9b4f9cadc1bf0f9a1fd672e621206b63007"
+    },
+    {
+      "id": "3",
+      "name": "requests",
+      "owner": "mj",
+      "ref": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60"
+    },
+    {
+      "id": "4",
+      "name": "flask",
+      "owner": "mj",
+      "ref": "d086db856be187255b8ec61ef409357393020f32"
+    },
+    {
+      "id": "5",
+      "name": "httpx",
+      "owner": "mj",
+      "ref": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254"
+    },
+    {
+      "id": "6",
+      "name": "starlette",
+      "owner": "mj",
+      "ref": "96d5023c55b29224edb8d684868c49f681d079a9"
+    },
+    {
+      "id": "7",
+      "name": "click",
+      "owner": "mj",
+      "ref": "2247b35ea1c47c727d7a06e51fa280e12a863ff6"
+    },
+    {
+      "id": "8",
+      "name": "rich",
+      "owner": "mj",
+      "ref": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f"
+    },
+    {
+      "id": "9",
+      "name": "pytest",
+      "owner": "mj",
+      "ref": "c9c19f8e62c12834ad83193a1869cc82fe9c700e"
+    }
+  ],
+  "results": [
+    {
+      "concurrency": 1,
+      "first": {
+        "bytes": 31042,
+        "failures": 0,
+        "p50": 310,
+        "p95": 1858,
+        "p99": 1858,
+        "samples": 16
+      },
+      "generatedAt": "2026-10-13T19:31:46.927Z",
+      "iterations": 2,
+      "samples": [
+        {
+          "bytes": 835,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 280,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 2027,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 204,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 807,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 467,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 3005,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 282,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 880,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 504,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 2182,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 250,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 729,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 466,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 1749,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 523,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 738,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 1858,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 2284,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 291,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 699,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 377,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 2180,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 233,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 730,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 477,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 6996,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 285,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 799,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 546,
+          "repository": "pytest",
+          "status": 200
+        },
+        {
+          "bytes": 4402,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 310,
+          "repository": "pytest",
+          "status": 200
+        },
+        {
+          "bytes": 835,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 325,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 2027,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 322,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 807,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 335,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 3005,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 257,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 880,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 432,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 2182,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 260,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 729,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 268,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 1749,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 304,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 738,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 308,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 2284,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 268,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 699,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 231,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 2180,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 214,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 730,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 262,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 6996,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 224,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 799,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 287,
+          "repository": "pytest",
+          "status": 200
+        },
+        {
+          "bytes": 4402,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 336,
+          "repository": "pytest",
+          "status": 200
+        }
+      ],
+      "scope": "One enrolled user and one workspace; not global or multi-tenant acceptance. First pass does not prove an empty edge or index cache.",
+      "stageTotals": {
+        "access": {
+          "count": 32,
+          "duration": 0
+        },
+        "access_auth": {
+          "count": 32,
+          "duration": 0
+        },
+        "actor": {
+          "count": 32,
+          "duration": 877
+        },
+        "authority": {
+          "count": 32,
+          "duration": 4386
+        },
+        "authority_actor": {
+          "count": 32,
+          "duration": 615
+        },
+        "authority_d1": {
+          "count": 32,
+          "duration": 2105
+        },
+        "authority_grant": {
+          "count": 32,
+          "duration": 1490
+        },
+        "authority_queue": {
+          "count": 32,
+          "duration": 1427
+        },
+        "d1": {
+          "count": 144,
+          "duration": 4079
+        },
+        "grant": {
+          "count": 32,
+          "duration": 1896
+        },
+        "index_hit": {
+          "count": 32,
+          "duration": 0
+        },
+        "native": {
+          "count": 32,
+          "duration": 8465
+        },
+        "queue": {
+          "count": 32,
+          "duration": 0
+        },
+        "worker": {
+          "count": 32,
+          "duration": 10807
+        }
+      },
+      "warm": {
+        "bytes": 31042,
+        "failures": 0,
+        "p50": 268,
+        "p95": 432,
+        "p99": 432,
+        "samples": 16
+      }
+    },
+    {
+      "concurrency": 4,
+      "first": {
+        "bytes": 31042,
+        "failures": 0,
+        "p50": 492,
+        "p95": 865,
+        "p99": 865,
+        "samples": 16
+      },
+      "generatedAt": "2026-10-13T19:31:51.686Z",
+      "iterations": 2,
+      "samples": [
+        {
+          "bytes": 835,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 321,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 3005,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 321,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 807,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 519,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 2027,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 535,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 1749,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 296,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 2182,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 312,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 880,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 492,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 729,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 795,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 699,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 725,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 2180,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 726,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 2284,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 776,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 738,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 865,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 730,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 397,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 4402,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 402,
+          "repository": "pytest",
+          "status": 200
+        },
+        {
+          "bytes": 799,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 444,
+          "repository": "pytest",
+          "status": 200
+        },
+        {
+          "bytes": 6996,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 580,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 3005,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 236,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 807,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 299,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 2027,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 782,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 835,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 786,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 1749,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 244,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 880,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 314,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 729,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 330,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 2182,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 380,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 2180,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 259,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 699,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 265,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 2284,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 313,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 738,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 411,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 4402,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 298,
+          "repository": "pytest",
+          "status": 200
+        },
+        {
+          "bytes": 6996,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 313,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 730,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 350,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 799,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 396,
+          "repository": "pytest",
+          "status": 200
+        }
+      ],
+      "scope": "One enrolled user and one workspace; not global or multi-tenant acceptance. First pass does not prove an empty edge or index cache.",
+      "stageTotals": {
+        "access": {
+          "count": 32,
+          "duration": 0
+        },
+        "access_auth": {
+          "count": 32,
+          "duration": 177
+        },
+        "actor": {
+          "count": 32,
+          "duration": 719
+        },
+        "authority": {
+          "count": 32,
+          "duration": 4196
+        },
+        "authority_actor": {
+          "count": 32,
+          "duration": 666
+        },
+        "authority_d1": {
+          "count": 32,
+          "duration": 3231
+        },
+        "authority_grant": {
+          "count": 32,
+          "duration": 2565
+        },
+        "authority_queue": {
+          "count": 32,
+          "duration": 0
+        },
+        "d1": {
+          "count": 144,
+          "duration": 5063
+        },
+        "grant": {
+          "count": 32,
+          "duration": 2039
+        },
+        "index_hit": {
+          "count": 32,
+          "duration": 0
+        },
+        "native": {
+          "count": 32,
+          "duration": 9259
+        },
+        "queue": {
+          "count": 32,
+          "duration": 0
+        },
+        "worker": {
+          "count": 32,
+          "duration": 12101
+        }
+      },
+      "warm": {
+        "bytes": 31042,
+        "failures": 0,
+        "p50": 313,
+        "p95": 786,
+        "p99": 786,
+        "samples": 16
+      }
+    },
+    {
+      "concurrency": 16,
+      "first": {
+        "bytes": 31042,
+        "failures": 0,
+        "p50": 528,
+        "p95": 806,
+        "p99": 806,
+        "samples": 16
+      },
+      "generatedAt": "2026-10-13T19:31:53.184Z",
+      "iterations": 2,
+      "samples": [
+        {
+          "bytes": 2180,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 304,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 6996,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 377,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 2182,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 387,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 2284,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 462,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 3005,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 466,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 880,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 468,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 738,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 521,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 729,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 528,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 2027,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 577,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 799,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 629,
+          "repository": "pytest",
+          "status": 200
+        },
+        {
+          "bytes": 835,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 699,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 699,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 744,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 730,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 788,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 1749,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 790,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 4402,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetContents",
+          "milliseconds": 792,
+          "repository": "pytest",
+          "status": 200
+        },
+        {
+          "bytes": 807,
+          "exact": true,
+          "iteration": 0,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 806,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 2180,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 418,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 4402,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 526,
+          "repository": "pytest",
+          "status": 200
+        },
+        {
+          "bytes": 807,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 529,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 835,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 531,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 1749,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 530,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 2027,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 531,
+          "repository": "fastapi",
+          "status": 200
+        },
+        {
+          "bytes": 3005,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 531,
+          "repository": "requests",
+          "status": 200
+        },
+        {
+          "bytes": 699,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 530,
+          "repository": "click",
+          "status": 200
+        },
+        {
+          "bytes": 2284,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 580,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 2182,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 659,
+          "repository": "flask",
+          "status": 200
+        },
+        {
+          "bytes": 730,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 665,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 6996,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetContents",
+          "milliseconds": 665,
+          "repository": "rich",
+          "status": 200
+        },
+        {
+          "bytes": 738,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 687,
+          "repository": "starlette",
+          "status": 200
+        },
+        {
+          "bytes": 799,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 685,
+          "repository": "pytest",
+          "status": 200
+        },
+        {
+          "bytes": 729,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 688,
+          "repository": "httpx",
+          "status": 200
+        },
+        {
+          "bytes": 880,
+          "exact": true,
+          "iteration": 1,
+          "method": "GetRepositoryOverview",
+          "milliseconds": 690,
+          "repository": "flask",
+          "status": 200
+        }
+      ],
+      "scope": "One enrolled user and one workspace; not global or multi-tenant acceptance. First pass does not prove an empty edge or index cache.",
+      "stageTotals": {
+        "access": {
+          "count": 32,
+          "duration": 0
+        },
+        "access_auth": {
+          "count": 32,
+          "duration": 455
+        },
+        "actor": {
+          "count": 32,
+          "duration": 1158
+        },
+        "authority": {
+          "count": 32,
+          "duration": 6815
+        },
+        "authority_actor": {
+          "count": 32,
+          "duration": 1275
+        },
+        "authority_d1": {
+          "count": 32,
+          "duration": 4338
+        },
+        "authority_grant": {
+          "count": 32,
+          "duration": 3063
+        },
+        "authority_queue": {
+          "count": 32,
+          "duration": 352
+        },
+        "d1": {
+          "count": 144,
+          "duration": 7390
+        },
+        "grant": {
+          "count": 32,
+          "duration": 3781
+        },
+        "index_hit": {
+          "count": 32,
+          "duration": 0
+        },
+        "native": {
+          "count": 32,
+          "duration": 14205
+        },
+        "queue": {
+          "count": 32,
+          "duration": 0
+        },
+        "worker": {
+          "count": 32,
+          "duration": 15894
+        }
+      },
+      "warm": {
+        "bytes": 31042,
+        "failures": 0,
+        "p50": 531,
+        "p95": 690,
+        "p99": 690,
+        "samples": 16
+      }
+    }
+  ],
+  "state": "complete"
+}

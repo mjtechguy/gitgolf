@@ -157,3 +157,30 @@ needs its owned Access application's domain changed to `HOST/auth/login` with
 Profile README content is edited in Golf, not synchronized from a special Git
 repository. Pins are limited to six currently public repositories owned by that
 profile. Search covers names, descriptions and topics, not file contents.
+
+## Agent workspace and retained performance
+
+The read-only Agent workspace is at `/:owner/:repo/agents`, with a selected PR
+at `/agents/:number`. It assembles existing evidence and previews without
+starting agents or changing merge policy. An installation without agent
+execution still shows existing CI and review evidence with an explicit notice.
+
+Enable bounded performance observations on a retained installation with:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-observability NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+The saved input enables the existing 2048-request/30-minute workspace history
+and 1% Cloudflare request-log sampling. Query strings are redacted, invocation
+logs and tracing stay off, and Golf's structured events omit request bodies and
+authorization. The Alchemy control Worker uses the shared build's observability
+policy. No analytics credential or provider billing collection is implied.
+Operations shows source, evidence and preview latency, including p50/p95, beside
+existing database, authority and cache observations. Empty families are unknown.
+
+Use `cloudflare/forge/browser-benchmark.mjs` in an authenticated browser for
+bounded source-read comparisons (up to eight fixed repositories, eight passes,
+and 16 concurrent requests). First pass is not proof of an empty cache. Preserve
+raw scope, exact commits, errors, payload bytes and cache state when comparing.

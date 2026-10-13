@@ -2,8 +2,10 @@ const stages = ['access', 'queue', 'actor', 'grant', 'd1', 'artifacts', 'artifac
 const counters = ['object_hit', 'object_miss', 'object_shared', 'index_hit', 'index_miss', 'artifacts_errors'];
 
 export function performanceSample(request, response, duration) {
-  const match = /^\/rpc\/golf\.v1\.[A-Za-z]+Service\/([A-Za-z]{1,80})$/.exec(new URL(request.url).pathname);
-  if (!match || match[1] === 'WatchRepository') return null;
+  const path = new URL(request.url).pathname;
+  const native = {'/native/pr-evidence':'NativeEvidence','/native/pr-preview':'NativePreview'}[path];
+  const match = /^\/rpc\/golf\.v1\.[A-Za-z]+Service\/([A-Za-z]{1,80})$/.exec(path);
+  if (!match && !native || match?.[1] === 'WatchRepository') return null;
   const timing = {};
   for (const part of (response.headers.get('Server-Timing') || '').split(',')) {
     const value = /^\s*([a-z0-9_]+);dur=([\d.]+)(?:;desc="(\d+) calls")?\s*$/.exec(part);
@@ -11,7 +13,7 @@ export function performanceSample(request, response, duration) {
     if (stages.includes(value[1])) timing[value[1]] = Number(value[2]);
     if (counters.includes(value[1])) timing[value[1]] = Number(value[3] || 0);
   }
-  return { method: match[1], status: response.status, duration, timing };
+  return { method: native || match[1], status: response.status, duration, timing };
 }
 
 // shortcut: retain the latest 2048 RPCs per workspace, use sampled analytics for fleet percentiles.
@@ -37,9 +39,14 @@ export class PerformanceHistory {
     const summarize = (id, label, values) => {
       values.sort((a, b) => a - b);
       metric(id + '.mean', label + ' · mean', values.length ? values.reduce((a, b) => a + b, 0) / values.length : undefined);
+      metric(id + '.p50', label + ' · p50', values.length ? values[Math.ceil(values.length * .5) - 1] : undefined);
       metric(id + '.p95', label + ' · p95', values.length ? values[Math.ceil(values.length * .95) - 1] : undefined);
     };
     summarize('request', 'RPC response time', samples.map(row => row.duration));
+    const sourceMethods = new Set(['ResolveRepositorySource','GetContents','GetRepositoryOverview','GetRepositoryFileIndex','ListCommits','GetCommitDiff','GetRepositoryComparison']);
+    summarize('source', 'Source read response time', samples.filter(row => sourceMethods.has(row.method)).map(row => row.duration));
+    summarize('evidence', 'Evidence API response time', samples.filter(row => row.method === 'NativeEvidence').map(row => row.duration));
+    summarize('preview', 'Preview API response time', samples.filter(row => row.method === 'NativePreview').map(row => row.duration));
     summarize('metadata', 'Repository metadata response time', samples.filter(row => row.method === 'GetRepository').map(row => row.duration));
     for (const stage of stages) summarize(stage, stage.replaceAll('_', ' ') + ' time', samples.flatMap(row => row.timing[stage] === undefined ? [] : [row.timing[stage]]));
     for (const key of counters) metric(key, key.replaceAll('_', ' '), samples.length ? samples.reduce((sum, row) => sum + (row.timing[key] || 0), 0) : undefined, 'count');

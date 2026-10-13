@@ -1,7 +1,7 @@
 # Agent workspace mode — proposal
 
-Status: planning only, 2026-10-13. No runtime mode or new source-control backend
-is enabled by this document. Existing portable Forgejo transition and native
+Status: first read-only native view implemented, 2026-10-13. Selective checkouts,
+new agent execution and storage changes remain proposals. Existing portable Forgejo transition and native
 Artifacts/D1/Workers decisions remain in force.
 
 ## What prompted this
@@ -66,3 +66,34 @@ proposal/CI/preview records. Ship no automatic merges or new execution authority
 Treat responsiveness, correctness and reduced job startup cost as separate
 acceptance criteria. Link this work to the existing agent, source indexing and CI
 roadmaps rather than declaring a second complete forge implementation.
+
+
+## First increment delivered
+
+`/:owner/:repo/agents` and `/agents/:number` assemble existing PRs, current source,
+agent/evidence states, test outcomes, source-qualified previews and an on-demand
+report. Shared TanStack tables keep the view compact and searchable. The mode
+adds no mutation endpoint, schema, execution authority or dependency. Existing
+PR review/check pages provide the action controls. Reported token/call usage is
+shown for agent runs; absent usage and monetary costs are not fabricated.
+
+The initial native UI chunk is about 3.2 kB gzip. Lists are bounded to 100 PRs,
+100 repository evidence runs and 100 previews, with visible truncation. It has no
+cross-repository task graph, independent task creation, agent assignment editor,
+or new portable-runtime consumer. The retained demo has CI evidence but agent
+execution is disabled; no model was called to manufacture a proposal.
+
+Operations now includes source/evidence/preview p50 and p95. The repeatable
+Alchemy observability option enables its existing bounded history and sampled
+logging. Browser qualification compares eight indexed, pinned repository
+snapshots at concurrency 1/4/16; it is not cold-cache or fleet-scale proof.
+[Measurements](compatibility/evidence/agent-workspace-reads-20261013.json) retain
+exact identities, request outcomes, bytes and stage totals.
+
+Stage 0 remains partial: checkout bytes/time, CI queue delay, index lag, large
+monorepos and multi-tenant load still need measurements. Current cached reads
+spend substantial time in D1 and final authority checks; evidence/preview APIs
+also pass through serialized admission. A follow-up should measure and reduce
+redundant current-authority reads or add a bounded read projection, preserving
+revocation ordering. Do not infer that caching permissions or relaxing mutation
+fences is safe from these timings.
