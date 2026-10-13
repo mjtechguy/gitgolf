@@ -177,7 +177,7 @@ func TestGitSnapshotNativeAdversarialSource(t *testing.T) {
 				}
 			}
 			git(nil, "init", "--quiet", "--template=")
-			workflow := ".gitea/workflows/proof.yml"
+			workflow := ".forgejo/workflows/proof.yml"
 			write(workflow, "on: workflow_dispatch\n")
 			write("src/nested/message.txt", "$Format:%H$\n")
 			switch mode {

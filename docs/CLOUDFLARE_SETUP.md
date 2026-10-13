@@ -6,15 +6,15 @@ The selected public control hostname is **`gitgolf.mjtechguy.com`**. Protected a
 
 | Path | Setup | Current authority |
 | --- | --- | --- |
-| Portable local | Existing `make local-up`; [README](../README.md). | Go/PostgreSQL/Gitea, portable storage and runners; Cloudflare optional. |
-| Cloudflare migration bridge | This document and `scripts/cloudflare_setup.py`. | Workers serves the existing frontend; protected Tunnel reaches the existing Go/PostgreSQL/Gitea core; R2 stores supported immutable objects. |
+| Portable local | Existing `make local-up`; [README](../README.md). | Go/PostgreSQL/Forgejo, portable storage and runners; Cloudflare optional. |
+| Cloudflare migration bridge | This document and `scripts/cloudflare_setup.py`. | Workers serves the existing frontend; protected Tunnel reaches the existing Go/PostgreSQL/Forgejo core; R2 stores supported immutable objects. |
 | Cloudflare-native SaaS | [Native repository setup](CLOUDFLARE_NATIVE_SETUP.md), [ADR0008](decisions/0008-cloudflare-native-saas-ownership.md) and [build plan](CLOUDFLARE_BUILD_PLAN.md). | Target: Artifacts canonical Git, partitioned D1 collaboration/authority, Durable Objects coordination, Workers APIs, R2 retained objects. **Not yet an installable forge replacement.** |
 
 The bridge is an explicit migration stage. It does not put canonical repositories in Artifacts, convert PostgreSQL to D1, or execute ordinary product agent tasks in Sandbox. The independently qualified Artifacts agent forks remain an operator prototype until connected to product task admission/results. Do not advertise native parity from a successful bridge installation.
 
 ## Prepare a fresh bridge
 
-Prerequisites: Docker with Compose supporting `!reset`, Python 3, OpenSSL, the qualified native `cf` CLI1.0.0-beta.13, and the normal frontend build toolchain. Use a persistent host for PostgreSQL/Gitea and trusted execution. Container disks in Cloudflare are not a replacement for canonical database/Git volumes.
+Prerequisites: Docker with Compose supporting `!reset`, Python 3, OpenSSL, the qualified native `cf` CLI1.0.0-beta.13, and the normal frontend build toolchain. Use a persistent host for PostgreSQL/Forgejo and trusted execution. Container disks in Cloudflare are not a replacement for canonical database/Git volumes.
 
 ```sh
 python3 scripts/cloudflare_setup.py init \
@@ -26,7 +26,7 @@ python3 scripts/cloudflare_setup.py init \
 
 `origin.gitgolf.mjtechguy.com` is the proposed service-only bridge hostname, distinct from the selected public control hostname. Create it only as part of the protected origin procedure below. The initializer creates no Cloudflare resources and starts no containers. An existing installation directory is refused; credentials are never rotated on retry.
 
-Private configuration lives in `.cloudflare/install` (0700, Git-ignored), separate from every local `.env*` file. The Compose project is always `golf-cloudflare`; database, native forge and runner volumes have that project prefix. Inherited Golf/Gitea/Compose/storage variables are stripped before invoking Compose. No host ports are published, and no local RustFS service is included.
+Private configuration lives in `.cloudflare/install` (0700, Git-ignored), separate from every local `.env*` file. The Compose project is always `golf-cloudflare`; database, native forge and runner volumes have that project prefix. Inherited Golf/Forgejo/Compose/storage variables are stripped before invoking Compose. No host ports are published, and no local RustFS service is included.
 
 The initializer generates new database passwords, encryption and runner keys, a private configuration file, and an origin certificate valid for365days. The certificate covers `golf`, `localhost` and127.0.0.1. Golf and the trusted runner communicate with real TLS; Cloudflare Tunnel must verify the certificate too. The key is readable by the non-root container through its individual read-only mount; its0700 parent restricts host access. Back up this entire directory privately. Certificate rotation requires replacing the matching certificate/key, restarting the bridge and checking both the runner and Tunnel; never disable verification to bypass expiry.
 
@@ -41,7 +41,7 @@ To load an agent image before starting the consumer, use `compose up -d --build 
 
 ## Configure real provider resources
 
-1. Create a dedicated private R2 bucket with public access disabled. Supply bucket-scoped S3 credentials in `bridge.env` as `GOLF_OBJECT_ACCESS_KEY_ID` and `GOLF_OBJECT_SECRET_ACCESS_KEY`. The generated endpoint pins the selected account and uses HTTPS/region `auto`. Do not substitute a Cloudflare management token for S3 credentials. Existing immutable object authorization, conditional writes and digest checks still apply. This moves supported CI sources/artifacts and attachment consumers; it does not move native Gitea Git/LFS/packages or PostgreSQL records. See [R2 authentication](https://developers.cloudflare.com/r2/api/tokens/).
+1. Create a dedicated private R2 bucket with public access disabled. Supply bucket-scoped S3 credentials in `bridge.env` as `GOLF_OBJECT_ACCESS_KEY_ID` and `GOLF_OBJECT_SECRET_ACCESS_KEY`. The generated endpoint pins the selected account and uses HTTPS/region `auto`. Do not substitute a Cloudflare management token for S3 credentials. Existing immutable object authorization, conditional writes and digest checks still apply. This moves supported CI sources/artifacts and attachment consumers; it does not move native Forgejo Git/LFS/packages or PostgreSQL records. See [R2 authentication](https://developers.cloudflare.com/r2/api/tokens/).
 2. Create an Access application for the **exact bridge hostname**, with a Service Auth policy allowing only a dedicated service token. Record its audience. Do this **before** publishing any DNS/tunnel route. Put the token's client ID/secret in the owner-only `worker-secrets.json`; never put them in a browser bundle or ordinary variables. This transport identity is distinct from Golf user sessions and preview reviewer identity. See [Access service tokens](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/).
 3. Create a dedicated remotely managed Tunnel and put its token in `tunnel-token` (0600). Configure its only ingress as the exact bridge hostname, service `https://golf:8443`, origin TLS server name `golf`, CA pool `/run/golf/origin-ca.crt`, and HTTP Host header equal to the public control hostname. Require Access validation with the exact team name and application audience. Finish ingress with `http_status:404`. Keep TLS verification enabled. Publish the bridge DNS record to this exact tunnel only after checking this configuration. See [Tunnel setup](https://developers.cloudflare.com/tunnel/get-started/) and [origin parameters](https://developers.cloudflare.com/tunnel/configuration/origin-configuration/).
 4. Check the dedicated namespace for collisions before publishing the public Worker/custom domain. Preserve existing records and services; the initializer does not adopt or delete anything. Build the current frontend and prepare the native CLI bundle:
@@ -73,7 +73,7 @@ python3 scripts/cloudflare_setup.py status
 python3 scripts/cloudflare_setup.py stop
 ```
 
-Stop test runtimes as soon as verification finishes. `stop` stops bridge containers and retains data; it does not delete the Worker, Tunnel, Access application, R2 bucket, DNS or database/native volumes. Delete only explicitly owned disposable provider resources, in dependency order, with independent absence checks. Persistent installations need coordinated database/Gitea/R2 backup and restore qualification before production use. The approved test planning envelope remains $10/day, including AI; it is not a Cloudflare billing cap.
+Stop test runtimes as soon as verification finishes. `stop` stops bridge containers and retains data; it does not delete the Worker, Tunnel, Access application, R2 bucket, DNS or database/native volumes. Delete only explicitly owned disposable provider resources, in dependency order, with independent absence checks. Persistent installations need coordinated database/Forgejo/R2 backup and restore qualification before production use. The approved test planning envelope remains $10/day, including AI; it is not a Cloudflare billing cap.
 
 ## Native work still required
 

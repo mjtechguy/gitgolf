@@ -51,7 +51,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--test-pattern', default='TestForge|TestPathsAndDirectoryConfiguration|TestForgeTokenAlias|TestApiCredentialQuotaAndScopePostgres|TestSessionAndRepositoryWithPostgres', help='Go integration selection; use . for the full legacy suite')
-    parser.add_argument('--migration', action='store_true', help='also qualify a real Gitea-to-Forgejo staged import')
     parser.add_argument('--integration', action='store_true', help='also run Go race/integration checks in an owned database')
     parser.add_argument('--suite', nargs='+', default=['smoke.py', 'workflow-config-smoke.py', 'forgejo-native-smoke.py'])
     args = parser.parse_args()
@@ -79,7 +78,7 @@ def main():
             while subprocess.run(['docker','exec',pg,'pg_isready','-h','127.0.0.1','-U','postgres'],capture_output=True).returncode:
                 if time.monotonic()>deadline: raise RuntimeError('PostgreSQL readiness failed')
                 time.sleep(.25)
-            for name in ('golf','forgejo','golf_tests','source_gitea'):
+            for name in ('golf','forgejo','golf_tests'):
                 command('docker','exec',pg,'createdb','-U','postgres',name)
             if args.integration:
                 print('Running Go race/integration tests in owned PostgreSQL',flush=True)
@@ -87,13 +86,6 @@ def main():
                 (args.output.parent/'go-integration.log').write_text(result.stdout+result.stderr)
                 receipt['checks'].append({'script':'go test -race ./... -run '+args.test_pattern,'passed':result.returncode==0})
                 if result.returncode: raise RuntimeError('Go integration failed; see go-integration.log')
-            source_port=port()
-            if args.migration:
-                source_native=prefix+'-source';containers.append(source_native)
-                source_settings={'GITEA__database__DB_TYPE':'postgres','GITEA__database__HOST':pg+':5432','GITEA__database__NAME':'source_gitea','GITEA__database__USER':'postgres','GITEA__database__PASSWD':password,'GITEA__server__ROOT_URL':f'http://localhost:{source_port}/','GITEA__security__INSTALL_LOCK':'true','GITEA__service__DISABLE_REGISTRATION':'true','GITEA__actions__ENABLED':'false','GITEA__mailer__ENABLED':'false'}
-                flags=[part for key in source_settings for part in ('-e',key)]
-                command('docker','run','-d','--name',source_native,'--network',prefix,'-p',f'127.0.0.1:{source_port}:3000','--label','golf.fixture=forgejo',*flags,'gitea/gitea:1.27.3-rootless',env={**env,**source_settings})
-                wait(f'http://localhost:{source_port}/api/v1/version')
             native = prefix+'-forgejo'; containers.append(native)
             settings = {
                 'FORGEJO__database__DB_TYPE':'postgres', 'FORGEJO__database__HOST':pg+':5432',
@@ -102,7 +94,6 @@ def main():
                 'FORGEJO__server__ROOT_URL':f'http://localhost:{forge_port}/','FORGEJO__actions__ENABLED':'false',
                 'FORGEJO__mailer__ENABLED':'false','FORGEJO__repository__DEFAULT_BRANCH':'main',
             }
-            if args.migration: settings.update(FORGEJO__migrations__ALLOWED_DOMAINS=prefix+'-source',FORGEJO__migrations__ALLOW_LOCALNETWORKS='true')
             flags = [part for key in settings for part in ('-e',key)]
             command('docker','run','-d','--name',native,'--network',prefix,'-p',f'127.0.0.1:{forge_port}:3000',
                     '--label','golf.fixture=forgejo',*flags,IMAGE,env={**env,**settings})
@@ -122,10 +113,8 @@ def main():
                 'GOLF_SMOKE_FORGE_CONTAINER':native,'GOLF_SMOKE_FORGE_KIND':'forgejo'}
             with (private/'server.log').open('w') as log:
                 process=subprocess.Popen([str(private/'golf-server')],env=runtime,cwd=ROOT,stdout=log,stderr=log)
-                wait(runtime['GOLF_PUBLIC_URL']+'/readyz')
-                if args.migration:
-                    runtime.update(GOLF_MIGRATION_FIXTURE_SOURCE=f'http://localhost:{source_port}',GOLF_MIGRATION_FIXTURE_CLONE='http://'+prefix+'-source:3000',GOLF_MIGRATION_FIXTURE_CONTAINER=source_native,GOLF_MIGRATION_FIXTURE_RECEIPT=str(args.output.parent/'migration-fidelity.json'))
-                for name in args.suite + (['forgejo-migration-smoke.py'] if args.migration else []):
+                assert wait(runtime['GOLF_PUBLIC_URL']+'/readyz')['checks'] == {'database':'ready','forgejo':'ready'}
+                for name in args.suite:
                     check_started=time.monotonic()
                     print('Running '+name,flush=True)
                     extra=['--cli',str(private/'golf')] if name=='smoke.py' else []

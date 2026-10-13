@@ -71,7 +71,7 @@ def main():
     smoke.GOLF, smoke.GITEA = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{forge_port}'
     signing_secret, connection = secrets.token_hex(32), str(uuid.uuid4())
     private.append(signing_secret)
-    path = '/hooks/gitea/'+connection
+    path = '/hooks/forgejo/'+connection
     captured, capture_lock = [], threading.Lock()
     recorder_counts = {'received': 0, 'bad_request': 0, 'bad_signature': 0, 'forward_error': 0}
 

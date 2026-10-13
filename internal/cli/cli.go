@@ -85,7 +85,7 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin | --native-token-s
 Success writes JSON: {"schema_version":"golf.cli.v1","data":...}.
 Exit codes: 0 success/help; 1 operation/authentication failure; 2 usage error.
 Data uses the versioned API's Protobuf JSON format. No automatic pagination.
-Pass a forge token on stdin with --token-stdin, or set GOLF_FORGE_TOKEN (legacy: GOLF_GITEA_TOKEN).
+Pass a forge token on stdin with --token-stdin, or set GOLF_FORGE_TOKEN.
 Pass a Golf API token on stdin with --api-token-stdin, or set GOLF_API_TOKEN.
 Native workspace credentials use --native-token-stdin or GOLF_NATIVE_TOKEN.
 Native Access deployments also require GOLF_ACCESS_CLIENT_ID and GOLF_ACCESS_CLIENT_SECRET for machine requests.
@@ -101,13 +101,13 @@ JSON files use the corresponding versioned Protobuf JSON request with exact IDs,
 expected revisions and an original UUID v4 idempotencyKey. No generated key or retries.
 Do not place request text or tokens in command arguments.
 Portable Golf API credentials remain bound to the issuing browser session; expiry, revocation or source sign-out denies access.
-MCP takes one token from GOLF_API_TOKEN or GOLF_FORGE_TOKEN (legacy: GOLF_GITEA_TOKEN); stdin is reserved for the protocol.
+MCP takes one token from GOLF_API_TOKEN or GOLF_FORGE_TOKEN; stdin is reserved for the protocol.
 Global flags precede the command; resource flags follow positional arguments.
 Organization reads need read:user and read:organization; code needs read:repository.
 Account activity needs read:user and records successful session lifecycle operations.
 Audit pagination preserves the first snapshot ID; PAT-mode CLI calls also record their login/logout.
 Commit diffs require a full lowercase 40- or 64-character commit ID; branch aliases are not accepted.
-Diffs preserve bounded native Gitea text; merges compare only the first parent.
+Diffs preserve bounded native Forgejo text; merges compare only the first parent.
 Repository creation inspection needs a canonical UUID v4 key from a prior create request.
 It never creates or retries a repository; OUTCOME_UNKNOWN can include in-flight work.
 Issue comments need read:repository and read:issue; empty pages can have a next page.
@@ -170,14 +170,11 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		fmt.Fprintln(diagnostic, err)
 		return 2
 	}
-	pat, apiToken, nativeToken := getenv("GOLF_GITEA_TOKEN"), getenv("GOLF_API_TOKEN"), getenv("GOLF_NATIVE_TOKEN")
-	if neutral := getenv("GOLF_FORGE_TOKEN"); neutral != "" {
-		if pat != "" && pat != neutral {
-			fmt.Fprintln(diagnostic, "Conflicting forge token aliases.")
-			return 2
-		}
-		pat = neutral
+	if getenv("GOLF_GITEA_TOKEN") != "" {
+		fmt.Fprintln(diagnostic, "GOLF_GITEA_TOKEN is unsupported; use GOLF_FORGE_TOKEN.")
+		return 2
 	}
+	pat, apiToken, nativeToken := getenv("GOLF_FORGE_TOKEN"), getenv("GOLF_API_TOKEN"), getenv("GOLF_NATIVE_TOKEN")
 	kinds := 0
 	for _, present := range []bool{*stdin || pat != "", *apiStdin || apiToken != "", *nativeStdin || nativeToken != ""} {
 		if present {

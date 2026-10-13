@@ -110,7 +110,7 @@
         "limits"
       ]
     },
-    "gitea": {
+    "forgejo": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -128,26 +128,14 @@
           "type": "string",
           "enum": [
             ".forgejo/workflows",
-            ".gitea/workflows",
             ".github/workflows",
-            ".forgejo/workflows,.gitea/workflows",
             ".forgejo/workflows,.github/workflows",
-            ".gitea/workflows,.forgejo/workflows",
-            ".gitea/workflows,.github/workflows",
-            ".github/workflows,.forgejo/workflows",
-            ".github/workflows,.gitea/workflows",
-            ".forgejo/workflows,.gitea/workflows,.github/workflows",
-            ".forgejo/workflows,.github/workflows,.gitea/workflows",
-            ".gitea/workflows,.forgejo/workflows,.github/workflows",
-            ".gitea/workflows,.github/workflows,.forgejo/workflows",
-            ".github/workflows,.forgejo/workflows,.gitea/workflows",
-            ".github/workflows,.gitea/workflows,.forgejo/workflows"
+            ".github/workflows,.forgejo/workflows"
           ]
         },
         "qualifiedVersion": {
           "type": "string",
           "enum": [
-            "1.27.3",
             "15.0.9"
           ]
         },
@@ -435,7 +423,7 @@
             }
           }
         },
-        "giteaIngressFrom": {
+        "forgejoIngressFrom": {
           "type": "array",
           "items": {
             "type": "object",
@@ -520,7 +508,7 @@
       "required": [
         "enabled",
         "ingressFrom",
-        "giteaIngressFrom",
+        "forgejoIngressFrom",
         "postgresIngressFrom",
         "externalEgress",
         "dnsNamespace"
@@ -602,7 +590,6 @@
       "properties": {
         "kind": {
           "enum": [
-            "gitea",
             "forgejo"
           ]
         },
@@ -626,7 +613,7 @@
     "existingSecret",
     "oauth",
     "resources",
-    "gitea",
+    "forgejo",
     "postgresql",
     "ingress",
     "networkPolicy",

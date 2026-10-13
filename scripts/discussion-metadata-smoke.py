@@ -34,7 +34,7 @@ def served_browser(args, report, token, native, issue, pull, label, milestone, n
         cookies = [dict(name=c.name, value=c.value, url=smoke.GOLF, httpOnly=c.has_nonstandard_attr('HttpOnly'), sameSite='Lax')
                    for handler in session.handlers if isinstance(handler, urllib.request.HTTPCookieProcessor)
                    for c in handler.cookiejar]
-        source = subprocess.check_output(['docker', 'inspect', 'golf-golf-1', '--format',
+        source = subprocess.check_output(['docker', 'inspect', 'golf-forgejo-golf-1', '--format',
                                          '{{ index .Config.Labels "io.golf.web.revision" }}'], text=True).strip()
         config = dict(cookies=cookies, forbidden=[token, credentials['Password']], source=source,
                       output=str((args.output/'browser').resolve()),

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: golf
-description: Golf portable core with one canonical Gitea writer and optional bundled PostgreSQL
+description: Golf portable core with one canonical Forgejo writer and optional bundled PostgreSQL
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

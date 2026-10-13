@@ -97,7 +97,7 @@ def qualify(*, stack, output, directory, actors, command, execute, metadata, rpc
     assert len(networks)==1
     overlay['services']['runner']['environment']['GOLF_RUNNER_ACTIONS_EGRESS_HOST']=next(iter(networks.values()))['IPAddress']
     (directory/'services.json').write_text(json.dumps(overlay))
-    smoke.provider(owner['token'],'POST',base+'/hooks', {'type':'gitea','active':True,'events':['push'],'branch_filter':'*','config':{'url':'http://golf:8080/hooks/gitea/'+connection,'content_type':'json','http_method':'POST','secret':secret}}, expected=201)
+    smoke.provider(owner['token'],'POST',base+'/hooks', {'type':'gitea','active':True,'events':['push'],'branch_filter':'*','config':{'url':'http://golf:8080/hooks/forgejo/'+connection,'content_type':'json','http_method':'POST','secret':secret}}, expected=201)
     command('up','-d','--no-build','--pull','never','runner-image-init','runner-actions-image-init')
     command('up','-d','--no-build','--pull','never','runner')
     time.sleep(7)

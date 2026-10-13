@@ -24,12 +24,12 @@ def main():
         native=smoke.provider(token,'POST','user/repos',{'name':'selection','private':True,'auto_init':True,'default_branch':'main'},201)
         key={'owner':name,'name':'selection'};base='repos/'+native['full_name']
         source=b'on: workflow_dispatch\njobs:\n  check:\n    runs-on: linux\n    steps:\n      - run: echo qualified\n'
-        for path in ('.github/workflows/legacy.yml','.gitea/workflows/legacy.yml','.forgejo/workflows/check.yml'):
+        for path in ('.github/workflows/other.yml','.forgejo/workflows/check.yml'):
             smoke.provider(token,'POST',base+'/contents/'+path,{'content':base64.b64encode(source).decode(),'message':'Owned workflow'},201)
         result=smoke.rpc(session,'WorkflowService/InspectWorkflows',{'repository':key,'ref':'main'})
         paths=[r['path'] for r in result['configurations']]
-        assert '.forgejo/workflows/check.yml' in paths and not any(p.startswith(('.gitea/','.github/')) for p in paths),paths
-        assert sum(v['code']=='actions_shadowed' for v in result.get('diagnostics',[])) == 2, 'Shadowed workflow directories must be reported'
+        assert '.forgejo/workflows/check.yml' in paths and not any(p.startswith('.github/') for p in paths),paths
+        assert sum(v['code']=='actions_shadowed' for v in result.get('diagnostics',[])) == 1, 'Shadowed workflow directory must be reported'
         smoke.rpc(actors[2][2],'WorkflowService/InspectWorkflows',{'repository':key,'ref':'main'},expected=404)
         smoke.provider(token,'PUT',base+'/collaborators/'+actors[1][0],{'permission':'write'},204)
         smoke.provider(token,'POST',base+'/branches',{'new_branch_name':'feature','old_branch_name':'main'},201)

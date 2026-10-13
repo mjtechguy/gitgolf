@@ -6,7 +6,7 @@ LOCAL_COMPOSE = docker compose --env-file .env --env-file .env.ci --env-file .en
 .DEFAULT_GOAL := setup
 HTTPS_COMPOSE = $(LOCAL_COMPOSE) --env-file .env.https -f compose.https.yaml
 ACTIVE_LOCAL_COMPOSE = $(LOCAL_COMPOSE)
-HTTPS_IMAGE ?= $(shell docker inspect golf-golf-1 --format '{{.Image}}')
+HTTPS_IMAGE ?= $(shell docker inspect $$($(LOCAL_COMPOSE) ps -q golf) --format '{{.Image}}')
 .PHONY: local-https-up local-https-stop local-https-status local-https-certificate qualify-https
 local-https-up: ACTIVE_LOCAL_COMPOSE = $(HTTPS_COMPOSE)
 local-https-up: .env.https local-up
@@ -67,15 +67,15 @@ qualify-repository-access:
 qualify-workflow-inspection:
 	python3 scripts/workflow-config-smoke.py
 qualify-instance-admin:
-	python3 scripts/instance-account-disable-smoke.py --image golf-golf:latest
+	python3 scripts/instance-account-disable-smoke.py --image "$(HTTPS_IMAGE)"
 qualify-account-security:
-	python3 scripts/account-lifecycle-smoke.py --image golf-golf:latest
+	python3 scripts/account-lifecycle-smoke.py --image "$(HTTPS_IMAGE)"
 qualify-automation-grants:
-	python3 scripts/automation-grants-smoke.py --image golf-golf:latest
+	python3 scripts/automation-grants-smoke.py --image "$(HTTPS_IMAGE)"
 qualify-repository-events:
-	python3 scripts/repository-events-smoke.py --image golf-golf:latest
+	python3 scripts/repository-events-smoke.py --image "$(HTTPS_IMAGE)"
 qualify-public-repositories: cli
-	python3 scripts/public-repositories-smoke.py --image golf-golf:latest --cli bin/golf
+	python3 scripts/public-repositories-smoke.py --image "$(HTTPS_IMAGE)" --cli bin/golf
 test:
 	go test ./...
 test-integration:
@@ -200,10 +200,9 @@ qualify-source-identity: cli
 
 .PHONY: forgejo-setup forgejo-up forgejo-stop forgejo-qualify
 forgejo-setup:
-	python3 scripts/init-forgejo-env.py
-forgejo-up: forgejo-setup
-	docker compose -p golf-forgejo --env-file .env.forgejo -f compose.forgejo.yaml up -d --build
+	$(MAKE) setup
+forgejo-up: up
 forgejo-stop:
-	docker compose -p golf-forgejo --env-file .env.forgejo -f compose.forgejo.yaml stop
+	docker compose stop
 forgejo-qualify:
 	python3 scripts/forgejo-qualify.py --output .tmp/forgejo-qualification/receipt.json

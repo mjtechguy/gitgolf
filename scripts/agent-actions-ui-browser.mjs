@@ -27,7 +27,7 @@ if(process.argv.includes('--self-check')){
 let config,browser,stage='configuration',initialRuntime;
 const contexts=[],results=[];
 function runtime(){
-  const inspect=JSON.parse(execFileSync('docker',['inspect','golf-golf-1'],{encoding:'utf8',maxBuffer:1024*1024}))[0];
+  const inspect=JSON.parse(execFileSync('docker',['inspect','golf-forgejo-golf-1'],{encoding:'utf8',maxBuffer:1024*1024}))[0];
   return {image:inspect.Image,revision:inspect.Config.Labels?.['org.opencontainers.image.revision']??null,running:inspect.State.Running};
 }
 async function manifest(complete=false){

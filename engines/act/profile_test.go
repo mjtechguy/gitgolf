@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -193,6 +194,19 @@ func testInputAtPath(t *testing.T, workflowPath, source string, files map[string
 	}
 	h := sha1.Sum([]byte(fmt.Sprintf("blob %d\x00%s", len(source), source)))
 	return protocol.ActionPlanInput{Catalog: protocol.ActionsCatalog, WorkflowPath: workflowPath, WorkflowBlobID: hex.EncodeToString(h[:]), Archive: archive.Bytes(), Event: "workflow_dispatch", Ref: strings.Repeat("a", 40), Images: map[string]string{"linux": "alpine@sha256:" + strings.Repeat("b", 64)}}
+}
+func TestPinnedPullRequestCatalogPlansExactHead(t *testing.T) {
+	workflow := "name: Native PR\non: pull_request\njobs:\n  check:\n    runs-on: linux\n    steps:\n      - name: verify\n        run: echo ok\n"
+	input := testInput(t, workflow, nil)
+	input.Event, input.Ref = "pull_request", strings.Repeat("a", 40)
+	plan, err := Plan(input)
+	if err != nil || plan.Event != "pull_request" || len(plan.Jobs) != 1 || plan.Jobs[0].JobID != "check" {
+		t.Fatalf("pinned PR plan: plan=%+v err=%v", plan, err)
+	}
+	input.Ref = "refs/heads/main"
+	if _, err = Plan(input); !errors.Is(err, ErrProfile) {
+		t.Fatal("PR plan accepted a mutable ref")
+	}
 }
 func TestActualPinnedGraphMatrixAndLocalCompositeAdmission(t *testing.T) {
 	input := testInput(t, testWorkflow, map[string]string{"actions/owned/action.yml": testComposite})

@@ -25,32 +25,30 @@ resources:
     cpu: "1"
     memory: 512Mi
 
-# Existing installations keep this profile until a verified fresh-target transfer.
 forge:
-  kind: gitea
+  kind: forgejo
   instanceID: ""
 
-# Legacy value/resource names remain stable to preserve existing PVC ownership.
-gitea:
+forgejo:
   enabled: true
   # Required public origin; configures clone URLs and optional OAuth navigation.
   publicURL: ""
-  # Set only when enabled=false. No Gitea storage or workload is then created.
+  # Set only when enabled=false. No bundled Forgejo storage or workload is then created.
   externalURL: ""
-  qualifiedVersion: "1.27.3"
-  # Match the external Gitea setting when enabled=false. Custom paths are unsupported.
-  workflowDirs: ".gitea/workflows,.github/workflows"
+  qualifiedVersion: "15.0.9"
+  # Match the external Forgejo setting when enabled=false. Custom paths are unsupported.
+  workflowDirs: ".forgejo/workflows,.github/workflows"
   image:
-    repository: gitea/gitea
-    tag: 1.27.3-rootless
-    digest: ""
+    repository: codeberg.org/forgejo/forgejo
+    tag: ""
+    digest: sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413
     pullPolicy: IfNotPresent
   sshPort: 2222
   database:
-    # Required host:port when bundled PostgreSQL is disabled and Gitea is internal.
+    # Required host:port when bundled PostgreSQL is disabled and Forgejo is internal.
     host: ""
-    name: gitea
-    user: gitea
+    name: forgejo
+    user: forgejo
     sslMode: verify-full
   persistence:
     storageClass: ""
@@ -95,9 +93,9 @@ networkPolicy:
   # kubectl port-forward still works. Populate for your ingress controller.
   ingressFrom: []
   # Extra same/cross-namespace peers for optional external Golf installations.
-  giteaIngressFrom: []
+  forgejoIngressFrom: []
   postgresIngressFrom: []
-  # Full egress rules required for external Gitea/PostgreSQL with policy enabled.
+  # Full egress rules required for external Forgejo/PostgreSQL with policy enabled.
   externalEgress: []
   dnsNamespace: kube-system
 

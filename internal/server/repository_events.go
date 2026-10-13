@@ -217,7 +217,7 @@ func (s *Server) repositoryEventWebhook(w http.ResponseWriter, r *http.Request) 
 		fail(http.StatusRequestHeaderFieldsTooLarge)
 		return
 	}
-	if r.URL.RawQuery != "" || r.URL.EscapedPath() != "/hooks/gitea/"+connection.ID || len(r.Header.Values("Cookie")) != 0 || len(r.Header.Values("Authorization")) != 0 || len(r.Header.Values("Content-Encoding")) != 0 {
+	if r.URL.RawQuery != "" || r.URL.EscapedPath() != "/hooks/forgejo/"+connection.ID || len(r.Header.Values("Cookie")) != 0 || len(r.Header.Values("Authorization")) != 0 || len(r.Header.Values("Content-Encoding")) != 0 {
 		fail(http.StatusBadRequest)
 		return
 	}

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { isActionsWorkflowPath, isWorkflowPath } from '../src/workflowPaths';
 
 test('all workflow editors share the literal native path boundary', () => {
-  for (const directory of ['.forgejo/workflows/', '.gitea/workflows/', '.github/workflows/']) {
+  for (const directory of ['.forgejo/workflows/', '.github/workflows/']) {
     for (const filename of ['check.yml', 'golf-test.yaml', 'a.b.yml']) {
       expect(isActionsWorkflowPath(directory + filename)).toBe(true);
       expect(isWorkflowPath(directory + filename)).toBe(true);
@@ -13,5 +13,5 @@ test('all workflow editors share the literal native path boundary', () => {
   }
   expect(isWorkflowPath('.gitlab-ci.yml')).toBe(true);
   expect(isActionsWorkflowPath('.gitlab-ci.yml')).toBe(false);
-  expect(isWorkflowPath('.gitea/scoped_workflows/a.yml')).toBe(false);
+  expect(isWorkflowPath('.gitea/workflows/a.yml')).toBe(false);
 });

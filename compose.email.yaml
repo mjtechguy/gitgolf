@@ -16,7 +16,9 @@ services:
       GOLF_ACTIVE_ENCRYPTION_KEY: ${GOLF_ACTIVE_ENCRYPTION_KEY:-}
       GOLF_EMAIL_EGRESS_POLICY: ${GOLF_EMAIL_EGRESS_POLICY:-}
       DATABASE_URL: postgres://golf:${GOLF_DB_PASSWORD:?Run scripts/init-env.sh}@postgres:5432/golf?sslmode=disable
-      GITEA_URL: http://gitea:3000
+      GOLF_FORGE_KIND: forgejo
+      GOLF_FORGE_INSTANCE_ID: ${GOLF_FORGE_INSTANCE_ID:?Run scripts/init-env.sh}
+      GOLF_FORGE_URL: http://forgejo:3000
     read_only: true
     tmpfs: ["/tmp:size=16777216,mode=1777"]
     cap_drop: [ALL]

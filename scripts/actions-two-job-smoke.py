@@ -4,7 +4,7 @@
 One input-free first -> second DAG, immutable source/attempt and private scoped
 logs, fresh job workspace, original replay/restart and exact-owned cleanup.
 Requires cached images/binary hashes and operator-approved seeding of fresh DinD.
-Optional .gitea location and signed push proof use the same admission/worker.
+Optional .forgejo location and signed push proof use the same admission/worker.
 --self-check performs pure counterexample checks only. No new scheduler support,
 full Actions, failure/skip, cancellation, secrets, remote actions or UI claim.
 """
@@ -39,7 +39,7 @@ notifications=load('two_job_foreign_helpers','workflow-notifications-smoke.py')
 helpers=act.helpers
 CATALOG, ENGINE, IMAGE=act.CATALOG,act.ENGINE,act.IMAGE
 DIND='docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0'
-NATIVE, PG='gitea/gitea:1.27.3-rootless','postgres:18.4-alpine3.24'
+PG='postgres:18.4-alpine3.24'
 PATH='.github/workflows/two-job.yml'
 WITH_PUSH=False
 WITH_GIT=False
@@ -164,12 +164,12 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ('image','runner-image','source-revision','expected-core-sha256','expected-runner-sha256','expected-engine-sha256'):
         parser.add_argument('--'+name,required=True)
-    parser.add_argument('--forge-kind', choices=('gitea','forgejo'), default='gitea')
+    parser.add_argument('--forge-kind', choices=('forgejo',), default='forgejo')
     parser.add_argument('--forgejo-spec', type=Path, help='Frozen API from forgejo-qualify.py; must match the inventoried digest')
     parser.add_argument('--stack-root',type=Path,default=ROOT)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--seed-wait-seconds',type=int,default=300)
-    parser.add_argument('--workflow-directory', choices=('.github/workflows', '.gitea/workflows', '.forgejo/workflows'), default='.github/workflows')
+    parser.add_argument('--workflow-directory', choices=('.github/workflows', '.forgejo/workflows'), default='.github/workflows')
     parser.add_argument('--with-push', action='store_true', help='Also qualify an independently granted actual native push run of the owned fixture')
     parser.add_argument('--git-image-proof', type=Path, help='Passed actual Git engine/image receipt; enables historical Git qualification using a fresh private local registry')
     parser.add_argument('--worker-death', action='store_true', help='With Git qualification, kill the enrolled worker during a running step and qualify explicit fenced recovery')
@@ -179,19 +179,15 @@ def main():
 
     args=parser.parse_args();stack=args.stack_root.resolve();output=args.output.resolve()
     forge = args.forge_kind
-    if args.workflow_directory == '.forgejo/workflows' and forge != 'forgejo':
-        parser.error('.forgejo/workflows requires --forge-kind forgejo')
-    native_image = NATIVE if forge == 'gitea' else 'codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'
-    native_version = '1.27.3' if forge == 'gitea' else '15.0.9+gitea-1.22.0'
-    compose_file = 'compose.yaml' if forge == 'gitea' else 'compose.forgejo.yaml'
-    init_file = 'deploy/postgres/init.sh' if forge == 'gitea' else 'deploy/postgres/forgejo-init.sh'
-    config_file = '/etc/gitea/app.ini' if forge == 'gitea' else '/var/lib/gitea/custom/conf/app.ini'
-    workflow_dirs = ('.forgejo/workflows,' if forge == 'forgejo' else '') + '.gitea/workflows,.github/workflows'
-    spec_path = stack/'docs/compatibility/gitea-1.27.3.swagger.json'
-    if forge == 'forgejo':
-        if not args.forgejo_spec: parser.error('--forge-kind forgejo requires --forgejo-spec')
-        spec_path = args.forgejo_spec
-        assert hashlib.sha256(spec_path.read_bytes()).hexdigest() == json.loads((stack/'docs/compatibility/forgejo-inventory.json').read_text())['targetSHA256'], 'Forgejo API baseline differs from the inventoried snapshot'
+    native_image = 'codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'
+    native_version = '15.0.9+gitea-1.22.0'
+    compose_file = 'compose.yaml'
+    init_file = 'deploy/postgres/forgejo-init.sh'
+    config_file = '/var/lib/gitea/custom/conf/app.ini'
+    workflow_dirs = '.forgejo/workflows,.github/workflows'
+    if not args.forgejo_spec: parser.error('--forgejo-spec is required')
+    spec_path = args.forgejo_spec
+    assert hashlib.sha256(spec_path.read_bytes()).hexdigest() == json.loads((stack/'docs/compatibility/forgejo-inventory.json').read_text())['targetSHA256'], 'Forgejo API baseline differs from the inventoried snapshot'
     official_spec = json.loads(spec_path.read_bytes())
     PATH=args.workflow_directory+'/two-job.yml';WITH_PUSH=args.with_push;WITH_GIT=args.git_image_proof is not None
     WITH_ORDINARY=args.ordinary_actions_bundles is not None
@@ -272,11 +268,11 @@ def main():
         execute('openssl','x509','-req','-days','1','-in',str(directory/'server.csr'),'-CA',str(ca),'-CAkey',str(directory/'ca.key'),'-CAcreateserial','-extfile',str(directory/'extensions'),'-out',str(cert))
         for file in (ca,cert,key):file.chmod(0o444)
         worker_key=base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
-        values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD','FORGEJO_DB_PASSWORD')}
+        values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_RUNNER_KEY=worker_key,GOLF_RUNNER_KEYS=json.dumps({'local-docker':worker_key}),GOLF_RUNNER_IMAGES=json.dumps({'linux':IMAGE}),GOLF_RUNNER_JOB_IMAGE=IMAGE,GOLF_RUNNER_APPROVED_IMAGES=json.dumps([IMAGE]),GOLF_INTERNAL_TLS_LISTEN_ADDR=':8443',GOLF_INTERNAL_TLS_CERT_FILE=str(cert),GOLF_INTERNAL_TLS_KEY_FILE=str(key),GOLF_RUNNER_TLS_CA_FILE=str(ca),GOLF_RUNNER_TLS_URL='https://127.0.0.1:8443')
-        if forge == 'forgejo': values['GOLF_FORGE_INSTANCE_ID'] = str(uuid.uuid4())
+        values['GOLF_FORGE_INSTANCE_ID'] = str(uuid.uuid4())
         if WITH_GIT:values['GOLF_RUNNER_GIT_PREPARATION_IMAGE']=IMAGE
-        forbidden.extend(values[k] for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD','FORGEJO_DB_PASSWORD','GOLF_ENCRYPTION_KEY','GOLF_RUNNER_KEY'))
+        forbidden.extend(values[k] for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD','GOLF_ENCRYPTION_KEY','GOLF_RUNNER_KEY'))
         if WITH_ORDINARY:
             import urllib.request,http.cookiejar
             public='https://127.0.0.1:8443'
@@ -288,7 +284,7 @@ def main():
             def request(opener,method,url,payload=None,headers=None,expected=200):return original_request(opener,method,url,payload,headers={'Origin':public,**(headers or {})},expected=expected)
             smoke.request=request
         helpers.private_write(directory/'proof.env',''.join(k+"='"+v+"'\n" for k,v in values.items()))
-        overlay={'services':{'golf':{'image':images['golf'],'pull_policy':'never','mem_limit':'384m','environment':{('GOLF_FORGE_URL' if forge == 'forgejo' else 'GITEA_URL'):'http://'+forge+':3000','GOLF_ACTIONS_ENGINE_CATALOG':act.CATALOG}},forge:{'image':images['native'],'pull_policy':'never','mem_limit':'512m','environment':{forge.upper()+'__server__ROOT_URL':smoke.GITEA+'/',forge.upper()+'__server__DISABLE_SSH':'true',forge.upper()+'__server__START_SSH_SERVER':'false',forge.upper()+'__actions__ENABLED':'false',forge.upper()+'__log__MODE':'console'}},'postgres':{'image':images['postgres'],'pull_policy':'never','mem_limit':'768m','command':['postgres','-c','max_wal_size=64MB','-c','min_wal_size=32MB','-c','checkpoint_timeout=30s']},'runner':{'image':images['runner'],'pull_policy':'never'},'runner-daemon':{'image':images['daemon'],'pull_policy':'never','mem_limit':'1024m'},'runner-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'},'runner-actions-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'}}}
+        overlay={'services':{'golf':{'image':images['golf'],'pull_policy':'never','mem_limit':'384m','environment':{'GOLF_FORGE_URL':'http://'+forge+':3000','GOLF_ACTIONS_ENGINE_CATALOG':act.CATALOG}},forge:{'image':images['native'],'pull_policy':'never','mem_limit':'512m','environment':{forge.upper()+'__server__ROOT_URL':smoke.GITEA+'/',forge.upper()+'__server__DISABLE_SSH':'true',forge.upper()+'__server__START_SSH_SERVER':'false',forge.upper()+'__actions__ENABLED':'false',forge.upper()+'__log__MODE':'console'}},'postgres':{'image':images['postgres'],'pull_policy':'never','mem_limit':'768m','command':['postgres','-c','max_wal_size=64MB','-c','min_wal_size=32MB','-c','checkpoint_timeout=30s']},'runner':{'image':images['runner'],'pull_policy':'never'},'runner-daemon':{'image':images['daemon'],'pull_policy':'never','mem_limit':'1024m'},'runner-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'},'runner-actions-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'}}}
         if WITH_GIT:
             source_row=json.loads(execute('docker','image','inspect',git_proof['originalSourceImage']['Id']))[0]
             assert source_row['Id']==git_proof['originalSourceImage']['Id'] and source_row['Os']+'/'+source_row['Architecture']==platforms['runner'] and not source_row['Config'].get('Volumes')
@@ -412,7 +408,7 @@ def main():
                 owner=actors['owner'];native=smoke.provider(owner['token'],'POST','user/repos',{'name':'two-job-actions','private':True,'auto_init':True},expected=201)
                 repository={'owner':owner['name'],'name':native['name']};base='repos/'+native['full_name'];smoke.wait_for_push(owner['token'],native['full_name'])
                 for path,data in files.items():smoke.provider(owner['token'],'POST',base+'/contents/'+path,{'content':base64.b64encode(data).decode(),'message':'Controlled two-job Actions fixture'},expected=201)
-                if args.workflow_directory in ('.gitea/workflows', '.forgejo/workflows'):
+                if args.workflow_directory in ('.forgejo/workflows',):
                     smoke.provider(owner['token'],'POST',base+'/contents/.github/workflows/suppressed.yml',{'content':base64.b64encode(files[PATH]).decode(),'message':'Controlled suppressed directory fixture'},expected=201)
                 if WITH_GIT:
                     stage('native executable mode through supported Git push')
@@ -438,7 +434,7 @@ def main():
                 inspection=rpc('owner','WorkflowService/InspectWorkflows',{'repository':repository,'ref':head,'repositoryId':target['repositoryId']})
                 assert inspection['repositoryId']==target['repositoryId'] and inspection['commitId']==head and inspection['catalogVersion']=='golf.workflow.inspect.v3' and inspection['executionCatalog']==CATALOG and inspection['executionEngineCommit']==ENGINE
                 configurations=inspection.get('configurations',[]);assert len(configurations)==1 and configurations[0]['path']==PATH and configurations[0]['blobId']==blob and configurations[0]['format']=='WORKFLOW_FORMAT_GITHUB_ACTIONS' and configurations[0]['state']=='WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET' and configurations[0].get('manualPolicyAllowed') is True
-                if args.workflow_directory in ('.gitea/workflows', '.forgejo/workflows'):
+                if args.workflow_directory in ('.forgejo/workflows',):
                     rpc('owner','WorkflowRunService/DispatchWorkflow',{'repository':repository,'ref':head,'workflowPath':'.github/workflows/suppressed.yml','idempotencyKey':str(uuid.uuid4())},expected=400,code='failed_precondition')
                     assert int(metadata('SELECT count(*) FROM golf_workflow_runs'))==0
                     record(suppressedDirectoryRefusedWithoutAdmission=True)
@@ -523,7 +519,7 @@ def main():
                     command('stop','runner')
                     command('up','-d','--no-build','--pull','never','--no-deps','golf');smoke.ready()
                     command('up','-d','--no-build','--pull','never','--no-deps','--force-recreate','runner')
-                    smoke.provider(owner['token'],'POST',base+'/hooks',{'type':'gitea','active':True,'events':['push'],'branch_filter':'*','config':{'url':'http://golf:8080/hooks/gitea/'+connection,'content_type':'json','http_method':'POST','secret':signing_secret}},expected=201)
+                    smoke.provider(owner['token'],'POST',base+'/hooks',{'type':'gitea','active':True,'events':['push'],'branch_filter':'*','config':{'url':'http://golf:8080/hooks/forgejo/'+connection,'content_type':'json','http_method':'POST','secret':signing_secret}},expected=201)
                     # The existing native-activity proof admits only events clearly
                     # newer than the grant (whole-second provider clocks + skew).
                     import time

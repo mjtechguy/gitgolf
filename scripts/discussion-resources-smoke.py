@@ -34,7 +34,7 @@ def main():
     report = {'passed': False, 'ownedSessionsLoggedOut': False, 'ownedUsersPurged': False, 'ownedOrganizationPurged': False}
     actors, users, organization, native = {}, [], None, None
     try:
-        report['servedSourceRevision'] = subprocess.check_output(['docker', 'inspect', 'golf-golf-1', '--format', '{{ index .Config.Labels "io.golf.web.revision" }}'], text=True).strip()
+        report['servedSourceRevision'] = subprocess.check_output(['docker', 'inspect', 'golf-forgejo-golf-1', '--format', '{{ index .Config.Labels "io.golf.web.revision" }}'], text=True).strip()
         report['sourceRevision'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
         files = ['internal/server/discussion_resource_operations.go', 'internal/server/discussion_write_authority_test.go', 'internal/server/issue_discussions.go', 'internal/server/repository_labels.go', 'internal/server/repository_milestones.go', 'api/golf/v1/golf.proto', 'web/src/DiscussionResourceControls.tsx', 'scripts/discussion-resources-smoke.py', 'scripts/discussion-resources-browser.mjs']
         report['sourceFilesSha256'] = {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in files}

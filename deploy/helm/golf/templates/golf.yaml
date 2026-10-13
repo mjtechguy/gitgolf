@@ -69,12 +69,12 @@ spec:
               value: {{ trimSuffix "/" .Values.publicURL | quote }}
             - name: GOLF_ALLOW_INSECURE_COOKIES
               value: {{ .Values.allowInsecureCookies | quote }}
-            - name: GOLF_GITEA_WORKFLOW_DIRS
-              value: {{ .Values.gitea.workflowDirs | quote }}
+            - name: GOLF_FORGE_WORKFLOW_DIRS
+              value: {{ .Values.forgejo.workflowDirs | quote }}
             - {name: GOLF_FORGE_KIND, value: {{ .Values.forge.kind | quote }}}
             - {name: GOLF_FORGE_INSTANCE_ID, value: {{ .Values.forge.instanceID | quote }}}
-            - name: GITEA_URL
-              value: {{ include "golf.giteaURL" . | quote }}
+            - name: GOLF_FORGE_URL
+              value: {{ include "golf.forgejoURL" . | quote }}
             {{- range $key := list "DATABASE_URL" }}
             - name: {{ $key }}
               valueFrom:
@@ -86,9 +86,9 @@ spec:
                 secretKeyRef: {name: {{ $.Values.existingSecret | quote }}, key: {{ $key }}, optional: true}
             {{- end }}
             {{- if .Values.oauth.enabled }}
-            - name: GITEA_PUBLIC_URL
-              value: {{ trimSuffix "/" .Values.gitea.publicURL | quote }}
-            {{- range $key := list "GITEA_OAUTH_CLIENT_ID" "GITEA_OAUTH_CLIENT_SECRET" }}
+            - name: GOLF_FORGE_PUBLIC_URL
+              value: {{ trimSuffix "/" .Values.forgejo.publicURL | quote }}
+            {{- range $key := list "GOLF_FORGE_OAUTH_CLIENT_ID" "GOLF_FORGE_OAUTH_CLIENT_SECRET" }}
             - name: {{ $key }}
               valueFrom:
                 secretKeyRef: {name: {{ $.Values.existingSecret | quote }}, key: {{ $key }}}

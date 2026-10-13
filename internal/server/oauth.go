@@ -22,7 +22,7 @@ import (
 )
 
 const oauthCookieName = "golf_oauth_binding"
-const oauthCallbackPath = "/auth/gitea/callback"
+const oauthCallbackPath = "/auth/forgejo/callback"
 const oauthAttemptLifetime = 10 * time.Minute
 const maxOAuthResponse = 16 << 10
 

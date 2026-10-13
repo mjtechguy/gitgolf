@@ -129,7 +129,7 @@ func (s *Server) GetPullCodeOwners(ctx context.Context, req *connect.Request[gol
 		if pullRevision(pull) != m.ExpectedPullRevision {
 			return errPullSnapshotChanged
 		}
-		for _, name := range []string{"CODEOWNERS", "docs/CODEOWNERS", ".gitea/CODEOWNERS"} {
+		for _, name := range []string{"CODEOWNERS", "docs/CODEOWNERS", ".forgejo/CODEOWNERS"} {
 			entry, _, e := s.sourceObjectAtPath(ctx, base, token, m.Selection.BaseCommitId, name)
 			if sourceNotFound(e) {
 				continue

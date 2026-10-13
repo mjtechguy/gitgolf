@@ -184,9 +184,9 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	r.Use(s.security)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]string{"status": "ok"}) })
 	r.Get("/readyz", s.readiness)
-	r.Get("/auth/gitea/callback", s.oauthCallback)
+	r.Get("/auth/forgejo/callback", s.oauthCallback)
 	r.Handle("/notifications/unsubscribe", s.EmailUnsubscribeHandler())
-	r.Post("/hooks/gitea/{connectionID}", s.repositoryEventWebhook)
+	r.Post("/hooks/forgejo/{connectionID}", s.repositoryEventWebhook)
 	r.Post("/internal/ci/poll", s.runnerPoll)
 	r.Post("/internal/ci/recover", s.runnerRecover)
 	r.Post("/internal/ci/attempt/{id}/heartbeat", s.runnerAttempt)
@@ -293,7 +293,7 @@ func respond(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func (s *Server) dependencyChecks(ctx context.Context) (map[string]string, bool) {
-	checks := map[string]string{"database": "ready", "gitea": "ready"}
+	checks := map[string]string{"database": "ready", "forgejo": "ready"}
 	ready := true
 	if s.db == nil || s.db.PingContext(ctx) != nil {
 		checks["database"] = "unavailable"
@@ -303,10 +303,10 @@ func (s *Server) dependencyChecks(ctx context.Context) (map[string]string, bool)
 		Version string `json:"version"`
 	}
 	if _, err := s.forge(ctx, "GET", "/version", forgeCredential{}, nil, &version); err != nil || version.Version == "" {
-		checks["gitea"] = "unavailable"
+		checks["forgejo"] = "unavailable"
 		ready = false
 	} else if !supportedForgeVersion(s.config.ForgeKind, version.Version) {
-		checks["gitea"] = "unsupported_version"
+		checks["forgejo"] = "unsupported_version"
 		ready = false
 	}
 	return checks, ready

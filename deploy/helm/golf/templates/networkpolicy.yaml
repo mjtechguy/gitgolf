@@ -27,12 +27,12 @@ spec:
   {{- end }}
   egress:
     {{- include "golf.dnsEgress" . | nindent 4 }}
-    {{- if .Values.gitea.enabled }}
+    {{- if .Values.forgejo.enabled }}
     - to:
         - podSelector:
             matchLabels:
               {{- include "golf.selector" . | nindent 14 }}
-              app.kubernetes.io/component: gitea
+              app.kubernetes.io/component: forgejo
       ports: [{protocol: TCP, port: 3000}]
     {{- end }}
     {{- if .Values.postgresql.enabled }}
@@ -46,20 +46,20 @@ spec:
     {{- with .Values.networkPolicy.externalEgress }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-{{- if .Values.gitea.enabled }}
+{{- if .Values.forgejo.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "golf.fullname" . }}-gitea
+  name: {{ include "golf.fullname" . }}-forgejo
   labels:
     {{- include "golf.labels" . | nindent 4 }}
-    app.kubernetes.io/component: gitea
+    app.kubernetes.io/component: forgejo
 spec:
   podSelector:
     matchLabels:
       {{- include "golf.selector" . | nindent 6 }}
-      app.kubernetes.io/component: gitea
+      app.kubernetes.io/component: forgejo
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
@@ -74,7 +74,7 @@ spec:
               app.kubernetes.io/component: webhooks
         {{- end }}
       ports: [{protocol: TCP, port: 3000}]
-    {{- with .Values.networkPolicy.giteaIngressFrom }}
+    {{- with .Values.networkPolicy.forgejoIngressFrom }}
     - from: {{ toYaml . | nindent 8 }}
       ports: [{protocol: TCP, port: 3000}]
     {{- end }}
@@ -123,11 +123,11 @@ spec:
               {{- include "golf.selector" . | nindent 14 }}
               app.kubernetes.io/component: webhooks
         {{- end }}
-        {{- if .Values.gitea.enabled }}
+        {{- if .Values.forgejo.enabled }}
         - podSelector:
             matchLabels:
               {{- include "golf.selector" . | nindent 14 }}
-              app.kubernetes.io/component: gitea
+              app.kubernetes.io/component: forgejo
         {{- end }}
       ports: [{protocol: TCP, port: 5432}]
     {{- with .Values.networkPolicy.postgresIngressFrom }}
@@ -154,12 +154,12 @@ spec:
   ingress: []
   egress:
     {{- include "golf.dnsEgress" . | nindent 4 }}
-    {{- if .Values.gitea.enabled }}
+    {{- if .Values.forgejo.enabled }}
     - to:
         - podSelector:
             matchLabels:
               {{- include "golf.selector" . | nindent 14 }}
-              app.kubernetes.io/component: gitea
+              app.kubernetes.io/component: forgejo
       ports: [{protocol: TCP, port: 3000}]
     {{- end }}
     {{- if .Values.postgresql.enabled }}

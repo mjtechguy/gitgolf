@@ -29,7 +29,7 @@ import (
 )
 
 func testConfig(forgeURL string) Config {
-	return Config{PublicURL: "http://localhost:8080", GiteaURL: forgeURL, AllowInsecureCookies: true,
+	return Config{PublicURL: "http://localhost:8080", GiteaURL: forgeURL, ForgeInstanceID: "ba09ae45-092f-4b4d-9e17-c6b848e5d95c", AllowInsecureCookies: true,
 		EncryptionKey: base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))}
 }
 

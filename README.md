@@ -1,15 +1,13 @@
 # Golf
 
-Forgejo transition: use the separate [Forgejo setup](docs/FORGEJO_SETUP.md) for a
-fresh qualification destination. Existing Gitea installations remain unchanged
-until the [data/identity and recovery gates](docs/FORGEJO_MIGRATION_PLAN.md) pass.
+Forgejo is the default Git backend for new portable installs. See [Forgejo setup](docs/FORGEJO_SETUP.md).
 
 Golf is an agent-ready Git and developer-workflow platform with two infrastructure tracks:
 
 - **Cloudflare-focused:** first-class Workers, Artifacts and useful Cloudflare integrations for execution, storage, previews, delivery, email and operations.
 - **Self-hosted:** Docker Compose and Kubernetes without a Cloudflare requirement. Operators can mix local/other providers with individual optional Cloudflare backends.
 
-These are infrastructure choices, not editions. AI is optional in Golf's core workflows. The Cloudflare competition demonstration separately requires real concurrent agents, Workers and Artifacts. The existing Gitea/Go/PostgreSQL core is a migration bridge toward the selected Cloudflare-native managed SaaS destination; portable hosting remains independent. Native forge ownership does not change until its migration and acceptance gates pass.
+These are infrastructure choices, not editions. AI is optional in Golf's core workflows. The Cloudflare competition demonstration separately requires real concurrent agents, Workers and Artifacts. The portable Forgejo/Go/PostgreSQL core is an origin-backed bridge toward the selected Cloudflare-native managed SaaS destination; portable hosting remains independent. Cloudflare-native Golf keeps its separate Artifacts/D1/Workers Git backend.
 
 ## What works now
 
@@ -29,7 +27,7 @@ Navigation is contextual: the compact header has an on-demand personal/organizat
 
 Settings use contextual personal, organization, repository and instance pages with current inventories and explicit Add/Edit actions. Own password and login-alias changes confirm the current password and revoke local sessions; a login alias does not verify mailbox ownership. Explicitly enrolled Golf instance administrators manage ordinary local accounts and infrastructure/worker controls. Qualified repository owners/direct administrators manage bounded collaborator, existing-account invitation, team association and deploy-key controls; an instance role never overrides repository authority. Broader settings sections remain Partial. See the [account security](docs/ACCOUNT_SECURITY_CONTRACT.md), [repository settings](docs/REPOSITORY_SETTINGS_CONTRACT.md), [repository access](docs/REPOSITORY_ACCESS_CONTRACT.md) and [invitation](docs/REPOSITORY_INVITATION_CONTRACT.md) contracts, with current qualification in the ledger.
 
-Pinned public GitHub/GitLab examples passed actual source/history/CLI/private-clone qualification. That source-transfer qualification preserves workflow files without executing them and is not a product importer. **Repository settings → Workflow configuration** performs bounded, commit-pinned inspection of direct `*.yml`/`*.yaml` in the first existing Gitea workflow directory (default `.gitea/workflows`, then `.github/workflows`), plus root `.gitlab-ci.yml`, verifies exact blob bytes and reports unsupported features. Execution is a separate explicit action under the supported catalog and policies; inspection is not full compatibility. See the [workflow inspection contract](docs/WORKFLOW_CONFIGURATION_CONTRACT.md), [versioned compatibility register and evidence](docs/compatibility/README.md), and [public repository qualification](docs/PUBLIC_REPOSITORY_QUALIFICATION.md).
+Pinned public GitHub/GitLab examples passed actual source/history/CLI/private-clone qualification. That source-transfer qualification preserves workflow files without executing them and is not a product importer. **Repository settings → Workflow configuration** performs bounded, commit-pinned inspection of direct `*.yml`/`*.yaml` in the first existing Forgejo workflow directory (default `.forgejo/workflows`, then `.github/workflows`), plus root `.gitlab-ci.yml`, verifies exact blob bytes and reports unsupported features. Execution is a separate explicit action under the supported catalog and policies; inspection is not full compatibility. See the [workflow inspection contract](docs/WORKFLOW_CONFIGURATION_CONTRACT.md), [versioned compatibility register and evidence](docs/compatibility/README.md), and [public repository qualification](docs/PUBLIC_REPOSITORY_QUALIFICATION.md).
 
 ## Run locally
 
@@ -45,17 +43,17 @@ docker compose up -d --build
 curl --fail http://localhost:8080/readyz
 ```
 
-Open **http://localhost:8080** for Golf and **http://localhost:3001** for Gitea. Use `localhost` consistently: all RPC calls check the exact configured origin. Readiness returns 503 until PostgreSQL and Gitea are ready; retry after first startup.
+Open **http://localhost:8080** for Golf and **http://localhost:3001** for Forgejo. Use `localhost` consistently: all RPC calls check the exact configured origin. Readiness returns 503 until PostgreSQL and Forgejo are ready; retry after first startup.
 
-Registration is disabled. Create your local account with Gitea's supported command (replace the example identity):
+Registration is disabled. Create your local account with Forgejo's supported command (replace the example identity):
 
 ```sh
-docker compose exec gitea gitea --config /etc/gitea/app.ini admin user create \
+docker compose exec forgejo forgejo --config /var/lib/gitea/custom/conf/app.ini admin user create \
   --username golf-owner --email owner@example.com --admin \
   --random-password --must-change-password=false
 ```
 
-Store the printed **native Gitea** password securely. Sign into Gitea and create a dedicated scoped token under **Settings → Applications**, using the scopes below. This is the forge identity/credential setup; it is not your Golf password.
+Store the printed **native Forgejo** password securely. Sign into Forgejo and create a dedicated scoped token under **Settings → Applications**, using the scopes below. This is the forge identity/credential setup; it is not your Golf password.
 
 Enroll the corresponding **Golf account** with the server operator command. Create a private, ignored JSON file through your editor or secret manager; never put real credentials in shell arguments or committed examples. Its exact create shape is:
 
@@ -64,7 +62,7 @@ Enroll the corresponding **Golf account** with the server operator command. Crea
   "username": "golf-owner",
   "email": "owner@example.com",
   "password": "REPLACE_WITH_A_UNIQUE_GOLF_PASSWORD",
-  "forge_token": "REPLACE_WITH_THIS_USERS_SCOPED_GITEA_TOKEN",
+  "forge_token": "REPLACE_WITH_THIS_USERS_SCOPED_FORGEJO_TOKEN",
   "is_instance_admin": true
 }
 ```
@@ -75,7 +73,7 @@ Use a unique password of at least 15 characters. Restrict the input file to mode
 docker compose exec -T golf golf local-account create < .tmp/local-account/enrollment.json
 ```
 
-Open Golf and sign in with **Email or username** and **Password**. Golf hashes its own password and keeps the mapped forge token encrypted on the server; the Golf password is never sent to Gitea. Local administrator enrollment records a Golf instance role; the admin portal offers ordinary local-account lifecycle and organization-creation/execution policies. Public registration is unavailable. Operators can explicitly reset, disable or re-enable accounts; see [local authentication](docs/LOCAL_AUTHENTICATION.md). Individual users need their own mapping and scopes; never share an administrator token across users. Bearer credentials remain available for API tooling, and OAuth is optional.
+Open Golf and sign in with **Email or username** and **Password**. Golf hashes its own password and keeps the mapped forge token encrypted on the server; the Golf password is never sent to Forgejo. Local administrator enrollment records a Golf instance role; the admin portal offers ordinary local-account lifecycle and organization-creation/execution policies. Public registration is unavailable. Operators can explicitly reset, disable or re-enable accounts; see [local authentication](docs/LOCAL_AUTHENTICATION.md). Individual users need their own mapping and scopes; never share an administrator token across users. Bearer credentials remain available for API tooling, and OAuth is optional.
 
 Open **Your account → User settings → Sessions** to list your active Golf sessions and revoke one, the current session, or all other sessions. Confirmation is required. Revocation removes Golf access on subsequent requests; provider PATs, OAuth consent and Git credentials remain separately managed. Settings and sessions use full pages; revocations require a confirmation dialog. See [session management](docs/SESSION_MANAGEMENT.md).
 
@@ -83,25 +81,25 @@ Open **Account activity** to inspect your recorded successful sign-ins, sign-out
 
 ### Optional browser OAuth
 
-Register a **confidential** OAuth application in Gitea Settings → Applications with the exact callback `http://localhost:8080/auth/gitea/callback` (use your Golf HTTPS origin remotely). Leave consent enabled. Save its client secret in ignored `.env` or an operator-managed secret source and set all three variables:
+Register a **confidential** OAuth application in Forgejo Settings → Applications with the exact callback `http://localhost:8080/auth/forgejo/callback` (use your Golf HTTPS origin remotely). Leave consent enabled. Save its client secret in ignored `.env` or an operator-managed secret source and set all three variables:
 
 ```dotenv
-GITEA_PUBLIC_URL=http://localhost:3001
-GITEA_OAUTH_CLIENT_ID=your-registered-client-id
-GITEA_OAUTH_CLIENT_SECRET=your-registered-client-secret
+GOLF_FORGE_PUBLIC_URL=http://localhost:3001
+GOLF_FORGE_OAUTH_CLIENT_ID=your-registered-client-id
+GOLF_FORGE_OAUTH_CLIENT_SECRET=your-registered-client-secret
 ```
 
-Run `docker compose up -d golf` to apply the configuration. Golf then offers **Continue with Gitea**; login and consent occur at your configured forge. Golf requests `write:user`, `write:repository`, `write:issue`, `write:organization`, `read:package` and `write:notification`, including broader upstream repository/user write authority for repository creation. Use a restricted personal token when read-only access is desired. The browser receives only a Golf session cookie; access and refresh credentials remain encrypted on the server. OAuth configuration is optional, not a Cloudflare requirement.
+Run `docker compose up -d golf` to apply the configuration. Golf then offers **Continue with Forgejo**; login and consent occur at your configured forge. Golf requests `write:user`, `write:repository`, `write:issue`, `write:organization`, `read:package` and `write:notification`, including broader upstream repository/user write authority for repository creation. Use a restricted personal token when read-only access is desired. The browser receives only a Golf session cookie; access and refresh credentials remain encrypted on the server. OAuth configuration is optional, not a Cloudflare requirement.
 
-The fixed callback uses single-use ten-minute state, a separate HttpOnly browser binding and S256 PKCE. Sessions retain their absolute twelve-hour expiry despite access-token refresh. Logout removes the Golf session; manage provider consent in Gitea. This is Gitea OAuth, not complete self-service account management or external OIDC, organization policy or CLI OAuth login. See [ADR 0003](docs/decisions/0003-gitea-oauth-and-session-refresh.md).
+The fixed callback uses single-use ten-minute state, a separate HttpOnly browser binding and S256 PKCE. Sessions retain their absolute twelve-hour expiry despite access-token refresh. Logout removes the Golf session; manage provider consent in Forgejo. This is Forgejo OAuth, not complete self-service account management or external OIDC, organization policy or CLI OAuth login. See [ADR 0003](docs/decisions/0003-gitea-oauth-and-session-refresh.md).
 
-**Token scopes (verified on Gitea 1.27.3):** use `read:user` plus `read:repository` to sign in and browse. Creating repositories additionally requires `write:user` plus `write:repository` (write includes read). Gitea applies both user and repository scopes to its `/user/repos` route; Golf preserves that authorization. Read-only tokens can browse but creation is rejected; explicit-key requests return recorded rejection evidence, while legacy unkeyed calls retain permission errors.
+**Token scopes for the pinned Forgejo profile:** use `read:user` plus `read:repository` to sign in and browse. Creating repositories additionally requires `write:user` plus `write:repository` (write includes read). Forgejo applies both user and repository scopes to its `/user/repos` route; Golf preserves that authorization. Read-only tokens can browse but creation is rejected; explicit-key requests return recorded rejection evidence, while legacy unkeyed calls retain permission errors.
 
-Add `read:organization` to browse your organizations and provider-visible teams; this scope does not grant membership. For an existing OAuth grant without it, revoke Golf’s grant in Gitea **Settings → Applications**, then sign in through Golf and approve the new scopes. Signing in again alone can reuse the narrower grant. Add `read:issue` to browse issues. Code browsing continues to work without issue scope; the issue panel reports the missing permission. Scopes never grant repository access the user does not already have.
+Add `read:organization` to browse your organizations and provider-visible teams; this scope does not grant membership. For an existing OAuth grant without it, revoke Golf’s grant in Forgejo **Settings → Applications**, then sign in through Golf and approve the new scopes. Signing in again alone can reuse the narrower grant. Add `read:issue` to browse issues. Code browsing continues to work without issue scope; the issue panel reports the missing permission. Scopes never grant repository access the user does not already have.
 
-The browser receives an opaque HttpOnly session cookie, not the upstream credential. The server stores only the session identifier's hash and an AES-GCM-encrypted Gitea token. Sessions persist across backend restarts and expire after 12 hours. HTTPS uses a host-only `__Host-golf_session` cookie with Secure, HttpOnly and SameSite=Lax; loopback development uses `golf_session`. Password reset/disable invalidates local-password sessions; saved cookies and their delegated API credentials then fail. Token revocation is enforced by Gitea on subsequent calls. Local insecure cookies are explicitly allowed only on loopback origins; remote use requires HTTPS and secure cookies.
+The browser receives an opaque HttpOnly session cookie, not the upstream credential. The server stores only the session identifier's hash and an AES-GCM-encrypted Forgejo token. Sessions persist across backend restarts and expire after 12 hours. HTTPS uses a host-only `__Host-golf_session` cookie with Secure, HttpOnly and SameSite=Lax; loopback development uses `golf_session`. Password reset/disable invalidates local-password sessions; saved cookies and their delegated API credentials then fail. Token revocation is enforced by Forgejo on subsequent calls. Local insecure cookies are explicitly allowed only on loopback origins; remote use requires HTTPS and secure cookies.
 
-Secrets are generated once into ignored `.env`. Keep that file and all configured encryption keys secure. The original `GOLF_ENCRYPTION_KEY` remains supported as the `legacy` key; do not replace its bytes under the same label. The database initializes two independent databases/roles, one for Golf and one for Gitea. Changing `.env` passwords later does not rotate existing PostgreSQL roles. Do not delete `.env` while retaining volumes and expect a fresh credential set to work.
+Secrets are generated once into ignored `.env`. Keep that file and all configured encryption keys secure. The original `GOLF_ENCRYPTION_KEY` remains supported as the `legacy` key; do not replace its bytes under the same label. The database initializes two independent databases/roles, one for Golf and one for Forgejo. Changing `.env` passwords later does not rotate existing PostgreSQL roles. Do not delete `.env` while retaining volumes and expect a fresh credential set to work.
 
 ```sh
 docker compose stop      # stop; retain all data
@@ -109,7 +107,7 @@ docker compose start     # resume
 docker compose down      # remove containers/network; retain named volumes
 ```
 
-Do not add `--volumes` unless intentionally erasing this installation. Preserve both databases, Gitea repository/configuration volumes and encryption keys together. The bounded [offline recovery workflow](docs/RECOVERY.md) below passes the native fresh-restore and whole-stack restart drill; production recovery remains open. Local ports bind only to loopback; this Compose file is a development installation.
+Do not add `--volumes` unless intentionally erasing this installation. Preserve both databases, Forgejo repository/configuration volumes and encryption keys together. A Forgejo backup and restore drill remains open. Local ports bind only to loopback; this Compose file is a development installation.
 
 ## Credential key operations
 
@@ -121,33 +119,31 @@ Before activation, drain all old Golf writers and in-flight OAuth exchanges. Dat
 
 ## Offline backup and quarantined restore
 
-The [recovery guide](docs/RECOVERY.md) documents `scripts/recovery.py backup|verify|restore` for the canonical three-service Docker installation: PostgreSQL 18.4, Gitea 1.27.3 and Golf schema 202610020007. It captures native database dumps, both complete Gitea volumes and resolved runtime credentials/configuration into a private age-encrypted archive. A fresh restore requires the exact local image IDs, invalidates every restored Golf session/pending PKCE attempt and disables all restored local accounts and leaves Golf/Gitea stopped. Images are not included.
-
-All writers must be stopped and drained before capture or restore; `--writers-drained` asserts that operator precondition and does not fence administrators. Accept only trusted operator backups, protect plaintext staging and restore configuration, and reconcile native/provider revocations, deletion decisions and outbound work before reopening. Real PostgreSQL safeguards, offline archive checks and the full native fresh-restore drill pass, including preserved creation-operation/event history, same-key inspection/replay without another create, signed Git, hydrated LFS, attachments, protections, SSH/signing identity, fresh access and simultaneous whole-stack restart. The small fixture skips the minimum-size-cap negative case; this is not an 8 GiB or load qualification. This does not complete P1.6, qualify Kubernetes/external object stores or establish RPO/RTO targets. Backup age encryption does not change the application credential cipher.
+The historical [recovery guide](docs/RECOVERY.md) and `scripts/recovery.py` target the retired Gitea installation and do not qualify Forgejo backups or restore. For a new Forgejo installation, preserve `.env`, PostgreSQL data and Forgejo data together. A verified Forgejo restore drill is still required before production use.
 
 ## Run on Kubernetes
 
-The [Helm chart](deploy/helm/golf/README.md) installs the same core with existing Secret references, persistent volumes, probes, resource/security bounds and native ingress/network policies. It supports external PostgreSQL and an existing qualified Gitea. Supply an explicitly built Golf image; no public release image is available yet. Cloudflare and AI are optional.
+The [Helm chart](deploy/helm/golf/README.md) installs the same core with existing Secret references, persistent volumes, probes, resource/security bounds and native ingress/network policies. It supports external PostgreSQL and the pinned Forgejo profile. Supply an explicitly built Golf image; no public release image is available yet. Cloudflare and AI are optional.
 
-The [Kubernetes guide](docs/KUBERNETES.md) includes an isolated k3d qualification command. The verified developer profile scales Golf to two replicas and retains one canonical Git writer. Single-node restart evidence does not establish storage fencing, multi-node failover, HA or production readiness. Workers/runners and object-storage adapters are not installed by this chart.
+The [Kubernetes guide](docs/KUBERNETES.md) contains historical Gitea qualification. Forgejo Helm rendering and validation pass, but a live Kubernetes rollout and restore trial are still open. Workers/runners and object-storage adapters are not installed by this chart.
 
 ## Browse code, issues and pull requests
 
-Open a repository in Golf to explore its branches, commit history and source tree. File/folder navigation stays at an exact commit, so a concurrent push cannot silently change the snapshot you are inspecting. Refresh or select a branch again to observe a new head. The commit view can open historical snapshots. Empty repositories display push guidance; after the first push, Gitea may need a moment to finish processing before refresh shows the source.
+Open a repository in Golf to explore its branches, commit history and source tree. File/folder navigation stays at an exact commit, so a concurrent push cannot silently change the snapshot you are inspecting. Refresh or select a branch again to observe a new head. The commit view can open historical snapshots. Empty repositories display push guidance; after the first push, Forgejo may need a moment to finish processing before refresh shows the source.
 
 Files are rendered as plain text up to 256 KiB. Binary/control content, large files, symlinks, submodules and LFS objects show metadata and an explanation instead. Golf does not execute source HTML, follow source links or fetch submodule targets. Directories above 1,000 entries or upstream responses above 2 MiB fail visibly; this preview does not claim unlimited monorepo browsing.
 
-The Issues tab lists open/closed issues and reads issue bodies as plain text. Issue editing, comments, rendered Markdown, PR comparisons, blame and review submission remain future work. Gitea remains the sole source of collaboration data. See the [browser contract](docs/REPOSITORY_BROWSER_CONTRACT.md) for procedures and bounds.
+The Issues tab lists open/closed issues and reads issue bodies as plain text. Issue editing, comments, rendered Markdown, PR comparisons, blame and review submission remain future work. Forgejo remains the sole source of collaboration data. See the [browser contract](docs/REPOSITORY_BROWSER_CONTRACT.md) for procedures and bounds.
 
-In **Commits**, choose **View diff** to inspect an exact object and its first-parent comparison (or root output). Merge diffs show only the first parent. Native text is limited to 512 KiB and stays plain text; binary notices and root commit metadata, including author email, remain as supplied by Gitea. Oversized/invalid text fails visibly. **Browse this commit** opens that object’s source. This is unparsed provider output, not independently verified patch completeness or merge readiness. See the [commit-diff contract](docs/COMMIT_DIFF_CONTRACT.md).
+In **Commits**, choose **View diff** to inspect an exact object and its first-parent comparison (or root output). Merge diffs show only the first parent. Native text is limited to 512 KiB and stays plain text; binary notices and root commit metadata, including author email, remain as supplied by Forgejo. Oversized/invalid text fails visibly. **Browse this commit** opens that object’s source. This is unparsed provider output, not independently verified patch completeness or merge readiness. See the [commit-diff contract](docs/COMMIT_DIFF_CONTRACT.md).
 
-The **Pull requests** tab lists open/closed/all PRs and opens plain-text detail with native Gitea reviews. List heads are labeled retained snapshots; detail refs are provider observations or explicit retained fallbacks. These labels, native merge records and review flags do not establish a live source branch, Golf approval eligibility or merge readiness. Pagination can advance from an empty review page because Gitea filters hidden pending reviews after counting. PR and review reads require `read:user` plus `read:repository`, without issue scope. See the [PR read contract](docs/PULL_REQUEST_READ_CONTRACT.md).
+The **Pull requests** tab lists open/closed/all PRs and opens plain-text detail with native Forgejo reviews. List heads are labeled retained snapshots; detail refs are provider observations or explicit retained fallbacks. These labels, native merge records and review flags do not establish a live source branch, Golf approval eligibility or merge readiness. Pagination can advance from an empty review page because the provider filters hidden pending reviews after counting. PR and review reads require `read:user` plus `read:repository`, without issue scope. See the [PR read contract](docs/PULL_REQUEST_READ_CONTRACT.md).
 
 ## Durable repository creation
 
-The browser gives each creation request a stable key, immediately blocks duplicate submission events, and freezes its submitted details. It retains only the key, name and visibility in tab session storage scoped by browser origin and native Gitea user ID. Unresolved requests remain available for status inspection after closing the dialog or reloading the tab; they are never automatically recreated. Golf commits the operation before the native POST and never dispatches a repeated account/key again. A known rejection permits an explicit new request.
+The browser gives each creation request a stable key, immediately blocks duplicate submission events, and freezes its submitted details. It retains only the key, name and visibility in tab session storage scoped by browser origin and native Forgejo user ID. Unresolved requests remain available for status inspection after closing the dialog or reloading the tab; they are never automatically recreated. Golf commits the operation before the native POST and never dispatches a repeated account/key again. A known rejection permits an explicit new request.
 
-The API adds optional `CreateRepository.idempotency_key` (a canonical lowercase UUID v4) and `GetRepositoryCreation`. Keyed responses carry explicit `SUCCEEDED`, `REJECTED` or `OUTCOME_UNKNOWN` evidence; HTTP 200 alone does not mean creation succeeded. Reusing a key with changed inputs fails. Current native access and repository ID are checked before returning repository metadata. Unkeyed callers retain legacy error behavior, with no deduplication across separate invocations. See [the operation contract](docs/REPOSITORY_CREATION_CONTRACT.md) for scope, ambiguity, storage and verification boundaries. Native success/rejection/restart, real browser acknowledgment loss and counted Gitea-response-loss checks pass; the latter stays unknown after retries and restart with exactly one observed provider POST. This is not a general outbox/job engine or exactly-once provider contract.
+The API adds optional `CreateRepository.idempotency_key` (a canonical lowercase UUID v4) and `GetRepositoryCreation`. Keyed responses carry explicit `SUCCEEDED`, `REJECTED` or `OUTCOME_UNKNOWN` evidence; HTTP 200 alone does not mean creation succeeded. Reusing a key with changed inputs fails. Current native access and repository ID are checked before returning repository metadata. Unkeyed callers retain legacy error behavior, with no deduplication across separate invocations. See [the operation contract](docs/REPOSITORY_CREATION_CONTRACT.md) for scope, ambiguity, storage and verification boundaries. Native success/rejection/restart, real browser acknowledgment loss and counted Forgejo-response-loss checks pass; the latter stays unknown after retries and restart with exactly one observed provider POST. This is not a general outbox/job engine or exactly-once provider contract.
 
 ## Read-only CLI
 
@@ -156,7 +152,7 @@ Requires the Go version in `go.mod`. `make cli` produces `bin/golf`; `make build
 ```sh
 make cli
 ./bin/golf --help
-# Supply GOLF_GITEA_TOKEN through your shell's secret manager, not a literal in history.
+# Supply GOLF_FORGE_TOKEN through your shell's secret manager, not a literal in history.
 ./bin/golf repo list
 ./bin/golf repo view owner/repository
 ./bin/golf repo overview owner/repository
@@ -180,7 +176,7 @@ make cli
 ./bin/golf audit list --limit 20
 ```
 
-Alternatively pipe one token from your secret manager to `./bin/golf --token-stdin repo list`. For owner-issued read-only Golf credentials, set `GOLF_API_TOKEN` or use `--api-token-stdin`. API and Gitea token sources cannot be mixed. Secrets are never accepted as command-line arguments. Set `GOLF_URL` or global `--url` for another installation; remote origins require HTTPS. The CLI does not follow redirects or save credentials/cookies. Gitea PAT mode creates and deletes a temporary Golf session per command, including after an operation fails. Golf API credential mode delegates the issuing browser session without login/logout or a cookie jar; ending that session invalidates the credential. See the [API credential contract](docs/API_CREDENTIAL_CONTRACT.md). Abrupt termination can leave that session until its normal server expiry.
+Alternatively pipe one token from your secret manager to `./bin/golf --token-stdin repo list`. For owner-issued read-only Golf credentials, set `GOLF_API_TOKEN` or use `--api-token-stdin`. API and Forgejo token sources cannot be mixed. Secrets are never accepted as command-line arguments. Set `GOLF_URL` or global `--url` for another installation; remote origins require HTTPS. The CLI does not follow redirects or save credentials/cookies. Forgejo PAT mode creates and deletes a temporary Golf session per command, including after an operation fails. Golf API credential mode delegates the issuing browser session without login/logout or a cookie jar; ending that session invalidates the credential. See the [API credential contract](docs/API_CREDENTIAL_CONTRACT.md). Abrupt termination can leave that session until its normal server expiry.
 
 `repo overview` returns current authorized About metadata, topics, website, optional counts, and explicitly available/unavailable/error language and license indexes. It validates the native repository ID and canonical key; indexes are not bound to a selected commit and website links are never fetched.
 
@@ -198,75 +194,20 @@ Success writes JSON with `schema_version: "golf.cli.v1"` and the API response in
 
 ## Local MCP tools
 
-`./bin/golf mcp` exposes 21 existing repository/source/commit-diff/issue/PR/organization/activity reads over stdin/stdout using the official Go MCP SDK. Configure an owner-controlled client to launch that binary and provide exactly one of `GOLF_API_TOKEN` or `GOLF_GITEA_TOKEN` through its environment from a secret manager; `GOLF_URL` selects the installation. MCP reserves stdin for JSON-RPC, so both token-stdin flags are unavailable. Tool arguments cannot choose credentials, destinations or arbitrary commands.
+`./bin/golf mcp` exposes 21 existing repository/source/commit-diff/issue/PR/organization/activity reads over stdin/stdout using the official Go MCP SDK. Configure an owner-controlled client to launch that binary and provide exactly one of `GOLF_API_TOKEN` or `GOLF_FORGE_TOKEN` through its environment from a secret manager; `GOLF_URL` selects the installation. MCP reserves stdin for JSON-RPC, so both token-stdin flags are unavailable. Tool arguments cannot choose credentials, destinations or arbitrary commands.
 
 Each call shares the CLI's scoped API path. PAT mode uses temporary sign-in/sign-out with session activity; API credential mode uses its existing source session and creates no login/logout events. Results use the `golf.mcp.v1` envelope in structured and text content; pagination is explicit, and source/review text remains untrusted data. Four concurrent calls, bounded input/output and cancellation cleanup limit this local adapter. Native checks cover all 21 tools under both `2026-07-28` and legacy `2025-11-25`; separate raw-wire cancellation checks also cover both versions. See the [MCP contract](docs/MCP_CONTRACT.md). This does not provide remote MCP, ACP, mutations, managed authentication or qualified coding-agent execution.
 
 ## Local checks
 
 ```sh
-npm --prefix web ci
-npm --prefix web exec -- playwright install chromium
-make check  # includes generated-output drift checks
-make helm-check # requires Helm; no cluster or credentials
-make generate # after editing Protobuf or SQL queries
-go test -race ./...
-npm --prefix web test
-python3 scripts/smoke.py --restart
-# Optional: include real CLI checks against the same stack.
-make cli
-python3 scripts/smoke.py --cli bin/golf
-# Native stdio MCP discovery, all 21 reads, scope and lifecycle checks.
-python3 scripts/mcp-smoke/run.py --cli bin/golf
-# Raw-wire cancellation, request-ID and input-framing checks.
-python3 scripts/mcp-cancellation-check.py --cli bin/golf
-# Own-account activity API/CLI and production-served browser checks.
-python3 scripts/audit-smoke.py --cli bin/golf
-# Isolated DB/real PAT keyring checks; build bin/golf-server first.
-python3 scripts/keyring-smoke.py
-# Offline recovery archive/configuration validation, without data mutations.
-python3 scripts/recovery-test.py
-# Isolated native backup/restore drill; supply a current locally built image.
-python3 scripts/recovery-smoke.py --image '<LOCAL_GOLF_IMAGE_TAG_OR_ID>'
-# Durable creation, native replay/privacy/restart and real browser response loss.
-python3 scripts/repository-creation-smoke.py --restart --cli bin/golf --browser
-# Provider-response loss uses a separate fresh database; preparation is in
-# docs/REPOSITORY_CREATION_CONTRACT.md, not the normal installation.
-python3 scripts/repository-creation-fault-smoke.py --server-binary bin/golf-server \
-  --database-url-file .tmp/creation-verification/database-url
-# Actual PAT session management and production-served dialog checks.
-python3 scripts/sessions-smoke.py
-# Real membership-scoped organizations/teams and production browser checks.
-python3 scripts/organizations-smoke.py --cli bin/golf
-# Native Git commit diffs, bounded plain text, CLI and production browser checks.
-python3 scripts/commit-diff-smoke.py --cli bin/golf
-# Real private-fork PR/native-review reads and production browser checks.
-python3 scripts/pulls-smoke.py --cli bin/golf
-# Isolated provider role contract; uses disposable PostgreSQL/Gitea on port 3016.
-python3 scripts/gitea-role-smoke.py
-# Characterize protected writes on disposable port 3018; exit 0 also records limitations.
-python3 scripts/gitea-protection-smoke.py
-# Docker Desktop: publication faults/private-fork races on disposable port 3020.
-python3 scripts/gitea-publisher-smoke.py
-# Deterministic local Git source race; disposable local hook, no provider changes.
-python3 scripts/git-atomic-verify-smoke.py
-# Optional browser OAuth and real rotating-refresh checks; briefly recreates services.
-python3 scripts/oauth-smoke.py --refresh
+make check                 # Go, web, generated output and static checks
+make helm-check            # Forgejo chart rendering; requires Helm
+python3 scripts/forgejo-qualify.py --output .tmp/forgejo-qualification/receipt.json
+python3 scripts/smoke.py --restart   # against the running local Compose stack
 ```
 
-The browser checks use contract fixtures. `scripts/smoke.py` exercises the real running Compose stack: isolated users/private repositories, cross-user denial, CSRF, real Git pushes, source snapshots/preview boundaries, issues/scope denial, optional CLI/restart/outage checks, revocation and logout. It removes its test Gitea users/repositories afterward. `--restart` briefly interrupts local Golf/Gitea; omit it to skip those service operations. Python 3 and Git are required; `--cli` accepts an already-built CLI executable.
-
-`scripts/recovery-smoke.py` creates and removes two isolated Docker installations with native Git, LFS, attachment and key fixtures. Its small archive does not qualify large backups, an 8 GiB payload, or RPO/RTO targets. The size-cap check prints `SKIP` when the actual plaintext payload is at or below the minimum 1 MiB bound; a skipped check or offline file-limit check is not evidence of a successful large restore.
-
-`scripts/audit-smoke.py` checks recorded session events, account privacy, cursor snapshots, ephemeral CLI cleanup and the production activity screen. Its optional `--upgrade` expects a running pre-audit service and an already-built new image; `--restart` briefly interrupts Golf. Provider users and active sessions are removed afterward, while immutable Golf identities/history remain. Drain all old writers before claiming an audited operating window; a mixed-version rolling fleet is not qualified. Automatic cleanup and provider changes are not a complete audit trail.
-
-`scripts/oauth-smoke.py` creates disposable users and a confidential provider application, enables OAuth with a private temporary override, and exercises actual browser login/consent. `--refresh` uses two real short-lived token cycles with concurrent requests and revocation. It restores the original Gitea token settings and disabled Golf OAuth, then purges its fixtures. It also checks all six member-scoped organization/team reads and OAuth session listing/current/bulk revocation using a separate account. It also obtains a real narrower legacy-equivalent grant, verifies that refresh and a new sign-in cannot expand it, then revokes that provider grant and verifies fresh consent enables organization access. This does not test a complete old-release binary upgrade. It requires OAuth to be disabled initially; it never edits `.env` or deletes volumes.
-
-The [publisher qualification](docs/GITEA_PUBLISHER_QUALIFICATION.md) tests real lost responses, delayed writes, exact private-fork candidate publication and supported PR bookkeeping. Its experimental journal is not a Golf publisher. It reproduces old-authority and private-source races; protected integration remains unavailable. Custom hooks are enabled only in its disposable provider for a bounded callback barrier. This proof currently requires Docker Desktop host callbacks, not a qualified Linux/Kubernetes managed profile.
-
-The backend's database integration test runs when `GOLF_TEST_DATABASE_URL` points to a dedicated test PostgreSQL database. `make test-integration` requires it; without it, ordinary Go tests explicitly skip that integration case. Do not use a production database.
-
-To develop the browser separately, use `npm --prefix web run dev` and `GOLF_PUBLIC_URL=http://127.0.0.1:5173 docker compose up -d golf`. The default Vite origin must exactly match that configured value. Vite proxies the API to port 8080; local Compose keeps loopback-only insecure cookies enabled. Run `docker compose up -d golf` without that override to return to the normal app origin at port 8080.
+The isolated Forgejo qualification uses disposable PostgreSQL and Forgejo containers, checks source, Git, PR and workflow behavior, then removes its fixtures. The local smoke checks authentication, private source, Git push, access denial and restart persistence. Browser fixture tests can be run with `npm --prefix web test`. The old Gitea specific smoke and recovery scripts are historical evidence and do not qualify this Forgejo installation. A dedicated database is required for `make test-integration`; never point it at the installed database.
 
 ## Repositories and delivery plan
 
@@ -279,13 +220,13 @@ To develop the browser separately, use `npm --prefix web run dev` and `GOLF_PUBL
 
 All repositories currently require access. Website/docs builds and Cloudflare dry-runs do not imply live deployment. Public release/licensing and competition submission remain separate decisions. Run local checks; do not add or enable repository CI until requested.
 
-The [Gitea identity/role qualification](docs/GITEA_IDENTITY_ROLE_QUALIFICATION.md) records actual per-unit grants and alternate-path limitations. Golf organization role administration is still unimplemented; Gitea issue-read allows reporting/commenting, and repository admin includes deletion. Those grants cannot silently stand in for strict viewer or constrained maintainer roles.
+The historical [provider role qualification](docs/GITEA_IDENTITY_ROLE_QUALIFICATION.md) does not establish Forgejo role behavior. Golf organization role administration remains unimplemented; qualify Forgejo grants before relying on strict viewer or constrained maintainer roles.
 
 Open **Organizations** to browse memberships, native team/unit settings, members and assigned repositories with typed deep links. See the [organization browser contract](docs/ORGANIZATION_BROWSER_CONTRACT.md). Protected integration remains gated by the [actual write/merge qualification](docs/GITEA_PROTECTED_WRITE_QUALIFICATION.md); native status names, review counts and a Golf queue mutex cannot substitute for exact authorized candidate evidence.
 
 ## Optional observability
 
-Golf records correlated JSON request logs and can export bounded API/Gitea/PostgreSQL traces and private Prometheus metrics. Metrics use a separate authenticated listener; export is disabled by default. See the [configuration and privacy contract](docs/OBSERVABILITY.md) and [local monitoring overlay](deploy/observability/README.md). Job/runner instrumentation and production operational qualification remain open.
+Golf records correlated JSON request logs and can export bounded API/Forgejo/PostgreSQL traces and private Prometheus metrics. Metrics use a separate authenticated listener; export is disabled by default. See the [configuration and privacy contract](docs/OBSERVABILITY.md) and [local monitoring overlay](deploy/observability/README.md). Job/runner instrumentation and production operational qualification remain open.
 
 Issue discussion creation uses `write:issue` with current user/repository scopes and UUID-backed intents. An unknown result is inspected rather than resent; native address races remain a qualification limit. CLI/MCP provide reads and explicitly granted journaled writes, including comment pages and own-operation status. See [discussion boundaries](docs/ISSUE_DISCUSSION_CONTRACT.md).
 
@@ -314,6 +255,6 @@ Use **Admin portal → Infrastructure** for encrypted connection profiles and st
 
 Golf records authenticated native push webhooks without Cloudflare or AI. When separately enabled and authorized, automatic shell CI consumes eligible sponsor-authored branch pushes at their exact commit; intake alone never grants execution. The [event contract](docs/REPOSITORY_EVENTS_CONTRACT.md) explains bounded input, immutable repository binding, durable deduplication and the native unsigned-header replay limitation. The [push CI contract](docs/PUSH_AUTOMATION_CONTRACT.md) specifies current grants, policy ceilings and supported triggers. Outbound HTTP/SMTP consumers are separate opt-in services; this does not imply a complete Slack integration or every planned agent trigger.
 
-An operator supplies `GOLF_REPOSITORY_EVENT_CONNECTIONS` as a JSON array of explicit connection ID, native repository ID, owner ID, exact `owner/name` and a distinct random signing secret per repository. Keep this in an ignored mode0600 environment file or the deployment Secret, never the repository. Configure the native repository webhook through supported APIs to POST push events to `/hooks/gitea/<connectionID>` with that secret. Compose passes the variable to Golf; Helm accepts the optional key in its existing Secret. Unset or `[]` disables intake. Secret changes require draining/restarting every serving replica; this slice has no live configuration epoch.
+An operator supplies `GOLF_REPOSITORY_EVENT_CONNECTIONS` as a JSON array of explicit connection ID, native repository ID, owner ID, exact `owner/name` and a distinct random signing secret per repository. Keep this in an ignored mode0600 environment file or the deployment Secret, never the repository. Configure the native repository webhook through supported APIs to POST push events to `/hooks/forgejo/<connectionID>` with that secret. Compose passes the variable to Golf; Helm accepts the optional key in its existing Secret. Unset or `[]` disables intake. Secret changes require draining/restarting every serving replica; this slice has no live configuration epoch.
 
 `/status` separates shared platform capabilities, portable coding-agent adapters and individual Cloudflare integrations using the common searchable, sortable table without pagination. Planned integrations remain unavailable; operator configuration or an installed harness alone is not a verified connection.

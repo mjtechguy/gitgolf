@@ -42,7 +42,7 @@ func eventFixtureBody() []byte {
 }
 
 func eventRequest(connection repositoryEventConnection, delivery string, body []byte) *http.Request {
-	r := httptest.NewRequest(http.MethodPost, "/hooks/gitea/"+connection.ID, bytes.NewReader(body))
+	r := httptest.NewRequest(http.MethodPost, "/hooks/forgejo/"+connection.ID, bytes.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Gitea-Delivery", delivery)
 	r.Header.Set("X-Gitea-Event", "push")
@@ -51,6 +51,9 @@ func eventRequest(connection repositoryEventConnection, delivery string, body []
 	mac := hmac.New(sha256.New, []byte(connection.Secret))
 	mac.Write(body)
 	r.Header.Set("X-Gitea-Signature", hex.EncodeToString(mac.Sum(nil)))
+	for _, suffix := range []string{"Delivery", "Event", "Event-Type", "Signature"} {
+		r.Header.Set("X-Forgejo-"+suffix, r.Header.Get("X-Gitea-"+suffix))
+	}
 	route := chi.NewRouteContext()
 	route.URLParams.Add("connectionID", connection.ID)
 	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, route))
@@ -133,8 +136,14 @@ func TestRepositoryEventHTTPRejections(t *testing.T) {
 	}{
 		{"method", func(r *http.Request) { r.Method = "GET" }, 405},
 		{"missing signature", func(r *http.Request) { r.Header.Del("X-Gitea-Signature") }, 400},
-		{"bad signature", func(r *http.Request) { r.Header.Set("X-Gitea-Signature", strings.Repeat("0", 64)) }, 401},
-		{"uppercase signature", func(r *http.Request) { r.Header.Set("X-Gitea-Signature", strings.Repeat("A", 64)) }, 401},
+		{"bad signature", func(r *http.Request) {
+			r.Header.Set("X-Gitea-Signature", strings.Repeat("0", 64))
+			r.Header.Set("X-Forgejo-Signature", strings.Repeat("0", 64))
+		}, 401},
+		{"uppercase signature", func(r *http.Request) {
+			r.Header.Set("X-Gitea-Signature", strings.Repeat("A", 64))
+			r.Header.Set("X-Forgejo-Signature", strings.Repeat("A", 64))
+		}, 401},
 		{"duplicate signature", func(r *http.Request) { r.Header.Add("X-Gitea-Signature", r.Header.Get("X-Gitea-Signature")) }, 400},
 		{"duplicate delivery", func(r *http.Request) { r.Header.Add("X-Gitea-Delivery", uuid.NewString()) }, 400},
 		{"unknown event", func(r *http.Request) { r.Header.Set("X-Gitea-Event", "pull_request") }, 400},
@@ -422,13 +431,13 @@ func TestForgejoRepositoryEventHeaders(t *testing.T) {
 			t.Fatal("signed Forgejo payload escaped repository binding", field, response.Code)
 		}
 	}
-	legacy, err := New(eventFixtureConfig(connection), nil)
+	forge, err := New(eventFixtureConfig(connection), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := eventRequest(connection, uuid.NewString(), eventFixtureBody())
-	r.Header.Del("X-Gitea-Hook-Installation-Target-Type")
-	if response := eventResponse(legacy, r); response.Code != 400 {
-		t.Fatal("Gitea scope requirement relaxed", response.Code)
+	r.Header.Del("X-Forgejo-Signature")
+	if response := eventResponse(forge, r); response.Code != 400 {
+		t.Fatal("Forgejo signature header missing", response.Code)
 	}
 }

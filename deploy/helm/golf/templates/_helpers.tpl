@@ -14,11 +14,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "golf.image" -}}
 {{- if .digest -}}{{ .repository }}@{{ .digest }}{{- else -}}{{ .repository }}:{{ .tag }}{{- end -}}
 {{- end -}}
-{{- define "golf.giteaURL" -}}
-{{- if .Values.gitea.enabled -}}http://{{ include "golf.fullname" . }}-gitea:3000{{- else -}}{{ trimSuffix "/" .Values.gitea.externalURL }}{{- end -}}
+{{- define "golf.forgejoURL" -}}
+{{- if .Values.forgejo.enabled -}}http://{{ include "golf.fullname" . }}-forgejo:3000{{- else -}}{{ trimSuffix "/" .Values.forgejo.externalURL }}{{- end -}}
 {{- end -}}
 {{- define "golf.postgresHost" -}}
-{{- if .Values.postgresql.enabled -}}{{ include "golf.fullname" . }}-postgres:5432{{- else -}}{{ .Values.gitea.database.host }}{{- end -}}
+{{- if .Values.postgresql.enabled -}}{{ include "golf.fullname" . }}-postgres:5432{{- else -}}{{ .Values.forgejo.database.host }}{{- end -}}
 {{- end -}}
 {{- define "golf.containerSecurity" -}}
 allowPrivilegeEscalation: false

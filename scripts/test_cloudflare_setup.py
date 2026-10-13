@@ -16,6 +16,9 @@ class CloudflareSetupTest(unittest.TestCase):
             setup.initialize(directory, 'a' * 32, 'control.example.com', 'origin.example.com', 'private-test',
                              ['agents', 'email', 'webhooks', 'remote-actions', 'managed-git'])
             original = setup.private_read(directory / 'bridge.env')
+            self.assertIn('FORGEJO_DB_PASSWORD=', original)
+            self.assertIn('GOLF_FORGE_INSTANCE_ID=', original)
+            self.assertNotIn('GITEA_DB_PASSWORD=', original)
             with self.assertRaises(FileExistsError):
                 setup.initialize(directory, 'a' * 32, 'control.example.com', 'origin.example.com', 'private-test', [])
             self.assertEqual(original, setup.private_read(directory / 'bridge.env'))
@@ -40,6 +43,8 @@ class CloudflareSetupTest(unittest.TestCase):
             config = json.loads(result.stdout)
             self.assertEqual(config['name'], 'golf-cloudflare')
             services = config['services']
+            self.assertIn('forgejo', services)
+            self.assertNotIn('gitea', services)
             self.assertNotIn('rustfs', services)
             for service in services.values():
                 self.assertFalse(service.get('ports'))

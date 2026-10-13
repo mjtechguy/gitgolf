@@ -12,6 +12,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DIRECTORY = ROOT / '.cloudflare/install'
@@ -84,7 +85,7 @@ def private_read(path):
 def clean_environment():
     # Compose shell variables otherwise override even an explicitly selected env file.
     return {key: value for key, value in os.environ.items() if not key.startswith(
-        ('GOLF_', 'GITEA_', 'POSTGRES_', 'COMPOSE_', 'RUSTFS_', 'AWS_', 'OTEL_')) and key != 'DATABASE_URL'}
+        ('GOLF_', 'GITEA_', 'FORGEJO_', 'POSTGRES_', 'COMPOSE_', 'RUSTFS_', 'AWS_', 'OTEL_')) and key != 'DATABASE_URL'}
 
 
 def initialize(directory, account, public_host, bridge_host, bucket, components):
@@ -101,10 +102,11 @@ def initialize(directory, account, public_host, bridge_host, bucket, components)
     # Refuse an existing target instead of rotating live database/encryption keys.
     directory.parent.mkdir(parents=True, exist_ok=True)
     directory.mkdir(mode=0o700)
-    values = {key: secrets.token_hex(24) for key in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD')}
+    values = {key: secrets.token_hex(24) for key in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'FORGEJO_DB_PASSWORD')}
     runner_key = secrets.token_urlsafe(32)
     values.update({
         'GOLF_ENCRYPTION_KEY': base64.b64encode(secrets.token_bytes(32)).decode(),
+        'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4()),
         'GOLF_PUBLIC_URL': 'https://' + public_host, 'GOLF_ALLOW_INSECURE_COOKIES': 'false',
         'GOLF_RUNNER_KEY': runner_key, 'GOLF_RUNNER_KEYS': json.dumps({'local-docker': runner_key}),
         'GOLF_RUNNER_IMAGES': json.dumps({'linux': IMAGE}), 'GOLF_RUNNER_JOB_IMAGE': IMAGE,

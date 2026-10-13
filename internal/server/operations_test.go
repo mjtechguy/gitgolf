@@ -78,7 +78,7 @@ func TestOperationsDashboardPostgres(t *testing.T) {
 		t.Fatal(&data)
 	}
 	for _, service := range data.Services {
-		if service.Id == "gitea" && service.State != "available" {
+		if service.Id == "forgejo" && service.State != "available" {
 			t.Fatal(service)
 		}
 	}

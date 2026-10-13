@@ -39,14 +39,13 @@ def stage(value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--forge-kind', choices=('gitea','forgejo'), default='gitea')
     parser.add_argument('--image', required=True)
     parser.add_argument('--runner-image', required=True)
     parser.add_argument('--objects', action='store_true', help='qualify private RustFS-backed CI sources using the storage overlay')
     parser.add_argument('--ui-screenshots', type=Path, help='owner-only output directory for optional actual Actions browser proof (requires local Playwright)')
     args = parser.parse_args()
-    forge = args.forge_kind
-    workflow_dir = ".forgejo/workflows" if forge == "forgejo" else ".github/workflows"
+    forge = 'forgejo'
+    workflow_dir = '.forgejo/workflows'
     def action_path(name): return workflow_dir + "/" + name
 
     environment = {key:value for key,value in os.environ.items() if not key.startswith(('GOLF_','GITEA_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','RUSTFS_','AWS_')) and key!='DATABASE_URL'}
@@ -77,10 +76,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory = Path(temporary); directory.chmod(0o700)
         key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
-        values = {name:secrets.token_hex(24) for name in ['POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD','FORGEJO_DB_PASSWORD']}
+        values = {name:secrets.token_hex(24) for name in ['POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD']}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(), GOLF_PUBLIC_URL=smoke.GOLF,
             GOLF_RUNNER_KEY=key,GOLF_RUNNER_KEYS=json.dumps({'local-docker':key}),GOLF_RUNNER_IMAGES=json.dumps({'linux':IMAGE}),GOLF_RUNNER_JOB_IMAGE=IMAGE,GOLF_RUNNER_APPROVED_IMAGES=json.dumps([IMAGE]))
-        if forge == 'forgejo': values['GOLF_FORGE_INSTANCE_ID'] = str(uuid.uuid4())
+        values['GOLF_FORGE_INSTANCE_ID'] = str(uuid.uuid4())
         if args.objects:
             values.update(RUSTFS_ACCESS_KEY='golf-proof-'+secrets.token_hex(12), RUSTFS_SECRET_KEY=secrets.token_hex(32))
         env_file, override = directory/'core.env',directory/'proof.yaml'
@@ -98,7 +97,7 @@ def main():
     image: {worker}
     pull_policy: never
 ''')
-        compose = ['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/('compose.forgejo.yaml' if forge == 'forgejo' else 'compose.yaml')),'-f',str(ROOT/'compose.ci.yaml')]
+        compose = ['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/'compose.yaml'),'-f',str(ROOT/'compose.ci.yaml')]
         if args.objects:
             compose += ['-f',str(ROOT/'compose.storage.yaml')]
         compose += ['-f',str(override)]
@@ -110,7 +109,7 @@ def main():
             return {'containerImageReference':observed['Image'], 'resolvedLocalImageId':core,
                     'composeConfigHash':observed['Config']['Labels']['com.docker.compose.config-hash'],
                     'suppliedImageReference':args.image}
-        def admin(*arguments): return command('exec','-T',forge,forge,'--config','/var/lib/gitea/custom/conf/app.ini' if forge == 'forgejo' else '/etc/gitea/app.ini','admin','user',*arguments).strip()
+        def admin(*arguments): return command('exec','-T',forge,forge,'--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*arguments).strip()
         def rpc(method,body=None,expected=200,code=None): return smoke.rpc(session,method,body,expected=expected,code=code)
         def wait_run(identifier,state=None):
             deadline=time.monotonic()+90

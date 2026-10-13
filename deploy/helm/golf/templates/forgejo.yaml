@@ -1,17 +1,16 @@
-{{- $prefix := ternary "FORGEJO" "GITEA" (eq .Values.forge.kind "forgejo") -}}
-{{- if .Values.gitea.enabled }}
+{{- if .Values.forgejo.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "golf.fullname" . }}-gitea
+  name: {{ include "golf.fullname" . }}-forgejo
   labels:
     {{- include "golf.labels" . | nindent 4 }}
-    app.kubernetes.io/component: gitea
+    app.kubernetes.io/component: forgejo
 spec:
   clusterIP: None
   selector:
     {{- include "golf.selector" . | nindent 4 }}
-    app.kubernetes.io/component: gitea
+    app.kubernetes.io/component: forgejo
   ports:
     - {name: http, port: 3000, targetPort: http}
     - {name: ssh, port: 2222, targetPort: ssh}
@@ -19,12 +18,12 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "golf.fullname" . }}-gitea
+  name: {{ include "golf.fullname" . }}-forgejo
   labels:
     {{- include "golf.labels" . | nindent 4 }}
-    app.kubernetes.io/component: gitea
+    app.kubernetes.io/component: forgejo
 spec:
-  serviceName: {{ include "golf.fullname" . }}-gitea
+  serviceName: {{ include "golf.fullname" . }}-forgejo
   # One canonical filesystem writer. Do not scale this StatefulSet manually.
   replicas: 1
   podManagementPolicy: OrderedReady
@@ -33,12 +32,12 @@ spec:
   selector:
     matchLabels:
       {{- include "golf.selector" . | nindent 6 }}
-      app.kubernetes.io/component: gitea
+      app.kubernetes.io/component: forgejo
   template:
     metadata:
       labels:
         {{- include "golf.selector" . | nindent 8 }}
-        app.kubernetes.io/component: gitea
+        app.kubernetes.io/component: forgejo
     spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 120
@@ -53,9 +52,9 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile: {type: RuntimeDefault}
       containers:
-        - name: gitea
-          image: {{ include "golf.image" .Values.gitea.image | quote }}
-          imagePullPolicy: {{ .Values.gitea.image.pullPolicy }}
+        - name: forgejo
+          image: {{ include "golf.image" .Values.forgejo.image | quote }}
+          imagePullPolicy: {{ .Values.forgejo.image.pullPolicy }}
           securityContext:
             {{- include "golf.containerSecurity" . | nindent 12 }}
           ports:
@@ -63,30 +62,30 @@ spec:
             - {name: ssh, containerPort: 2222}
           env:
             - {name: GITEA_APP_INI, value: /etc/gitea/app.ini}
-            - {name: {{ $prefix }}__database__DB_TYPE, value: postgres}
-            - name: {{ $prefix }}__database__HOST
+            - {name: FORGEJO__database__DB_TYPE, value: postgres}
+            - name: FORGEJO__database__HOST
               value: {{ include "golf.postgresHost" . | quote }}
-            - name: {{ $prefix }}__database__NAME
-              value: {{ .Values.gitea.database.name | quote }}
-            - name: {{ $prefix }}__database__USER
-              value: {{ .Values.gitea.database.user | quote }}
-            - name: {{ $prefix }}__database__SSL_MODE
-              value: {{ ternary "disable" .Values.gitea.database.sslMode .Values.postgresql.enabled | quote }}
-            - name: {{ $prefix }}__database__PASSWD
+            - name: FORGEJO__database__NAME
+              value: {{ .Values.forgejo.database.name | quote }}
+            - name: FORGEJO__database__USER
+              value: {{ .Values.forgejo.database.user | quote }}
+            - name: FORGEJO__database__SSL_MODE
+              value: {{ ternary "disable" .Values.forgejo.database.sslMode .Values.postgresql.enabled | quote }}
+            - name: FORGEJO__database__PASSWD
               valueFrom:
-                secretKeyRef: {name: {{ .Values.existingSecret | quote }}, key: GITEA_DB_PASSWORD}
-            - {name: {{ $prefix }}__server__PUBLIC_URL_DETECTION, value: "never"}
-            - name: {{ $prefix }}__server__ROOT_URL
-              value: {{ printf "%s/" (trimSuffix "/" .Values.gitea.publicURL) | quote }}
-            - name: {{ $prefix }}__server__SSH_DOMAIN
-              value: {{ regexReplaceAll ":[0-9]+$" (urlParse .Values.gitea.publicURL).host "" | quote }}
-            - name: {{ $prefix }}__server__SSH_PORT
-              value: {{ .Values.gitea.sshPort | quote }}
-            - {name: {{ $prefix }}__server__SSH_LISTEN_PORT, value: "2222"}
-            - {name: {{ $prefix }}__security__INSTALL_LOCK, value: "true"}
-            - {name: {{ $prefix }}__service__DISABLE_REGISTRATION, value: "true"}
-            - {name: {{ $prefix }}__actions__ENABLED, value: "false"}
-            - {name: {{ $prefix }}__actions__WORKFLOW_DIRS, value: {{ .Values.gitea.workflowDirs | quote }}}
+                secretKeyRef: {name: {{ .Values.existingSecret | quote }}, key: FORGEJO_DB_PASSWORD}
+            - {name: FORGEJO__server__PUBLIC_URL_DETECTION, value: "never"}
+            - name: FORGEJO__server__ROOT_URL
+              value: {{ printf "%s/" (trimSuffix "/" .Values.forgejo.publicURL) | quote }}
+            - name: FORGEJO__server__SSH_DOMAIN
+              value: {{ regexReplaceAll ":[0-9]+$" (urlParse .Values.forgejo.publicURL).host "" | quote }}
+            - name: FORGEJO__server__SSH_PORT
+              value: {{ .Values.forgejo.sshPort | quote }}
+            - {name: FORGEJO__server__SSH_LISTEN_PORT, value: "2222"}
+            - {name: FORGEJO__security__INSTALL_LOCK, value: "true"}
+            - {name: FORGEJO__service__DISABLE_REGISTRATION, value: "true"}
+            - {name: FORGEJO__actions__ENABLED, value: "false"}
+            - {name: FORGEJO__actions__WORKFLOW_DIRS, value: {{ .Values.forgejo.workflowDirs | quote }}}
           startupProbe:
             httpGet: {path: /api/healthz, port: http}
             periodSeconds: 5
@@ -101,7 +100,7 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 6
-          resources: {{ toYaml .Values.gitea.resources | nindent 12 }}
+          resources: {{ toYaml .Values.forgejo.resources | nindent 12 }}
           volumeMounts:
             - {name: data, mountPath: /var/lib/gitea}
             - {name: config, mountPath: /etc/gitea}
@@ -110,14 +109,14 @@ spec:
         - name: tmp
           emptyDir: {sizeLimit: 128Mi}
   volumeClaimTemplates:
-    {{- range $name, $size := dict "data" .Values.gitea.persistence.dataSize "config" .Values.gitea.persistence.configSize }}
+    {{- range $name, $size := dict "data" .Values.forgejo.persistence.dataSize "config" .Values.forgejo.persistence.configSize }}
     - metadata:
         name: {{ $name }}
         annotations: {helm.sh/resource-policy: keep}
       spec:
         accessModes: [ReadWriteOnce]
-        {{- if $.Values.gitea.persistence.storageClass }}
-        storageClassName: {{ $.Values.gitea.persistence.storageClass | quote }}
+        {{- if $.Values.forgejo.persistence.storageClass }}
+        storageClassName: {{ $.Values.forgejo.persistence.storageClass | quote }}
         {{- end }}
         resources:
           requests: {storage: {{ $size | quote }}}

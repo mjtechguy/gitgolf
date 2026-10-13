@@ -1,15 +1,15 @@
 Golf public origin: {{ .Values.publicURL }}
-Configured {{ .Values.forge.kind }} public origin: {{ .Values.gitea.publicURL }}
+Configured {{ .Values.forge.kind }} public origin: {{ .Values.forgejo.publicURL }}
 
 This chart installs the current portable core. It creates no Secrets, runners,
 Cloudflare resources or load balancers. Secret {{ .Values.existingSecret }} must
 already exist in namespace {{ .Release.Namespace }}; see the chart README for keys.
 
-{{- if .Values.gitea.enabled }}
-Gitea has exactly one canonical writer and retained data/config PVCs. Ordinary
+{{- if .Values.forgejo.enabled }}
+Forgejo has exactly one canonical writer and retained data/config PVCs. Ordinary
 StatefulSet replacements stop the old Pod first. RWO and StatefulSet identity do
 NOT fence a partitioned node: never force-delete/recreate a writer until the old
-node is fenced from storage. No Gitea HA or safe forced failover is claimed.
+node is fenced from storage. No Forgejo HA or safe forced failover is claimed.
 {{- end }}
 {{- if .Values.postgresql.enabled }}
 Bundled PostgreSQL is a single persistent instance, not an HA database. Its init
@@ -29,5 +29,4 @@ NetworkPolicy requires an enforcing CNI. Public ingress is denied unless explici
 ingressFrom peers are configured; kubectl port-forward is not a policy test.
 {{- end }}
 
-Forge profile: {{ .Values.forge.kind }}. Existing gitea value/resource names are storage compatibility names.
-Forgejo requires a fresh release/database; never attach existing Gitea PVCs.
+Forge profile: {{ .Values.forge.kind }}. This chart requires a fresh Forgejo release and database.

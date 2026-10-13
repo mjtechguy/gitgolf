@@ -87,7 +87,7 @@ func ExecuteAcknowledged(ctx context.Context, input protocol.ActionExecutionInpu
 		}
 		limits = input.JobResources.Limits
 	}
-	if input.ExecutionEnvironment.Validate() != nil || os.Getenv("DOCKER_HOST") != "unix:///var/run/docker.sock" || os.Getenv("GOLF_OWNED_ACTIONS_DAEMON") != "1" || (input.Input.Event != "workflow_dispatch" && input.Input.Event != "push") || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || !fullObjectPattern.MatchString(input.CommitID) || len(input.EventJSON) > 16<<10 {
+	if input.ExecutionEnvironment.Validate() != nil || os.Getenv("DOCKER_HOST") != "unix:///var/run/docker.sock" || os.Getenv("GOLF_OWNED_ACTIONS_DAEMON") != "1" || (input.Input.Event != "workflow_dispatch" && input.Input.Event != "push" && input.Input.Event != "pull_request") || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || !fullObjectPattern.MatchString(input.CommitID) || len(input.EventJSON) > 16<<10 {
 		return ErrExecution
 	}
 	phase = "engine_environment_validation"

@@ -23,7 +23,7 @@ func (s *Server) GetOperationsDashboard(ctx context.Context, req *connect.Reques
 	stamp := time.Now().UTC().Format(time.RFC3339Nano)
 	out := &golfv1.GetOperationsDashboardResponse{RuntimeProfile: s.config.RuntimeProfile, Scope: "instance", GeneratedAt: stamp, Release: "unknown",
 		Notices: []string{"Process counters restart with Golf. Latencies are histogram estimates, not browser navigation times.", "Provider billing, storage bytes, runner backlog and organization drilldown are not collected by this snapshot."}}
-	for _, d := range []struct{ id, label string }{{"database", "PostgreSQL"}, {"gitea", s.forgeLabel()}} {
+	for _, d := range []struct{ id, label string }{{"database", "PostgreSQL"}, {"forgejo", s.forgeLabel()}} {
 		state, detail := "available", "Readiness check succeeded."
 		if checks[d.id] != "ready" {
 			state, detail = "degraded", "Readiness check did not succeed."

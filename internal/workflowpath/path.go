@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-const ForgejoDirectories = ".forgejo/workflows,.gitea/workflows,.github/workflows"
+const ForgejoDirectories = ".forgejo/workflows,.github/workflows"
 
-const DefaultDirectories = ".gitea/workflows,.github/workflows"
+const DefaultDirectories = ForgejoDirectories
 
 // Directories preserves the operator's order. Custom locations remain unavailable
 // until discovery, policy and worker contracts qualify them together.
@@ -20,8 +20,8 @@ func Directories(setting string) ([]string, error) {
 	var result []string
 	for _, part := range strings.Split(setting, ",") {
 		dir := strings.TrimSpace(part)
-		if (dir != ".forgejo/workflows" && dir != ".gitea/workflows" && dir != ".github/workflows") || seen[dir] {
-			return nil, errors.New("GOLF_FORGE_WORKFLOW_DIRS supports only distinct .forgejo/workflows, .gitea/workflows and .github/workflows directories in the selected order; custom locations are unsupported")
+		if (dir != ".forgejo/workflows" && dir != ".github/workflows") || seen[dir] {
+			return nil, errors.New("GOLF_FORGE_WORKFLOW_DIRS supports only distinct .forgejo/workflows and .github/workflows directories in the selected order; custom locations are unsupported")
 		}
 		seen[dir] = true
 		result = append(result, dir)
@@ -34,7 +34,7 @@ func Actions(value string) bool {
 		return false
 	}
 	dir, name, found := strings.Cut(value, "/workflows/")
-	if !found || (dir != ".forgejo" && dir != ".gitea" && dir != ".github") || name == "" || strings.Contains(name, "..") || (!strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml")) {
+	if !found || (dir != ".forgejo" && dir != ".github") || name == "" || strings.Contains(name, "..") || (!strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml")) {
 		return false
 	}
 	for _, c := range name {

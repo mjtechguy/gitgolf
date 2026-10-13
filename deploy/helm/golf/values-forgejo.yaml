@@ -1,10 +1,10 @@
-# Fresh release/database only; never overlay an existing Gitea installation.
+# Fresh release/database only.
 forge:
   kind: forgejo
   instanceID: "" # Generate once with uuidgen (lowercase); retain across restarts.
-gitea:
+forgejo:
   qualifiedVersion: "15.0.9"
-  workflowDirs: ".forgejo/workflows,.gitea/workflows,.github/workflows"
+  workflowDirs: ".forgejo/workflows,.github/workflows"
   image:
     repository: codeberg.org/forgejo/forgejo
     tag: ""

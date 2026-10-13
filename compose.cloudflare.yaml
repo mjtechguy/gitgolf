@@ -1,5 +1,5 @@
 # Separate bridge installation. Apply last, with compose.runner-tls.yaml.
-# Canonical Go/PostgreSQL/Gitea authority remains on this persistent host.
+# Canonical Go/PostgreSQL/Forgejo authority remains on this persistent host.
 services:
   golf:
     ports: !reset []
@@ -20,10 +20,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 24
-  gitea:
+  forgejo:
     ports: !reset []
     environment:
-      GITEA__server__ROOT_URL: ${GITEA_PUBLIC_URL:-http://gitea:3000}/
+      FORGEJO__server__ROOT_URL: ${GOLF_FORGE_PUBLIC_URL:-http://forgejo:3000}/
   cloudflared:
     image: cloudflare/cloudflared:2026.10.0@sha256:9b49eed8f62806d5d45ddf59ecefb5710429598ea6d3fcccd2af938f621b2b07
     command: [tunnel, --no-autoupdate, run, --token-file, /run/golf/tunnel-token]

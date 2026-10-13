@@ -16,8 +16,8 @@ spec:
     - secretName: {{ .Values.ingress.tlsSecret | quote }}
       hosts:
         - {{ regexReplaceAll ":[0-9]+$" (urlParse .Values.publicURL).host "" | quote }}
-        {{- if .Values.gitea.enabled }}
-        - {{ regexReplaceAll ":[0-9]+$" (urlParse .Values.gitea.publicURL).host "" | quote }}
+        {{- if .Values.forgejo.enabled }}
+        - {{ regexReplaceAll ":[0-9]+$" (urlParse .Values.forgejo.publicURL).host "" | quote }}
         {{- end }}
   {{- end }}
   rules:
@@ -28,13 +28,13 @@ spec:
             pathType: Prefix
             backend:
               service: {name: {{ include "golf.fullname" . }}, port: {name: http}}
-    {{- if .Values.gitea.enabled }}
-    - host: {{ regexReplaceAll ":[0-9]+$" (urlParse .Values.gitea.publicURL).host "" | quote }}
+    {{- if .Values.forgejo.enabled }}
+    - host: {{ regexReplaceAll ":[0-9]+$" (urlParse .Values.forgejo.publicURL).host "" | quote }}
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
-              service: {name: {{ include "golf.fullname" . }}-gitea, port: {name: http}}
+              service: {name: {{ include "golf.fullname" . }}-forgejo, port: {name: http}}
     {{- end }}
 {{- end }}

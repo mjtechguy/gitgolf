@@ -7,7 +7,7 @@ import (
 )
 
 func TestPathsAndDirectoryConfiguration(t *testing.T) {
-	for _, prefix := range []string{".forgejo/workflows/", ".gitea/workflows/", ".github/workflows/"} {
+	for _, prefix := range []string{".forgejo/workflows/", ".github/workflows/"} {
 		for _, name := range []string{"check.yml", "golf-test.yaml", "a.b.yml"} {
 			if !Actions(prefix+name) || !Valid(prefix+name) {
 				t.Fatal("ordinary filename refused", prefix+name)
@@ -19,17 +19,17 @@ func TestPathsAndDirectoryConfiguration(t *testing.T) {
 			}
 		}
 	}
-	if !Valid(".gitlab-ci.yml") || Actions(".gitlab-ci.yml") || Valid(".gitlab-ci.yaml") || Actions(".gitea/scoped_workflows/a.yml") {
+	if !Valid(".gitlab-ci.yml") || Actions(".gitlab-ci.yml") || Valid(".gitlab-ci.yaml") || Actions(".gitea/workflows/a.yml") || Actions(".gitea/scoped_workflows/a.yml") {
 		t.Fatal("format/location boundary changed")
 	}
 	for _, tc := range []struct {
 		setting string
 		want    []string
 	}{
-		{"", []string{".gitea/workflows", ".github/workflows"}},
-		{" .github/workflows, .gitea/workflows ", []string{".github/workflows", ".gitea/workflows"}},
-		{ForgejoDirectories, []string{".forgejo/workflows", ".gitea/workflows", ".github/workflows"}},
-		{".gitea/workflows", []string{".gitea/workflows"}},
+		{"", []string{".forgejo/workflows", ".github/workflows"}},
+		{" .github/workflows, .forgejo/workflows ", []string{".github/workflows", ".forgejo/workflows"}},
+		{ForgejoDirectories, []string{".forgejo/workflows", ".github/workflows"}},
+		{".forgejo/workflows", []string{".forgejo/workflows"}},
 		{".github/workflows", []string{".github/workflows"}},
 	} {
 		got, err := Directories(tc.setting)
@@ -37,7 +37,7 @@ func TestPathsAndDirectoryConfiguration(t *testing.T) {
 			t.Fatal("directory order changed", tc.setting, got, err)
 		}
 	}
-	for _, setting := range []string{" ", "custom/workflows", ".gitea/workflows,", ".github/workflows,.github/workflows", ".gitea/workflows/../workflows", ".gitlab-ci.yml"} {
+	for _, setting := range []string{" ", "custom/workflows", ".gitea/workflows", ".forgejo/workflows,", ".github/workflows,.github/workflows", ".forgejo/workflows/../workflows", ".gitlab-ci.yml"} {
 		if _, err := Directories(setting); err == nil {
 			t.Fatal("unsupported directory configuration accepted", setting)
 		}

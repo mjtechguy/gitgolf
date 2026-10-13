@@ -28,7 +28,7 @@ type LegacyDispatchIntent = { actorId:string; key:string; owner:string; name:str
 type TypedDispatchIntent=LegacyDispatchIntent&{version:2;inputContract:string;schemaSha256:string;submittedSha256:string;effectiveSha256:string};
 type DispatchIntent=LegacyDispatchIntent|TypedDispatchIntent;
 const typedIntent=(intent:DispatchIntent):intent is TypedDispatchIntent=>'version' in intent&&intent.version===2;
-const workflowPath = (value:string) => /^(?:\.(?:forgejo|gitea|github)\/workflows\/[^/]+\.ya?ml|\.gitlab-ci\.yml)$/.test(value) && new TextEncoder().encode(value).length<=4096 && !/[\\\p{Cc}\uD800-\uDFFF]/u.test(value);
+const workflowPath = (value:string) => /^(?:\.(?:forgejo|github)\/workflows\/[^/]+\.ya?ml|\.gitlab-ci\.yml)$/.test(value) && new TextEncoder().encode(value).length<=4096 && !/[\\\p{Cc}\uD800-\uDFFF]/u.test(value);
 function validDispatchIntent(value:unknown, actor:string,repo:string):value is DispatchIntent {
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const v=value as Record<string,unknown>;

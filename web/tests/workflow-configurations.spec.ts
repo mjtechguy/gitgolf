@@ -18,7 +18,7 @@ const inputDefinitions=[
  create(WorkflowDispatchInputDefinitionSchema,{name:'choice',type:WorkflowDispatchInputType.CHOICE,options:['first','second'],defaultValue:{name:'choice',value:{case:'stringValue',value:'first'}}}),
 ];
 async function backend(page: Page) {
-  const state = { nativeDirectory:false, forgejoDirectory:false, typed:false, gitlabReady:false, writeBodies:[] as Record<string,unknown>[], definitions:inputDefinitions, badPreparation:'', badInputs:false, prepareBarrier:undefined as Promise<void>|undefined, prepared:[] as ReturnType<typeof request<typeof PrepareWorkflowDispatchRequestSchema>>[], mode: 'ready', worker: false, policyKnown: true, manualPolicy: false, pushPolicy: false, badPolicyRevision: false, badTarget: false, dispatchLost: false, inspectBarrier: undefined as Promise<void>|undefined, inspectMode: 'ready', permission: 'write', badOwner:false, badReceipt:'', actor:'9007199254740993', signedRun: undefined as ReturnType<typeof completeRun>|undefined, writes: [] as ReturnType<typeof request<typeof DispatchWorkflowRequestSchema>>[], inspections: [] as ReturnType<typeof request<typeof GetWorkflowDispatchRequestSchema>>[], badMetadata: false, missingMetadata: false, signedIn: true, barrier: undefined as Promise<void> | undefined, requests: [] as unknown[], runPages: false, matchingRuns: false, methods: [] as string[], denyRuns: false, requestedRunPages: [] as number[] };
+  const state = { nativeDirectory:false, typed:false, gitlabReady:false, writeBodies:[] as Record<string,unknown>[], definitions:inputDefinitions, badPreparation:'', badInputs:false, prepareBarrier:undefined as Promise<void>|undefined, prepared:[] as ReturnType<typeof request<typeof PrepareWorkflowDispatchRequestSchema>>[], mode: 'ready', worker: false, policyKnown: true, manualPolicy: false, pushPolicy: false, badPolicyRevision: false, badTarget: false, dispatchLost: false, inspectBarrier: undefined as Promise<void>|undefined, inspectMode: 'ready', permission: 'write', badOwner:false, badReceipt:'', actor:'9007199254740993', signedRun: undefined as ReturnType<typeof completeRun>|undefined, writes: [] as ReturnType<typeof request<typeof DispatchWorkflowRequestSchema>>[], inspections: [] as ReturnType<typeof request<typeof GetWorkflowDispatchRequestSchema>>[], badMetadata: false, missingMetadata: false, signedIn: true, barrier: undefined as Promise<void> | undefined, requests: [] as unknown[], runPages: false, matchingRuns: false, methods: [] as string[], denyRuns: false, requestedRunPages: [] as number[] };
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1); state.methods.push(method||'');
  if(method === 'ListAgentTasks') return disabledAgentTasks(route);
@@ -64,7 +64,7 @@ async function backend(page: Page) {
       if (state.mode === 'denied') return reject(route, 'permission_denied', 'Workflow inspection requires repository read access.');
       if (state.mode === 'expired') { state.signedIn = false; return reject(route, 'unauthenticated', 'Your session ended.'); }
       if (state.mode === 'overfull') return reject(route, 'resource_exhausted', 'Workflow configuration inventory exceeds its bound.');
-      return respond(route, InspectWorkflowsResponseSchema, { repositoryId: state.badTarget?'18':'9007199254740997', commitId: commit, catalogVersion: 'golf.workflow.inspect.v3', executionCatalog:state.typed?'golf.workflow.act.v0.2.89.linux.v2':'', executionAvailable: state.worker, policyRevision: state.policyKnown?(state.badPolicyRevision?'not-a-revision':'e'.repeat(64)):'', configurations: (state.mode === 'empty' ? [] : [state.mode === 'push' ? { ...manual, events: ['push'] } : manual, { path: '.gitlab-ci.yml', blobId: 'c'.repeat(40), byteSize: 321n, format: WorkflowFormat.GITLAB_CI, state: state.gitlabReady?WorkflowInspectionState.VALIDATED_SUBSET:WorkflowInspectionState.UNSUPPORTED, jobs: [{ id: 'build', stage: 'test', stepCount: 1 }], diagnostics: [{ code: 'unsupported_field', message: 'Remote includes are not fetched.', line: 3, column: 2 }] }]).map(item=>({...item,path:state.nativeDirectory&&item.path===manual.path?(state.forgejoDirectory?'.forgejo/workflows/manual.yml':'.gitea/workflows/manual.yml'):item.path,...(state.typed&&item.path===manual.path?{manualInputs:state.badInputs?[{...inputDefinitions[0]!,type:99}]:state.definitions,manualInputsSchemaSha256:inputSchema}:{}),manualPolicyAllowed:state.policyKnown?state.manualPolicy:undefined,pushPolicyAllowed:state.policyKnown?state.pushPolicy:undefined})) });
+      return respond(route, InspectWorkflowsResponseSchema, { repositoryId: state.badTarget?'18':'9007199254740997', commitId: commit, catalogVersion: 'golf.workflow.inspect.v3', executionCatalog:state.typed?'golf.workflow.act.v0.2.89.linux.v2':'', executionAvailable: state.worker, policyRevision: state.policyKnown?(state.badPolicyRevision?'not-a-revision':'e'.repeat(64)):'', configurations: (state.mode === 'empty' ? [] : [state.mode === 'push' ? { ...manual, events: ['push'] } : manual, { path: '.gitlab-ci.yml', blobId: 'c'.repeat(40), byteSize: 321n, format: WorkflowFormat.GITLAB_CI, state: state.gitlabReady?WorkflowInspectionState.VALIDATED_SUBSET:WorkflowInspectionState.UNSUPPORTED, jobs: [{ id: 'build', stage: 'test', stepCount: 1 }], diagnostics: [{ code: 'unsupported_field', message: 'Remote includes are not fetched.', line: 3, column: 2 }] }]).map(item=>({...item,path:state.nativeDirectory&&item.path===manual.path?'.forgejo/workflows/manual.yml':item.path,...(state.typed&&item.path===manual.path?{manualInputs:state.badInputs?[{...inputDefinitions[0]!,type:99}]:state.definitions,manualInputsSchemaSha256:inputSchema}:{}),manualPolicyAllowed:state.policyKnown?state.manualPolicy:undefined,pushPolicyAllowed:state.policyKnown?state.pushPolicy:undefined})) });
     }
     return reject(route, 'not_found', 'Unsupported workflow fixture: '+method);
   });
@@ -386,22 +386,9 @@ test('v2 Actions catalog preserves input-free GitHub legacy dispatch and origina
 });
 
 
-test('native Gitea path is shown and dispatched without widening source selection', async ({ page }) => {
-  const state = await backend(page);
-  state.nativeDirectory = true; state.worker = true; state.manualPolicy = true;
-  await open(page);
-  await expect(page.getByText('.gitea/workflows/manual.yml', { exact: true })).toBeVisible();
-  await expect(page.getByText('.github/workflows/manual.yml', { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Run workflow', exact: true }).click();
-  await expect.poll(() => state.writes.length).toBe(1);
-  expect(state.writes[0]!.workflowPath).toBe('.gitea/workflows/manual.yml');
-  expect(state.writes[0]!.ref).toBe(commit);
-});
-
-
 test('Forgejo path stays visible and exact through dispatch', async ({ page }) => {
   const state = await backend(page);
-  state.nativeDirectory = true; state.forgejoDirectory = true; state.worker = true; state.manualPolicy = true;
+  state.nativeDirectory = true; state.worker = true; state.manualPolicy = true;
   await open(page);
   await expect(page.getByText('.forgejo/workflows/manual.yml', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Run workflow', exact: true }).click();

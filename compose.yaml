@@ -1,44 +1,44 @@
-name: golf
+# Fresh Forgejo installation.
+name: golf-forgejo
 services:
   postgres:
     image: postgres:18.4-alpine3.24
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init-env.sh}
-      GOLF_DB_PASSWORD: ${GOLF_DB_PASSWORD:?Run scripts/init-env.sh}
-      GITEA_DB_PASSWORD: ${GITEA_DB_PASSWORD:?Run scripts/init-env.sh}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init-forgejo-env.py}
+      GOLF_DB_PASSWORD: ${GOLF_DB_PASSWORD:?Run scripts/init-forgejo-env.py}
+      FORGEJO_DB_PASSWORD: ${FORGEJO_DB_PASSWORD:?Run scripts/init-forgejo-env.py}
     volumes:
       - postgres-data:/var/lib/postgresql
-      - ./deploy/postgres/init.sh:/docker-entrypoint-initdb.d/01-golf.sh:ro
+      - ./deploy/postgres/forgejo-init.sh:/docker-entrypoint-initdb.d/01-golf.sh:ro
     healthcheck:
       test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U postgres']
       interval: 3s
       timeout: 3s
       retries: 30
-  gitea:
-    image: gitea/gitea:1.27.3-rootless
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413
     environment:
-      GITEA__database__DB_TYPE: postgres
-      GITEA__database__HOST: postgres:5432
-      GITEA__database__NAME: gitea
-      GITEA__database__USER: gitea
-      GITEA__database__PASSWD: ${GITEA_DB_PASSWORD:?Run scripts/init-env.sh}
-      GITEA__server__ROOT_URL: http://localhost:3001/
-      GITEA__server__PUBLIC_URL_DETECTION: never
-      GITEA__server__SSH_DOMAIN: localhost
-      GITEA__server__SSH_PORT: 2222
-      GITEA__server__SSH_LISTEN_PORT: 2222
-      GITEA__security__INSTALL_LOCK: 'true'
+      FORGEJO__database__DB_TYPE: postgres
+      FORGEJO__database__HOST: postgres:5432
+      FORGEJO__database__NAME: forgejo
+      FORGEJO__database__USER: forgejo
+      FORGEJO__database__PASSWD: ${FORGEJO_DB_PASSWORD:?Run scripts/init-forgejo-env.py}
+      FORGEJO__server__ROOT_URL: ${GOLF_FORGE_PUBLIC_URL:-http://localhost:3001/}
+      FORGEJO__server__PUBLIC_URL_DETECTION: never
+      FORGEJO__server__SSH_DOMAIN: localhost
+      FORGEJO__server__SSH_PORT: ${GOLF_FORGE_SSH_PORT:-2222}
+      FORGEJO__server__SSH_LISTEN_PORT: 2222
+      FORGEJO__security__INSTALL_LOCK: 'true'
       # Allow the authenticated Golf callback without allowing every private host.
-      GITEA__security__ALLOWED_HOST_LIST: 'external,golf'
-      GITEA__service__DISABLE_REGISTRATION: 'true'
-      GITEA__actions__ENABLED: 'false'
-      GITEA__actions__WORKFLOW_DIRS: ${GOLF_GITEA_WORKFLOW_DIRS:-.gitea/workflows,.github/workflows}
+      FORGEJO__webhook__ALLOWED_HOST_LIST: 'external,golf'
+      FORGEJO__service__DISABLE_REGISTRATION: 'true'
+      FORGEJO__actions__ENABLED: 'false'
+      FORGEJO__actions__WORKFLOW_DIRS: ${GOLF_FORGE_WORKFLOW_DIRS:-.forgejo/workflows,.github/workflows}
     ports:
-      - '127.0.0.1:3001:3000'
-      - '127.0.0.1:2222:2222'
+      - '127.0.0.1:${GOLF_FORGE_HTTP_PORT:-3001}:3000'
+      - '127.0.0.1:${GOLF_FORGE_SSH_PORT:-2222}:2222'
     volumes:
-      - gitea-data:/var/lib/gitea
-      - gitea-config:/etc/gitea
+      - forgejo-data:/var/lib/gitea
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,20 +55,21 @@ services:
       GOLF_ENCRYPTION_KEY: ${GOLF_ENCRYPTION_KEY:-}
       GOLF_ENCRYPTION_KEYS: ${GOLF_ENCRYPTION_KEYS:-}
       GOLF_ACTIVE_ENCRYPTION_KEY: ${GOLF_ACTIVE_ENCRYPTION_KEY:-}
-      DATABASE_URL: postgres://golf:${GOLF_DB_PASSWORD:?Run scripts/init-env.sh}@postgres:5432/golf?sslmode=disable
-      GITEA_URL: http://gitea:3000
-      GOLF_GITEA_WORKFLOW_DIRS: ${GOLF_GITEA_WORKFLOW_DIRS:-.gitea/workflows,.github/workflows}
-      GITEA_PUBLIC_URL: ${GITEA_PUBLIC_URL:-}
-      GITEA_OAUTH_CLIENT_ID: ${GITEA_OAUTH_CLIENT_ID:-}
-      GITEA_OAUTH_CLIENT_SECRET: ${GITEA_OAUTH_CLIENT_SECRET:-}
+      DATABASE_URL: postgres://golf:${GOLF_DB_PASSWORD:?Run scripts/init-forgejo-env.py}@postgres:5432/golf?sslmode=disable
+      GOLF_FORGE_KIND: forgejo
+      GOLF_FORGE_INSTANCE_ID: ${GOLF_FORGE_INSTANCE_ID:?Run scripts/init-forgejo-env.py}
+      GOLF_FORGE_URL: http://forgejo:3000
+      GOLF_FORGE_WORKFLOW_DIRS: ${GOLF_FORGE_WORKFLOW_DIRS:-.forgejo/workflows,.github/workflows}
+      GOLF_FORGE_PUBLIC_URL: ${GOLF_FORGE_PUBLIC_URL:-}
+      GOLF_FORGE_OAUTH_CLIENT_ID: ${GOLF_FORGE_OAUTH_CLIENT_ID:-}
+      GOLF_FORGE_OAUTH_CLIENT_SECRET: ${GOLF_FORGE_OAUTH_CLIENT_SECRET:-}
     ports:
-      - '127.0.0.1:8080:8080'
+      - '127.0.0.1:${GOLF_HTTP_PORT:-8080}:8080'
     depends_on:
       postgres:
         condition: service_healthy
-      gitea:
+      forgejo:
         condition: service_started
 volumes:
   postgres-data:
-  gitea-data:
-  gitea-config:
+  forgejo-data:

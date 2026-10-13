@@ -45,9 +45,9 @@ spec:
               value: {{ .Values.allowInsecureCookies | quote }}
             - {name: GOLF_FORGE_KIND, value: {{ .Values.forge.kind | quote }}}
             - {name: GOLF_FORGE_INSTANCE_ID, value: {{ .Values.forge.instanceID | quote }}}
-            - {name: GOLF_GITEA_WORKFLOW_DIRS, value: {{ .Values.gitea.workflowDirs | quote }}}
-            - name: GITEA_URL
-              value: {{ include "golf.giteaURL" . | quote }}
+            - {name: GOLF_FORGE_WORKFLOW_DIRS, value: {{ .Values.forgejo.workflowDirs | quote }}}
+            - name: GOLF_FORGE_URL
+              value: {{ include "golf.forgejoURL" . | quote }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef: {name: {{ .Values.existingSecret | quote }}, key: DATABASE_URL}

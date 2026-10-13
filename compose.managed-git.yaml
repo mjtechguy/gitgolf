@@ -2,12 +2,12 @@
 # Never apply to an adopted installation and assume it closed old/native ingress.
 # Root qualifier/operator must verify actual private-native topology separately.
 services:
-  gitea:
+  forgejo:
     ports: !reset []
     environment:
-      GITEA__server__DISABLE_SSH: 'true'
-      GITEA__server__START_SSH_SERVER: 'false'
-      GITEA__actions__ENABLED: 'false'
+      FORGEJO__server__DISABLE_SSH: 'true'
+      FORGEJO__server__START_SSH_SERVER: 'false'
+      FORGEJO__actions__ENABLED: 'false'
   golf:
     environment:
       GOLF_MANAGED_HTTP_GIT: 'true'

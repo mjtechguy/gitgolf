@@ -110,7 +110,7 @@ def main():
             git('push', remote, 'HEAD:refs/heads/main'); smoke.wait_for_push(push, owner+'/'+name)
             connection, secret = str(uuid.uuid4()), secrets.token_hex(32)
             # Preserve other operator connections; refuse to silently replace one.
-            current = json.loads(command('docker', 'inspect', 'golf-golf-1'))[0]
+            current = json.loads(command('docker', 'inspect', 'golf-forgejo-golf-1'))[0]
             runtime = dict(item.split('=', 1) for item in current['Config']['Env'])
             bindings = json.loads(runtime.get('GOLF_REPOSITORY_EVENT_CONNECTIONS') or '[]')
             bindings.append({'id': connection, 'repositoryId': str(repo['id']), 'ownerId': str(user['id']),
@@ -142,7 +142,7 @@ def main():
                 'idempotencyKey': str(uuid.uuid4())})['grant']
             assert grant['executionState'] == 'requires_push_admission'
             smoke.provider(push, 'POST', 'repos/'+owner+'/'+name+'/hooks', {'type': 'gitea', 'active': True,
-                'events': ['push'], 'branch_filter': 'main', 'config': {'url': 'http://golf:8080/hooks/gitea/'+connection,
+                'events': ['push'], 'branch_filter': 'main', 'config': {'url': 'http://golf:8080/hooks/forgejo/'+connection,
                     'content_type': 'json', 'http_method': 'POST', 'secret': secret}}, expected=201)
             time.sleep(7)
             (work/'README.md').write_text((work/'README.md').read_text()+'\nThis push exercises the automatic worker.\n')

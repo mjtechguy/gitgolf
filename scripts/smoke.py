@@ -2,7 +2,7 @@
 """Exercise the local Compose stack; creates then purges isolated test users.
 
 Run after docker compose up -d --build. --restart also restarts services and
-briefly stops Gitea to verify persistence and outage reporting on this dev stack.
+briefly stops Forgejo to verify persistence and outage reporting on this dev stack.
 Credentials stay in process memory and are never printed. --cli PATH optionally
 checks a built Golf CLI against the same private repository and immutable commit.
 """
@@ -33,12 +33,12 @@ def command(*args, env=None, cwd=ROOT):
 
 def admin(*args):
     if container := os.environ.get('GOLF_SMOKE_FORGE_CONTAINER'):
-        binary = os.environ.get('GOLF_SMOKE_FORGE_KIND', 'gitea')
+        binary = os.environ.get('GOLF_SMOKE_FORGE_KIND', 'forgejo')
         if binary not in ('gitea', 'forgejo'): raise ValueError('unsupported fixture provider')
         config = '/var/lib/gitea/custom/conf/app.ini' if binary == 'forgejo' else '/etc/gitea/app.ini'
         return command('docker', 'exec', container, binary, '--config', config, 'admin', 'user', *args)
-    return command('docker', 'compose', 'exec', '-T', 'gitea', 'gitea',
-                   '--config', '/etc/gitea/app.ini', 'admin', 'user', *args)
+    return command('docker', 'compose', 'exec', '-T', 'forgejo', 'forgejo',
+                   '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *args)
 
 
 def client():
@@ -90,14 +90,14 @@ def provider(token, method, route, payload=None, expected=200):
 
 
 def wait_for_push(token, full_name):
-    # Gitea's first-push hook processes repository initialization asynchronously.
+    # Forgejo's first-push hook processes repository initialization asynchronously.
     # Its branch-detail route can panic while repository metadata is still empty.
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
         if not provider(token, 'GET', 'repos/' + full_name)['empty']:
             return
         time.sleep(0.25)
-    raise RuntimeError('Gitea did not finish initial push processing within 45 seconds')
+    raise RuntimeError('Forgejo did not finish initial push processing within 45 seconds')
 
 
 def pages(session, procedure, payload, field):
@@ -337,17 +337,17 @@ def main():
             print('PASS: direct private-resource isolation, no-store responses, input validation and least-privilege scopes')
         print('PASS: real sessions, private repository isolation, origin rejection and Git push')
         if args.restart:
-            command('docker', 'compose', 'restart', 'golf', 'gitea')
+            command('docker', 'compose', 'restart', 'golf', 'forgejo')
             ready()
             assert any(r['fullName'] == full_name for r in rpc(alice, 'RepositoryService/ListRepositories').get('repositories', []))
             assert content(alice, repository, revision, nested_path)['file']['content'] == nested_text
             try:
-                command('docker', 'compose', 'stop', 'gitea')
+                command('docker', 'compose', 'stop', 'forgejo')
                 request(client(), 'GET', GOLF + '/readyz', expected=503)
                 rpc(alice, 'RepositoryService/ListRepositories', expected=503)
                 rpc(alice, 'RepositoryService/GetContents', {'repository': repository}, expected=503)
             finally:
-                command('docker', 'compose', 'start', 'gitea')
+                command('docker', 'compose', 'start', 'forgejo')
                 ready()
             print('PASS: persisted session/repository after restart; dependency outage fails visibly')
         basic = base64.b64encode(f'{alice_name}:{alice_password}'.encode()).decode()
@@ -370,7 +370,7 @@ def main():
                 cleanup_errors.append(name)
         if cleanup_errors:
             raise RuntimeError('Could not purge temporary users: ' + ', '.join(cleanup_errors))
-        print('Temporary Gitea users and repositories removed.')
+        print('Temporary Forgejo users and repositories removed.')
 
 
 if __name__ == '__main__':

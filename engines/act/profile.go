@@ -288,7 +288,7 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 	typed := input.Catalog == protocol.ActionsInputsCatalog
 	agents := input.Catalog == protocol.ActionsAgentCatalog
 	remote := input.Catalog == protocol.ActionsRemoteCatalog
-	if (input.Catalog != protocol.ActionsCatalog && !typed && !agents && !remote) || agents && input.Event == "push" || !safePath(input.WorkflowPath) || !fullObjectPattern.MatchString(input.WorkflowBlobID) || (input.Event != "workflow_dispatch" && input.Event != "push" && input.Event != "inspect") || input.Event == "push" && (!strings.HasPrefix(input.Ref, "refs/heads/") || !safePath(strings.TrimPrefix(input.Ref, "refs/heads/"))) || len(input.Images) < 1 || len(input.Images) > 20 {
+	if (input.Catalog != protocol.ActionsCatalog && !typed && !agents && !remote) || agents && input.Event == "push" || !safePath(input.WorkflowPath) || !fullObjectPattern.MatchString(input.WorkflowBlobID) || (input.Event != "workflow_dispatch" && input.Event != "push" && input.Event != "pull_request" && input.Event != "inspect") || input.Event == "pull_request" && (input.Catalog != protocol.ActionsCatalog || !fullObjectPattern.MatchString(input.Ref)) || input.Event == "push" && (!strings.HasPrefix(input.Ref, "refs/heads/") || !safePath(strings.TrimPrefix(input.Ref, "refs/heads/"))) || len(input.Images) < 1 || len(input.Images) > 20 {
 		return out, nil, nil, ErrProfile
 	}
 	for label, image := range input.Images {
@@ -546,7 +546,7 @@ func eventMatches(n *yaml.Node, event, ref string, typed bool, remote bool) (boo
 		return false, ErrProfile
 	}
 	if scalar(n) {
-		if n.Value != "push" && n.Value != "workflow_dispatch" {
+		if n.Value != "push" && n.Value != "workflow_dispatch" && n.Value != "pull_request" {
 			return false, ErrProfile
 		}
 		return n.Value == event, nil
@@ -555,7 +555,7 @@ func eventMatches(n *yaml.Node, event, ref string, typed bool, remote bool) (boo
 		matched := false
 		seen := map[string]bool{}
 		for _, v := range n.Content {
-			if !scalar(v) || (v.Value != "push" && v.Value != "workflow_dispatch" && (!remote || v.Value != "pull_request")) || seen[v.Value] {
+			if !scalar(v) || (v.Value != "push" && v.Value != "workflow_dispatch" && v.Value != "pull_request") || seen[v.Value] {
 				return false, ErrProfile
 			}
 			seen[v.Value] = true
@@ -563,7 +563,7 @@ func eventMatches(n *yaml.Node, event, ref string, typed bool, remote bool) (boo
 		}
 		return matched, nil
 	}
-	if !mapping(n, "push", "workflow_dispatch") {
+	if !mapping(n, "push", "workflow_dispatch", "pull_request") {
 		return false, ErrProfile
 	}
 	declaration := field(n, event)
@@ -579,6 +579,9 @@ func eventMatches(n *yaml.Node, event, ref string, typed bool, remote bool) (boo
 			continue
 		}
 		if !mapping(v, "branches") {
+			return false, ErrProfile
+		}
+		if e == "pull_request" && field(v, "branches") != nil {
 			return false, ErrProfile
 		}
 		if branches := field(v, "branches"); branches != nil {

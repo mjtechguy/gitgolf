@@ -68,7 +68,7 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 		return nil, errors.New("invalid telemetry service version")
 	}
 	r := &Runtime{started: time.Now(), version: config.ServiceVersion, logger: config.Logger, registry: prometheus.NewRegistry(), routes: map[string]struct{}{
-		"/healthz": {}, "/readyz": {}, "/auth/gitea/callback": {}, "web": {}, "not_found": {},
+		"/healthz": {}, "/readyz": {}, "/auth/forgejo/callback": {}, "web": {}, "not_found": {},
 	}}
 	services := golfv1.File_golf_v1_golf_proto.Services()
 	for i := 0; i < services.Len(); i++ {

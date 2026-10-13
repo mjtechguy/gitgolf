@@ -8,7 +8,7 @@ const req = (path, init = {}) => new Request(env.GOLF_PUBLIC_ORIGIN + path, init
 
 test('all existing backend namespaces and Git protocol requests reach the bridge', () => {
   for (const path of ['/rpc/golf.v1.GolfService/GetSession', '/api/deployments/id/open', '/auth/access/token',
-    '/hooks/gitea/connection', '/internal/cloudflare/preview', '/internal/ci/poll', '/notifications/unsubscribe',
+    '/hooks/forgejo/connection', '/internal/cloudflare/preview', '/internal/ci/poll', '/notifications/unsubscribe',
     '/healthz', '/readyz', '/git/a/repo.git/info/refs', '/a/repo.git/info/refs', '/a/repo/git-upload-pack']) assert.ok(dynamicPath(path), path);
   for (const path of ['/', '/a/repo/pulls/1', '/assets/app-12345678.js', '/git/repo', '/apiary']) assert.ok(!dynamicPath(path), path);
 });
@@ -50,7 +50,7 @@ test('does not follow redirects with service secrets; maps only bridge locations
     ['https://forge.example.com/login', 'https://forge.example.com/login', 303],
     ['https://team.cloudflareaccess.com/cdn-cgi/access/login', null, 502],
   ]) {
-    const result = await handle(req('/auth/gitea/callback'), env, async () => new Response(null, { status: 303, headers: { location } }));
+    const result = await handle(req('/auth/forgejo/callback'), env, async () => new Response(null, { status: 303, headers: { location } }));
     assert.equal(result.status, status);
     assert.equal(result.headers.get('location'), expected);
   }

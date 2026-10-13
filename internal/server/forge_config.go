@@ -7,14 +7,13 @@ import (
 	"github.com/mjtechguy/golf-git/internal/workflowpath"
 )
 
-// NormalizeForgeConfig resolves transition aliases once, before any database or
-// provider access. Historical storage/API field names remain stable.
+// NormalizeForgeConfig resolves internal storage/API field names before provider access.
 func NormalizeForgeConfig(c Config) (Config, error) {
 	if c.ForgeKind == "" {
-		c.ForgeKind = "gitea"
+		c.ForgeKind = "forgejo"
 	}
-	if c.ForgeKind != "gitea" && c.ForgeKind != "forgejo" {
-		return c, errors.New("GOLF_FORGE_KIND must be gitea or forgejo")
+	if c.ForgeKind != "forgejo" {
+		return c, errors.New("GOLF_FORGE_KIND must be forgejo")
 	}
 	for _, alias := range []struct {
 		current, legacy *string
@@ -36,7 +35,7 @@ func NormalizeForgeConfig(c Config) (Config, error) {
 	if c.GiteaURL == "" {
 		c.GiteaURL = "http://" + c.ForgeKind + ":3000"
 	}
-	if c.GiteaWorkflowDirs == "" && c.ForgeKind == "forgejo" {
+	if c.GiteaWorkflowDirs == "" {
 		c.GiteaWorkflowDirs = workflowpath.ForgejoDirectories
 	}
 	dirs, err := workflowpath.Directories(c.GiteaWorkflowDirs)
@@ -44,7 +43,7 @@ func NormalizeForgeConfig(c Config) (Config, error) {
 		return c, err
 	}
 	c.GiteaWorkflowDirs = strings.Join(dirs, ",")
-	if c.ForgeKind == "forgejo" && !forgeInstanceID.MatchString(c.ForgeInstanceID) {
+	if !forgeInstanceID.MatchString(c.ForgeInstanceID) {
 		return c, errors.New("Forgejo requires GOLF_FORGE_INSTANCE_ID: a stable, unique lowercase UUID for this installation")
 	}
 	if c.ForgeInstanceID != "" && !forgeInstanceID.MatchString(c.ForgeInstanceID) {
@@ -54,18 +53,12 @@ func NormalizeForgeConfig(c Config) (Config, error) {
 }
 
 func (s *Server) forgeLabel() string {
-	if s.config.ForgeKind == "forgejo" {
-		return "Forgejo"
-	}
-	return "Gitea"
+	return "Forgejo"
 }
 
 // API qualification is tied to these exact server releases. A newer image needs
 // its own contract and native behavior receipts before readiness can pass.
 func supportedForgeVersion(kind, version string) bool {
 	version = strings.TrimPrefix(version, "v")
-	if kind == "forgejo" {
-		return version == "15.0.9" || version == "15.0.9+gitea-1.22.0"
-	}
-	return version == "1.27.3"
+	return kind == "forgejo" && (version == "15.0.9" || version == "15.0.9+gitea-1.22.0")
 }

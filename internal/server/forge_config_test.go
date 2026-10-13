@@ -15,10 +15,12 @@ func TestForgeConfigurationTransition(t *testing.T) {
 		kind, origin, dirs string
 		denied             bool
 	}{
-		{"legacy", Config{GiteaURL: "https://old.invalid"}, "gitea", "https://old.invalid", workflowpath.DefaultDirectories, false},
+		{"default requires identity", Config{GiteaURL: "https://old.invalid"}, "", "", "", true},
+		{"default is forgejo", Config{ForgeInstanceID: id, ForgeURL: "https://new.invalid"}, "forgejo", "https://new.invalid", workflowpath.DefaultDirectories, false},
 		{"fresh", Config{ForgeKind: "forgejo", ForgeInstanceID: id, ForgeURL: "https://new.invalid"}, "forgejo", "https://new.invalid", workflowpath.ForgejoDirectories, false},
 		{"explicit selection", Config{ForgeKind: "forgejo", ForgeInstanceID: id, ForgeWorkflowDirs: ".github/workflows"}, "forgejo", "http://forgejo:3000", ".github/workflows", false},
 		{"unknown", Config{ForgeKind: "guess"}, "", "", "", true},
+		{"gitea refused", Config{ForgeKind: "gitea", ForgeInstanceID: id}, "", "", "", true},
 		{"no identity", Config{ForgeKind: "forgejo"}, "", "", "", true},
 		{"bad identity", Config{ForgeKind: "forgejo", ForgeInstanceID: "https://secret.invalid"}, "", "", "", true},
 		{"URL conflict", Config{ForgeURL: "https://new.invalid", GiteaURL: "https://old.invalid"}, "", "", "", true},
@@ -52,7 +54,7 @@ func TestForgeVersionQualification(t *testing.T) {
 		kind, version string
 		ok            bool
 	}{
-		{"forgejo", "15.0.9", true}, {"forgejo", "15.0.9+gitea-1.22.0", true}, {"gitea", "1.27.3", true},
+		{"forgejo", "15.0.9", true}, {"forgejo", "15.0.9+gitea-1.22.0", true}, {"gitea", "1.27.3", false},
 		{"forgejo", "1.27.3", false}, {"gitea", "15.0.9", false}, {"forgejo", "15.0.10", false}, {"forgejo", "15.0.9-evil", false},
 	} {
 		if supportedForgeVersion(tc.kind, tc.version) != tc.ok {

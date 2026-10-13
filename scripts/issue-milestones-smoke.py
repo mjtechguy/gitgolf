@@ -103,7 +103,7 @@ def main():
     users = []
     native_users = {}
     try:
-        report['servedSourceRevision'] = subprocess.check_output(['docker', 'inspect', 'golf-golf-1', '--format', '{{ index .Config.Labels "io.golf.web.revision" }}'], text=True).strip()
+        report['servedSourceRevision'] = subprocess.check_output(['docker', 'inspect', 'golf-forgejo-golf-1', '--format', '{{ index .Config.Labels "io.golf.web.revision" }}'], text=True).strip()
         field = 'assignees' if args.assignees else 'labels' if args.labels else 'milestone'
         prefix = 'golf-'+field+'-'+secrets.token_hex(4)
         for role in ('owner', 'writer', 'reader', 'outsider'):

@@ -17,7 +17,7 @@ func (s *Server) observeHTTP(next http.Handler, webEnabled bool) http.Handler {
 		if s.config.Telemetry != nil {
 			route := "not_found"
 			switch {
-			case r.URL.Path == "/healthz", r.URL.Path == "/readyz", r.URL.Path == "/auth/gitea/callback", r.URL.Path == "/rpc", strings.HasPrefix(r.URL.Path, "/rpc/"):
+			case r.URL.Path == "/healthz", r.URL.Path == "/readyz", r.URL.Path == "/auth/forgejo/callback", r.URL.Path == "/rpc", strings.HasPrefix(r.URL.Path, "/rpc/"):
 				// StartRequest checks its generated procedure/fixed-route allowlist;
 				// unknown RPC paths never become telemetry labels.
 				route = r.URL.Path

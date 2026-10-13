@@ -26,18 +26,18 @@ func TestActionsWorkflowDirectorySelection(t *testing.T) {
 		denied                   bool
 	}{
 		{name: "github only", directory: ".github/workflows", files: map[string]string{".github/workflows/a.yml": workflowActionsFixture}},
-		{name: "gitea only", directory: ".gitea/workflows", files: map[string]string{".gitea/workflows/a.yaml": workflowActionsFixture}},
-		{name: "both prefer gitea", directory: ".gitea/workflows", files: map[string]string{".gitea/workflows/a.yml": workflowActionsFixture, ".github/workflows/b.yml": workflowActionsFixture}},
-		{name: "empty first inventory", directory: ".gitea/workflows", files: map[string]string{".gitea/workflows/.keep": "", ".github/workflows/b.yml": workflowActionsFixture}},
-		{name: "nested first", directory: ".gitea/workflows", files: map[string]string{".gitea/workflows/nested/a.yml": workflowActionsFixture, ".github/workflows/b.yml": workflowActionsFixture}},
-		{name: "invalid YAML still selects first", directory: ".gitea/workflows", files: map[string]string{".gitea/workflows/a.yml": "invalid: [", ".github/workflows/b.yml": workflowActionsFixture}},
-		{name: "renamed first falls back", directory: ".github/workflows", files: map[string]string{".gitea/renamed/a.yml": workflowActionsFixture, ".github/workflows/b.yml": workflowActionsFixture}},
+		{name: "forgejo only", directory: ".forgejo/workflows", files: map[string]string{".forgejo/workflows/a.yaml": workflowActionsFixture}},
+		{name: "both prefer forgejo", directory: ".forgejo/workflows", files: map[string]string{".forgejo/workflows/a.yml": workflowActionsFixture, ".github/workflows/b.yml": workflowActionsFixture}, diagnostics: 1},
+		{name: "empty first inventory", directory: ".forgejo/workflows", files: map[string]string{".forgejo/workflows/.keep": "", ".github/workflows/b.yml": workflowActionsFixture}, diagnostics: 1},
+		{name: "nested first", directory: ".forgejo/workflows", files: map[string]string{".forgejo/workflows/nested/a.yml": workflowActionsFixture, ".github/workflows/b.yml": workflowActionsFixture}, diagnostics: 1},
+		{name: "invalid YAML still selects first", directory: ".forgejo/workflows", files: map[string]string{".forgejo/workflows/a.yml": "invalid: [", ".github/workflows/b.yml": workflowActionsFixture}, diagnostics: 1},
+		{name: "renamed first falls back", directory: ".github/workflows", files: map[string]string{".forgejo/renamed/a.yml": workflowActionsFixture, ".github/workflows/b.yml": workflowActionsFixture}},
 		{name: "deleted directories", files: map[string]string{"README.md": "ordinary"}},
-		{name: "symlink parent", directory: ".github/workflows", files: map[string]string{".gitea": "elsewhere", ".github/workflows/b.yml": workflowActionsFixture}, kinds: map[string]string{".gitea": "symlink"}, diagnostics: 1},
-		{name: "file workflow location", directory: ".github/workflows", files: map[string]string{".gitea/workflows": "elsewhere", ".github/workflows/b.yml": workflowActionsFixture}, diagnostics: 1},
-		{name: "submodule location", files: map[string]string{".gitea/workflows": "elsewhere"}, kinds: map[string]string{".gitea/workflows": "submodule"}, diagnostics: 1},
-		{name: "operator reversed", setting: ".github/workflows,.gitea/workflows", directory: ".github/workflows", files: map[string]string{".gitea/workflows/a.yml": workflowActionsFixture, ".github/workflows/b.yml": workflowActionsFixture}},
-		{name: "operator github only", setting: ".github/workflows", files: map[string]string{".gitea/workflows/a.yml": workflowActionsFixture}},
+		{name: "symlink parent", directory: ".github/workflows", files: map[string]string{".forgejo": "elsewhere", ".github/workflows/b.yml": workflowActionsFixture}, kinds: map[string]string{".forgejo": "symlink"}, diagnostics: 1},
+		{name: "file workflow location", directory: ".github/workflows", files: map[string]string{".forgejo/workflows": "elsewhere", ".github/workflows/b.yml": workflowActionsFixture}, diagnostics: 1},
+		{name: "submodule location", files: map[string]string{".forgejo/workflows": "elsewhere"}, kinds: map[string]string{".forgejo/workflows": "submodule"}, diagnostics: 1},
+		{name: "operator reversed", setting: ".github/workflows,.forgejo/workflows", directory: ".github/workflows", files: map[string]string{".forgejo/workflows/a.yml": workflowActionsFixture, ".github/workflows/b.yml": workflowActionsFixture}, diagnostics: 1},
+		{name: "operator github only", setting: ".github/workflows", files: map[string]string{".forgejo/workflows/a.yml": workflowActionsFixture}},
 		{name: "permission is not absence", files: map[string]string{".github/workflows/b.yml": workflowActionsFixture}, denied: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -122,7 +122,7 @@ func TestWorkflowPlannerFailureClassificationPostgres(t *testing.T) {
 
 func TestWorkflowDefinitionUsesSelectedDirectory(t *testing.T) {
 	const commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	files := map[string]string{".gitea/workflows/a.yml": workflowActionsFixture, ".github/workflows/b.yml": workflowActionsFixture}
+	files := map[string]string{".forgejo/workflows/a.yml": workflowActionsFixture, ".github/workflows/b.yml": workflowActionsFixture}
 	objects := workflowSourceObjects(commit, files, nil)
 	var blobs atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +147,7 @@ func TestWorkflowDefinitionUsesSelectedDirectory(t *testing.T) {
 	if _, _, _, err := s.readWorkflowDefinition(t.Context(), credential, repositoryKey{"alice", "example"}, commit, ".github/workflows/b.yml"); !errors.Is(err, errWorkflowExecutionUnsupported) || blobs.Load() != 0 {
 		t.Fatal("suppressed directory admitted or fetched", err)
 	}
-	got, blob, body, err := s.readWorkflowDefinition(t.Context(), credential, repositoryKey{"alice", "example"}, commit, ".gitea/workflows/a.yml")
+	got, blob, body, err := s.readWorkflowDefinition(t.Context(), credential, repositoryKey{"alice", "example"}, commit, ".forgejo/workflows/a.yml")
 	if err != nil || got != commit || blob != workflowTestBlob([]byte(workflowActionsFixture)) || string(body) != workflowActionsFixture || blobs.Load() != 1 {
 		t.Fatal("selected exact workflow refused", err)
 	}

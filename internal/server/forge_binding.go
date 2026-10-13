@@ -30,13 +30,11 @@ func BindForgeInstallation(ctx context.Context, db *sql.DB, c Config) error {
 	err = tx.QueryRowContext(ctx, "SELECT kind, origin, instance_id, workflow_directories FROM golf_forge_installation WHERE singleton=true").Scan(&kind, &origin, &identity, &directories)
 	if errors.Is(err, sql.ErrNoRows) {
 		var occupied bool
-		if c.ForgeKind != "gitea" {
-			if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM golf_users)").Scan(&occupied); err != nil {
-				return err
-			}
-			if occupied {
-				return errors.New("existing Golf identities require verified forge migration; use a fresh destination database")
-			}
+		if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM golf_users)").Scan(&occupied); err != nil {
+			return err
+		}
+		if occupied {
+			return errors.New("forge installation requires a fresh destination database")
 		}
 		_, err = tx.ExecContext(ctx, "INSERT INTO golf_forge_installation(singleton,kind,origin,instance_id,workflow_directories) VALUES(true,$1,$2,$3,$4)", c.ForgeKind, c.GiteaURL, c.ForgeInstanceID, c.GiteaWorkflowDirs)
 	} else if err == nil && (kind != c.ForgeKind || origin != c.GiteaURL || identity != c.ForgeInstanceID || directories != c.GiteaWorkflowDirs) {
