@@ -377,7 +377,8 @@ test('work navigation stays compact and system status is separate from repositor
   const nav = page.getByRole('navigation', { name: 'Workspace', exact: true });
   const repositories = nav.getByRole('link', { name: 'Repositories', exact: true });
   await expect(repositories).toHaveAttribute('aria-current', 'page');
-  await expect(nav.getByRole('link')).toHaveCount(2);
+  // Golf's default rail lists repositories, organizations and notifications.
+  await expect(nav.getByRole('link')).toHaveCount(3);
   await expect(page.locator('.sidebar')).toHaveCount(0);
   await page.getByLabel('Repository ownership', { exact: true }).selectOption('owned');
   await expect(page.locator('.repository-row')).toHaveCount(2);

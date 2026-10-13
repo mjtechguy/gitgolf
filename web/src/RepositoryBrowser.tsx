@@ -21,10 +21,10 @@ import { SourceActions } from './SourceActions';
 import { CommitList } from './CommitList';
 import { useRepositoryLive, RepositoryLiveStatus, RepositoryLiveContext } from './RepositoryLive';
 import { DiffViewer } from './DiffViewer';
-import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppearance } from './ThemeSwitch';
-import { ShellSlots, SummaryBand, useWideViewport } from './Layout';
+import { SummaryBand, useShellSlot, useWideViewport } from './Layout';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Bot, BookOpen, ChevronRight, CircleDot, Code2, File, Folder, Package, GitBranch, GitCommitHorizontal, GitPullRequest, Link2, Play, RefreshCw, Settings, Tag } from 'lucide-react';
 import { Code, ConnectError } from '@connectrpc/connect';
@@ -106,7 +106,8 @@ function useRetainedRepositoryAccess(repositoryKey: Pick<RepositoryKey, 'owner' 
 }
 
 function SourcePanel({ repositoryKey, queryKey, location, addressLocation, snapshot,repositoryId,onLatest }: { onLatest:()=>void; addressLocation:RepositoryLocation; snapshot:string; repositoryId:string; repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation; defaultBranch: string }) {
-  const panes = useWideViewport() && useAppearance().content === 'panes';
+  const wide = useWideViewport(), appearance = useAppearance();
+  const panes = wide && appearance.content === 'panes';
   const navigate = useNavigate();
   const router = useRouter();
   const cache = useQueryClient();
@@ -213,7 +214,7 @@ export function RepositoryBrowser({ location: addressLocation, userId, anonymous
   const native = runtime.data?.runtimeProfile === 'cloudflare-native';
   const cache = useQueryClient();
   const appearance = useAppearance();
-  const slots = useContext(ShellSlots);
+  const navigationSlot = useShellSlot('navigation'), topSlot = useShellSlot('heading');
   const wide = useWideViewport();
   const repositoryKey = { owner: addressLocation.owner, name: addressLocation.name };
   const queryKey = ['repository', userId, addressLocation.owner, addressLocation.name];
@@ -241,8 +242,8 @@ export function RepositoryBrowser({ location: addressLocation, userId, anonymous
   const codeToolbar = <div className="repository-code-toolbar"><RepositoryRefs {...panelProps} onLatest={location.view === 'source' ? sourceSelection.latest : undefined} latestPending={sourceSelection.pending} pinnedCommitId={sourceSelection.selection?.commitId} unresolvedSource={!sourceSelection.selection&&Boolean(addressLocation.sourceSuffix)}/>{location.view === 'source' && (repository?.cloneUrl || repository?.sshUrl) ? <CloneMenu https={repository.cloneUrl} ssh={repository.sshUrl} native={native&&!anonymous} location={location}/> : null}</div>;
   const emptyState = <section className="browser-panel empty-state"><GitBranch size={29} /><h2>No commits yet.</h2><p>This repository is empty. Push your first commit through Git to add source and branches.</p>{repository?.cloneUrl ? <div className="clone-address"><span>HTTPS clone URL</span><code>{repository?.cloneUrl}</code></div> : null}{repository?.sshUrl ? <div className="clone-address"><span>SSH clone URL</span><code>{repository?.sshUrl}</code></div> : null}</section>;
   const tabs = <RepositoryTabs label="Repository" selection={settingsPage?'settings':location.view==='branches'||location.view==='tags'?'source':location.view}><Link data-shortcut="c" {...repositoryOptions(location, { view: 'source', issue: undefined })} aria-current={!settingsPage && (location.view === 'source'||location.view==='branches'||location.view==='tags') ? 'page' : undefined}><Code2 size={16} />Code</Link><Link data-shortcut="m" {...repositoryOptions(location, { view: 'commits', ref:sourceSelection.selection?.commitId||location.ref, issue: undefined, commit: undefined,historyPath:undefined })} aria-current={!settingsPage && location.view === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={17} />Commits</Link>{!anonymous && <>{repository?.issuesEnabled !== false ? <Link data-shortcut="i" {...repositoryOptions(location, { view: 'issues', issue: undefined,issueNew:undefined })} aria-current={!settingsPage && location.view === 'issues' ? 'page' : undefined}><CircleDot size={16} />Issues</Link> : null}{repository?.pullRequestsEnabled !== false ? <Link data-shortcut="p" {...repositoryOptions(location, { view: 'pulls', pull: undefined })} aria-current={!settingsPage && (location.view === 'pulls' || location.view === 'compare') ? 'page' : undefined}><GitPullRequest size={16} />Pull requests</Link> : null}<Link data-shortcut="a" {...repositoryOptions(location, { view: 'actions',run:undefined })} aria-current={!settingsPage && location.view === 'actions' ? 'page' : undefined}><Play size={16}/>Actions</Link>{native && <Link data-shortcut="b" {...repositoryOptions(location, {view: 'agents', pull: undefined})} aria-current={!settingsPage && location.view === 'agents' ? 'page' : undefined}><Bot size={16}/>Agent workspace</Link>}<RuntimeFeature id="repository.releases"><Link data-shortcut="l" {...repositoryOptions(location,{view:'releases',releaseId:undefined})} aria-current={!settingsPage && location.view==='releases'?'page':undefined}><Tag size={16}/>Releases</Link></RuntimeFeature>{runtimeFeature(runtime.data, 'repository.wiki') && repository?.wikiEnabled!==false?<Link data-shortcut="w" {...repositoryOptions(location,{view:'wiki',wikiPage:undefined})} aria-current={!settingsPage && location.view==='wiki'?'page':undefined}><BookOpen size={16}/>Wiki</Link>:null}<RuntimeFeature id="repository.packages">{native ? <NativePackagesTab selected={!settingsPage && location.view === 'packages'} userId={userId} repository={repositoryKey} repositoryId={repository?.id||''} blocked={query.isFetching||!repository}/> : <Link data-shortcut="k" {...repositoryOptions(location,{view:'packages'})} aria-current={!settingsPage && location.view==='packages'?'page':undefined}><Package size={16}/>Packages</Link>}</RuntimeFeature><Link data-shortcut="s" aria-current={settingsPage?'page':undefined} to="/$owner/$name/settings" params={{owner:location.owner,name:location.name}}><Settings size={16}/>Settings</Link></>}</RepositoryTabs>;
-  const sideNavigation = appearance.feature('contextnav') && wide && slots.navigation;
-  const headingSlot = appearance.nav !== 'top' && wide && slots.heading;
+  const sideNavigation = appearance.feature('contextnav') && wide && navigationSlot;
+  const headingSlot = appearance.nav !== 'top' && wide && topSlot;
   const identity = <div className="repository-identity"><h1 className="repository-context" aria-label={`${location.owner}/${location.name}`} title={`${location.owner}/${location.name}`}>{native && document.documentElement.dataset.golfPublic === 'true' ? <Link to="/$owner" params={{owner:location.owner}}>{location.owner}</Link> : <span>{location.owner}</span>}<span aria-hidden="true">/</span><Link {...repositoryOptions({owner:location.owner,name:location.name})}>{location.name}</Link></h1>{!settingsPage && repository ? <div className="panel-actions repository-identity-actions"><RepositoryVisibility isPrivate={repository.private} />{!anonymous && <><RepositoryStars client={repositoryClient} userId={userId} repository={repositoryKey} repositoryId={repository.id} revalidating={query.isFetching} onAuthorityDenied={denyStarAuthority}/><RepositoryLiveStatus status={live.status} reconnect={live.reconnect}/></>}<button className="icon-button manual-refresh" aria-label="Refresh repository access" disabled={query.isFetching} onClick={() => void refreshAccess()}><RefreshCw size={16} /></button></div> : null}</div>;
   return <RepositoryLiveContext value={live.status}><div className={`repository-browser ${live.status==='live'?'live-connected':''}`}>
     {headingSlot ? createPortal(identity, headingSlot) : identity}

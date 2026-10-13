@@ -73,15 +73,11 @@ test('workspace frame stays aligned between repository, list, and account pages'
     await expect(page.locator('.workspace-navigation a').first()).toHaveAttribute('aria-current', 'page');
     const frame = () => page.evaluate(() => {
       const x = (selector:string) => Math.round(document.querySelector(selector)!.getBoundingClientRect().x);
-      // Rail and sidebar layouts lift the repository heading into the top bar, so the frame is the main column's content edge.
-      const main = document.querySelector('#main-content')!;
-      return {header:Math.round(document.querySelector('.topbar')!.getBoundingClientRect().height), menu:x('.global-menu'), switcher:x('.workspace-switcher'), account:x('.topbar-controls .account-menu'), content:Math.round(main.getBoundingClientRect().x + parseFloat(getComputedStyle(main).paddingLeft)), overflow:document.documentElement.scrollWidth > innerWidth};
+      return {header:Math.round(document.querySelector('.topbar')!.getBoundingClientRect().height), menu:x('.global-menu'), switcher:x('.workspace-switcher'), account:x('.topbar-controls .account-menu'), content:x('.repository-context, .workspace-intro, .account-layout'), overflow:document.documentElement.scrollWidth > innerWidth};
     });
     const repositoryFrame = await frame();
-    // The menu belongs to the top-bar shell; layouts with a rail or sidebar navigate from it instead.
-    const menu = page.getByLabel('Open workspace navigation', {exact:true});
-    if (await menu.isVisible()) { await menu.click(); await page.getByRole('navigation', {name:'Workspace menu', exact:true}).getByRole('link', {name:'Repositories', exact:true}).click(); }
-    else await page.getByRole('complementary', {name:'Workspace shortcuts', exact:true}).getByRole('link', {name:'Repositories', exact:true}).click();
+    await page.getByLabel('Open workspace navigation', {exact:true}).click();
+    await page.getByRole('navigation', {name:'Workspace menu', exact:true}).getByRole('link', {name:'Repositories', exact:true}).click();
     await expect(page).toHaveURL('/');
     expect(await frame()).toEqual(repositoryFrame);
     await page.getByLabel('Your account', {exact:true}).click();

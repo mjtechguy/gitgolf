@@ -1638,6 +1638,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .context-heading .repository-context { font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .context-navigation .repository-tabs { display:grid; gap:2px; margin:0; border:0; overflow:visible; }
 .context-navigation .repository-tabs a { border:0; margin:0; }
+/* Narrow windows return the heading to the page; hiding the slot keeps the resize itself from overflowing. */
+@media(max-width:1050.98px) { .context-heading { display:none; } }
 @media(min-width:1051px) {
   :root:not([data-nav=top]) .global-menu { display:none; }
   :root:not([data-nav=top]) .workspace-heading { flex:1; }
@@ -1674,8 +1676,11 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 
   /* Panes: the repository root becomes edge-to-edge panes that share hairlines. */
   :root[data-content=panes] .workspace-content main { max-width:none; }
-  :root[data-content=panes] .repository-source-layout { grid-template-columns:minmax(0,1fr) 300px; gap:0; align-items:stretch; margin:-16px -24px 0; min-height:calc(100dvh - var(--topbar-h)); border-bottom:1px solid var(--line); }
-  :root[data-content=panes] .repository-navigation + .repository-authorized-content > .repository-source-layout,:root[data-content=panes] .summary-band + .repository-authorized-content > .repository-source-layout { margin-top:-14px; min-height:0; }
+  :root[data-content=panes] .repository-source-layout { grid-template-columns:minmax(0,1fr) 300px; gap:0; align-items:stretch; margin:-16px -24px 0; border-bottom:1px solid var(--line); }
+  :root[data-content=panes] .repository-navigation + .repository-authorized-content > .repository-source-layout,:root[data-content=panes] .summary-band + .repository-authorized-content > .repository-source-layout { margin-top:-14px; }
+  /* The file column is narrower between two panes, so the latest commit takes its own row. */
+  :root[data-content=panes] .repository-source-main .source-panel-heading { flex-wrap:wrap; }
+  :root[data-content=panes] .repository-source-main .repository-latest-commit { flex-basis:100%; }
   :root[data-content=panes] .repository-source-layout > .repository-sidebar { align-content:start; padding:16px; border-left:1px solid var(--line); background:var(--panel); }
   :root[data-content=panes] .repository-source-main > .repository-code-toolbar { margin:0; padding:8px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
   :root[data-content=panes] .repository-source-main > .source-file-layout { grid-template-columns:264px minmax(0,1fr); gap:0; align-items:stretch; min-height:100%; }
@@ -1703,7 +1708,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 :root[data-appearance=flare] .summary-band { box-shadow:var(--shadow); }
 
 /* Keyboard layer: hints beside sections, a legend at the foot of the window. */
-kbd { display:inline-flex; align-items:center; min-height:18px; padding:0 5px; border:1px solid var(--line-strong); border-radius:max(2px,calc(var(--radius) / 2)); background:var(--bg); color:var(--muted); font:500 .6875rem/1 var(--mono); }
+:is(.shortcut-legend,.shortcut-dialog) kbd { display:inline-flex; align-items:center; min-height:18px; padding:0 5px; border:1px solid var(--line-strong); border-radius:max(2px,calc(var(--radius) / 2)); background:var(--bg); color:var(--muted); font:500 .6875rem/1 var(--mono); }
 :root[data-features~=keys] :is(.workspace-navigation,.repository-tabs) a[data-shortcut]::after { content:"g " attr(data-shortcut) / ""; margin-left:6px; padding:2px 4px; border:1px solid var(--line); color:var(--muted); font:500 .6875rem/1 var(--mono); }
 :root[data-features~=keys] .workspace-content main { padding-bottom:44px; }
 :root[data-features~=keys] :is(.repository-row,.source-tree > li,.commit-list > li,.data-table tbody tr):focus-within { background:var(--hover); box-shadow:inset 3px 0 var(--brand-mark-bg); }
@@ -1735,4 +1740,4 @@ kbd { display:inline-flex; align-items:center; min-height:18px; padding:0 5px; b
 
 /* Signed-out pages share the compact controls and frame of the signed-in shell. */
 .public-workspace .topbar .button { min-height:var(--control-h); padding:4px 12px; font-size:.8125rem; }
-@media(min-width:721px) { .public-workspace .topbar { padding-inline:max(24px, calc((100% - 1400px)/2 + 24px)); } }
+@media(min-width:721px) { :root .public-workspace .topbar { padding-inline:max(24px, calc((100% - 1400px)/2 + 24px)); } }

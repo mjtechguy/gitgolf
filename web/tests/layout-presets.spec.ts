@@ -132,6 +132,26 @@ test('operators set the first-visit appearance and layout; a saved choice still 
   await expect(root(page)).toHaveAttribute('data-layout', 'tiles');
 });
 
+test('signed-out pages keep the top bar and one frame in every appearance', async ({ page }) => {
+  await page.route('**/rpc/**', route => route.request().url().endsWith('/GetSession') ? respond(route, GetSessionResponseSchema, {}) : reject(route, 'unimplemented', 'Fixture procedure unavailable.'));
+  await page.route('**/', async route => { const response = await route.fetch(); await route.fulfill({ response, body: (await response.text()).replace('<html', '<html data-golf-public="true"') }); });
+  for (const appearance of ['classic', 'golf', 'flare']) for (const width of [1600, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    await page.evaluate(value => localStorage.setItem('golf.appearance', value), appearance);
+    await page.reload();
+    await expect(root(page)).toHaveAttribute('data-appearance', appearance);
+    await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible();
+    await expect(page.locator('.topbar').getByRole('link', { name: 'Golf home', exact: true })).toBeVisible();
+    await expect(page.getByRole('complementary', { name: 'Workspace shortcuts' })).toHaveCount(0);
+    const brand = await box(page, '.topbar .brand'), main = await box(page, '#main-content'), signIn = await box(page, '.topbar .button');
+    const padding = await page.locator('#main-content').evaluate(element => parseFloat(getComputedStyle(element).paddingLeft));
+    if (width > 720) { expect(Math.abs(brand.x - (main.x + padding))).toBeLessThan(1); expect(signIn.height).toBeLessThanOrEqual(36); }
+    expect(await fits(page)).toBe(true);
+    await page.screenshot({ path: `test-results/layout-signed-out-${appearance}-${width}.png` });
+  }
+});
+
 test('Cloudflare-native entry starts on Flare Console', async ({ page }) => {
   await page.goto('/native.html');
   await expect(root(page)).toHaveAttribute('data-appearance', 'flare');
@@ -144,12 +164,15 @@ test('Fewer strokes follows section shortcuts, moves through rows and lists its 
   await page.goto('/alex/demo');
   await expect(page.getByRole('contentinfo', { name: 'Keyboard shortcuts' })).toContainText('all shortcuts');
   await expect(page.getByRole('region', { name: 'Repository README' })).toBeVisible();
-  // The active element is read directly: parallel headless pages do not always hold window focus.
+  // Access revalidation briefly makes repository content inert, which drops focus; the sequence restarts from a clean state.
   const focused = () => page.evaluate(() => document.activeElement?.getAttribute('title'));
-  await page.keyboard.press('j'); await page.keyboard.press('j');
-  await expect.poll(focused).toBe('LICENSE');
-  await page.keyboard.press('k');
-  await expect.poll(focused).toBe('src');
+  await expect(async () => {
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('j'); await page.keyboard.press('j');
+    expect(await focused()).toBe('LICENSE');
+    await page.keyboard.press('k');
+    expect(await focused()).toBe('src');
+  }).toPass();
   await page.keyboard.press('?');
   const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
   await expect(dialog).toContainText('Commits');
