@@ -428,7 +428,7 @@ test('appearance choices color the Golf brand, persist, and share the header col
   await expect(root).toHaveAttribute('data-appearance', 'golf');
   await expect(page.getByRole('heading', { name: 'Appearance', exact: true })).toBeVisible();
   const brandColors: Record<string, [string, string]> = {
-    'Classic/Light': ['rgb(9, 105, 218)', 'rgb(121, 184, 255)'],
+    'Classic/Light': ['rgb(9, 105, 218)', 'rgb(9, 105, 218)'],
     'Classic/Dark': ['rgb(121, 184, 255)', 'rgb(121, 184, 255)'],
     'Golf/Light': ['rgb(212, 255, 58)', 'rgb(63, 100, 0)'],
     'Golf/Dark': ['rgb(212, 255, 58)', 'rgb(212, 255, 58)'],
@@ -441,7 +441,8 @@ test('appearance choices color the Golf brand, persist, and share the header col
     await expect(root).toHaveAttribute('data-appearance', name.toLowerCase());
     await expect(root).toHaveAttribute('data-theme', color.toLowerCase());
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', name === 'Golf' ? '/golf.svg' : name === 'Classic' && color === 'Dark' ? '/golf-classic-dark.svg' : `/golf-${name.toLowerCase()}.svg`);
-    const brand = page.locator(name === 'Flare' ? '.appearance-sidebar .brand' : '.topbar .brand');
+    // Classic's default layout keeps the brand in the top bar; Golf and Flare start with a rail.
+    const brand = page.locator(name === 'Classic' ? '.topbar .brand' : '.appearance-sidebar .brand');
     expect([
       await brand.locator('.brand-mark').evaluate(element => getComputedStyle(element).backgroundColor),
       await brand.evaluate(element => getComputedStyle(element).color),

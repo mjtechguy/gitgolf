@@ -1,6 +1,7 @@
 import { nativeBuildIdentity } from './build-identity.mjs';
 import { webhookBindings } from './src/webhooks.mjs';
 import { accessBindings } from './src/access.mjs';
+import { defaultAppearance } from './src/public.mjs';
 import { operationsPolicy } from './src/operations-provider.mjs';
 import { readFile, mkdir, rm, lstat } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
@@ -167,6 +168,10 @@ if (mode === 'retire') {
     output.workers.default.config.env.APP_HOSTS = { type: 'text', value: 'true' };
     await u.writeWorkerConfig({ root: previewRoot, config: output.workers.default.config, manifest: { type: 'partial', mainModule: 'worker.mjs', modules: {} } });
     await u.readBuildOutput(previewRoot);
+  }
+  if (settings.default_appearance !== undefined) {
+    if (typeof settings.default_appearance !== 'string' || !defaultAppearance.test(settings.default_appearance)) throw Error('Default appearance must be an appearance or appearance/layout');
+    config.env.DEFAULT_APPEARANCE = { type: 'text', value: settings.default_appearance };
   }
   if (settings.automatic_ci !== undefined) {
     if (typeof settings.automatic_ci !== 'boolean' || settings.automatic_ci && !settings.tests) throw Error('Automatic CI requires an approved test allocation');

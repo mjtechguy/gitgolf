@@ -73,11 +73,15 @@ test('workspace frame stays aligned between repository, list, and account pages'
     await expect(page.locator('.workspace-navigation a').first()).toHaveAttribute('aria-current', 'page');
     const frame = () => page.evaluate(() => {
       const x = (selector:string) => Math.round(document.querySelector(selector)!.getBoundingClientRect().x);
-      return {header:Math.round(document.querySelector('.topbar')!.getBoundingClientRect().height), menu:x('.global-menu'), switcher:x('.workspace-switcher'), account:x('.topbar-controls .account-menu'), content:x('.repository-context, .workspace-intro, .account-layout'), overflow:document.documentElement.scrollWidth > innerWidth};
+      // Rail and sidebar layouts lift the repository heading into the top bar, so the frame is the main column's content edge.
+      const main = document.querySelector('#main-content')!;
+      return {header:Math.round(document.querySelector('.topbar')!.getBoundingClientRect().height), menu:x('.global-menu'), switcher:x('.workspace-switcher'), account:x('.topbar-controls .account-menu'), content:Math.round(main.getBoundingClientRect().x + parseFloat(getComputedStyle(main).paddingLeft)), overflow:document.documentElement.scrollWidth > innerWidth};
     });
     const repositoryFrame = await frame();
-    await page.getByLabel('Open workspace navigation', {exact:true}).click();
-    await page.getByRole('navigation', {name:'Workspace menu', exact:true}).getByRole('link', {name:'Repositories', exact:true}).click();
+    // The menu belongs to the top-bar shell; layouts with a rail or sidebar navigate from it instead.
+    const menu = page.getByLabel('Open workspace navigation', {exact:true});
+    if (await menu.isVisible()) { await menu.click(); await page.getByRole('navigation', {name:'Workspace menu', exact:true}).getByRole('link', {name:'Repositories', exact:true}).click(); }
+    else await page.getByRole('complementary', {name:'Workspace shortcuts', exact:true}).getByRole('link', {name:'Repositories', exact:true}).click();
     await expect(page).toHaveURL('/');
     expect(await frame()).toEqual(repositoryFrame);
     await page.getByLabel('Your account', {exact:true}).click();
@@ -90,7 +94,8 @@ test('workspace frame stays aligned between repository, list, and account pages'
 
 for (const profile of ['local', 'docker', 'kubernetes', 'cloudflare-native']) for (const width of [320, 1440]) test(`persistent repository frame and settings navigation ${profile} ${width}`, async ({page}) => {
   const state = await fixture(page, profile);
-  await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme), profile==='local'||profile==='kubernetes'?'dark':'light');
+  // This covers the top-bar shell's workspace menu; layout-presets.spec.ts covers the rail and sidebar layouts.
+  await page.addInitScript(theme=>{localStorage.setItem('golf.theme',theme);localStorage.setItem('golf.layout.golf','refined');}, profile==='local'||profile==='kubernetes'?'dark':'light');
   await page.setViewportSize({width, height:900});
   await page.goto('/alex/demo');
   const tabs = page.getByRole('navigation', {name:'Repository',exact:true});

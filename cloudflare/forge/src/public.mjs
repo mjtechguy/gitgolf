@@ -2,6 +2,9 @@ import { release, configuration, timings } from './telemetry.mjs';
 import { performanceSample } from './performance.mjs';
 import { bounded } from './git.mjs';
 import { accessContext } from './access.mjs';
+
+// "appearance" or "appearance/layout", matching web/public/theme.js.
+export const defaultAppearance = /^(classic(\/(primer|workbench|reader))?|golf(\/(refined|strokes|tiles))?|flare(\/(kumo|overview|console))?)$/;
 // Current assets are embedded; older hashes are retained in private R2 across releases.
 const builtAssets = typeof GOLF_NATIVE_ASSETS === 'undefined' ? null : GOLF_NATIVE_ASSETS;
 export const immutableAsset = path => /^\/assets\/[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8}\.(?:js|css|woff2?|svg)$/.test(path);
@@ -86,6 +89,8 @@ async function dispatch(request, env, ctx, clock) {
         const session = JSON.stringify(await auth.json()).replace(/</g, '\\u003c');
         let html = (await response.text()).replace('<script id="golf-session" type="application/json">null</script>', () => `<script id="golf-session" type="application/json">${session}</script>`);
         if (publicSite) html = html.replace('<html', '<html data-golf-public="true"');
+        // The operator's first-visit appearance and layout; web/public/theme.js applies it before paint.
+        if (defaultAppearance.test(env.DEFAULT_APPEARANCE || '')) html = html.replace('<html', `<html data-golf-default-appearance="${env.DEFAULT_APPEARANCE}"`);
         outgoing.set('Cache-Control', 'no-store'); outgoing.delete('Content-Length');
         return new Response(html, { status: response.status, headers: outgoing });
       }

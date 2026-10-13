@@ -1505,7 +1505,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 :root[data-appearance=classic] .workspace-content main { max-width:1280px; }
 @media(min-width:721px) { :root[data-appearance=classic] .topbar { padding-inline:max(32px, calc((100% - 1280px)/2 + 32px)); } }
 
-/* Flare: an operational dashboard. Persistent rail, white cards on a warm-gray canvas. */
+/* Flare: an operational dashboard. White cards on a warm-gray canvas. The sidebar and rail belong to the layout (data-nav), below. */
 .appearance-sidebar { display:none; }
 .appearance-sidebar-label { margin:12px 12px 4px; color:var(--muted); font-size:.75rem; font-weight:600; }
 .appearance-sidebar nav { display:grid; gap:2px; }
@@ -1524,13 +1524,13 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 :root[data-appearance=flare] .repository-sidebar-section,:root[data-appearance=flare] .repository-sidebar-section:last-child { padding:0 0 12px; border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; box-shadow:none; }
 :root[data-appearance=flare][data-theme=dark] :is(input:not([type=checkbox]),textarea,select) { background:var(--raised); }
 @media(min-width:1051px) {
-  :root[data-appearance=flare] .app-shell { display:grid; grid-template-columns:192px minmax(0,1fr); }
-  :root[data-appearance=flare] .appearance-sidebar { position:sticky; top:0; align-self:start; display:flex; flex-direction:column; height:100dvh; padding:10px 8px 16px; overflow-y:auto; border-right:1px solid var(--line); background:var(--panel); }
-  :root[data-appearance=flare] .appearance-sidebar .brand { min-height:28px; margin:0 12px 16px; }
-  :root[data-appearance=flare] .topbar .brand,:root[data-appearance=flare] .workspace-navigation { display:none; }
-  :root[data-appearance=flare] .workspace-content main { padding-inline:24px; }
-  :root[data-appearance=flare] .topbar { padding-inline:max(24px, calc((100% - 1440px)/2 + 24px)); }
-  :root[data-appearance=flare] .repository-navigation { margin-inline:-24px; padding-inline:24px; }
+  :root:not([data-nav=top]) .app-shell { display:grid; grid-template-columns:192px minmax(0,1fr); }
+  :root:not([data-nav=top]) .appearance-sidebar { position:sticky; top:0; align-self:start; display:flex; flex-direction:column; height:100dvh; padding:10px 8px 16px; overflow-y:auto; border-right:1px solid var(--line); background:var(--panel); }
+  :root:not([data-nav=top]) .appearance-sidebar .brand { min-height:28px; margin:0 12px 16px; }
+  :root:not([data-nav=top]) .topbar .brand,:root:not([data-nav=top]) .workspace-navigation { display:none; }
+  :root:not([data-nav=top]) .workspace-content main { padding-inline:24px; }
+  :root:not([data-nav=top]) .topbar { padding-inline:max(24px, calc((100% - 1440px)/2 + 24px)); }
+  :root:not([data-nav=top]) .repository-navigation { margin-inline:-24px; padding-inline:24px; }
 }
 
 .appearance-settings-content { display:grid; gap:14px; padding:var(--panel-padding); }
@@ -1614,7 +1614,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .public-profile-layout textarea { width:100%; }
 @media(max-width:800px) { .public-profile-layout { grid-template-columns:1fr; gap:20px; } .public-pinned-grid { grid-template-columns:1fr; } }
 
-:root[data-appearance=flare] .public-workspace .topbar .brand { display:inline-flex; }
+:root:not([data-nav=top]) .public-workspace .topbar .brand { display:inline-flex; }
 .public-profile-identity p:has(svg) { display:flex; align-items:center; gap:6px; }
 
 .agent-workspace-heading { display:flex; align-items:start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
@@ -1626,3 +1626,113 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .agent-workspace-summary strong { font-size:18px; overflow-wrap:anywhere; }
 .agent-workspace .data-table [aria-current=page] { font-weight:700; color:var(--accent); }
 @media(max-width:600px) { .agent-workspace-summary { grid-template-columns:1fr; } }
+
+/* ── Layouts ───────────────────────────────────────────────────────────────
+   Each appearance offers three layouts (public/theme.js). A layout names its
+   navigation (data-nav), content arrangement (data-content) and features
+   (data-features); rules target those parts, never a page. Below 1051px every
+   layout uses the same top-bar shell. */
+.context-navigation:empty,.context-heading:empty { display:none; }
+.context-heading { display:flex; align-items:center; min-width:0; }
+.context-heading .repository-identity { min-height:0; margin:0; flex-wrap:nowrap; }
+.context-heading .repository-context { font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.context-navigation .repository-tabs { display:grid; gap:2px; margin:0; border:0; overflow:visible; }
+.context-navigation .repository-tabs a { border:0; margin:0; }
+@media(min-width:1051px) {
+  :root:not([data-nav=top]) .global-menu { display:none; }
+  :root:not([data-nav=top]) .workspace-heading { flex:1; }
+  :root:not([data-nav=top]) .context-heading { flex:1; }
+  :root:not([data-nav=top]) .context-heading .repository-identity { flex:1; }
+  :root:not([data-nav=top]) .appearance-sidebar nav a[aria-current=page] { color:var(--text); background:var(--raised); font-weight:600; }
+  /* Rail: icons over short labels. */
+  :root[data-nav=rail] .app-shell { grid-template-columns:76px minmax(0,1fr); }
+  :root[data-nav=rail] .appearance-sidebar { padding:0 0 12px; gap:2px; }
+  :root[data-nav=rail] .appearance-sidebar .brand { justify-content:center; min-height:var(--topbar-h); margin:0 0 6px; font-size:0; gap:0; }
+  :root[data-nav=rail] .appearance-sidebar-label { height:1px; margin:6px 12px; padding:0; overflow:hidden; background:var(--line); font-size:0; line-height:0; }
+  /* The account menu already holds these; the rail keeps to places you move between. */
+  :root[data-nav=rail] .appearance-sidebar > .appearance-sidebar-label:last-of-type,:root[data-nav=rail] .appearance-sidebar > nav:last-of-type { display:none; }
+  :root[data-nav=rail] .appearance-sidebar:has(.context-navigation a[aria-current=page]) > nav a[aria-current=page] { background:transparent; box-shadow:inset 3px 0 var(--brand-mark-bg); }
+  :root[data-nav=rail] .appearance-sidebar nav a,:root[data-nav=rail] .context-navigation .repository-tabs a { flex-direction:column; justify-content:center; gap:4px; min-height:52px; padding:7px 2px; border-radius:0; font-size:.65625rem; font-weight:500; line-height:1.15; text-align:center; box-shadow:none; }
+  :root[data-nav=rail] .appearance-sidebar nav a[aria-current=page] { box-shadow:inset 3px 0 var(--brand-mark-bg); }
+  /* Golf's rail stays black in both color modes; the current section is the lime block. */
+  :root[data-appearance=golf][data-nav=rail] .appearance-sidebar { border-right:0; background:#101010; }
+  :root[data-appearance=golf][data-nav=rail] .appearance-sidebar nav a { color:#b4b4b4; }
+  :root[data-appearance=golf][data-nav=rail] .appearance-sidebar nav a:hover { background:#1f1f1f; color:#fff; }
+  :root[data-appearance=golf][data-nav=rail] .appearance-sidebar nav a[aria-current=page] { background:#d4ff3a; color:#0c0c0c; font-weight:700; box-shadow:none; }
+  :root[data-appearance=golf][data-nav=rail] .appearance-sidebar:has(.context-navigation a[aria-current=page]) > nav a[aria-current=page] { color:#fff; font-weight:500; }
+  :root[data-appearance=golf][data-nav=rail] .appearance-sidebar .brand-mark { width:76px; height:var(--topbar-h); font-size:1.75rem; }
+  :root[data-appearance=golf][data-nav=rail] .appearance-sidebar-label { background:#2b2b2b; }
+  /* Flare's rail is icon-only; link titles name each destination. */
+  :root[data-appearance=flare][data-nav=rail] .app-shell { grid-template-columns:56px minmax(0,1fr); }
+  :root[data-appearance=flare][data-nav=rail] .appearance-sidebar { align-items:center; padding-inline:8px; background:var(--bg); }
+  :root[data-appearance=flare][data-nav=rail] .appearance-sidebar nav a { width:40px; min-height:36px; padding:0; border-radius:var(--radius); font-size:0; gap:0; }
+  :root[data-appearance=flare][data-nav=rail] .appearance-sidebar nav a[aria-current=page] { box-shadow:none; }
+  :root[data-appearance=flare][data-nav=rail] .appearance-sidebar-label { width:24px; margin-inline:0; }
+  /* Sidebar: repository sections list under the workspace links. */
+  :root[data-nav=sidebar] .app-shell { grid-template-columns:216px minmax(0,1fr); }
+  :root[data-nav=sidebar] .context-navigation .repository-tabs a { justify-content:flex-start; }
+
+  /* Panes: the repository root becomes edge-to-edge panes that share hairlines. */
+  :root[data-content=panes] .workspace-content main { max-width:none; }
+  :root[data-content=panes] .repository-source-layout { grid-template-columns:minmax(0,1fr) 300px; gap:0; align-items:stretch; margin:-16px -24px 0; min-height:calc(100dvh - var(--topbar-h)); border-bottom:1px solid var(--line); }
+  :root[data-content=panes] .repository-navigation + .repository-authorized-content > .repository-source-layout,:root[data-content=panes] .summary-band + .repository-authorized-content > .repository-source-layout { margin-top:-14px; min-height:0; }
+  :root[data-content=panes] .repository-source-layout > .repository-sidebar { align-content:start; padding:16px; border-left:1px solid var(--line); background:var(--panel); }
+  :root[data-content=panes] .repository-source-main > .repository-code-toolbar { margin:0; padding:8px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+  :root[data-content=panes] .repository-source-main > .source-file-layout { grid-template-columns:264px minmax(0,1fr); gap:0; align-items:stretch; min-height:100%; }
+  :root[data-content=panes] .repository-source-main > .source-file-layout > :is(.browser-panel,.source-navigator) { margin:0; border:0; border-radius:0; box-shadow:none; }
+  :root[data-content=panes] .repository-source-main > .source-file-layout > .source-navigator { border-right:1px solid var(--line); background:var(--panel); }
+  :root[data-content=panes] .repository-source-main { display:flex; flex-direction:column; }
+  :root[data-content=panes] .repository-source-main > .source-file-layout { flex:1; }
+  :root[data-appearance=classic][data-content=panes] { font-size:.9375rem; }
+
+  /* Reader: files and README share one panel, side by side. */
+  :root[data-features~=reader] .repository-source-main section.browser-panel:has(> [aria-label="Repository README"]) { display:grid; grid-template-columns:minmax(260px,380px) minmax(0,1fr); align-items:start; }
+  :root[data-features~=reader] .repository-source-main section.browser-panel:has(> [aria-label="Repository README"]) > * { grid-column:1; min-width:0; }
+  :root[data-features~=reader] .repository-source-main section.browser-panel:has(> [aria-label="Repository README"]) > .browser-panel-heading { grid-column:1 / -1; }
+  :root[data-features~=reader] .repository-source-main section.browser-panel > [aria-label="Repository README"] { grid-column:2; grid-row:2 / span 12; align-self:stretch; margin:0; border:0; border-left:1px solid var(--line); border-radius:0; box-shadow:none; }
+  :root[data-features~=reader] .repository-source-main .source-tree :is(.source-entry-commit-title,.source-entry-commit) { display:none; }
+}
+
+/* Summary band: facts the page has already loaded. */
+.summary-band { display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); margin:0 0 var(--section-gap); border:1px solid var(--line); border-radius:var(--radius-panel); background:var(--panel); overflow:hidden; }
+.summary-band > div { min-width:0; padding:10px 16px 12px; box-shadow:-1px 0 var(--line); }
+.summary-band dt { color:var(--muted); font-size:.75rem; }
+.summary-band dd { margin:2px 0 0; font-size:1.125rem; font-weight:600; letter-spacing:-.01em; overflow-wrap:anywhere; }
+.summary-band dd.summary-band-note { margin-top:0; color:var(--muted); font-size:.75rem; font-weight:400; letter-spacing:0; }
+:root[data-appearance=golf] .summary-band dd:not(.summary-band-note) { font-size:1.5rem; font-weight:900; letter-spacing:-.03em; line-height:1.15; font-variant-numeric:tabular-nums; }
+:root[data-appearance=flare] .summary-band { box-shadow:var(--shadow); }
+
+/* Keyboard layer: hints beside sections, a legend at the foot of the window. */
+kbd { display:inline-flex; align-items:center; min-height:18px; padding:0 5px; border:1px solid var(--line-strong); border-radius:max(2px,calc(var(--radius) / 2)); background:var(--bg); color:var(--muted); font:500 .6875rem/1 var(--mono); }
+:root[data-features~=keys] :is(.workspace-navigation,.repository-tabs) a[data-shortcut]::after { content:"g " attr(data-shortcut) / ""; margin-left:6px; padding:2px 4px; border:1px solid var(--line); color:var(--muted); font:500 .6875rem/1 var(--mono); }
+:root[data-features~=keys] .workspace-content main { padding-bottom:44px; }
+:root[data-features~=keys] :is(.repository-row,.source-tree > li,.commit-list > li,.data-table tbody tr):focus-within { background:var(--hover); box-shadow:inset 3px 0 var(--brand-mark-bg); }
+.shortcut-legend { position:fixed; inset:auto 0 0; z-index:5; display:flex; align-items:center; justify-content:flex-end; gap:6px 18px; min-height:30px; padding:4px 24px; border-top:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:.75rem; }
+.shortcut-legend span { display:flex; align-items:center; gap:4px; white-space:nowrap; }
+.shortcut-dialog dl { display:grid; gap:0; margin:0; }
+.shortcut-dialog dl > div { display:flex; align-items:center; gap:12px; padding:7px 0; border-top:1px solid var(--line); }
+.shortcut-dialog dl > div:first-child { border-top:0; }
+.shortcut-dialog dt { display:flex; gap:4px; min-width:76px; }
+.shortcut-dialog dd { margin:0; }
+@media(max-width:720px) { .shortcut-legend { display:none; } :root[data-features~=keys] .workspace-content main { padding-bottom:0; } :root[data-features~=keys] :is(.workspace-navigation,.repository-tabs) a[data-shortcut]::after { content:none; } }
+
+/* Classic · Primer: the light header GitHub uses today. */
+:root[data-layout=primer]:not([data-theme=dark]) { --header-bg:#f6f8fa; --header-fg:#1f2328; --header-muted:#59636e; --header-line:#d1d9e0; --brand-header-wordmark:#0969da; }
+
+/* Layout choices reuse the appearance buttons; each sketch shows where navigation, content and the side column sit. */
+.layout-sketch { display:grid; gap:3px; width:100%; height:34px; margin-bottom:2px; padding:4px; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg); grid-template:"n n" 6px "m a" 1fr / 1fr 28%; }
+.layout-sketch i { display:block; border-radius:1px; background:var(--line); }
+.layout-sketch i:first-child { grid-area:n; background:var(--line-strong); }
+.layout-sketch i:nth-child(2) { grid-area:m; }
+.layout-sketch i:last-child { grid-area:a; }
+.layout-sketch-workbench { grid-template:"n n" 6px "a m" 1fr / 30% 1fr; }
+.layout-sketch-reader { grid-template:"n n" 6px "m a" 1fr / 38% 1fr; }
+.layout-sketch-strokes { grid-template:"n" 5px "a" 7px "m" 1fr / 1fr; }
+.layout-sketch-tiles { grid-template:"n a m" 1fr / 12% 26% 1fr; }
+.layout-sketch-console { grid-template:"n m a" 1fr / 9% 1fr 26%; }
+.layout-sketch-kumo { grid-template:"n m a" 1fr / 24% 1fr 22%; }
+.layout-sketch-overview { grid-template:"n a" 8px "n m" 1fr / 24% 1fr; }
+
+/* Signed-out pages share the compact controls and frame of the signed-in shell. */
+.public-workspace .topbar .button { min-height:var(--control-h); padding:4px 12px; font-size:.8125rem; }
+@media(min-width:721px) { .public-workspace .topbar { padding-inline:max(24px, calc((100% - 1400px)/2 + 24px)); } }
