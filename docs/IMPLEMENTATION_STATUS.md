@@ -2963,3 +2963,41 @@ Cloudflare routing error 1042 during a read-only capability call; its resources
 were removed and the read-only retry list was corrected before the passing run.
 No production profile migration, user-managed pool, maintained Actions `uses`
 execution, broad GitLab feature set, or runner UI is qualified.
+
+## Native pinned Actions, stock GitLab Runner and socketless build slice (2026-10-12)
+
+The customer-hosted PR adapter now accepts an opt-in `actions-act` workflow
+profile for the existing pinned `act` v0.2.89 Linux v1 catalog. A host must
+advertise the catalog, clone and verify the exact PR head, run the static engine
+planner, then execute the pinned graph in the existing isolated inner Docker
+daemon. A real local Docker test passed a dependent graph with matrix expansion
+and a local composite action. The shell-only profile remains separate.
+
+Workspace admins can enroll a stock GitLab Runner machine with a `glrt-` token.
+The unchanged GitLab Runner 18.5.0 Docker executor registered directly with a
+local Golf coordinator fixture, cloned the exact Git commit through its leased
+job-token URL, executed the script, uploaded trace ranges and completed the
+job. The coordinator also tests token rejection, terminal replay and sponsor,
+lease and PR authority checks. This is the existing one-job GitLab shell
+contract, not broad GitLab CI syntax or every Runner API feature.
+
+An optional native Actions post-test build ran a pinned-base Dockerfile with
+`COPY` and `RUN` on the selected rootless Docker BuildKit driver. The job had no
+Docker socket, the build used `--network none`, and the 32 MiB OCI tar passed
+blob and manifest verification. The result records the digest and exact source
+commit. The tar is deleted with the attempt, so no CFCR publication or retained
+artifact is claimed. Hosted customer-runner qualification, complete GitLab
+artifact/cache/service/ID-token paths and the broad failure/load matrix remain
+open. See [host configuration and tests](../cmd/golf-native-runner/README.md).
+
+Fresh native databases now carry schema20. The guarded release tool applies
+0019 and 0020 to existing D1 databases, checks the required columns and
+indexes, and recovers after a lost additive migration acknowledgement. Local
+release migration tests pass; a hosted schema20 deployment and rollback
+rehearsal have not run.
+
+## 2026-10-12: greenfield Forgejo default
+
+The portable new-install profile now uses pinned Forgejo 15.0.9 in the default Compose file and Helm chart. Runtime configuration defaults to Forgejo and rejects `GOLF_FORGE_KIND=gitea`; it requires a stable installation UUID. The default workflow directories are `.forgejo/workflows` and `.github/workflows`, and `.gitea/workflows` is rejected. Public OAuth and webhook routes are `/auth/forgejo/callback` and `/hooks/forgejo/{connectionID}`. Readiness and operations report `forgejo`. CLI authentication now requires `GOLF_FORGE_TOKEN` and rejects `GOLF_GITEA_TOKEN`. The old Gitea recovery and qualification scripts are retained only as historical evidence, not as new-install gates. Forgejo's rootless image still uses upstream `/var/lib/gitea` and `/etc/gitea` filesystem paths, and some generated RPC/field names retain Gitea vocabulary; these do not select or launch a Gitea service.
+
+New-install evidence: default Compose configuration and a rebuilt local stack; actual private login, repository, Git push, restart persistence and revocation smoke; fresh isolated Forgejo/PostgreSQL qualification with native PR/review, workflow precedence and reader revocation; Helm lint/render plus 25 invalid configuration cases; `make check` (including Go, generated-output, act, browser typecheck, Cloudflare, race and compatibility checks); web typecheck and 82 focused browser tests plus four code owner browser tests. The isolated qualification removes its owned containers. A live Forgejo Kubernetes rollout, optional OAuth browser flow, and Forgejo backup/restore drill remain open. Previous Gitea installation receipts do not qualify those paths.

@@ -68,7 +68,7 @@ export async function buildRelease(directory, executable) {
   await esbuild.build({ entryPoints: ['cloudflare/forge/src/' + (settings.agent_path ? 'agent-entry.mjs' : settings.tests ? 'test-entry.mjs' : 'worker.mjs')], outfile: target + '.next', bundle: true, format: 'esm', platform: 'neutral',
     define: { GOLF_NATIVE_ASSETS: JSON.stringify(assets), GOLF_NATIVE_RELEASE: JSON.stringify(release), GOLF_NATIVE_CONFIGURATION: JSON.stringify(configuration) }, nodePaths: ['cloudflare/agents/node_modules'],
     conditions: ['workerd', 'worker', 'browser'], external: ['cloudflare:workers', 'node:*'] });
-  const manifest = { format: 1, release, contract: 1, schema: 18, account: settings.account, worker: settings.worker, database: settings.database.uuid,
+  const manifest = { format: 1, release, contract: 1, schema: 20, account: settings.account, worker: settings.worker, database: settings.database.uuid,
     namespace: settings.namespace, workspace: settings.workspace, origin: settings.origin, bucket: settings.evidence.bucket,
     previousBundleSha256: base, bundleSha256: hash(await readFile(target + '.next')), assets: retained, createdAt: new Date().toISOString() };
   await writeFile(resolve(root, 'release-manifest.json.next'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });

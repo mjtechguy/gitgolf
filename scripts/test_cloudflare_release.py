@@ -387,6 +387,34 @@ class ReleaseTests(unittest.TestCase):
             release.state['migration0018'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate()
 
+    def test_runner_migrations_recover_lost_alter_ack(self):
+        release = self.release(); release.manifest['schema'] = 20
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            db.executescript(schema[:schema.index('-- Workspace-owned outbound runner identities')])
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith(('PRAGMA', 'SELECT')):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if sql.startswith('ALTER TABLE native_runner_machines') and lost:
+                    lost = False
+                    raise RuntimeError('Lost runner migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0019/0020'): release.check_runner_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost runner'): release.migrate_runner_schema([])
+            applied = []
+            release.migrate_runner_schema(applied)
+            self.assertEqual(applied, ['0020'])
+            release.check_runner_schema()
+            self.assertEqual(release.migrate_runner_schema([]), None)
+            release.state['migration0020'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_runner_schema([])
+
     def test_uncertain_deployment_is_not_dispatched_twice(self):
         release = self.release(); release.check = lambda: 'previous'; release.retain = lambda: 1
         release.state['releases'][release.manifest['release']] = {'state':'dispatched'}

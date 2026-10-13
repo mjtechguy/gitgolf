@@ -15,7 +15,10 @@ import { parseDocument, isAlias, isCollection } from '../../agents/node_modules/
 import { sha } from './git.mjs';
 
 export const nativeWorkflowContract = 'golf.native.workflow-shell.v1';
-export const nativeWorkflowPath = (format, path) => format === 'actions' ?
+export const nativeActionsContract = 'golf.native.actions-act.v1';
+export const nativeActionsBuildContract = 'golf.native.actions-act-build.v1';
+export const nativeActionsCatalog = 'golf.workflow.act.v0.2.89.linux.v1';
+export const nativeWorkflowPath = (format, path) => ['actions','actions-act'].includes(format) ?
   typeof path === 'string' && /^\.github\/workflows\/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml$/.test(path) :
   format === 'gitlab' && path === '.gitlab-ci.yml';
 
@@ -67,6 +70,7 @@ export function nativeWorkflow(format, source) {
 }
 
 export function nativeWorkflowPlanOK(plan) {
+  if (fields(plan, ['format','catalog']) && plan.format === 'actions-act') return plan.catalog === nativeActionsCatalog;
   return fields(plan, ['format', 'name', 'jobId', 'steps', 'image', 'afterScript']) && ['actions', 'gitlab'].includes(plan.format) && label(plan.name) &&
     typeof plan.jobId === 'string' && /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(plan.jobId) &&
     Array.isArray(plan.steps) && plan.steps.length >= 1 && plan.steps.length <= (plan.format === 'actions' ? 10 : 1) &&
@@ -89,5 +93,5 @@ export async function nativeWorkflowSource(repo, treeId, format, path) {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   if (bytes.length !== blob.size) throw Error('Native workflow source changed');
   const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  return { path, blobId: tree, plan: nativeWorkflow(format, source) };
+  return { path, blobId: tree, plan: format === 'actions-act' ? { format, catalog: nativeActionsCatalog } : nativeWorkflow(format, source) };
 }

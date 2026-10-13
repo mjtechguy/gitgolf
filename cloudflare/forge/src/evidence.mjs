@@ -2,7 +2,7 @@ import { collaboration } from './collaboration.mjs';
 import { digest, uuidOK, Fault, deny, invalid, reply, conflict } from './common.mjs';
 import { remote } from './git.mjs';
 import { nativeTestContract, testPolicy, testResult } from './test-policy.mjs';
-import { nativeWorkflowContract, nativeWorkflowSource } from './native-workflow.mjs';
+import { nativeActionsBuildContract, nativeActionsContract, nativeWorkflowContract, nativeWorkflowSource } from './native-workflow.mjs';
 import { nativeRunnerAdmission, nativeRunnerProgress } from './native-runners.mjs';
 import { agentPolicy } from './agent-policy.mjs';
 import { agentStep, agentSource } from './agents.mjs';
@@ -11,6 +11,12 @@ const terminal = new Set(['SUCCEEDED', 'REFUSED', 'EXPIRED']);
 const choices = ['inspect_changes', 'run_tests', 'resolve_feedback'];
 const time = () => new Date().toISOString();
 const exhausted = () => { throw new Fault('resource_exhausted', 429, 'The workspace daily evidence allocation is used.'); };
+export function publicEvidenceExecution(execution) {
+  if (![nativeWorkflowContract, nativeActionsContract, nativeActionsBuildContract].includes(execution?.contract)) return execution;
+  const { path, blobId, plan } = execution.workflow;
+  return { ...execution, workflow: { path, blobId, format: plan.format,
+    ...(plan.format === 'actions-act' ? { catalog: plan.catalog } : { jobId: plan.jobId }) } };
+}
 export function evidencePolicy(env) {
   const limit = Number(env.EVIDENCE_DAILY_LIMIT);
   return Boolean(env.EVIDENCE_BUCKET && env.EVIDENCE_QUEUE && env.EVIDENCE_QUEUE_NAME && env.EVIDENCE_WORKFLOW_NAME && Number.isInteger(limit) && limit >= 1 && limit <= 20);
@@ -110,14 +116,16 @@ export async function evidenceAPI(db, env, person, row, artifact, body) {
         if (env.TEST_WORKFLOW_FORMAT) {
           try { workflow = await nativeWorkflowSource(repo, commit.treeHash, env.TEST_WORKFLOW_FORMAT, env.TEST_WORKFLOW_PATH); }
           catch (error) {
-            if (/^(Unsupported native|Native workflow)/.test(error.message)) throw new Fault('failed_precondition', 412, 'The selected PR head needs one supported native shell workflow at the approved path.');
+            if (/^(Unsupported native|Native workflow)/.test(error.message)) throw new Fault('failed_precondition', 412, 'The selected PR head needs a supported workflow at the approved path.');
             throw error;
           }
           if (workflow.plan.image && workflow.plan.image !== env.TEST_IMAGE_REF) throw new Fault('failed_precondition', 412, 'The GitLab image must match the operator-approved container image reference.');
         }
         const runner = await nativeRunnerAdmission(db, env, row.id);
-        return { contract: workflow ? nativeWorkflowContract : nativeTestContract, commitId: s.headCommitId, treeId: commit.treeHash, branch: observed.pr.head.ref,
+        if (workflow?.plan.format === 'actions-act' && !runner) throw new Fault('failed_precondition', 412, 'Pinned Actions PR jobs require a selected customer runner pool.');
+        return { contract: workflow ? workflow.plan.format === 'actions-act' ? env.TEST_SOCKETLESS_BUILD === 'true' ? nativeActionsBuildContract : nativeActionsContract : nativeWorkflowContract : nativeTestContract, commitId: s.headCommitId, treeId: commit.treeHash, branch: observed.pr.head.ref,
           ...(workflow ? { workflow, workflowSha256: await digest(JSON.stringify(workflow)) } : { module: env.TEST_MODULE }), policySha256: env.TEST_POLICY_SHA256,
+          ...(env.TEST_SOCKETLESS_BUILD === 'true' ? { build: true } : {}),
           ...(runner ? { runner } : {}),
           ...(env.REGISTRY_CI_ENABLED === 'true' && env.REGISTRY ? { registry: { origin:env.REGISTRY_ORIGIN, name:env.WORKSPACE_SLUG+'/'+row.name } } : {}) };
       });
@@ -177,7 +185,8 @@ export async function evidenceStep(db, env, job, context, phase, workflows) {
   if (!context || !evidencePolicy(env) || job.advice_state !== 'NONE' && !(env.EVIDENCE_ALLOW_AI === 'true' && env.AI && env.EVIDENCE_GATEWAY)) return update(db, job, 'REFUSED');
   if (job.expires_at <= time()) return update(db, job, 'EXPIRED');
   const { person, row, artifact } = context, snapshot = JSON.parse(job.snapshot);
-  if (snapshot.execution && (!testPolicy(env) || snapshot.execution.contract !== undefined && snapshot.execution.contract !== (env.TEST_WORKFLOW_FORMAT ? nativeWorkflowContract : nativeTestContract) ||
+  if (snapshot.execution && (!testPolicy(env) || snapshot.execution.contract !== undefined && snapshot.execution.contract !== (env.TEST_WORKFLOW_FORMAT === 'actions-act' ? env.TEST_SOCKETLESS_BUILD === 'true' ? nativeActionsBuildContract : nativeActionsContract : env.TEST_WORKFLOW_FORMAT ? nativeWorkflowContract : nativeTestContract) ||
+      Boolean(snapshot.execution.build) !== (env.TEST_SOCKETLESS_BUILD === 'true') ||
       (env.TEST_WORKFLOW_FORMAT ? snapshot.execution.workflow?.plan?.format !== env.TEST_WORKFLOW_FORMAT || snapshot.execution.workflow?.path !== env.TEST_WORKFLOW_PATH : snapshot.execution.module !== env.TEST_MODULE) ||
       snapshot.execution.workflow?.plan?.image && snapshot.execution.workflow.plan.image !== env.TEST_IMAGE_REF ||
       snapshot.execution.policySha256 !== env.TEST_POLICY_SHA256)) return update(db, job, 'REFUSED');
@@ -260,12 +269,12 @@ export async function evidenceStep(db, env, job, context, phase, workflows) {
   if (job.advice_state === 'REQUESTED' || job.advice_state === 'RESERVED') throw Error('Advice stage unfinished');
   if (job.test_state === 'REQUESTED' || job.test_state === 'RUNNING') throw Error('Test stage unfinished');
   if (['REQUESTED', 'FORK_PENDING', 'RUNNING'].includes(job.agent_state)) throw Error('Agent stage unfinished');
-  const publicSnapshot = snapshot.execution?.contract === nativeWorkflowContract ? { ...snapshot,
-    execution: { ...snapshot.execution, workflow: { path: snapshot.execution.workflow.path, blobId: snapshot.execution.workflow.blobId,
-      format: snapshot.execution.workflow.plan.format, jobId: snapshot.execution.workflow.plan.jobId } } } : snapshot;
+  const publicSnapshot = snapshot.execution ? { ...snapshot, execution: publicEvidenceExecution(snapshot.execution) } : snapshot;
   const report = JSON.stringify({ schema: 'golf.native.pr-evidence.v1', jobId: job.id, capturedAt: job.created_at, advisoryOnly: true,
     limitations: [snapshot.agent ? 'An isolated agent proposal and its observed tests; no merge authorization or canonical publication.' : snapshot.execution?.contract === nativeWorkflowContract ?
-      'Only the operator-approved single-job shell workflow was executed; no full Actions/GitLab compatibility or merge authorization.' : snapshot.execution ?
+      'Only the operator-approved single-job shell workflow was executed; no full Actions/GitLab compatibility or merge authorization.' :
+      [nativeActionsContract, nativeActionsBuildContract].includes(snapshot.execution?.contract) ?
+        'The pinned Actions catalog ran on a customer host; GitHub-hosted runner parity and merge authorization are not claimed.' : snapshot.execution ?
         'Only the operator-approved test module was executed; no code review or merge authorization.' : 'Metadata snapshot; no code diff or tests executed.',
       ...(snapshot.execution?.runner ? ['A customer-hosted runner reported its own isolation and cleanup; Golf cannot independently attest the host.'] : []),
       'Reviews and reported checks do not authorize merge.'],

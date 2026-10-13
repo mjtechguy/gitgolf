@@ -42,7 +42,7 @@ def rehearse(directory, profile, observe, command, preview_context):
     before = observe('/native/diagnostics')
     baseline = None
     if before['release'] == 'development':
-        # Establish a real journaled schema18 predecessor; never label an unrecorded deployment compatible.
+        # Establish a real journaled predecessor; never label an unrecorded deployment compatible.
         settings_path = directory/'forge.json'
         settings = json.loads(settings_path.read_text())
         baseline_directory = directory/'rehearsal-assets'

@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"debug/elf"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,6 +20,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -26,6 +29,8 @@ import (
 )
 
 const workflowContract = "golf.native.workflow-shell.v1"
+const actionsContract = "golf.native.actions-act.v1"
+const actionsBuildContract = "golf.native.actions-act-build.v1"
 const moduleContract = "golf.native.pr-test.v1"
 
 var uuid = regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$`)
@@ -36,10 +41,13 @@ var module = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]
 var workflowPath = regexp.MustCompile(`^\.github/workflows/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml$`)
 
 type config struct {
-	Origin         string `json:"origin"`
-	MachineID      string `json:"machineId"`
-	ImageID        string `json:"imageId"`
-	StateDirectory string `json:"stateDirectory"`
+	Origin              string `json:"origin"`
+	MachineID           string `json:"machineId"`
+	ImageID             string `json:"imageId"`
+	ImageRef            string `json:"imageRef,omitempty"`
+	ActionsEngineBinary string `json:"actionsEngineBinary,omitempty"`
+	SocketlessBuild     bool   `json:"socketlessBuild,omitempty"`
+	StateDirectory      string `json:"stateDirectory"`
 }
 type step struct {
 	Name  string `json:"name"`
@@ -48,6 +56,7 @@ type step struct {
 }
 type plan struct {
 	Format      string `json:"format"`
+	Catalog     string `json:"catalog,omitempty"`
 	Name        string `json:"name"`
 	JobID       string `json:"jobId"`
 	Steps       []step `json:"steps"`
@@ -55,19 +64,23 @@ type plan struct {
 	AfterScript string `json:"afterScript"`
 }
 type assignment struct {
-	Contract       string `json:"contract"`
-	JobID          string `json:"jobId"`
-	Generation     int    `json:"generation"`
-	Lease          string `json:"lease"`
-	LeaseExpiresAt int64  `json:"leaseExpiresAt"`
-	Deadline       int64  `json:"deadline"`
-	CommitID       string `json:"commitId"`
-	TreeID         string `json:"treeId"`
-	Branch         string `json:"branch"`
-	ImageID        string `json:"imageId"`
-	PolicySHA256   string `json:"policySha256"`
-	WorkflowSHA256 string `json:"workflowSha256"`
-	Workflow       struct {
+	Contract          string `json:"contract"`
+	JobID             string `json:"jobId"`
+	Generation        int    `json:"generation"`
+	Lease             string `json:"lease"`
+	LeaseExpiresAt    int64  `json:"leaseExpiresAt"`
+	Deadline          int64  `json:"deadline"`
+	CommitID          string `json:"commitId"`
+	TreeID            string `json:"treeId"`
+	Branch            string `json:"branch"`
+	ImageID           string `json:"imageId"`
+	ImageRef          string `json:"imageRef,omitempty"`
+	PullRequestNumber int    `json:"pullRequestNumber,omitempty"`
+	BaseCommitID      string `json:"baseCommitId,omitempty"`
+	Build             bool   `json:"build,omitempty"`
+	PolicySHA256      string `json:"policySha256"`
+	WorkflowSHA256    string `json:"workflowSha256"`
+	Workflow          struct {
 		Path   string `json:"path"`
 		BlobID string `json:"blobId"`
 		Plan   plan   `json:"plan"`
@@ -89,6 +102,8 @@ type attemptJournal struct {
 	Finish     map[string]any `json:"finish,omitempty"`
 }
 
+var errActionsRejected = errors.New("pinned Actions workflow was not admitted")
+
 func newUUID() (string, error) {
 	var value [16]byte
 	if _, err := rand.Read(value[:]); err != nil {
@@ -105,6 +120,32 @@ func validConfig(value config, credential string) error {
 		!uuid.MatchString(value.MachineID) || !image.MatchString(value.ImageID) || !filepath.IsAbs(value.StateDirectory) ||
 		!regexp.MustCompile(`^golf_runner_[a-f0-9-]{36}_[a-f0-9]{64}$`).MatchString(credential) || !strings.HasPrefix(credential, "golf_runner_"+value.MachineID+"_") {
 		return errors.New("use an exact HTTPS origin, enrolled machine credential, approved image ID and absolute private state directory")
+	}
+	if value.ImageRef != "" || value.ActionsEngineBinary != "" {
+		if !regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}@sha256:[a-f0-9]{64}$`).MatchString(value.ImageRef) ||
+			!filepath.IsAbs(value.ActionsEngineBinary) || filepath.Clean(value.ActionsEngineBinary) != value.ActionsEngineBinary {
+			return errors.New("native Actions requires an approved image reference and absolute pinned engine binary")
+		}
+		info, err := os.Stat(value.ActionsEngineBinary)
+		if err != nil || !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
+			return errors.New("native Actions engine is unavailable")
+		}
+		binary, err := elf.Open(value.ActionsEngineBinary)
+		if err != nil {
+			return errors.New("native Actions engine must be a static Linux binary")
+		}
+		defer binary.Close()
+		if runtime.GOOS != "linux" || runtime.GOARCH == "amd64" && binary.Machine != elf.EM_X86_64 || runtime.GOARCH == "arm64" && binary.Machine != elf.EM_AARCH64 || runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
+			return errors.New("native Actions engine architecture differs from the host")
+		}
+		for _, program := range binary.Progs {
+			if program.Type == elf.PT_INTERP {
+				return errors.New("native Actions engine must be statically linked")
+			}
+		}
+	}
+	if value.SocketlessBuild && (value.ImageRef == "" || value.ActionsEngineBinary == "") {
+		return errors.New("socketless build requires the pinned Actions engine and image reference")
 	}
 	return nil
 }
@@ -149,7 +190,7 @@ func (c *client) call(ctx context.Context, path, lease string, input any, output
 	return decode(response.Body, 128<<10, output)
 }
 func validate(a assignment, c config) error {
-	if (a.Contract != workflowContract && a.Contract != moduleContract) || !uuid.MatchString(a.JobID) || a.Generation < 1 || a.Generation > 1000000 ||
+	if (a.Contract != workflowContract && a.Contract != actionsContract && a.Contract != actionsBuildContract && a.Contract != moduleContract) || !uuid.MatchString(a.JobID) || a.Generation < 1 || a.Generation > 1000000 ||
 		len(a.Lease) != 64 || !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(a.Lease) ||
 		a.LeaseExpiresAt <= time.Now().UnixMilli() || a.Deadline <= time.Now().UnixMilli() || a.Deadline > time.Now().Add(10*time.Minute).UnixMilli() ||
 		!sha.MatchString(a.CommitID) || !sha.MatchString(a.TreeID) || !branch.MatchString(a.Branch) ||
@@ -159,8 +200,17 @@ func validate(a assignment, c config) error {
 		return errors.New("native assignment differs from approved source and execution contract")
 	}
 	if a.Contract == moduleContract {
-		if !module.MatchString(a.Module) || len(a.Module) > 128 || a.WorkflowSHA256 != "" || a.Workflow.Path != "" || a.Workflow.BlobID != "" || a.Workflow.Plan.Format != "" || a.Workflow.Plan.Name != "" || a.Workflow.Plan.JobID != "" || a.Workflow.Plan.Image != "" || a.Workflow.Plan.AfterScript != "" || len(a.Workflow.Plan.Steps) != 0 {
+		if !module.MatchString(a.Module) || len(a.Module) > 128 || a.WorkflowSHA256 != "" || a.Workflow.Path != "" || a.Workflow.BlobID != "" || a.Workflow.Plan.Format != "" || a.Workflow.Plan.Name != "" || a.Workflow.Plan.JobID != "" || a.Workflow.Plan.Image != "" || a.Workflow.Plan.AfterScript != "" || len(a.Workflow.Plan.Steps) != 0 || a.ImageRef != "" || a.PullRequestNumber != 0 || a.BaseCommitID != "" || a.Build {
 			return errors.New("invalid native Python module assignment")
+		}
+		return nil
+	}
+	if a.Contract == actionsContract || a.Contract == actionsBuildContract {
+		if a.Module != "" || a.Workflow.Plan.Format != "actions-act" || a.Workflow.Plan.Catalog != runner.ActionsCatalog ||
+			a.Workflow.Plan.Name != "" || a.Workflow.Plan.JobID != "" || a.Workflow.Plan.Image != "" || a.Workflow.Plan.AfterScript != "" || len(a.Workflow.Plan.Steps) != 0 ||
+			a.ImageRef == "" || a.ImageRef != c.ImageRef || c.ActionsEngineBinary == "" || a.Build != (a.Contract == actionsBuildContract) || a.Build && !c.SocketlessBuild || !sha.MatchString(a.BaseCommitID) || a.PullRequestNumber < 1 ||
+			!workflowPath.MatchString(a.Workflow.Path) || !sha.MatchString(a.Workflow.BlobID) || !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(a.WorkflowSHA256) {
+			return errors.New("invalid native Actions assignment")
 		}
 		return nil
 	}
@@ -171,7 +221,8 @@ func validate(a assignment, c config) error {
 		(a.Workflow.Plan.Format == "actions" && (a.Workflow.Plan.AfterScript != "" || a.Workflow.Plan.Image != "")) ||
 		(a.Workflow.Plan.Format == "gitlab" && (len(a.Workflow.Plan.Steps) != 1 || a.Workflow.Plan.Steps[0].Shell != "sh")) ||
 		(a.Workflow.Plan.Image != "" && !regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}@sha256:[a-f0-9]{64}$`).MatchString(a.Workflow.Plan.Image)) ||
-		len(a.Workflow.Plan.AfterScript) > 8192 || strings.ContainsRune(a.Workflow.Plan.AfterScript, 0) || strings.Contains(a.Workflow.Plan.AfterScript, "${{") {
+		len(a.Workflow.Plan.AfterScript) > 8192 || strings.ContainsRune(a.Workflow.Plan.AfterScript, 0) || strings.Contains(a.Workflow.Plan.AfterScript, "${{") ||
+		a.ImageRef != "" || a.PullRequestNumber != 0 || a.BaseCommitID != "" || a.Workflow.Plan.Catalog != "" || a.Build {
 		return errors.New("invalid native workflow assignment")
 	}
 	total := len(a.Workflow.Plan.AfterScript)
@@ -228,6 +279,55 @@ func (c *client) source(ctx context.Context, a assignment, directory string) (st
 		return "", err
 	}
 	return archive, nil
+}
+func (c *client) executeActions(ctx context.Context, a assignment, archivePath string, executor *runner.Executor, attempt string, logs *bytes.Buffer) (runner.Result, error) {
+	archive, err := os.ReadFile(archivePath)
+	if err != nil || len(archive) < 1 || len(archive) > 16<<20 {
+		return runner.Result{}, errors.New("native Actions source limit")
+	}
+	input := runner.ActionPlanInput{Catalog: runner.ActionsCatalog, WorkflowPath: a.Workflow.Path, WorkflowBlobID: a.Workflow.BlobID,
+		Archive: archive, Event: "pull_request", Ref: a.CommitID, Images: map[string]string{"golf-native-linux": a.ImageRef}}
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return runner.Result{}, err
+	}
+	cmd := exec.CommandContext(ctx, c.config.ActionsEngineBinary, "plan")
+	cmd.Env = []string{"PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/tmp"}
+	cmd.Dir = "/"
+	cmd.Stdin = bytes.NewReader(append(encoded, '\n'))
+	cmd.Stderr = io.Discard
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	if err = cmd.Run(); err != nil || output.Len() > 256<<10 {
+		return runner.Result{}, errActionsRejected
+	}
+	var plan runner.ActionPlan
+	archiveHash := sha256.Sum256(archive)
+	if decode(bytes.NewReader(output.Bytes()), 256<<10, &plan) != nil || plan.Catalog != input.Catalog || plan.EngineCommit != runner.ActionsEngineCommit ||
+		plan.WorkflowPath != input.WorkflowPath || plan.WorkflowBlobID != input.WorkflowBlobID || plan.Event != input.Event || plan.Ref != input.Ref ||
+		plan.ArchiveSHA256 != hex.EncodeToString(archiveHash[:]) || len(plan.Jobs) < 1 || len(plan.Jobs) > 12 {
+		return runner.Result{}, errors.New("pinned Actions plan changed")
+	}
+	event, err := json.Marshal(map[string]any{"action": "synchronize", "number": a.PullRequestNumber,
+		"pull_request": map[string]any{"number": a.PullRequestNumber, "head": map[string]any{"sha": a.CommitID, "ref": a.Branch}, "base": map[string]any{"sha": a.BaseCommitID}}})
+	if err != nil {
+		return runner.Result{}, err
+	}
+	actions, err := runner.NewActions(executor, c.config.ActionsEngineBinary)
+	if err != nil {
+		return runner.Result{}, err
+	}
+	return actions.Execute(ctx, attempt, runner.ActionExecutionInput{Input: input, Plan: plan, CommitID: a.CommitID, EventJSON: event,
+		TimeoutSeconds: int(time.Until(time.UnixMilli(a.Deadline)).Seconds())}, func(_ context.Context, frame runner.ActionFrame) error {
+		if frame.Kind == "log" {
+			if logs.Len()+len(frame.Text) > 32<<10 {
+				return errors.New("native Actions log limit")
+			}
+			_, err := logs.WriteString(frame.Text)
+			return err
+		}
+		return nil
+	})
 }
 func privateDirectory(path string) error {
 	if err := os.MkdirAll(path, 0700); err != nil {
@@ -328,7 +428,11 @@ func (c *client) recover(ctx context.Context) error {
 	if err != nil || (record.State != "claimed" && record.State != "cleanup-confirmed") || !uuid.MatchString(record.ClaimID) || !uuid.MatchString(record.JobID) || record.Generation < 1 {
 		return errors.New("local recovery requires one inspectable attempt")
 	}
-	executor, err := runner.New(runner.Config{WorkerID: c.config.MachineID, ApprovedImages: []string{c.config.ImageID}})
+	images := []string{c.config.ImageID}
+	if c.config.ImageRef != "" {
+		images = append(images, c.config.ImageRef)
+	}
+	executor, err := runner.New(runner.Config{WorkerID: c.config.MachineID, ApprovedImages: images})
 	if err != nil {
 		return err
 	}
@@ -374,7 +478,11 @@ func (c *client) runOnce(ctx context.Context) (bool, error) {
 		return false, errors.New("native runner state is already in use")
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	executor, err := runner.New(runner.Config{WorkerID: c.config.MachineID, ApprovedImages: []string{c.config.ImageID}, MaxLogBytes: 64 << 10})
+	images := []string{c.config.ImageID}
+	if c.config.ImageRef != "" {
+		images = append(images, c.config.ImageRef)
+	}
+	executor, err := runner.New(runner.Config{WorkerID: c.config.MachineID, ApprovedImages: images, MaxLogBytes: 64 << 10})
 	if err != nil {
 		return false, err
 	}
@@ -401,6 +509,12 @@ func (c *client) runOnce(ctx context.Context) (bool, error) {
 	if err != nil || imageID != c.config.ImageID {
 		return false, errors.New("approved native runner image is unavailable")
 	}
+	if c.config.ImageRef != "" {
+		refID, imageErr := command(ctx, c.config.StateDirectory, os.Environ(), "docker", "image", "inspect", "--format", "{{.Id}}", c.config.ImageRef)
+		if imageErr != nil || refID != c.config.ImageID {
+			return false, errors.New("approved native Actions image reference changed")
+		}
+	}
 	claimID := previous.ClaimID
 	if claimID == "" {
 		claimID, err = newUUID()
@@ -425,9 +539,16 @@ func (c *client) runOnce(ctx context.Context) (bool, error) {
 	var claimed struct {
 		Assignment *assignment `json:"assignment"`
 	}
+	claim := map[string]any{"claimId": claimID}
+	if c.config.ActionsEngineBinary != "" {
+		claim["actionsCatalog"] = runner.ActionsCatalog
+	}
+	if c.config.SocketlessBuild {
+		claim["socketlessBuild"] = true
+	}
 	for attempt := 0; attempt < 3; attempt++ {
 		callCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		err = c.call(callCtx, "/native/runner-machine/claim", "", map[string]string{"claimId": claimID}, &claimed)
+		err = c.call(callCtx, "/native/runner-machine/claim", "", claim, &claimed)
 		cancel()
 		if err == nil {
 			break
@@ -491,7 +612,7 @@ func (c *client) runOnce(ctx context.Context) (bool, error) {
 	if a.Contract == moduleContract {
 		jobName = a.JobID
 		steps = append(steps, runner.Step{Script: "python3 -m unittest -v " + a.Module, Shell: "sh"})
-	} else {
+	} else if a.Contract == workflowContract {
 		for _, value := range a.Workflow.Plan.Steps {
 			steps = append(steps, runner.Step{Script: value.Run, Shell: value.Shell})
 		}
@@ -502,20 +623,36 @@ func (c *client) runOnce(ctx context.Context) (bool, error) {
 	result := runner.Result{ExitCode: -1}
 	runErr := sourceErr
 	if sourceErr == nil {
-		result, runErr = executor.Execute(runCtx, job, func(_ context.Context, chunk runner.LogChunk) error {
-			target := &stdout
-			if chunk.Stream == "stderr" {
-				target = &stderr
-			}
-			if target.Len()+len(chunk.Data) > 32<<10 {
-				return errors.New("runner log limit")
-			}
-			_, e := target.Write(chunk.Data)
-			return e
-		})
+		if a.Contract == actionsContract || a.Contract == actionsBuildContract {
+			result, runErr = c.executeActions(runCtx, a, archive, executor, job.AttemptID, &stdout)
+		} else {
+			result, runErr = executor.Execute(runCtx, job, func(_ context.Context, chunk runner.LogChunk) error {
+				target := &stdout
+				if chunk.Stream == "stderr" {
+					target = &stderr
+				}
+				if target.Len()+len(chunk.Data) > 32<<10 {
+					return errors.New("runner log limit")
+				}
+				_, e := target.Write(chunk.Data)
+				return e
+			})
+		}
+	}
+	var buildReceipt map[string]any
+	if runErr == nil && result.ExitCode == 0 && a.Build {
+		digest, size, buildErr := socketlessBuild(runCtx, filepath.Join(working, "repo"), a.ImageRef, a.ImageID, filepath.Join(working, "image.oci.tar"))
+		if buildErr != nil {
+			runErr = buildErr
+		} else {
+			buildReceipt = map[string]any{"digest": digest, "bytes": size, "dockerfile": "Dockerfile", "sourceCommit": a.CommitID}
+		}
 	}
 	if runErr != nil {
 		fmt.Fprintln(os.Stderr, "native runner stage:", runErr)
+		if errors.Is(runErr, errActionsRejected) || errors.Is(runErr, errBuildRejected) || errors.Is(runErr, errBuildFailed) {
+			stderr.WriteString(runErr.Error() + "\n")
+		}
 	}
 	close(done)
 	<-heartbeatStopped
@@ -532,7 +669,10 @@ func (c *client) runOnce(ctx context.Context) (bool, error) {
 	}
 	state := "PASSED"
 	code := result.ExitCode
-	if runErr != nil {
+	if errors.Is(runErr, errActionsRejected) || errors.Is(runErr, errBuildRejected) || errors.Is(runErr, errBuildFailed) {
+		state = "FAILED"
+		code = 1
+	} else if runErr != nil {
 		state = "LOST"
 		code = -1
 	} else if result.TimedOut {
@@ -545,6 +685,9 @@ func (c *client) runOnce(ctx context.Context) (bool, error) {
 		state = "FAILED"
 	}
 	finish := map[string]any{"state": state, "stdout": stdout.String(), "stderr": stderr.String(), "cleanup": "confirmed"}
+	if buildReceipt != nil {
+		finish["build"] = buildReceipt
+	}
 	if code < 0 {
 		finish["exitCode"] = nil
 	} else {

@@ -1,0 +1,8 @@
+name: Owned composite
+inputs: {value: {required: true}}
+runs:
+  using: composite
+  steps:
+    - shell: sh
+      env: {VALUE: '${{ inputs.value }}'}
+      run: test "$VALUE" = exact

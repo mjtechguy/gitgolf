@@ -34,7 +34,8 @@ async function dispatch(request, env, ctx, clock) {
     const url = new URL(request.url);
     if (url.origin !== env.PUBLIC_ORIGIN) return new Response('Unavailable', { status: 404 });
     // Configured Access is the outer gate for both people and machine callers.
-    if (env.ACCESS_AUD && ctx.access?.aud !== env.ACCESS_AUD) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });
+    const machineRoute = url.pathname.startsWith('/native/runner-machine/') || url.pathname.startsWith('/api/v4/');
+    if (env.ACCESS_AUD && ctx.access?.aud !== env.ACCESS_AUD && !machineRoute) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });
     if (env.ACCESS_AUD && immutableAsset(url.pathname) && ['GET', 'HEAD'].includes(request.method) && !url.search && url.href.length <= 8192 && !request.headers.has('Upgrade')) {
       let response;
       if (builtAssets && Object.hasOwn(builtAssets, url.pathname)) response = embeddedAsset(request, builtAssets);

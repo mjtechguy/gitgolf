@@ -522,6 +522,22 @@ GitLab Runner protocol, broad failure/load matrix and socketless build
 publication remain open. The bounded shell profile rejects
 unsupported forms explicitly; it does not represent full runner compatibility.
 
+The next local P5 slice adds an opt-in exact-head PR path for the existing
+`golf.workflow.act.v0.2.89.linux.v1` catalog on the customer supervisor. The
+host checks the Git commit/tree/workflow blob, runs the static pinned planner,
+then executes its graph in the existing disposable inner Docker daemon. A real
+local fixture exercised dependent jobs, matrix expansion, a local composite
+action and cleanup. A separate pinned GitLab Runner 18.5.0 Docker executor
+registered directly with Golf's `/api/v4` coordinator and completed a real
+leased Git clone, trace upload and terminal update. This proves the current
+one-job GitLab shell contract on an unchanged Runner binary; artifacts, caches,
+services and ID tokens still need admission and protocol proofs. Optional
+native Actions builds use the selected local rootless Docker BuildKit driver,
+one approved pinned base, no network in `RUN`, no socket in the customer job,
+a 32 MiB OCI output cap and a verified manifest digest receipt. The OCI tar is
+destroyed with the attempt; CFCR publication and hosted customer-runner
+qualification remain open. See the [host guide](../cmd/golf-native-runner/README.md).
+
 An opt-in `golf.native.workflow-shell.v1` PR evidence profile now admits one
 operator-selected Actions or GitLab shell job from the exact PR head blob. It
 uses the existing Container authority, Git/registry brokers and cleanup fence;

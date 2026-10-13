@@ -4,13 +4,19 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFile } from 'node:fs/promises';
 import { nativeRunnerAdmin, nativeRunnerPlacement, nativeRunnerMachine, nativeRunnerProgress } from './src/native-runners.mjs';
 import { digest } from './src/common.mjs';
-import { nativeWorkflow, nativeWorkflowContract } from './src/native-workflow.mjs';
+import { nativeActionsBuildContract, nativeActionsCatalog, nativeActionsContract, nativeWorkflow, nativeWorkflowContract } from './src/native-workflow.mjs';
+import { publicEvidenceExecution } from './src/evidence.mjs';
+
+test('native evidence reports identify the pinned Actions catalog without exposing a shell plan', () => {
+  const source = { contract: nativeActionsBuildContract, workflow: { path: '.github/workflows/pr.yml', blobId: 'a'.repeat(40), plan: { format: 'actions-act', catalog: nativeActionsCatalog } } };
+  assert.deepEqual(publicEvidenceExecution(source).workflow, { path: source.workflow.path, blobId: source.workflow.blobId, format: 'actions-act', catalog: nativeActionsCatalog });
+  assert.deepEqual(publicEvidenceExecution({ contract: nativeWorkflowContract, workflow: { path: '.gitlab-ci.yml', blobId: 'b'.repeat(40), plan: { format: 'gitlab', jobId: 'check', steps: [{ run: 'private script' }] } } }).workflow,
+    { path: '.gitlab-ci.yml', blobId: 'b'.repeat(40), format: 'gitlab', jobId: 'check' });
+});
 
 async function fixture(t) {
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());
   sql.exec(await readFile(new URL('./schema.sql', import.meta.url), 'utf8'));
-  const migration = await readFile(new URL('./migrations/0019_native_runners.sql', import.meta.url), 'utf8');
-  sql.exec(migration); sql.exec(migration);
   sql.exec("INSERT INTO users(id,login,email) VALUES(1,'admin','admin@example.invalid'),(2,'writer','writer@example.invalid'); INSERT INTO operations_admins(user_id) VALUES(1); INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at) VALUES(1,'project','','repo',1,'key','hash','ACTIVE','2026-10-12T00:00:00Z'); INSERT INTO grants VALUES(1,1,'admin'),(1,2,'write')");
   const db = { prepare(query) { const statement = sql.prepare(query); let values = []; return {
     bind(...input) { values = input; return this; }, async first() { return statement.get(...values) || null; },
@@ -99,6 +105,42 @@ test('native machine claim, heartbeat and result bind one source and one cleanup
   assert.equal(assignments.filter(value => value.assignment).length,1);
   assert.equal(f.sql.prepare('SELECT COUNT(*) AS total FROM native_runner_machines WHERE active_job_id IS NOT NULL').get().total,1);
   assert.equal(f.sql.prepare("SELECT COUNT(*) AS total FROM evidence_jobs WHERE id IN (?,?) AND test_state='RUNNING'").get(...waiting).total,1);
+});
+
+test('pinned act PR jobs require a catalog-capable native machine', async t => {
+  const f=await fixture(t),poolId=crypto.randomUUID(),machineId=crypto.randomUUID(),jobId=crypto.randomUUID();
+  f.env.PUBLIC_ORIGIN='https://golf.example.invalid';
+  f.env.TEST_IMAGE_REF='alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0';
+  await f.call({action:'savePool',id:poolId,expectedVersion:0,name:'act',state:'ACTIVE',trustClass:'UNTRUSTED',maxParallel:1});
+  const enrolled=await f.call({action:'enroll',id:machineId,poolId,poolVersion:1,name:'act-host',ttlHours:1,trustExecution:true});
+  await nativeRunnerPlacement(f.db,f.env,{id:1,role:'admin'},{action:'set',repository:{owner:'workspace',name:'project'},repositoryId:'1',expectedVersion:0,poolId,poolVersion:1});
+  const workflow={path:'.github/workflows/verify.yml',blobId:'f'.repeat(40),plan:{format:'actions-act',catalog:nativeActionsCatalog}};
+  const execution={contract:nativeActionsContract,commitId:'a'.repeat(40),treeId:'b'.repeat(40),branch:'feature',workflow,
+    workflowSha256:await digest(JSON.stringify(workflow)),policySha256:'c'.repeat(64),runner:{poolId,poolVersion:1,placementVersion:1,imageId:f.env.TEST_IMAGE_ID}};
+  const stamp=new Date().toISOString();
+  f.sql.prepare("INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,advice_state,created_at,updated_at,expires_at,test_state) VALUES(?,1,1,'act-job','hash',?,'NONE',?,?,?,'REQUESTED')")
+    .run(jobId,JSON.stringify({execution,selection:{number:7,baseCommitId:'d'.repeat(40)}}),stamp,stamp,new Date(Date.now()+600000).toISOString());
+  const request=new Request(f.env.PUBLIC_ORIGIN+'/native/runner-machine/claim',{method:'POST',headers:{Authorization:'Bearer '+enrolled.credential}});
+  const call=async body=>(await nativeRunnerMachine(f.db,f.env,request,body,async()=>true,()=>assert.fail())).json();
+  assert.equal((await call({claimId:crypto.randomUUID()})).assignment,null);
+  const claimed=await call({claimId:crypto.randomUUID(),actionsCatalog:nativeActionsCatalog});
+  assert.equal(claimed.assignment.contract,nativeActionsContract);
+  assert.equal(claimed.assignment.imageRef,f.env.TEST_IMAGE_REF);
+  assert.equal(claimed.assignment.pullRequestNumber,7);
+  assert.equal(claimed.assignment.baseCommitId,'d'.repeat(40));
+  await assert.rejects(call({claimId:crypto.randomUUID(),actionsCatalog:'other'}),/pinned Actions catalog/);
+  const finish=new Request(f.env.PUBLIC_ORIGIN+'/native/runner-machine/'+jobId+'/finish',{method:'POST',headers:{Authorization:'Bearer '+enrolled.credential,'X-Golf-Runner-Lease':claimed.assignment.lease}});
+  assert.equal((await (await nativeRunnerMachine(f.db,f.env,finish,{state:'PASSED',exitCode:0,stdout:'ok',stderr:'',cleanup:'confirmed'},async()=>true,()=>assert.fail())).json()).result.state,'PASSED');
+  const buildId=crypto.randomUUID(),withBuild={...execution,contract:nativeActionsBuildContract,build:true};
+  f.sql.prepare("INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,advice_state,created_at,updated_at,expires_at,test_state) VALUES(?,1,1,'build-job','hash',?,'NONE',?,?,?,'REQUESTED')")
+    .run(buildId,JSON.stringify({execution:withBuild,selection:{number:7,baseCommitId:'d'.repeat(40)}}),stamp,stamp,new Date(Date.now()+600000).toISOString());
+  assert.equal((await call({claimId:crypto.randomUUID(),actionsCatalog:nativeActionsCatalog})).assignment,null);
+  const buildClaim=await call({claimId:crypto.randomUUID(),actionsCatalog:nativeActionsCatalog,socketlessBuild:true});
+  assert.equal(buildClaim.assignment.build,true);
+  const buildFinish=new Request(f.env.PUBLIC_ORIGIN+'/native/runner-machine/'+buildId+'/finish',{method:'POST',headers:{Authorization:'Bearer '+enrolled.credential,'X-Golf-Runner-Lease':buildClaim.assignment.lease}});
+  const receipt={digest:'sha256:'+'e'.repeat(64),bytes:1024,dockerfile:'Dockerfile',sourceCommit:execution.commitId};
+  const built=await (await nativeRunnerMachine(f.db,f.env,buildFinish,{state:'PASSED',exitCode:0,stdout:'ok',stderr:'',cleanup:'confirmed',build:receipt},async()=>true,()=>assert.fail())).json();
+  assert.deepEqual(built.result.build,receipt);
 });
 
 test('lost heartbeat quarantines capacity and prevents late success', async t => {

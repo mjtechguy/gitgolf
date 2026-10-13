@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -115,6 +115,8 @@ class Release:
             self.check_git_credentials_schema()
         if self.manifest['schema'] >= 18:
             self.check_pull_reviews_schema()
+        if self.manifest['schema'] >= 19:
+            self.check_runner_schema()
         deployments = self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -183,6 +185,8 @@ class Release:
             self.migrate_git_credentials(applied)
         if self.manifest['schema'] >= 18:
             self.migrate_pull_reviews(applied)
+        if self.manifest['schema'] >= 19:
+            self.migrate_runner_schema(applied)
         return applied or 'already-applied'
 
     def check_access_schema(self):
@@ -467,6 +471,54 @@ class Release:
             self.check_pull_reviews_schema()
             self.state['migration0018'] = digest; self.save(); applied.append('0018')
 
+    def check_runner_schema(self, version=None):
+        version = self.manifest['schema'] if version is None else version
+        required = {
+            'native_runner_pools': {'id', 'version', 'max_parallel', 'image_id'},
+            'native_runner_machines': {'id', 'credential_digest', 'lease_digest', 'cleanup_state'},
+            'native_runner_placements': {'repository_id', 'pool_id', 'pool_version', 'version'},
+        }
+        if version >= 20:
+            required['native_runner_machines'].add('protocol')
+            required['gitlab_runner_jobs'] = {'id', 'evidence_job_id', 'machine_id', 'token_digest', 'trace', 'trace_bytes', 'completed_state', 'completed_exit_code'}
+        for table, fields in required.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info(' + table + ')')[0]['results']
+            if not fields.issubset({row['name'] for row in columns}):
+                raise ValueError('Apply additive 0019/0020 runner migrations before releasing')
+        indexes = self.command('d1', 'query', self.manifest['database'], '--sql', "SELECT name FROM sqlite_master WHERE type='index' AND name IN ('native_runner_machine_pool','gitlab_runner_jobs_machine')")[0]['results']
+        expected = {'native_runner_machine_pool'} | ({'gitlab_runner_jobs_machine'} if version >= 20 else set())
+        if not expected.issubset({row['name'] for row in indexes}):
+            raise ValueError('Runner migration index is missing')
+
+    def migrate_runner_schema(self, applied):
+        for number, filename, prefixes in [
+            ('0019', '0019_native_runners.sql', ['CREATE TABLE IF NOT EXISTS native_runner_pools (', 'CREATE TABLE IF NOT EXISTS native_runner_machines (', 'CREATE INDEX IF NOT EXISTS native_runner_machine_pool ', 'CREATE TABLE IF NOT EXISTS native_runner_placements (']),
+            ('0020', '0020_gitlab_runner.sql', ['ALTER TABLE native_runner_machines ADD COLUMN protocol ', 'CREATE TABLE gitlab_runner_jobs (', 'CREATE INDEX gitlab_runner_jobs_machine ']),
+        ]:
+            if self.manifest['schema'] < int(number):
+                continue
+            sql = (ROOT / 'cloudflare/forge/migrations' / filename).read_text()
+            digest = hashlib.sha256(sql.encode()).hexdigest()
+            if self.state.get('migration' + number) not in (None, digest):
+                raise ValueError('Recorded runner migration differs from reviewed source')
+            statements = [part.strip() for part in re.sub(r'--[^\n]*', '', sql).split(';') if part.strip()]
+            if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement, prefix in zip(statements, prefixes)):
+                raise ValueError('Runner migration differs from reviewed additions')
+            if number == '0019':
+                self.command('d1', 'query', self.manifest['database'], '--sql', ';\n'.join(statements) + ';')
+            else:
+                columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info(native_runner_machines)')[0]['results']
+                if 'protocol' not in {row['name'] for row in columns}:
+                    self.command('d1', 'query', self.manifest['database'], '--sql', statements[0] + ';')
+                for table, statement in [('gitlab_runner_jobs', statements[1]), ('gitlab_runner_jobs_machine', statements[2])]:
+                    kind = 'table' if table == 'gitlab_runner_jobs' else 'index'
+                    found = self.command('d1', 'query', self.manifest['database'], '--sql', "SELECT name FROM sqlite_master WHERE type='" + kind + "' AND name='" + table + "'")[0]['results']
+                    if not found:
+                        self.command('d1', 'query', self.manifest['database'], '--sql', statement + ';')
+            self.check_runner_schema(int(number))
+            if self.state.get('migration' + number) != digest:
+                self.state['migration' + number] = digest; self.save(); applied.append(number)
+
     def retain(self):
         # Persist ownership before effects so a lost PUT acknowledgement is recoverable.
         for asset in self.manifest['assets'].values():
@@ -527,6 +579,8 @@ class Release:
             predecessor = next((value for value in self.state['releases'].values() if value.get('version') == entry.get('previousVersion')), {})
             if self.manifest['schema'] >= 18 and predecessor.get('schema', 0) < 18:
                 raise ValueError('Rollback would expose private pending reviews; deploy a schema18-compatible fix forward')
+            if self.manifest['schema'] >= 19 and predecessor.get('schema', 0) < self.manifest['schema']:
+                raise ValueError('Rollback would abandon active runner attempts; deploy a runner-compatible fix forward')
             if predecessor.get('schema', 0) < 16:
                 raise ValueError('Rollback would remove native Git rule enforcement; deploy a compatible fix forward')
             previous = self.command('workers', 'versions', 'get', entry['previousVersion'], '--worker-id', self.manifest['worker'], '--include', 'modules')['modules']

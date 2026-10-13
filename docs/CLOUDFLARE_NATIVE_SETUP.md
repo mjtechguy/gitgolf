@@ -617,6 +617,18 @@ Local review runtime check (uses fixture Artifacts reads, actual workerd/D1):
 node cloudflare/forge/review-runtime-check.mjs "$(command -v cf)"
 ```
 
+### Native runners and stock GitLab Runner (schema20)
+
+Fresh installations include native runner tables and the GitLab coordinator job
+ledger in `schema.sql`. Existing native D1 installations must apply additive
+`0019_native_runners.sql` and then `0020_gitlab_runner.sql` before serving the
+schema20 Worker. Use the guarded `scripts/cloudflare_release.py migrate`, `check`,
+and `deploy` sequence. The migration records source digests and checks tables,
+columns and indexes after a lost acknowledgement. A rollback to code below the
+active runner schema is refused because it would abandon leased jobs. Stock
+GitLab Runner registration and the pinned Actions/BuildKit host setup are in
+`cmd/golf-native-runner/README.md`; hosted execution remains to be qualified.
+
 ### Unattended hosted qualification
 
 Use `--unattended` with the existing populated-demo command and omit
@@ -660,7 +672,7 @@ must reject service credentials. These denial/fixture tests do not establish
 hosted positive human mutation coverage; the real local workerd/D1 tests cover
 those workflows separately.
 
-The release rehearsal first deploys a journaled schema18 baseline with a harmless
+The release rehearsal first deploys a journaled baseline with a harmless
 HTML comment, verifies rollback to the unrecorded predecessor is refused, then
 deploys the original built frontend. It checks every served retained asset,
 rolls back to the compatible recorded baseline, and promotes the reviewed release

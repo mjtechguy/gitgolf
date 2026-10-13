@@ -1,0 +1,20 @@
+name: Native pinned act graph
+on: pull_request
+defaults: {run: {shell: sh}}
+jobs:
+  build:
+    runs-on: golf-native-linux
+    outputs: {value: '${{ steps.emit.outputs.value }}'}
+    steps:
+      - id: emit
+        run: printf 'value=exact\n' >> "$GITHUB_OUTPUT"
+  verify:
+    needs: build
+    runs-on: golf-native-linux
+    strategy:
+      fail-fast: false
+      matrix: {cell: [one, two]}
+    steps:
+      - uses: ./actions/owned
+        with: {value: '${{ needs.build.outputs.value }}'}
+      - run: test -f README.md && cat README.md

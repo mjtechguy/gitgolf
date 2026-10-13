@@ -161,7 +161,8 @@ CREATE TABLE IF NOT EXISTS native_runner_machines (
   expires_at INTEGER NOT NULL, last_seen_at TEXT, active_job_id TEXT REFERENCES evidence_jobs(id),
   attempt_generation INTEGER NOT NULL DEFAULT 0, claim_id TEXT, lease_digest TEXT, lease_expires_at INTEGER,
   cleanup_state TEXT NOT NULL DEFAULT 'CONFIRMED' CHECK(cleanup_state IN ('CONFIRMED','UNKNOWN')),
-  created_at TEXT NOT NULL, UNIQUE(pool_id,name)
+  created_at TEXT NOT NULL, protocol TEXT NOT NULL DEFAULT 'native' CHECK(protocol IN ('native','gitlab')),
+  UNIQUE(pool_id,name)
 );
 CREATE INDEX IF NOT EXISTS native_runner_machine_pool ON native_runner_machines(pool_id,state);
 CREATE TABLE IF NOT EXISTS native_runner_placements (
@@ -169,6 +170,19 @@ CREATE TABLE IF NOT EXISTS native_runner_placements (
   pool_version INTEGER, version INTEGER NOT NULL CHECK(version>0), updated_at TEXT NOT NULL,
   CHECK((pool_id IS NULL)=(pool_version IS NULL))
 );
+CREATE TABLE IF NOT EXISTS gitlab_runner_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  evidence_job_id TEXT NOT NULL UNIQUE REFERENCES evidence_jobs(id),
+  machine_id TEXT NOT NULL REFERENCES native_runner_machines(id),
+  token_digest TEXT NOT NULL,
+  trace TEXT NOT NULL DEFAULT '',
+  trace_bytes INTEGER NOT NULL DEFAULT 0,
+  completed_state TEXT,
+  completed_exit_code INTEGER,
+  CHECK(length(trace) <= 65536),
+  CHECK(trace_bytes BETWEEN 0 AND 49152)
+);
+CREATE INDEX IF NOT EXISTS gitlab_runner_jobs_machine ON gitlab_runner_jobs(machine_id);
 
 -- Native protected static PR delivery.
 CREATE TABLE IF NOT EXISTS previews (

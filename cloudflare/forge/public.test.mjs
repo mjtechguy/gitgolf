@@ -40,6 +40,22 @@ test('configured Access fails closed before native assets, bearer or spoofed ide
   assert.equal(calls, 0);
 });
 
+test('machine protocol routes reach the coordinator without a browser Access identity',async()=>{
+  const forwarded=[];
+  const env={PUBLIC_ORIGIN:'https://golf.example.com',ACCESS_AUD:'aud',WORKSPACE_SLUG:'team'};
+  const ctx={exports:{Workspace:{idFromName:key=>key,get:()=>({fetch:async request=>{
+    forwarded.push([new URL(request.url).pathname,request.headers.get('Authorization'),request.headers.get('X-Golf-Native-Access-Email')]);
+    return new Response('coordinator denied',{status:403});
+  }})}}};
+  for(const [path,authorization] of [['/api/v4/runners/verify',''],['/api/v4/jobs/1/git/info/refs','Basic dGVzdA=='],['/native/runner-machine/claim','Bearer golf_runner_invalid']]) {
+    const response=await publicFetch(new Request(env.PUBLIC_ORIGIN+path,{method:'POST',headers:{...(authorization?{Authorization:authorization}:{})}}),env,ctx);
+    assert.equal(response.status,403);
+  }
+  assert.deepEqual(forwarded.map(row=>row[0]),['/api/v4/runners/verify','/api/v4/jobs/1/git/info/refs','/native/runner-machine/claim']);
+  assert.ok(forwarded.every(row=>row[2]===null));
+  assert.equal((await publicFetch(new Request(env.PUBLIC_ORIGIN+'/native/runner-admin'),env,ctx)).status,401);
+});
+
 test('retained generic assets require Access but no Golf session or repository lookup', async () => {
   let reads = 0;
   const env = { PUBLIC_ORIGIN: 'https://golf.example.com', ACCESS_AUD: 'aud', EVIDENCE_BUCKET: { async get(key) {

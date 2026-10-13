@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/mjtechguy/golf-git/internal/runner"
 )
 
 func gitCommand(t *testing.T, dir string, args ...string) string {
@@ -221,6 +223,12 @@ func TestLocalClaimCloneExecuteAndFinish(t *testing.T) {
 	for _, format := range []string{"actions", "gitlab"} {
 		t.Run(format, func(t *testing.T) { localClaimCloneExecuteAndFinish(t, imageID, format) })
 	}
+	if os.Getenv("GOLF_RUNNER_TEST_ACTIONS_ENGINE") != "" {
+		t.Run("actions-act", func(t *testing.T) { localClaimCloneExecuteAndFinish(t, imageID, "actions-act") })
+		if os.Getenv("GOLF_RUNNER_TEST_SOCKETLESS_BUILD") == "true" {
+			t.Run("actions-act-build", func(t *testing.T) { localClaimCloneExecuteAndFinish(t, imageID, "actions-act-build") })
+		}
+	}
 	const alpineID = "sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0"
 	if err := exec.Command("docker", "image", "inspect", alpineID).Run(); err == nil {
 		t.Run("gitlab-pinned", func(t *testing.T) { localClaimCloneExecuteAndFinish(t, alpineID, "gitlab-pinned") })
@@ -239,7 +247,9 @@ func localClaimCloneExecuteAndFinish(t *testing.T, imageID, format string) {
 	}
 	workflowPath := ".github/workflows/verify.yml"
 	fixture := "native-actions-shell.yml"
-	if format != "actions" {
+	if format == "actions-act" || format == "actions-act-build" {
+		fixture = "native-actions-act.yml"
+	} else if format != "actions" {
 		workflowPath = ".gitlab-ci.yml"
 		fixture = "native-gitlab-shell.yml"
 		if format == "gitlab-pinned" {
@@ -253,8 +263,27 @@ func localClaimCloneExecuteAndFinish(t *testing.T, imageID, format string) {
 	if err := os.WriteFile(filepath.Join(repo, workflowPath), workflowSource, 0600); err != nil {
 		t.Fatal(err)
 	}
+	if format == "actions-act" || format == "actions-act-build" {
+		content, readErr := os.ReadFile(filepath.Join("..", "..", "docs", "compatibility", "fixtures", "native-actions-owned-action.yml"))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		path := filepath.Join(repo, "actions", "owned")
+		if err := os.MkdirAll(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(path, "action.yml"), content, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("exact source\n"), 0600); err != nil {
 		t.Fatal(err)
+	}
+	if format == "actions-act-build" {
+		content := "FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0\nCOPY README.md /source.txt\nRUN test -f /source.txt && printf built > /artifact\n"
+		if err := os.WriteFile(filepath.Join(repo, "Dockerfile"), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	gitCommand(t, repo, "add", ".")
 	gitCommand(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "source")
@@ -276,15 +305,28 @@ func localClaimCloneExecuteAndFinish(t *testing.T, imageID, format string) {
 		switch {
 		case r.URL.Path == "/native/runner-machine/claim":
 			var body struct {
-				ClaimID string `json:"claimId"`
+				ClaimID         string `json:"claimId"`
+				ActionsCatalog  string `json:"actionsCatalog"`
+				SocketlessBuild bool   `json:"socketlessBuild"`
 			}
-			if json.NewDecoder(r.Body).Decode(&body) != nil || !uuid.MatchString(body.ClaimID) {
+			if json.NewDecoder(r.Body).Decode(&body) != nil || !uuid.MatchString(body.ClaimID) || strings.HasPrefix(format, "actions-act") && body.ActionsCatalog != runner.ActionsCatalog || format == "actions-act-build" && !body.SocketlessBuild {
 				http.Error(w, "claim", 400)
 				return
 			}
 			a := assignment{Contract: workflowContract, JobID: jobID, Generation: 1, Lease: lease, LeaseExpiresAt: time.Now().Add(90 * time.Second).UnixMilli(), Deadline: time.Now().Add(5 * time.Minute).UnixMilli(), CommitID: commit, TreeID: tree, Branch: "feature", ImageID: imageID, PolicySHA256: strings.Repeat("c", 64), WorkflowSHA256: strings.Repeat("d", 64), CloneURL: origin + "/native/runner-machine/" + jobID + "/git"}
 			a.Workflow.Path, a.Workflow.BlobID, a.Workflow.Plan.Format, a.Workflow.Plan.JobID = workflowPath, blob, format, "verify"
-			if format == "gitlab-pinned" {
+			if format == "actions-act" || format == "actions-act-build" {
+				a.Contract = actionsContract
+				if format == "actions-act-build" {
+					a.Contract, a.Build = actionsBuildContract, true
+				}
+				a.Workflow.Plan.Format = "actions-act"
+				a.Workflow.Plan.JobID = ""
+				a.Workflow.Plan.Catalog = runner.ActionsCatalog
+				a.ImageRef = "alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0"
+				a.PullRequestNumber = 1
+				a.BaseCommitID = commit
+			} else if format == "gitlab-pinned" {
 				a.Workflow.Plan.Format, a.Workflow.Plan.JobID = "gitlab", "proof"
 				a.Workflow.Plan.Image = "alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0"
 				a.Workflow.Plan.Steps = []step{{Run: "value=shared\nmkdir prepared\ncd prepared\ntest \"$value\" = shared\ntest \"${PWD##*/}\" = prepared\ncd ..\ntest -f README.md\nprintf \"gitlab proof\\n\"", Shell: "sh"}}
@@ -341,6 +383,11 @@ func localClaimCloneExecuteAndFinish(t *testing.T, imageID, format string) {
 	defer server.Close()
 	origin = server.URL
 	c := client{config: config{Origin: origin, MachineID: jobID, ImageID: imageID, StateDirectory: filepath.Join(root, "state")}, credential: credential, http: server.Client()}
+	if format == "actions-act" || format == "actions-act-build" {
+		c.config.ImageRef = "alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0"
+		c.config.ActionsEngineBinary = os.Getenv("GOLF_RUNNER_TEST_ACTIONS_ENGINE")
+		c.config.SocketlessBuild = format == "actions-act-build"
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	worked, err := c.runOnce(ctx)
@@ -352,10 +399,16 @@ func localClaimCloneExecuteAndFinish(t *testing.T, imageID, format string) {
 		if gitRequests.Load() < 2 || result["cleanup"] != "confirmed" {
 			t.Fatalf("unverified source or cleanup: requests=%d result=%#v", gitRequests.Load(), result)
 		}
-		if format == "actions" && (result["state"] != "PASSED" || result["exitCode"] != float64(0) || !strings.Contains(result["stdout"].(string), "exact source")) ||
+		if (format == "actions" || format == "actions-act" || format == "actions-act-build") && (result["state"] != "PASSED" || result["exitCode"] != float64(0) || !strings.Contains(result["stdout"].(string), "exact source")) ||
 			format == "gitlab" && (result["state"] != "FAILED" || result["exitCode"] != float64(7) || !strings.Contains(result["stdout"].(string), "after-script")) ||
 			format == "gitlab-pinned" && (result["state"] != "PASSED" || result["exitCode"] != float64(0) || !strings.Contains(result["stdout"].(string), "gitlab proof")) {
 			t.Fatalf("unexpected completion: %#v", result)
+		}
+		if format == "actions-act-build" {
+			build, ok := result["build"].(map[string]any)
+			if !ok || !ociDigest.MatchString(build["digest"].(string)) || build["sourceCommit"] != commit || build["bytes"].(float64) < 1 {
+				t.Fatalf("missing OCI build receipt: %#v", result)
+			}
 		}
 	default:
 		t.Fatal("completion was not sent")

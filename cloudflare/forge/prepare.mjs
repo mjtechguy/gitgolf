@@ -81,8 +81,10 @@ if (mode === 'retire') {
     if (!settings.evidence || (workflow !== undefined ?
       !workflow || typeof workflow !== 'object' || Array.isArray(workflow) || Object.keys(workflow).some(key => !['format', 'path'].includes(key)) ||
         !nativeWorkflowPath(workflow.format, workflow.path) || settings.tests.module !== undefined : !testModuleOK(settings.tests.module))) throw Error('Invalid approved native test source');
+    if (settings.tests.build !== undefined && (settings.tests.build !== true || workflow?.format !== 'actions-act')) throw Error('Socketless build requires the pinned native Actions profile');
     if (typeof settings.tests.image !== 'string' ||
       !/^[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}(?:@sha256:[a-f0-9]{64})?$/.test(settings.tests.image) ||
+      workflow?.format === 'actions-act' && !settings.tests.image.includes('@sha256:') ||
       !/^sha256:[a-f0-9]{64}$/.test(settings.tests.image_id || '')) throw Error('Invalid approved container test allocation');
     const imageId = execFileSync('docker', ['image', 'inspect', settings.tests.image, '--format', '{{.Id}}'], { encoding: 'utf8', timeout: 10000 }).trim();
     if (imageId !== settings.tests.image_id) throw Error('Approved container image changed');
@@ -90,11 +92,12 @@ if (mode === 'retire') {
     config.env.TEST_EXECUTION_ENABLED = { type: 'text', value: 'true' };
     config.env.TEST_IMAGE_ID = { type: 'text', value: imageId };
     config.env.TEST_IMAGE_REF = { type: 'text', value: settings.tests.image };
+    if (settings.tests.build) config.env.TEST_SOCKETLESS_BUILD = { type: 'text', value: 'true' };
     if (workflow) {
       config.env.TEST_WORKFLOW_FORMAT = { type: 'text', value: workflow.format };
       config.env.TEST_WORKFLOW_PATH = { type: 'text', value: workflow.path };
     } else config.env.TEST_MODULE = { type: 'text', value: settings.tests.module };
-    config.env.TEST_POLICY_SHA256 = { type: 'text', value: createHash('sha256').update(JSON.stringify([workflow || settings.tests.module, imageId])).digest('hex') };
+    config.env.TEST_POLICY_SHA256 = { type: 'text', value: createHash('sha256').update(JSON.stringify(settings.tests.build ? [workflow, imageId, true] : [workflow || settings.tests.module, imageId])).digest('hex') };
     config.exports.PRTestTask = { type: 'durable-object', storage: 'sqlite', container: settings.worker };
     config.exports.TestOutbound = { type: 'worker' };
     await u.writeContainerConfig({ root, directoryName: 'pr-tests', config: { name: settings.worker, schedulingPolicy: 'durable-object',

@@ -43,12 +43,12 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
         if evidence['allow_ai'] and (not isinstance(evidence.get('gateway'), str) or not re.fullmatch('[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', evidence['gateway'])):
             raise ValueError('AI advice requires an allocated private AI Gateway')
     if tests is not None:
-        if not isinstance(tests, dict) or set(tests) - {'module', 'workflow', 'image', 'image_id'} or evidence is None:
+        if not isinstance(tests, dict) or set(tests) - {'module', 'workflow', 'image', 'image_id', 'build'} or evidence is None:
             raise ValueError('Container tests require an evidence allocation')
         workflow = tests.get('workflow')
         if workflow is not None:
             if 'module' in tests or not isinstance(workflow, dict) or set(workflow) != {'format', 'path'} or not (
-                    workflow['format'] == 'actions' and isinstance(workflow['path'], str) and
+                    workflow['format'] in ('actions', 'actions-act') and isinstance(workflow['path'], str) and
                     re.fullmatch(r'\.github/workflows/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml', workflow['path']) or
                     workflow['format'] == 'gitlab' and workflow['path'] == '.gitlab-ci.yml'):
                 raise ValueError('Choose one approved native Actions or GitLab workflow path')
@@ -58,6 +58,10 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
             raise ValueError('Explicit built container image tag or pinned digest required')
         if not isinstance(tests.get('image_id'), str) or not re.fullmatch('sha256:[a-f0-9]{64}', tests['image_id']):
             raise ValueError('Approved local Docker image ID required')
+        if workflow is not None and workflow['format'] == 'actions-act' and '@sha256:' not in tests['image']:
+            raise ValueError('Pinned Actions requires a digest-pinned approved image')
+        if 'build' in tests and (tests['build'] is not True or workflow is None or workflow['format'] != 'actions-act'):
+            raise ValueError('Socketless build requires the pinned Actions profile')
     if analytics is not None and (evidence is None or not isinstance(analytics, str) or not re.fullmatch('[A-Za-z_][A-Za-z0-9_]{0,63}', analytics)):
         raise ValueError('Evidence allocation and canonical Analytics Engine dataset required')
     if agent_path is not None and (tests is None or tests.get('workflow') or evidence is None or not evidence['allow_ai'] or not isinstance(agent_path, str) or
@@ -173,8 +177,9 @@ def main():
     parser.add_argument('--evidence-ai', action='store_true')
     parser.add_argument('--evidence-gateway')
     parser.add_argument('--test-module', help='Operator-approved Python unittest module; enables container tests')
-    parser.add_argument('--test-workflow-format', choices=['actions', 'gitlab'], help='Operator-approved PR shell workflow format')
+    parser.add_argument('--test-workflow-format', choices=['actions', 'actions-act', 'gitlab'], help='Operator-approved PR workflow format')
     parser.add_argument('--test-workflow-path', help='Exact workflow path in each PR head')
+    parser.add_argument('--test-socketless-build', action='store_true', help='Build a bounded OCI image after the pinned Actions job passes')
     parser.add_argument('--test-image', help='Built native container image tag, paired with a module or workflow')
     parser.add_argument('--test-image-id', help='Approved immutable local Docker image ID, sha256:HEX')
     parser.add_argument('--analytics-dataset', help='Optional Analytics Engine completion metrics; creates data on first event')
@@ -221,8 +226,9 @@ def main():
                 evidence['dead_letter'] = args.evidence_dead_letter_queue
         tests = {'image': args.test_image, 'image_id': args.test_image_id,
                  **({'module': args.test_module} if args.test_module else {}),
-                 **({'workflow': {'format': args.test_workflow_format, 'path': args.test_workflow_path}} if args.test_workflow_format or args.test_workflow_path else {})}
-        if not any([args.test_module, args.test_workflow_format, args.test_workflow_path, args.test_image, args.test_image_id]):
+                 **({'workflow': {'format': args.test_workflow_format, 'path': args.test_workflow_path}} if args.test_workflow_format or args.test_workflow_path else {}),
+                 **({'build': True} if args.test_socketless_build else {})}
+        if not any([args.test_module, args.test_workflow_format, args.test_workflow_path, args.test_image, args.test_image_id, args.test_socketless_build]):
             tests = None
         previews = None
         if any([args.preview_hostname, args.preview_worker, args.preview_access_aud, args.preview_path, args.preview_browser_snapshots, args.preview_manual]):
