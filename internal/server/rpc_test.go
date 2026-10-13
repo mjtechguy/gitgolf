@@ -149,6 +149,36 @@ func TestCapabilityReadinessWithPostgres(t *testing.T) {
 	}
 }
 
+func TestDefaultAppearanceIsValidatedAndServedWithTheDocument(t *testing.T) {
+	config := testConfig("http://gitea.invalid")
+	config.WebDir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(config.WebDir, "index.html"), []byte("<!doctype html><html lang=\"en\"><body></body></html>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{"lava", "flare/tiles", "golf/", `golf"><script>`} {
+		config.DefaultAppearance = value
+		if _, err := New(config, nil); err == nil {
+			t.Errorf("%q: accepted", value)
+		}
+	}
+	for value, want := range map[string]string{"": `<html lang="en">`, "classic": `<html data-golf-default-appearance="classic" lang="en">`, "flare/console": `<html data-golf-default-appearance="flare/console" lang="en">`} {
+		config.DefaultAppearance = value
+		s, err := New(config, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range []string{"/", "/owner/repository"} {
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request.Header.Set("Accept", "text/html")
+			response := httptest.NewRecorder()
+			s.ServeHTTP(response, request)
+			if response.Code != 200 || !strings.Contains(response.Body.String(), want) || response.Header().Get("Cache-Control") != "no-cache" || !strings.HasPrefix(response.Header().Get("Content-Type"), "text/html") {
+				t.Errorf("%q %s: status=%d type=%q body=%q", value, path, response.Code, response.Header().Get("Content-Type"), response.Body.String())
+			}
+		}
+	}
+}
+
 func TestWebCacheSeparatesHashedAssetsFromDocumentsAndRPC(t *testing.T) {
 	config := testConfig("http://gitea.invalid")
 	config.WebDir = t.TempDir()

@@ -105,6 +105,7 @@ func serverConfig() server.Config {
 		EncryptionKey: os.Getenv("GOLF_ENCRYPTION_KEY"), EncryptionKeysJSON: os.Getenv("GOLF_ENCRYPTION_KEYS"),
 		EncryptionActiveKeyID: os.Getenv("GOLF_ACTIVE_ENCRYPTION_KEY"),
 		AllowInsecureCookies:  os.Getenv("GOLF_ALLOW_INSECURE_COOKIES") == "true", WebDir: env("GOLF_WEB_DIR", "web/dist"),
+		DefaultAppearance: os.Getenv("GOLF_DEFAULT_APPEARANCE"),
 	}
 }
 

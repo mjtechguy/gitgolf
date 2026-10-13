@@ -1,10 +1,12 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,6 +22,9 @@ import (
 	"github.com/mjtechguy/golf-git/internal/objectstore"
 	"github.com/mjtechguy/golf-git/internal/telemetry"
 )
+
+// defaultAppearance is the operator's first-visit appearance and optional layout, matching web/public/theme.js.
+var defaultAppearance = regexp.MustCompile(`^(classic(/(primer|workbench|reader))?|golf(/(refined|strokes|tiles))?|flare(/(kumo|overview|console))?)$`)
 
 var immutableWebAsset = regexp.MustCompile(`^assets/[^/]+-[A-Za-z0-9_-]{8}\.(js|css|woff2?)$`)
 
@@ -39,11 +44,13 @@ type Config struct {
 	GiteaPublicURL, GiteaOAuthClientID, GiteaOAuthClientSecret string
 	AllowInsecureCookies                                       bool
 	WebDir                                                     string
-	RunnerKeysJSON, RunnerImagesJSON                           string
-	ActionsEngineCatalog, ActionsEngineBinary                  string
-	ActionsRemoteBundles                                       string
-	RepositoryEventConnectionsJSON                             string
-	Telemetry                                                  *telemetry.Runtime
+	// DefaultAppearance is "appearance" or "appearance/layout"; empty keeps the built-in default.
+	DefaultAppearance                         string
+	RunnerKeysJSON, RunnerImagesJSON          string
+	ActionsEngineCatalog, ActionsEngineBinary string
+	ActionsRemoteBundles                      string
+	RepositoryEventConnectionsJSON            string
+	Telemetry                                 *telemetry.Runtime
 }
 type Server struct {
 	accessOIDC                    *accessOIDC
@@ -75,6 +82,9 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	case "portable", "local", "docker", "kubernetes", "cloudflare-bridge":
 	default:
 		return nil, errors.New("unsupported Golf runtime profile")
+	}
+	if config.DefaultAppearance != "" && !defaultAppearance.MatchString(config.DefaultAppearance) {
+		return nil, errors.New("unsupported default appearance")
 	}
 	var err error
 	config, err = NormalizeForgeConfig(config)
@@ -216,6 +226,16 @@ func New(config Config, db *sql.DB) (*Server, error) {
 			webEnabled = true
 			files := root.FS()
 			fileServer := http.FileServerFS(files)
+			// The document carries the operator default so it applies before first paint.
+			serveDocument := func(w http.ResponseWriter, r *http.Request) {
+				document, err := fs.ReadFile(files, "index.html")
+				if config.DefaultAppearance == "" || err != nil {
+					http.ServeFileFS(w, r, files, "index.html")
+					return
+				}
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				_, _ = w.Write(bytes.Replace(document, []byte("<html"), []byte(`<html data-golf-default-appearance="`+config.DefaultAppearance+`"`), 1))
+			}
 			r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Cache-Control", "no-cache")
 				if strings.Contains(r.URL.Path, "..") {
@@ -224,7 +244,8 @@ func New(config Config, db *sql.DB) (*Server, error) {
 				}
 				name := strings.TrimPrefix(r.URL.Path, "/")
 				if name == "" {
-					name = "index.html"
+					serveDocument(w, r)
+					return
 				}
 				if f, err := files.Open(name); err == nil {
 					info, statErr := f.Stat()
@@ -238,7 +259,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 					}
 				}
 				if strings.Contains(r.Header.Get("Accept"), "text/html") {
-					http.ServeFileFS(w, r, files, "index.html")
+					serveDocument(w, r)
 					return
 				}
 				http.NotFound(w, r)

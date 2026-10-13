@@ -1,5 +1,75 @@
 # Golf implementation status
 
+## 2026-10-13 — Nine layout presets across the three appearances
+
+Each appearance now offers three named layouts in Appearance settings. The
+choice is saved in the browser and remembered per appearance.
+
+| Appearance | Layouts (default first) |
+| --- | --- |
+| Classic | Primer, Workbench, Reader |
+| Golf | Tiles, Refined, Fewer strokes |
+| Flare | Console, Kumo, Overview |
+
+A layout is a combination of shared parts set on the document by
+`web/public/theme.js`, never a page-specific design: navigation (`data-nav`:
+top bar, rail or sidebar), content arrangement (`data-content`: standard or
+panes) and features (`data-features`). Styles and components key on those parts.
+
+- **Rail and sidebar.** The existing Flare sidebar is now the shared side
+  navigation. Rail and sidebar layouts lift the repository heading into the top
+  bar; Tiles and Kumo also list the repository's sections in the side navigation.
+- **Panes.** Workbench and Tiles show the existing file tree beside the file
+  list on the repository root, as edge-to-edge panes with the About column.
+- **Reader.** Classic Reader places the README beside the file list.
+- **Fewer strokes.** Golf's keyboard layout adds `g` then a letter to change
+  section, `j`/`k` to move through rows, `/` to search, `?` for the key list,
+  hints beside sections and a legend. Shortcuts pause while typing or while a
+  dialog is open and are off in every other layout.
+- **Summary band.** Fewer strokes and Overview show facts already loaded for
+  the page: visibility, default branch, feature state and last update for a
+  repository; loaded, private, public and shown counts for the repository list.
+  No new reads or counts were added.
+- **Primer.** Classic's default uses the light header.
+
+Below 1051 pixels every layout uses the same top-bar shell. Built-in defaults
+are Golf/Tiles for portable installs and Flare/Console for Cloudflare-native.
+Operators set a first-visit default as `appearance` or `appearance/layout`
+with `GOLF_DEFAULT_APPEARANCE` (portable server, also exposed in
+`compose.yaml`) or `default_appearance` in the native installation settings.
+Both servers validate the value and write it onto the document, so it applies
+before first paint; a saved browser choice still wins. No dependency, schema,
+binding or RPC was added.
+
+Narrower than the design study, and still open:
+
+- Panes apply to the repository root. Issue, pull request, list and settings
+  pages keep the standard arrangement inside the chosen navigation.
+- Workbench keeps the About column rather than a one-line facts strip.
+- Summary bands show loaded facts only; commit, branch, check and review counts
+  need reads the page does not make today.
+- The operator default is deployment configuration. An administrator screen,
+  a Helm value and server-backed per-user preferences are not implemented.
+- Signed-out pages keep the top bar in every layout.
+
+Validation: typecheck, both frontend builds, `go vet`, `go test ./...`, the
+generation, engine and compatibility checks, and 296 native Worker tests (one
+skipped) pass. `make cloudflare-check` stops at `web/tests/navigation-cache.test.ts`,
+which fails the same way on `main` (module resolution); its remaining steps pass
+when run directly. The new `web/tests/layout-presets.spec.ts` (15 tests) covers
+all nine layouts at 1440 and 390 pixels, the picker and per-appearance memory,
+operator and native defaults, the keyboard layer and signed-out pages.
+
+The full browser suite ran on the final branch: 2,028 passed and 197 failed in
+25.8 minutes. The suite is not green on `main`: 189 of those 197 fail there in
+the same environment. Of the other eight, the appearance test fails on `main`
+at the same top-bar height assertion, and seven passed when rerun on the branch.
+Eight existing test definitions that measure the standard arrangement or use the top-bar
+workspace menu now select that layout or navigate from the side navigation.
+Screenshots were reviewed for every layout; dark mode was checked for the
+keyboard layout only. This was not exercised against a live backend before
+rollout.
+
 ## 2026-10-13 — Concurrent evidence and preview reads
 
 PR, Actions and Agent workspace inventories now use explicit read-only native

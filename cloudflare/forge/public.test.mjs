@@ -88,6 +88,12 @@ test('native UI requires an active Golf identity and strips all credentials from
   assert.equal(response.headers.get('Referrer-Policy'), 'strict-origin'); assert.equal(response.headers.get('Cache-Control'), 'no-store'); assert.ok(response.headers.get('Content-Security-Policy').includes("form-action 'self' https://preview.example.net"));
   assert.equal((await publicFetch(new Request(env.PUBLIC_ORIGIN + '/alice/repo/blob/' + 'a'.repeat(40) + '/hello%20world.py?view=source'), env, ctx)).status, 200);
   assert.equal(assets, 2);
+  assert.ok(!html.includes('data-golf-default-appearance'));
+  for (const [value, served] of [['flare/kumo', true], ['classic', true], ['flare/tiles', false], ['golf"><script>', false]]) {
+    const document = await (await publicFetch(new Request(env.PUBLIC_ORIGIN + '/'), { ...env, DEFAULT_APPEARANCE: value }, ctx)).text();
+    assert.equal(document.includes(`<html data-golf-default-appearance="${value}">`), served, value); assert.equal(document.includes('data-golf-default-appearance'), served, value);
+  }
+  assets = 2;
   authorized = false; assert.equal((await publicFetch(new Request(env.PUBLIC_ORIGIN + '/alice/repo/issues/1'), env, ctx)).status, 401); assert.equal(assets, 2);
 });
 

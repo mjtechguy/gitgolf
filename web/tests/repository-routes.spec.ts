@@ -90,7 +90,8 @@ test('workspace frame stays aligned between repository, list, and account pages'
 
 for (const profile of ['local', 'docker', 'kubernetes', 'cloudflare-native']) for (const width of [320, 1440]) test(`persistent repository frame and settings navigation ${profile} ${width}`, async ({page}) => {
   const state = await fixture(page, profile);
-  await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme), profile==='local'||profile==='kubernetes'?'dark':'light');
+  // This covers the top-bar shell's workspace menu; layout-presets.spec.ts covers the rail and sidebar layouts.
+  await page.addInitScript(theme=>{localStorage.setItem('golf.theme',theme);localStorage.setItem('golf.layout.golf','refined');}, profile==='local'||profile==='kubernetes'?'dark':'light');
   await page.setViewportSize({width, height:900});
   await page.goto('/alex/demo');
   const tabs = page.getByRole('navigation', {name:'Repository',exact:true});

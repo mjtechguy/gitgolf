@@ -1,12 +1,34 @@
 const root = document.documentElement;
-root.dataset.appearance = root.dataset.golfRuntime === 'cloudflare-native' ? 'flare' : 'golf';
+// Each appearance offers three layouts. A layout names its navigation, its content arrangement and optional features.
+const layouts = {
+  classic: { primer: 'top standard', workbench: 'top panes', reader: 'top standard reader' },
+  golf: { refined: 'top standard', strokes: 'top standard keys band', tiles: 'rail panes contextnav' },
+  flare: { kumo: 'sidebar standard contextnav', overview: 'sidebar standard band', console: 'rail standard' },
+};
+const preferred = { classic: 'primer', golf: 'tiles', flare: 'console' };
+const saved = key => { try { return localStorage.getItem(key); } catch { return null; } };
+const save = (key, value) => { try { localStorage.setItem(key, value); } catch { /* The choice still applies in this tab. */ } };
+// Operators may serve <html data-golf-default-appearance="appearance/layout">; a saved browser choice still wins.
+const [operatorAppearance, operatorLayout] = (root.dataset.golfDefaultAppearance || '').split('/');
+function apply(appearance, layout) {
+  const options = layouts[appearance];
+  const name = [layout, saved('golf.layout.' + appearance), appearance === operatorAppearance && operatorLayout, preferred[appearance]].find(value => Object.hasOwn(options, value));
+  const [nav, content, ...features] = options[name].split(' ');
+  Object.assign(root.dataset, { appearance, layout: name, nav, content, features: features.join(' ') });
+}
+apply([saved('golf.appearance'), operatorAppearance, root.dataset.golfRuntime === 'cloudflare-native' ? 'flare' : 'golf'].find(value => Object.hasOwn(layouts, value)));
 root.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-try {
-  const appearance = localStorage.getItem('golf.appearance');
-  const theme = localStorage.getItem('golf.theme');
-  if (['classic', 'golf', 'flare'].includes(appearance)) root.dataset.appearance = appearance;
-  if (['dark', 'light'].includes(theme)) root.dataset.theme = theme;
-} catch { /* Browser storage is optional; deployment and system defaults remain usable. */ }
+if (['dark', 'light'].includes(saved('golf.theme'))) root.dataset.theme = saved('golf.theme');
+window.golfAppearance = {
+  layouts,
+  choose(key, value) {
+    if (key === 'theme') root.dataset.theme = value;
+    else if (key === 'appearance') apply(value);
+    else apply(root.dataset.appearance, value);
+    save(key === 'layout' ? 'golf.layout.' + root.dataset.appearance : 'golf.' + key, value);
+    window.dispatchEvent(new Event('golf-appearance-change'));
+  },
+};
 const icon = document.querySelector('link[rel="icon"]');
 function colorIcon() {
   let href = '/golf.svg';

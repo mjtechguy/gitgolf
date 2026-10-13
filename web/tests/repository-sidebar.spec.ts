@@ -177,6 +177,8 @@ test('signout during a held read cannot restore private sidebar details or persi
 });
 
 for (const theme of ['dark', 'light']) for (const width of [390, 1280]) test(`root sidebar layout and keyboard controls at ${width}px ${theme}`, async ({ page }) => {
+  // This measures the standard arrangement; layout-presets.spec.ts covers panes.
+  await page.addInitScript(() => localStorage.setItem('golf.layout.golf', 'refined'));
   await fixture(page); await page.setViewportSize({ width, height: 1000 }); await page.goto('/alex/sidebar');
   await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
   await expect(sidebar(page)).toContainText('PRIVATE current description'); await expect(page.getByLabel('Rendered README.md')).toBeVisible();
