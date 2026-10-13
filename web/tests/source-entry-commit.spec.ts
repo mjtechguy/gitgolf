@@ -13,7 +13,8 @@ const ref = 'a'.repeat(40), latest = 'b'.repeat(40), repositoryId = '90071992547
 type Projection = { sha: string; message: string; authorName: string; authoredAt: string };
 type Invalid = 'path' | 'ref' | 'repository' | 'sha' | 'empty' | 'multiple' | 'date' | 'denied';
 
-async function fixture(page: Page, count = 1) {
+async function fixture(page: Page, count = 1, showByDefault = true) {
+  if (showByDefault) await page.addInitScript(() => localStorage.setItem('golf.source.latestChanges', 'show'));
   const user = create(UserSchema, { id: '9007199254740993', login: 'alex', fullName: 'Alex' });
   const repository = create(RepositorySchema, { id: repositoryId, name: 'entry-history', fullName: 'alex/entry-history', private: true, defaultBranch: 'main', htmlUrl: 'https://forge.example/alex/entry-history' });
   const entries = Array.from({ length: count }, (_, i) => ({ name: `row-${String(i).padStart(3, '0')}.ts`, path: `row-${String(i).padStart(3, '0')}.ts`, type: SourceEntryType.FILE, sha: ref, size: 10n }));
@@ -52,6 +53,21 @@ async function fixture(page: Page, count = 1) {
 }
 
 const entry = (page: Page, path = 'row-000.ts') => page.getByLabel(`Latest change for ${path}`, { exact: true });
+
+test('directory renders files before optional latest-change reads', async ({ page }) => {
+  const state = await fixture(page, 32, false);
+  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await expect(page.locator('.source-tree>li')).toHaveCount(32);
+  await expect(page.locator('.source-entry-commit')).toHaveCount(0);
+  expect(state.calls).toHaveLength(0);
+  await page.getByRole('button', {name:'Show latest changes'}).click();
+  await expect(entry(page).getByRole('link')).toHaveText('PRIVATE alex: row-000.ts');
+  expect(state.calls.length).toBeGreaterThan(0);
+  await page.getByRole('button', {name:'Hide latest changes'}).click();
+  await expect(page.locator('.source-entry-commit')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('button', {name:'Show latest changes'})).toBeVisible();
+});
 
 test('directory changes bind each visible path to the exact repository/snapshot and link the native latest commit', async ({ page }) => {
   const state = await fixture(page);

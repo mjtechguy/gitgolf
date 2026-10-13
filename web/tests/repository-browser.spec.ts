@@ -138,6 +138,7 @@ test('source and issues render safe Markdown; excluded previews explain their bo
   const reasons = { 'binary.png': 'Binary content cannot be previewed.', 'large.txt': 'File exceeds the 256 KiB preview limit.', 'pointer.lfs': 'Git LFS content is not fetched.', link: 'Symlink targets are not followed.', module: 'Submodule repositories are not followed.' };
   for (const [path, reason] of Object.entries(reasons)) {
     await page.goto(`/repositories/alex/design-system?ref=${head}&path=${path}`);
+    await expect(page.getByRole('navigation', { name: 'Source path' }).getByRole('link', { name: path, exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Preview unavailable' })).toBeVisible();
     await expect(page.getByText(reason, { exact: true })).toBeVisible();
     await expect(page.locator('.source-preview')).toHaveCount(0);
@@ -583,6 +584,7 @@ for (const width of [320, 1280, 1920]) for (const theme of ['dark', 'light']) te
   const main = await page.locator('main').boundingBox();
   expect(main!.width).toBe(Math.min(width, 1440)); expect(main!.x).toBe((width - main!.width) / 2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  await expect(page.locator('.source-write-toolbar')).toHaveCount(0);
   await page.screenshot({ path: `test-results/repository-code-summary-${theme}-${width}.png` });
 });
 

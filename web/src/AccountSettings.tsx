@@ -4,6 +4,7 @@ import { useRuntimeCapabilities } from './useRuntimeCapabilities';
 import { runtimeFeature, settingAvailable } from './runtimeCapabilities';
 import { AgentUsageScope } from './gen/golf/v1/golf_pb';
 import { ProfileSettings } from './ProfileSettings';
+import { AppearanceSettings } from './ThemeSwitch';
 import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
@@ -77,6 +78,7 @@ export function AccountSettings({ user, signingOut }: { user: User; signingOut: 
   return <section className="page-stack" aria-labelledby="settings-title">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1 id="settings-title"><UserRound size={29} />Profile</h1><p>Your identity, access and account preferences.</p></div></header>
     <ProfileSettings key={user.id} userId={user.id} signingOut={signingOut} isInstanceAdmin={user.isInstanceAdmin} />
+    <AppearanceSettings />
     {native ? <NativeInstallationSettings/> : runtime.isSuccess ? <Suspense fallback={<Loading label="Opening notification settings…" />}><OwnEmailNotifications userId={user.id} signingOut={signingOut} /></Suspense> : null}
     <SettingsInventory scope="personal" />
   </section>;
@@ -95,7 +97,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'credentials', section: 'API credentials', state: 'Ready', detail: 'Issue source-session-bound read credentials or explicit repository-bound issue/PR write scopes. Service accounts and managed device login remain separate.', task: 'P1.8 / P5.5', to: '/account/api-credentials' },
     { id: 'identity', section: 'Connected identities and integrations', state: 'Planned', detail: 'Optional provider OAuth sign-in exists; account linking/unlinking, external OIDC and installation approval need explicit immutable identity binding.', task: 'P1.3 / G2' },
     { id: 'notifications', section: 'Notifications and email', state: 'Partial', detail: 'Verify your notification mailbox and explicitly enable portable repository email subscriptions. Delivery uses an administrator-configured SMTP worker; richer preferences, inbound replies and Cloudflare delivery remain required.', task: 'P3 / P6' },
-    { id: 'appearance', section: 'Appearance', state: 'Ready', detail: 'Use the header theme button. Dark/light choice is stored in this browser; synchronized account preferences are not implemented.', task: 'P1.4' },
+    { id: 'appearance', section: 'Appearance', state: 'Ready', detail: 'Choose Classic, Golf or Flare and light or dark mode above. Choices are stored in this browser; synchronized account preferences are not implemented.', task: 'P1.4' },
     { id: 'activity', section: 'Account activity', state: 'Ready', detail: 'Inspect recorded successful session changes. Export, retention policy and broader security events remain planned.', task: 'P1.3', to: '/audit' },
     { id: 'agents', section: 'Agent tools and provider credentials', state: 'Partial', detail: 'Connect and re-authenticate your own Codex account, and view instance connections shared with you in Coding agents. Model access and task execution are not verified by authentication; Claude Code/OpenCode account setup and scoped usage configuration are available; managed execution remains planned.', task: 'P5 / G4', to: '/account/agents' },
   ],

@@ -61,6 +61,33 @@ const settingsPages = [
   ['settings/workflows', 'Workflow configuration', 'InspectWorkflows'],
 ] as const;
 
+test('workspace frame stays aligned between repository, list, and account pages', async ({page}) => {
+  test.setTimeout(60_000);
+  await fixture(page);
+  for (const appearance of ['classic', 'golf', 'flare']) for (const width of [1440, 320]) {
+    await page.setViewportSize({width, height:900});
+    await page.goto('/alex/demo');
+    await page.evaluate(value => localStorage.setItem('golf.appearance', value), appearance);
+    await page.reload();
+    await expect(page.locator('.repository-context')).toHaveAttribute('aria-label', 'alex/demo');
+    await expect(page.locator('.workspace-navigation a').first()).toHaveAttribute('aria-current', 'page');
+    const frame = () => page.evaluate(() => {
+      const x = (selector:string) => Math.round(document.querySelector(selector)!.getBoundingClientRect().x);
+      return {header:Math.round(document.querySelector('.topbar')!.getBoundingClientRect().height), menu:x('.global-menu'), switcher:x('.workspace-switcher'), account:x('.topbar-controls .account-menu'), content:x('.repository-context, .workspace-intro, .account-layout'), overflow:document.documentElement.scrollWidth > innerWidth};
+    });
+    const repositoryFrame = await frame();
+    await page.getByLabel('Open workspace navigation', {exact:true}).click();
+    await page.getByRole('navigation', {name:'Workspace menu', exact:true}).getByRole('link', {name:'Repositories', exact:true}).click();
+    await expect(page).toHaveURL('/');
+    expect(await frame()).toEqual(repositoryFrame);
+    await page.getByLabel('Your account', {exact:true}).click();
+    await page.getByRole('link', {name:'User settings', exact:true}).click();
+    await expect(page).toHaveURL('/account/settings');
+    expect(await frame()).toEqual(repositoryFrame);
+    expect(repositoryFrame.overflow).toBe(false);
+  }
+});
+
 for (const profile of ['local', 'docker', 'kubernetes', 'cloudflare-native']) for (const width of [320, 1440]) test(`persistent repository frame and settings navigation ${profile} ${width}`, async ({page}) => {
   const state = await fixture(page, profile);
   await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme), profile==='local'||profile==='kubernetes'?'dark':'light');
@@ -70,9 +97,9 @@ for (const profile of ['local', 'docker', 'kubernetes', 'cloudflare-native']) fo
   await expect(tabs.getByRole('link',{name:'Code',exact:true})).toHaveAttribute('aria-current','page');
   const header = await page.locator('.topbar').elementHandle(), navigation = await tabs.elementHandle();
   await page.getByLabel('Open workspace navigation',{exact:true}).click();
-  await expect(page.getByRole('navigation',{name:'Workspace',exact:true})).toBeVisible();
+  await expect(page.getByRole('navigation',{name:'Workspace menu',exact:true})).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('navigation',{name:'Workspace',exact:true})).toBeHidden();
+  await expect(page.getByRole('navigation',{name:'Workspace menu',exact:true})).toBeHidden();
   await expect(page.getByLabel('Open workspace navigation',{exact:true})).toBeFocused();
   await tabs.getByRole('link',{name:'Settings',exact:true}).click();
   await expect(page.getByText('PRIVATE route settings',{exact:true})).toBeVisible();
