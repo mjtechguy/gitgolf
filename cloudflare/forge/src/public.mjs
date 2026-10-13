@@ -37,7 +37,14 @@ async function dispatch(request, env, ctx, clock) {
     // Configured Access is the outer gate for both people and machine callers.
     const machineRoute = url.pathname.startsWith('/native/runner-machine/') || url.pathname.startsWith('/api/v4/');
     const access = env.ACCESS_AUD && !machineRoute ? await clock.measure('access_auth', () => accessContext(request, env, ctx)) : null;
-    if (env.ACCESS_AUD && !access && !machineRoute) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });
+    const publicSite = env.PUBLIC_REPOSITORIES === 'true';
+    if (env.ACCESS_AUD && !access && !machineRoute && !publicSite) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });
+    if (publicSite && url.pathname === '/auth/login') {
+      if (request.method !== 'GET' || !access || !(await access.getIdentity())?.email) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });
+      const target = url.searchParams.get('returnTo') || '/';
+      const safe = target.startsWith('/') && !target.startsWith('//') && !/[\\\r\n]/.test(target) && target.length <= 4096;
+      return new Response(null, { status: 303, headers: { Location: safe ? target : '/', 'Cache-Control': 'no-store' } });
+    }
     if (env.ACCESS_AUD && immutableAsset(url.pathname) && ['GET', 'HEAD'].includes(request.method) && !url.search && url.href.length <= 8192 && !request.headers.has('Upgrade')) {
       let response;
       if (builtAssets && Object.hasOwn(builtAssets, url.pathname)) response = embeddedAsset(request, builtAssets);
@@ -64,7 +71,7 @@ async function dispatch(request, env, ctx, clock) {
       const auth = await owner.fetch(new Request(env.PUBLIC_ORIGIN + '/rpc/golf.v1.SessionService/GetSession', {
         method: 'POST', headers: { ...Object.fromEntries(headers), 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: '{}' }));
       if (!auth.ok) return auth;
-      const screen = url.pathname === '/' || /^\/(?:account|admin|organizations)(?:\/|$)/.test(url.pathname) || ['/status', '/notifications', '/audit'].includes(url.pathname) || /^\/[^/]+\/[^/]+(?:\/|$)/.test(url.pathname) && !url.pathname.startsWith('/assets/');
+      const screen = publicSite && /^\/[a-z0-9][a-z0-9-]{0,38}$/.test(url.pathname) || url.pathname === '/' || /^\/(?:account|admin|organizations)(?:\/|$)/.test(url.pathname) || ['/status', '/notifications', '/audit'].includes(url.pathname) || /^\/[^/]+\/[^/]+(?:\/|$)/.test(url.pathname) && !url.pathname.startsWith('/assets/');
       const assetRequest = new Request(env.PUBLIC_ORIGIN + (screen ? '/native.html' : url.pathname), { method: request.method });
       const response = builtAssets ? embeddedAsset(assetRequest, builtAssets) : await env.ASSETS.fetch(assetRequest);
       const outgoing = new Headers(response.headers);
@@ -77,7 +84,8 @@ async function dispatch(request, env, ctx, clock) {
       if (screen && request.method === 'GET' && response.ok) {
         // Reuse this request's fresh session; keep personalized HTML uncached.
         const session = JSON.stringify(await auth.json()).replace(/</g, '\\u003c');
-        const html = (await response.text()).replace('<script id="golf-session" type="application/json">null</script>', () => `<script id="golf-session" type="application/json">${session}</script>`);
+        let html = (await response.text()).replace('<script id="golf-session" type="application/json">null</script>', () => `<script id="golf-session" type="application/json">${session}</script>`);
+        if (publicSite) html = html.replace('<html', '<html data-golf-public="true"');
         outgoing.set('Cache-Control', 'no-store'); outgoing.delete('Content-Length');
         return new Response(html, { status: response.status, headers: outgoing });
       }

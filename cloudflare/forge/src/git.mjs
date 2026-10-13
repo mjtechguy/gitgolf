@@ -111,6 +111,7 @@ export function defaultBranchAdvertisement(bytes, branch) {
   let offset=0,header=packet(bytes,offset);offset=header.end;
   if(header.text!=='# service=git-upload-pack\n') throw new GitProviderError('Unsupported Git advertisement.');
   const separator=packet(bytes,offset);offset=separator.end;if(!separator.flush) throw new GitProviderError('Invalid Git service separator.');
+  if (packet(bytes,offset).text === 'version 2\n') return bytes;
   const refs=[],names=new Set();let capabilities='',ended=false;
   while(offset<bytes.length) {
     const entry=packet(bytes,offset);offset=entry.end;
@@ -133,6 +134,31 @@ export function defaultBranchAdvertisement(bytes, branch) {
   caps.push('symref=HEAD:refs/heads/'+branch);
   if(!kept.length) kept.push({hash:zero,name:'capabilities^{}'});
   const chunks=[packetLine(header.text),encoder.encode('0000'),...kept.map((r,i)=>packetLine(r.hash+' '+r.name+(i===0?'\0'+caps.join(' '):'')+'\n')),encoder.encode('0000')];
+  const result=new Uint8Array(chunks.reduce((n,c)=>n+c.length,0));let cursor=0;
+  for(const chunk of chunks) {result.set(chunk,cursor);cursor+=chunk.length;}
+  return result;
+}
+
+export function gitV2Command(bytes) {
+  const first = packet(bytes, 0);
+  return first.text.replace(/\n$/, '');
+}
+
+// v2 negotiates shallow boundaries in fetch; retain Golf's default branch in ls-refs.
+export function defaultBranchRefsV2(bytes, branch, head) {
+  if (!validRef('refs/heads/'+branch) || head !== undefined && !sha(head)) throw new GitProviderError('Invalid default branch identity.');
+  const chunks=[]; let offset=0, ended=false, sawHead=false;
+  while(offset<bytes.length) {
+    const row=packet(bytes,offset); offset=row.end;
+    if(row.flush) {chunks.push(encoder.encode('0000'));ended=true;break;}
+    const fields=row.text.replace(/\n$/,'').split(' ');
+    if(fields[1]==='HEAD') {
+      if(sawHead || !sha(fields[0]) && fields[0]!=='unborn') throw new GitProviderError('Invalid advertised HEAD.');
+      sawHead=true;
+      if(head) chunks.push(packetLine(head+' HEAD'+(fields.some(f=>f.startsWith('symref-target:'))?' symref-target:refs/heads/'+branch:'')+'\n'));
+    } else chunks.push(packetLine(row.text));
+  }
+  if(!ended||offset!==bytes.length) throw new GitProviderError('Incomplete v2 ref response.');
   const result=new Uint8Array(chunks.reduce((n,c)=>n+c.length,0));let cursor=0;
   for(const chunk of chunks) {result.set(chunk,cursor);cursor+=chunk.length;}
   return result;

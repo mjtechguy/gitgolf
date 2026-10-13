@@ -57,6 +57,37 @@ class SchemaBootstrap(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'Schema changed'): demo.build(directory, value)
 
 
+class PublicMigration(unittest.TestCase):
+    def test_public_enable_requires_owned_database_and_reviewed_predecessor(self):
+        import hashlib
+        import sqlite3
+        with tempfile.TemporaryDirectory() as temporary, sqlite3.connect(':memory:') as db:
+            directory = Path(temporary)
+            db.row_factory = sqlite3.Row
+            schema = (demo.ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (demo.ROOT/'cloudflare/forge/migrations/0022_public_repositories.sql').read_text()
+            previous = schema[:-len('\n'+migration)]
+            db.executescript(previous)
+            value = {'name':'example','settings':{'access_team_domain':'https://example.cloudflareaccess.com'}}
+            replace_private_json(directory/'forge.json', {'database':{'uuid':'database'}})
+            replace_private_json(directory/'schema-receipt.json', {'database':'database','sha256':'unknown'})
+            calls = []
+            def cf(config, *args):
+                if args[:2] == ('d1','get'): return {'name':'example','uuid':'database'}
+                sql = json.loads(args[-1])['sql']; calls.append(sql)
+                if sql.startswith('PRAGMA'): return [{'results':[dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql); return [{'results':[]}]
+            with patch.object(demo,'cf',side_effect=cf):
+                with self.assertRaisesRegex(ValueError,'predecessor'): demo.enable_public(directory,value)
+                self.assertEqual(calls, [])
+                replace_private_json(directory/'schema-receipt.json', {'database':'database','sha256':hashlib.sha256(previous.encode()).hexdigest()})
+                demo.enable_public(directory,value)
+                demo.enable_public(directory,value)
+                self.assertTrue(json.loads((directory/'alchemy-input.json').read_text())['settings']['public_repositories'])
+                self.assertEqual(db.execute('SELECT count(*) FROM repository_visibility').fetchone()[0],0)
+                self.assertEqual(json.loads((directory/'schema-receipt.json').read_text())['sha256'],hashlib.sha256(schema.encode()).hexdigest())
+
+
 class RunnerIdentity(unittest.TestCase):
     def test_verification_rejects_provenance_indexes_and_wrong_image_identity(self):
         import hashlib

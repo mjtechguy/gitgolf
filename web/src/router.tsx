@@ -5,7 +5,7 @@ import { defaultRepositorySearch, isCommitID, isRunID, isWorkflowJobInstanceID, 
 import { sourcePath, sourceRef, sourceRepositoryID } from './sourceReads';
 import type { Location, RepositorySearch } from './navigation';
 
-type LocationMatch = { params: { owner: string; name: string; organization: string; teamId: string; _splat?: string }; search: RepositorySearch & { repositoryId: string; auth_error?: string; team?: string } };
+type LocationMatch = { params: { owner: string; name: string; organization: string; teamId: string; _splat?: string }; search: RepositorySearch & { repositoryId: string; auth_error?: string; team?: string; query?: string; topic?: string } };
 declare module '@tanstack/react-router' {
   interface StaticDataRouteOption { golfLocation?: (match: LocationMatch) => Location }
 }
@@ -35,6 +35,16 @@ const homeRoute = createRoute({
     auth_error: search.auth_error === 'oauth_failed' ? 'oauth_failed' : undefined,
   }),
   staticData: { golfLocation: HomePage },
+});
+const publicProfileRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/$owner',
+  beforeLoad: ({ params }) => { if (!/^[a-z0-9][a-z0-9-]{0,38}$/.test(params.owner)) throw notFound(); },
+  staticData: { golfLocation: match => ({ kind: 'public-profile', owner: match.params.owner }) },
+});
+const exploreRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/explore',
+  validateSearch: (search: Record<string, unknown>): { query?: string; topic?: string } => ({ query: typeof search.query === 'string' ? search.query.slice(0,100) : undefined, topic: typeof search.topic === 'string' ? search.topic.slice(0,35) : undefined }),
+  staticData: { golfLocation: match => ({ kind: 'explore', query: match.search.query, topic: match.search.topic }) },
 });
 const organizationsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -326,7 +336,7 @@ function OrganizationPage(match: LocationMatch): Location {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOperationsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountConnectionsRoute,accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, publicProfileRoute, exploreRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOperationsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountConnectionsRoute,accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => {

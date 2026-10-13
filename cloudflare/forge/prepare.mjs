@@ -1,3 +1,4 @@
+import { nativeBuildIdentity } from './build-identity.mjs';
 import { webhookBindings } from './src/webhooks.mjs';
 import { accessBindings } from './src/access.mjs';
 import { operationsPolicy } from './src/operations-provider.mjs';
@@ -175,10 +176,11 @@ if (mode === 'retire') {
   for (const [name, value] of Object.entries({ ACCOUNT_ID: settings.account, ARTIFACTS_NAMESPACE: settings.namespace,
     WORKSPACE_SLUG: settings.workspace, PUBLIC_ORIGIN: settings.origin, ACCESS_AUD: settings.access_aud || '' })) config.env[name] = { type: 'text', value };
   if (settings.hostname) config.domains = [settings.hostname];
+  const identity = await nativeBuildIdentity(settings, uiAssets);
   const built = await esbuild.build({ entryPoints: [fileURLToPath(new URL(settings.agent_path ? './src/agent-entry.mjs' : settings.tests ? './src/test-entry.mjs' : './src/worker.mjs', import.meta.url))],
     outfile: resolve(bundle, 'worker.mjs'), bundle: true, format: 'esm', platform: 'neutral',
     // Binding changes must also change the bundle so live Durable Objects adopt the new configuration.
-    define: { GOLF_NATIVE_ASSETS: JSON.stringify(uiAssets), GOLF_NATIVE_CONFIGURATION: JSON.stringify(createHash('sha256').update(JSON.stringify(settings)).digest('hex')) },
+    define: { GOLF_NATIVE_ASSETS: JSON.stringify(uiAssets), GOLF_NATIVE_CONFIGURATION: JSON.stringify(identity.configuration), GOLF_NATIVE_RELEASE: JSON.stringify(identity.release) },
     nodePaths: [resolve(fileURLToPath(new URL('../agents/node_modules', import.meta.url)))],
     conditions: ['workerd', 'worker', 'browser'], external: ['cloudflare:workers', 'node:*'], metafile: true });
   const exported = Object.values(built.metafile.outputs).flatMap(output => output.exports);

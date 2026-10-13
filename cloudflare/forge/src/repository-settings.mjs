@@ -56,7 +56,7 @@ export async function repositorySettings(db, env, person, row, method, body, art
     issuesMode: 'REPOSITORY_FEATURE_MODE_INTERNAL', wikiMode: 'REPOSITORY_FEATURE_MODE_DISABLED', canEdit: row.role === 'admin', generalEditImplemented: true, revision } };
 }
 
-function settingsAuthority(person,row) {
+export function settingsAuthority(person,row) {
   return {sql:`EXISTS(SELECT 1 FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id
     WHERE r.id=? AND r.artifact_name=? AND r.state='ACTIVE' AND g.user_id=? AND g.role=? AND u.active=1)
     AND COALESCE((SELECT version FROM repository_access_versions WHERE repository_id=?),0)=?

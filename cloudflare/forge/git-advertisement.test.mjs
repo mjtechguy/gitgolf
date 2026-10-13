@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {defaultBranchAdvertisement,packetLine,advertisedRefs} from './src/git.mjs';
+import {defaultBranchAdvertisement,defaultBranchRefsV2,gitV2Command,packetLine,advertisedRefs} from './src/git.mjs';
 const main='a'.repeat(40),next='b'.repeat(40);
 const advertisement=lines=>new Uint8Array(Buffer.concat([packetLine('# service=git-upload-pack\n'),Buffer.from('0000'),...lines.map(packetLine),Buffer.from('0000')]));
 test('Golf default branch replaces provider HEAD and symref while preserving refs and capabilities',()=>{
@@ -19,4 +19,16 @@ test('missing and unborn defaults are not advertised as another branch',()=>{
 test('malformed advertisements and invalid branch names fail closed',()=>{
  for(const branch of ['../main','main.lock',''])assert.throws(()=>defaultBranchAdvertisement(advertisement([]),branch));
  for(const raw of [new Uint8Array(),advertisement(['garbage\n']),advertisement([main+' refs/heads/main\0one\0two\n']),new Uint8Array([...advertisement([]),1])])assert.throws(()=>defaultBranchAdvertisement(raw,'main'));
+});
+
+test('v2 ref discovery keeps Golf HEAD without modifying other refs or fetch packets',()=>{
+ const raw=Buffer.concat([packetLine(main+' HEAD symref-target:refs/heads/main\n'),packetLine(main+' refs/heads/main\n'),packetLine(next+' refs/heads/next\n'),Buffer.from('0000')]);
+ const changed=defaultBranchRefsV2(raw,'next',next),text=new TextDecoder().decode(changed);
+ assert.ok(text.includes(next+' HEAD symref-target:refs/heads/next'));
+ assert.ok(text.includes(main+' refs/heads/main'));
+ assert.equal(new TextDecoder().decode(defaultBranchRefsV2(raw,'missing',undefined)).includes(' HEAD'),false);
+ assert.equal(gitV2Command(packetLine('command=ls-refs\n')),'command=ls-refs');
+ assert.equal(gitV2Command(packetLine('command=fetch\n')),'command=fetch');
+ assert.throws(()=>defaultBranchRefsV2(raw,'../main',next));
+ assert.throws(()=>defaultBranchRefsV2(raw.subarray(0,-4),'main',main));
 });

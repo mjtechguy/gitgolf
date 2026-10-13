@@ -12,7 +12,7 @@ if (JSON.parse(await readFile(resolve(cli, 'package.json'), 'utf8')).version !==
 const { Miniflare, convertV4MiniflareOptions } = await import(pathToFileURL(resolve(cli, 'node_modules/miniflare/dist/src/index.js')).href);
 const modules = [];
 const activity = await esbuild.build({ entryPoints: ['cloudflare/forge/src/activity.mjs'], outfile: 'cloudflare/forge/src/activity.runtime.mjs', bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./common.mjs', './git.mjs'] });
-for (const file of ['worker.mjs', 'owners.mjs', 'operations.mjs', 'operations-provider.mjs', 'core.mjs', 'file-index.mjs', 'telemetry.mjs', 'repository-indexes.mjs', 'repository-metadata.mjs', 'metadata-jobs.mjs', 'repository-images.mjs', 'repository-reads.mjs', 'repository-cache.mjs', 'repository-settings.mjs', 'managed-registry.mjs', 'native-runners.mjs', 'gitlab-runner.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'repository-diff.mjs', 'workspace-ui.mjs', 'git.mjs', 'common.mjs', 'collaboration.mjs', 'evidence.mjs', 'delivery.mjs', 'apps.mjs', 'app-policy.mjs', 'public.mjs', 'test-policy.mjs', 'agent-policy.mjs', 'agents.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: (await readFile(new URL('./src/' + file, import.meta.url), 'utf8')).replace("'../data/languages.json' with { type: 'json' }", "'../data/languages.mjs'") });
+for (const file of ['worker.mjs', 'owners.mjs', 'public-profiles.mjs', 'public-repositories.mjs', 'operations.mjs', 'operations-provider.mjs', 'core.mjs', 'file-index.mjs', 'telemetry.mjs', 'repository-indexes.mjs', 'repository-metadata.mjs', 'metadata-jobs.mjs', 'repository-images.mjs', 'repository-reads.mjs', 'repository-cache.mjs', 'repository-settings.mjs', 'managed-registry.mjs', 'native-runners.mjs', 'gitlab-runner.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'repository-diff.mjs', 'workspace-ui.mjs', 'git.mjs', 'common.mjs', 'collaboration.mjs', 'evidence.mjs', 'delivery.mjs', 'apps.mjs', 'app-policy.mjs', 'public.mjs', 'test-policy.mjs', 'agent-policy.mjs', 'agents.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: (await readFile(new URL('./src/' + file, import.meta.url), 'utf8')).replace("'../data/languages.json' with { type: 'json' }", "'../data/languages.mjs'") });
 modules.push({ type: 'ESModule', path: 'forge/src/performance.mjs', contents: await readFile(new URL('./src/performance.mjs', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'forge/src/activity.mjs', contents: activity.outputFiles[0].text });
 const access = await esbuild.build({ entryPoints: ['cloudflare/forge/src/access.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral' });
@@ -41,7 +41,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     assert.equal(request.headers.get('X-Golf-Signature-256'), 'sha256='+createHmac('sha256',webhookSecret).update(stamp+'\n'+event+'\n'+body).digest('hex'));
     webhookRequests++; return new Response(null,{status:204});
   },
-  bindings: { REGISTRY_PROVIDER: 'cloudflare', REGISTRY_ORIGIN: 'https://registry.cloudflare.com', REGISTRY_ACCOUNT: 'a'.repeat(32), REGISTRY_REPOSITORY_PREFIX: 'a'.repeat(32) + '/local-native-r', REGISTRY_CI_ENABLED: 'false',
+  bindings: { PUBLIC_REPOSITORIES: 'true', REGISTRY_PROVIDER: 'cloudflare', REGISTRY_ORIGIN: 'https://registry.cloudflare.com', REGISTRY_ACCOUNT: 'a'.repeat(32), REGISTRY_REPOSITORY_PREFIX: 'a'.repeat(32) + '/local-native-r', REGISTRY_CI_ENABLED: 'false',
     WEBHOOK_POLICY: JSON.stringify({origins:['https://receiver.example.com'],dailyLimit:10}), PUBLIC_ORIGIN: 'https://golf.example.com', WORKSPACE_SLUG: 'alice', ACCOUNT_ID: 'a'.repeat(32), ARTIFACTS_NAMESPACE: 'local-proof', EVIDENCE_DAILY_LIMIT: '2', EVIDENCE_ALLOW_AI: 'false',
     EVIDENCE_DEAD_LETTER_QUEUE: 'local-failed-evidence', EVIDENCE_QUEUE_NAME: 'local-evidence', EVIDENCE_WORKFLOW_NAME: 'local-evidence', OPERATIONS_SERVICE_HEALTH: 'true' },
   d1Databases: { DB: 'local-native-proof' },
@@ -74,6 +74,27 @@ try {
   await database.prepare(`INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at)
     VALUES(1,'runtime','',?,1,?,?,'ACTIVE',?)`).bind('repo-' + 'b'.repeat(32), crypto.randomUUID(), 'c'.repeat(64), new Date().toISOString()).run();
   await database.prepare("INSERT INTO grants VALUES(1,1,'admin')").run();
+  const publicCall = (path, payload) => runtime.dispatchFetch('https://golf.example.com'+path, {
+    method:'POST',headers:{'Content-Type':'application/json','Connect-Protocol-Version':'1'},body:JSON.stringify(payload),
+  });
+  assert.deepEqual(await (await publicCall('/rpc/golf.v1.SessionService/GetSession',{})).json(),{});
+  await call('/native/owners',token,{}, {action:'ensurePersonal',userId:'1',login:'alice',expectedLogin:'alice'});
+  const target={repository:{owner:'alice',name:'runtime'},repositoryId:'1'};
+  const visibility = await (await call('/native/repository-visibility',token,{}, {...target,action:'get'})).json();
+  assert.equal((await publicCall('/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess',target)).status,404);
+  assert.equal((await call('/native/repository-visibility',token,{}, {...target,action:'set',isPublic:true,expectedRevision:visibility.revision})).status,200);
+  assert.equal((await publicCall('/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess',target)).status,200);
+  assert.equal((await (await publicCall('/native/discover',{})).json()).repositories[0].fullName,'alice/runtime');
+  const draft=await (await call('/native/public-profile',token,{}, {action:'get',owner:'alice'})).json();
+  assert.equal((await call('/native/public-profile',token,{}, {action:'save',owner:'alice',ownerId:draft.ownerId,expectedRevision:draft.revision,
+    profile:{enabled:true,displayName:'Alice',bio:'Public',location:'',website:'',readme:'# Hello',pinned:['1']}})).status,200);
+  assert.equal((await (await publicCall('/native/public-profile',{action:'get',owner:'alice'})).json()).pinnedRepositories.length,1);
+  const published=await (await call('/native/repository-visibility',token,{}, {...target,action:'get'})).json();
+  await call('/native/repository-visibility',token,{}, {...target,action:'set',isPublic:false,expectedRevision:published.revision});
+  assert.equal((await publicCall('/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess',target)).status,404);
+  assert.equal((await (await publicCall('/native/public-profile',{action:'get',owner:'alice'})).json()).pinnedRepositories.length,0);
+  console.log('Real workerd/D1/DO anonymous discovery, profile publication and private revocation passed');
+
   const packages = await call('/native/repository-packages', token, {}, { action: 'status', repository: { owner: 'alice', name: 'runtime' }, repositoryId: '1' });
   assert.equal(packages.status, 200, await packages.clone().text());
   assert.equal((await packages.json()).provider, 'cloudflare');
@@ -235,6 +256,7 @@ try {
     await database.prepare('DELETE FROM grants WHERE repository_id=1').run();
     await assert.rejects(stream.next(), error => error.code === Code.NotFound);
     await database.prepare("INSERT INTO grants VALUES(1,1,'admin')").run();
+
   }
   const bucket = await runtime.getR2Bucket('EVIDENCE_BUCKET');
   await bucket.put('test/report.json', 'original', { onlyIf: { etagDoesNotMatch: '*' } });

@@ -32,7 +32,8 @@ export default Alchemy.Stack('GolfDemo', {
     { name: 'Demo operator', decision: 'non_identity' as const, include: [{ serviceToken: { tokenId: machine.serviceTokenId } }] },
   ];
   const controlAccess = yield* Cloudflare.Access.Application('ControlAccess', {
-    name: name + '-control', type: 'self_hosted', domain: input.hostname,
+    name: name + '-control', type: 'self_hosted', domain: input.hostname + (input.settings.public_repositories ? '/auth/login' : ''),
+    pathCookieAttribute: false,
     sessionDuration: '4h', allowedIdps: [idp.identityProviderId], autoRedirectToIdentity: true, policies,
   });
   const previewAccess = yield* Cloudflare.Access.Application('PreviewAccess', {

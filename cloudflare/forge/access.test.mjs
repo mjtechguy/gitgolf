@@ -57,7 +57,35 @@ test('missing runtime context still serves assets and forwards only verified ide
 
 test('issuer binding only accepts an explicit Cloudflare team origin with an audience', () => {
   assert.deepEqual(accessBindings({}), {});
+  assert.throws(() => accessBindings({public_repositories:true}));
+  assert.throws(() => accessBindings({public_repositories:'true'}));
+  assert.equal(accessBindings({public_repositories:true,access_aud:'expected',access_team_domain:env.ACCESS_TEAM_DOMAIN}).PUBLIC_REPOSITORIES.value,'true');
   assert.equal(accessBindings({ access_aud: 'expected', access_team_domain: env.ACCESS_TEAM_DOMAIN }).ACCESS_TEAM_DOMAIN.value, env.ACCESS_TEAM_DOMAIN);
   for (const value of ['http://test.cloudflareaccess.com', 'https://attacker.example', 'https://test.cloudflareaccess.com/anything', 'https://test.cloudflareaccess.com@attacker.example'])
     assert.throws(() => accessBindings({ access_aud: 'expected', access_team_domain: value }));
+});
+
+test('public-site login cookies require opt-in and the exact signed application claims', async () => {
+  const cookie = token => new Request(env.PUBLIC_ORIGIN, { headers: { Cookie: 'CF_Authorization='+token } });
+  const publicEnv = { ...env, PUBLIC_REPOSITORIES: 'true' };
+  const token = await sign();
+  assert.equal(await accessContext(cookie(token), env, {}, resolve), null);
+  assert.deepEqual(await (await accessContext(cookie(token), publicEnv, {}, resolve)).getIdentity(), { email: claims.email });
+  for (const value of ['forged', await sign({ aud: ['other'] }), await sign({ iss: 'https://other.cloudflareaccess.com' }), await sign({ exp: claims.iat-1 })])
+    assert.equal(await accessContext(cookie(value), publicEnv, {}, resolve), null);
+  assert.equal(await accessContext(new Request(env.PUBLIC_ORIGIN, { headers: { Cookie: 'CF_Authorization='+token+'; CF_Authorization='+token } }), publicEnv, {}, resolve), null);
+});
+
+test('public HTML admits anonymous sessions while login redirects stay on the configured origin', async () => {
+  const publicEnv = { ...env, PUBLIC_REPOSITORIES:'true', ASSETS:{fetch:async()=>new Response('<html><script id="golf-session" type="application/json">null</script></html>',{headers:{'Content-Type':'text/html'}})} };
+  const context = { exports:{Workspace:{idFromName:value=>value,get:()=>({fetch:async()=>Response.json({})})}} };
+  const page = await publicFetch(new Request(env.PUBLIC_ORIGIN+'/alice'),publicEnv,context);
+  assert.equal(page.status,200); assert.equal(page.headers.get('Cache-Control'),'no-store');
+  assert.match(await page.text(),/data-golf-public="true"/);
+  assert.equal((await publicFetch(new Request(env.PUBLIC_ORIGIN+'/auth/login'),publicEnv,context)).status,401);
+  context.access={aud:env.ACCESS_AUD,getIdentity:async()=>({email:claims.email})};
+  for (const target of ['https://evil.example/','//evil.example/','/\\evil.example/']) {
+    const result=await publicFetch(new Request(env.PUBLIC_ORIGIN+'/auth/login?returnTo='+encodeURIComponent(target)),publicEnv,context);
+    assert.equal(result.status,303); assert.equal(result.headers.get('Location'),'/');
+  }
 });

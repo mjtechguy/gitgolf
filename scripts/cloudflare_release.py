@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -119,6 +119,8 @@ class Release:
             self.check_runner_schema()
         if self.manifest['schema'] >= 21:
             self.check_owner_schema()
+        if self.manifest['schema'] >= 22:
+            self.check_public_schema()
         deployments = self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -191,7 +193,36 @@ class Release:
             self.migrate_runner_schema(applied)
         if self.manifest['schema'] >= 21:
             self.migrate_owner_schema(applied)
+        if self.manifest['schema'] >= 22:
+            self.migrate_public_schema(applied)
         return applied or 'already-applied'
+
+    def check_public_schema(self):
+        required = {'repository_visibility': {'repository_id', 'is_public', 'version'},
+                    'public_profiles': {'owner_id', 'enabled', 'display_name', 'bio', 'location', 'website', 'readme', 'pinned', 'version'}}
+        for table, fields in required.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
+            if {row['name'] for row in columns} != fields:
+                raise ValueError('Apply reviewed 0022 public repository/profile migration before releasing')
+
+    def migrate_public_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0022_public_repositories.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0022') not in (None, digest):
+            raise ValueError('Recorded public repository migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        prefixes = ['CREATE TABLE IF NOT EXISTS repository_visibility (', 'CREATE INDEX IF NOT EXISTS repository_visibility_public ON repository_visibility(', 'CREATE TABLE IF NOT EXISTS public_profiles (']
+        if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement, prefix in zip(statements, prefixes)):
+            raise ValueError('Public migration must only add reviewed tables and index')
+        ready = False
+        try:
+            self.check_public_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0022') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_public_schema()
+            self.state['migration0022'] = digest; self.save(); applied.append('0022')
 
     def check_owner_schema(self):
         required = {'native_owners': {'id','slug','kind','user_id','full_name','description','creator_id','creation_key','input_hash'},
