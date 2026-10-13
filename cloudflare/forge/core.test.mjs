@@ -2911,3 +2911,107 @@ test('personal ownership and organizations preserve repository identity and fenc
   assert.equal((await f.call('CreateRepository',{...creation,name:'another',idempotencyKey:crypto.randomUUID()})).status,404);
   assert.deepEqual((await (await orgs(ownerToken)).json()).organizations,[]);
 });
+
+test('public source visibility gates anonymous reads, Git, mutations and immediate revocation', async t => {
+  const f = await fixture(t); await f.create(); await f.sendPush(); f.env.PUBLIC_REPOSITORIES = 'true';
+  const repository = { owner: 'alice', name: 'project' }, target = { repository, repositoryId: '1' };
+  const anonymous = (method, body = target, service = 'RepositoryService', extra = {}) => f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/rpc/golf.v1.' + service + '/' + method, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...extra }, body: JSON.stringify(body),
+  }));
+  const visibility = body => f.call('', { ...target, ...body }, ownerToken, '/native/repository-visibility');
+  const clone = () => f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/info/refs?service=git-upload-pack'));
+  assert.equal((await anonymous('GetRepository')).status, 404);
+  assert.equal((await clone()).status, 404);
+  const before = await (await visibility({ action: 'get' })).json();
+  assert.equal(before.isPublic, false);
+  assert.equal((await f.call('', { ...target, action: 'set', isPublic: true, expectedRevision: before.revision }, readerToken, '/native/repository-visibility')).status, 404);
+  const published = await visibility({ action: 'set', isPublic: true, expectedRevision: before.revision });
+  assert.equal(published.status, 200); const current = await published.json();
+  assert.equal((await visibility({ action: 'set', isPublic: false, expectedRevision: before.revision })).status, 412);
+  const read = await anonymous('GetRepository'); assert.equal(read.status, 200); assert.equal((await read.json()).repository.private, false);
+  assert.equal((await anonymous('GetContents', { ...target, ref: commit, path: 'hello.txt' })).status, 200);
+  assert.equal((await clone()).status, 200);
+  assert.equal((await anonymous('GetRepositoryAccess', target, 'RepositoryAccessService')).status, 200);
+  assert.equal((await anonymous('GetRepository', target, 'RepositoryService', { Authorization: 'Bearer invalid' })).status, 401);
+  for (const [service, method] of [['RepositoryService', 'CreateRepository'], ['RepositoryService', 'ListIssues'], ['RepositorySettingsService', 'GetRepositorySettings'], ['OperationsService', 'GetOperationsDashboard']])
+    assert.equal((await anonymous(method, target, service)).status, 401);
+  assert.equal((await f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/info/refs?service=git-receive-pack'))).status, 401);
+  assert.equal((await (await anonymous('ListRepositories', { metadataOnly: true })).json()).repositories.length, 1);
+  assert.equal((await visibility({ action: 'set', isPublic: false, expectedRevision: current.revision })).status, 200);
+  assert.equal((await anonymous('GetContents', { ...target, ref: commit, path: 'hello.txt' })).status, 404);
+  assert.equal((await anonymous('GetRepositoryAccess', target, 'RepositoryAccessService')).status, 404);
+  assert.equal((await clone()).status, 404);
+  assert.deepEqual((await (await anonymous('ListRepositories', { metadataOnly: true })).json()).repositories, []);
+  assert.equal((await f.call('GetRepository', target)).status, 200);
+});
+
+test('public profiles and discovery disclose only published fields and currently public owned pins', async t => {
+  const f = await fixture(t); await f.create(); f.env.PUBLIC_REPOSITORIES = 'true';
+  const target = { repository: { owner: 'alice', name: 'project' }, repositoryId: '1' };
+  assert.equal((await f.call('', { action:'ensurePersonal', userId:'1', login:'alice', expectedLogin:'alice' }, ownerToken, '/native/owners')).status,200);
+  const profile = (body, token = ownerToken) => f.call('', { owner:'alice',...body }, token, '/native/public-profile');
+  const anonymous = (path,body) => f.dispatch(new Request(f.env.PUBLIC_ORIGIN+path,{method:'POST',headers:{'Content-Type':'application/json','Connect-Protocol-Version':'1'},body:JSON.stringify(body)}));
+  assert.equal((await anonymous('/native/public-profile',{action:'get',owner:'alice'})).status,404);
+  const draft = await (await profile({action:'get'})).json();
+  const input = { enabled:true, displayName:'Alice Developer',bio:'Public bio',location:'Example city',website:'https://example.com',readme:'# About Alice\nBuilding software.',pinned:['1'] };
+  assert.equal((await profile({action:'save',ownerId:draft.ownerId,expectedRevision:draft.revision,profile:input})).status,404);
+  const visibility = await (await f.call('',{...target,action:'get'},ownerToken,'/native/repository-visibility')).json();
+  assert.equal((await f.call('',{...target,action:'set',isPublic:true,expectedRevision:visibility.revision},ownerToken,'/native/repository-visibility')).status,200);
+  assert.equal((await profile({action:'save',ownerId:draft.ownerId,expectedRevision:draft.revision,profile:input},readerToken)).status,404);
+  assert.equal((await profile({action:'save',ownerId:draft.ownerId,expectedRevision:draft.revision,profile:{...input,email:'private@example.com'}})).status,400);
+  assert.equal((await profile({action:'save',ownerId:draft.ownerId,expectedRevision:draft.revision,profile:input})).status,200);
+  assert.equal((await profile({action:'save',ownerId:draft.ownerId,expectedRevision:draft.revision,profile:input})).status,412);
+  const publicValue = await (await anonymous('/native/public-profile',{action:'get',owner:'alice'})).json();
+  assert.equal(publicValue.canEdit,false); assert.equal(publicValue.revision,''); assert.equal(publicValue.readme,input.readme);
+  assert.equal(publicValue.pinnedRepositories.length,1); assert.equal(publicValue.publicRepositoryCount,1);
+  assert.equal(Object.hasOwn(publicValue,'email'),false); assert.equal(Object.hasOwn(publicValue,'members'),false);
+  assert.equal((await anonymous('/native/public-profile',{action:'save',owner:'alice',ownerId:draft.ownerId,profile:input})).status,404);
+  f.sql.prepare("INSERT INTO repository_settings(repository_id,description,website,topics,version) VALUES(1,'Python framework','','[\"python\",\"api\"]',1)").run();
+  for (const query of [{query:'framework'},{query:'python'},{topic:'api'},{owner:'alice'}]) {
+    const result = await anonymous('/native/discover',query); assert.equal(result.status,200); assert.equal((await result.json()).repositories.length,1);
+  }
+  assert.equal((await (await anonymous('/native/discover',{topic:'rust'})).json()).repositories.length,0);
+  const current = await (await f.call('',{...target,action:'get'},ownerToken,'/native/repository-visibility')).json();
+  await f.call('',{...target,action:'set',isPublic:false,expectedRevision:current.revision},ownerToken,'/native/repository-visibility');
+  const after = await (await anonymous('/native/public-profile',{action:'get',owner:'alice'})).json();
+  assert.deepEqual(after.pinnedRepositories,[]); assert.equal(after.publicRepositoryCount,0);
+  assert.deepEqual((await (await anonymous('/native/discover',{query:'Python'})).json()).repositories,[]);
+});
+
+test('organization public profile changes require current ownership, not membership or instance identity', async t => {
+  const f = await fixture(t); f.env.PUBLIC_REPOSITORIES='true';
+  const created=await (await f.call('',{action:'createOrganization',slug:'platform',fullName:'Platform',description:'Private draft',idempotencyKey:crypto.randomUUID()},ownerToken,'/native/owners')).json();
+  const id=created.owner.id;
+  f.sql.prepare("INSERT INTO native_owner_members(owner_id,user_id,role) VALUES(?,2,'member')").run(id);
+  const call=(body,token=ownerToken)=>f.call('',{owner:'platform',...body},token,'/native/public-profile');
+  const draft=await (await call({action:'get'})).json();
+  const profile={enabled:true,displayName:'Platform',bio:'Published description',location:'',website:'',readme:'## Platform engineering',pinned:[]};
+  const input={action:'save',ownerId:String(id),expectedRevision:draft.revision,profile};
+  assert.equal((await call(input,readerToken)).status,404);
+  assert.equal((await call(input)).status,200);
+  const published=await (await call({action:'get'},readerToken)).json();
+  assert.equal(published.canEdit,false);assert.equal(published.bio,profile.bio);assert.equal(published.publicRepositoryCount,0);
+  f.sql.prepare("UPDATE native_owner_members SET role='member' WHERE owner_id=? AND user_id=1").run(id);
+  assert.equal((await call({...input,expectedRevision:(await (await call({action:'get'})).json()).revision})).status,404);
+});
+
+test('public Git preserves v2 fetch negotiation and remaps ls-refs HEAD to the configured branch', async t => {
+  const f=await fixture(t);await f.create();await f.sendPush();f.env.PUBLIC_REPOSITORIES='true';
+  f.sql.exec("INSERT INTO repository_visibility(repository_id,is_public) VALUES(1,1)");
+  const packets=lines=>Buffer.concat([...lines.map(packetLine),Buffer.from('0000')]);
+  const v2=Buffer.concat([packetLine('# service=git-upload-pack\n'),Buffer.from('0000'),packets(['version 2\n','ls-refs\n','fetch=shallow\n'])]);
+  const fetchBytes=Buffer.concat([packetLine('shallow-info\n'),packetLine('shallow '+commit+'\n'),Buffer.from('0001'),packetLine('packfile\n'),Buffer.from('0000')]);
+  let forwards=0;
+  const provider=(url,options)=>{
+    if(!options.headers['Git-Protocol'])return f.providerFetch(url,options);
+    assert.equal(options.headers['Git-Protocol'],'version=2');forwards++;
+    const isGet=options.method==='GET';
+    const bytes=isGet?v2:new TextDecoder().decode(options.body).includes('command=ls-refs')?packets([commit+' HEAD symref-target:refs/heads/provider\n',commit+' refs/heads/main\n']):fetchBytes;
+    return new Response(bytes,{headers:{'Content-Type':'application/x-git-upload-pack-'+(isGet?'advertisement':'result')}});
+  };
+  const send=(body)=>handle(new Request(f.env.PUBLIC_ORIGIN+'/git/alice/project.git/'+(body?'git-upload-pack':'info/refs?service=git-upload-pack'),{method:body?'POST':'GET',headers:{'Git-Protocol':'version=2',...(body?{'Content-Type':'application/x-git-upload-pack-request'}:{})},...(body?{body}:{})}),f.env,provider);
+  assert.deepEqual(Buffer.from(await (await send()).arrayBuffer()),v2);
+  const listed=await send(packets(['command=ls-refs\n']));assert.equal(listed.status,200);assert.match(await listed.text(),/symref-target:refs\/heads\/main/);
+  assert.deepEqual(Buffer.from(await (await send(packets(['command=fetch\n']))).arrayBuffer()),fetchBytes);
+  assert.equal(forwards,3);assert.equal(f.tokens.size,0);
+});

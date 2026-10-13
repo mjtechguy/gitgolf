@@ -3,7 +3,8 @@ import { ChevronRight } from 'lucide-react';
 import { repositoryOptions, type Location } from './navigation';
 
 // One navigation pattern for repositories, account settings and administration.
-export function Breadcrumbs({location}:{location:Location}) {
+export function Breadcrumbs({location,currentLabel}:{location:Location;currentLabel?:string}) {
+ if(location.kind==='public-profile'||location.kind==='explore') return <nav className="workspace-breadcrumbs" aria-label="Breadcrumb"><span aria-current="page">{location.kind==='explore'?'Explore':currentLabel||location.owner}</span></nav>;
  const repository='owner' in location&&'name' in location;
  return <nav className="workspace-breadcrumbs" aria-label="Breadcrumb"><Link to="/">Repositories</Link>
  {repository?<><ChevronRight size={13}/><span>{location.owner}</span><ChevronRight size={13}/><Link {...repositoryOptions(location,{view:'source',path:''})}>{location.name}</Link>

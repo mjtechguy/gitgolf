@@ -150,6 +150,31 @@ def verify_image(value, reference):
     return {'reference': reference, 'manifest': digest, 'config': manifest['config']['digest']}
 
 
+def enable_public(directory, value):
+    if not re.fullmatch(r'https://[a-z0-9-]+\.cloudflareaccess\.com', value['settings'].get('access_team_domain', '')):
+        raise ValueError('Public sites require the configured Access issuer for signed login cookies')
+    settings = json.loads(private_read(directory/'forge.json'))
+    database = cf(value, 'd1', 'get', settings['database']['uuid'])
+    if database['name'] != value['name']: raise ValueError('Database ownership differs')
+    schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+    migration = (ROOT/'cloudflare/forge/migrations/0022_public_repositories.sql').read_text()
+    if not schema.endswith('\n'+migration): raise ValueError('Inspect the schema migration before enabling public access')
+    previous = hashlib.sha256(schema[:-len('\n'+migration)].encode()).hexdigest()
+    current = hashlib.sha256(schema.encode()).hexdigest()
+    receipt = json.loads(private_read(directory/'schema-receipt.json'))
+    if receipt['database'] != database['uuid'] or receipt['sha256'] not in [previous, current]:
+        raise ValueError('Public access migration requires the reviewed schema predecessor')
+    cf(value, 'd1', 'query', database['uuid'], '--body', json.dumps({'sql': migration, 'params': []}))
+    for table, expected in [('repository_visibility', {'repository_id','is_public','version'}),
+                            ('public_profiles', {'owner_id','enabled','display_name','bio','location','website','readme','pinned','version'})]:
+        rows = cf(value, 'd1', 'query', database['uuid'], '--body', json.dumps({'sql': 'PRAGMA table_info('+table+')', 'params': []}))[0]['results']
+        if {row['name'] for row in rows} != expected: raise ValueError('Public schema readback differs')
+    replace_private_json(directory/'schema-receipt.json', {'database':database['uuid'],'sha256':current})
+    value['settings']['public_repositories'] = True
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Public access prepared; deploy to update the login path. Repositories remain private until explicitly published.')
+
+
 def receipt(directory, value):
     result = json.loads(os.environ['GOLF_ALCHEMY_RECEIPT'])
     settings = result['settings']
@@ -281,13 +306,17 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public'])
     parser.add_argument('directory', nargs='?')
     args = parser.parse_args()
     os.umask(0o077)
     if args.action == 'prepare': return prepare(args.directory)
     directory, value = load(args.directory or os.environ['GOLF_ALCHEMY_DIRECTORY'])
     if args.action == 'renew-deploy': return renew_deploy(directory, value)
+    if args.action == 'seed-public':
+        from cloudflare_public_demo import publish
+        return publish(directory, ROOT)
+    if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)
     if args.action == 'receipt': return receipt(directory, value)
     if args.action == 'seed': return seed(directory, value)

@@ -121,3 +121,39 @@ The [retained deployment evidence](../../docs/compatibility/evidence/alchemy-dem
 records the actual replacement, CI and signed-in browser checks. The old Python
 installation was removed successfully. The new Alchemy destroy wrapper has not
 been exercised against this retained installation.
+
+## Public source and discovery demo
+
+Public access is opt-in. Upgrade the retained schema without recreating any
+resources, deploy the path-scoped Access login, then explicitly publish the
+reviewed discovery fixture:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-public NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py seed-public NEW_DIRECTORY
+```
+
+`enable-public` accepts only the recorded schema or its reviewed predecessor and
+adds migration 0022. It does not publish repositories. `seed-public` uses
+[`deploy/demo/public.json`](../demo/public.json) to publish only `mj/fastapi` and
+the public profiles for `mj`, `mj-platform`, and `mj-labs`. Other repositories,
+organization membership and account emails remain private. A private seed receipt
+prevents silently republishing a repository made private later; customized public
+profiles are never overwritten. Ordinary redeployment does not rerun this seed. Before publishing, the command
+waits up to ten minutes for the Worker and existing workspace Durable Object to
+report matching source/configuration fingerprints and schema 22. A successful
+Worker upload alone does not mean every existing object has adopted the release.
+
+The Access application protects `/auth/login`; its signed cookie applies across
+the hostname. The Worker verifies issuer, audience, signature and expiry before
+resolving enrolled Golf users. Only explicitly published source/history and HTTPS
+clone reads admit anonymous visitors. Settings, writes, issues, PRs, CI artifacts
+and previews retain existing grants. The Python/`cf` release path supports schema
+22 and the same `public_repositories` binding; a Python-owned installation also
+needs its owned Access application's domain changed to `HOST/auth/login` with
+`pathCookieAttribute=false`. Never have both deployers manage the same resources.
+
+Profile README content is edited in Golf, not synchronized from a special Git
+repository. Pins are limited to six currently public repositories owned by that
+profile. Search covers names, descriptions and topics, not file contents.

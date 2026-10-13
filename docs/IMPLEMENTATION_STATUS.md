@@ -1,5 +1,42 @@
 # Golf implementation status
 
+## 2026-10-13 — Public source, profiles and discovery
+
+The native opt-in public mode adds anonymous source/history browsing and HTTPS
+clone access for explicitly published repositories. Writes, collaboration, CI
+artifacts and previews retain their existing authorization. Schema 22 adds
+visibility and explicitly published profile fields without changing existing
+repository defaults. Access moves to `/auth/login`, and other paths verify its
+signed cookie before resolving an enrolled Golf user.
+
+User/company profiles include editable Markdown READMEs and up to six currently
+public owned pins. Discovery queries D1 names, descriptions and topics with
+server pagination. Repository lists and headers share Public/globe and
+Private/lock indicators. The UI uses existing TanStack components, sanitized
+Markdown, lazy routes and global Flare/density tokens.
+
+[Scope, GitHub research and next increments](GITHUB_DISCOVERY_PLAN.md) record
+limits and qualification gates. [The repeatable Alchemy recipe](../deploy/alchemy/README.md#public-source-and-discovery-demo)
+separates schema opt-in, deployment and explicit public fixture publication.
+
+[Hosted evidence](compatibility/evidence/public-discovery-demo-20261013.json)
+records anonymous HTTPS clone, private-source denial, cached-source and profile-pin
+revocation, retained admin access, profile saving, mobile topic discovery and
+visibility badges. Only `mj/fastapi` is public; the remaining 17 repositories are
+private. Public profiles live at `/mj`, `/mj-platform` and `/mj-labs`, without a
+misleading repositories breadcrumb or global workspace dropdown.
+
+Validation: 291 native tests passed (one skipped), 27 Python release tests, five
+Alchemy deployment tests, two public fixture/readiness tests, Alchemy typecheck/two binding
+tests, native frontend build, and real workerd/D1/Access runtime checks passed.
+The hosted clone check caught Artifacts' shallow v0 negotiation failure; forwarding
+v2 and preserving Golf's default branch fixed modern Git clones. Initial Worker /
+Durable Object propagation took about six minutes and briefly returned unsupported
+profile errors; seeding now waits for matching source/configuration fingerprints.
+Full browser regression, legacy shallow v0 clones and anonymous load qualification
+remain unverified. The existing main bundle still emits Vite's size warning.
+
+
 ## 2026-10-13 — Retained demo rebuilt with Alchemy
 
 The authorized Python/`cf` demo was backed up and removed, then replaced at the

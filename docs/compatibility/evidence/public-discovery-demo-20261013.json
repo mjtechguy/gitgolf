@@ -1,0 +1,96 @@
+{
+  "anonymous_clone": true,
+  "clone_commit": "f5c6e9b4f9cadc1bf0f9a1fd672e621206b63007",
+  "public_repository": "mj/fastapi",
+  "public_profiles": [
+    "mj",
+    "mj-platform",
+    "mj-labs"
+  ],
+  "private_denials": true,
+  "cached_source_revocation": true,
+  "public_pin_revocation": true,
+  "login_redirect": true,
+  "no_store_html": true,
+  "repository_read_ms": 1246,
+  "source_read_ms": 1791,
+  "schema": "golf.public-discovery.demo.v1",
+  "observed_at": "2026-10-13T19:13:39.782826+00:00",
+  "url": "https://demo.gitgolf.mjtechguy.com",
+  "inventory": {
+    "repositories": [
+      {
+        "slug": "mj",
+        "total": 12,
+        "public": 1
+      },
+      {
+        "slug": "mj-labs",
+        "total": 3,
+        "public": 0
+      },
+      {
+        "slug": "mj-platform",
+        "total": 3,
+        "public": 0
+      }
+    ],
+    "retained_domains": [
+      {
+        "hostname": "demo.gitgolf.mjtechguy.com",
+        "service": "golf-alchemy-20261013-0f2087f8"
+      },
+      {
+        "hostname": "demo-previews.mjtechguy.com",
+        "service": "golf-alchemy-20261013-0f2087f8-preview"
+      },
+      {
+        "hostname": "c1402c54-8712-45ce-87e1-b7df4e3489a4.demo-previews.mjtechguy.com",
+        "service": "golf-alchemy-20261013-0f2087f8-preview"
+      },
+      {
+        "hostname": "bf560702-3170-49fb-bc89-c6cb0135c91c.demo-previews.mjtechguy.com",
+        "service": "golf-alchemy-20261013-0f2087f8-preview"
+      }
+    ]
+  },
+  "browser": {
+    "signed_in_origin": "https://demo.gitgolf.mjtechguy.com",
+    "login": "mj",
+    "instance_admin": true,
+    "profile_save": true,
+    "profile_breadcrumb": "Mike Johnson",
+    "profile_workspace_dropdown": false,
+    "organization_workspace_dropdown": true,
+    "organization_private_lock_badges": 3,
+    "public_globe_badges": true,
+    "desktop_1280x800_no_horizontal_overflow": true,
+    "mobile_390x844_no_horizontal_overflow": true,
+    "dark_and_light_checked": true,
+    "anonymous_browser": "Read-only local proxy strips all cookies/authorization and forwards to the live origin; anonymous HTTP and Git checks used the live origin directly.",
+    "topic_filter_and_empty_search": true
+  },
+  "checks": {
+    "native_passed": 291,
+    "native_skipped": 1,
+    "python_release_passed": 27,
+    "python_alchemy_passed": 5,
+    "python_public_fixture_and_readiness_passed": 2,
+    "alchemy_typecheck": "passed",
+    "alchemy_binding_tests_passed": 2,
+    "native_frontend_build": "passed",
+    "workerd_d1_runtime": "passed",
+    "access_ui_runtime": "passed"
+  },
+  "limits": [
+    "Imported repositories contain shallow snapshots, not full upstream history.",
+    "Modern Git protocol v2 clone passed; legacy shallow v0 clone remains unqualified.",
+    "Full browser regression and anonymous load/concurrency qualification were not run.",
+    "Main frontend chunk still exceeds Vite 500 kB warning threshold.",
+    "Public access is source/history only; collaboration, execution, artifacts and previews retain grants."
+  ],
+  "rollout": {
+    "initial_workspace_propagation_seconds_approx": 375,
+    "publication_waits_for_matching_worker_workspace_release_and_configuration": true
+  }
+}

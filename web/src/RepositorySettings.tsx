@@ -1,4 +1,5 @@
 import { NativePackages } from './NativePackages';
+import { NativeRepositoryVisibility } from './NativeRepositoryVisibility';
 import { RuntimeFeature } from './RuntimeFeature';
 import { useRuntimeCapabilities } from './useRuntimeCapabilities';
 import {RepositoryMirrors} from './RepositoryMirrors';
@@ -117,6 +118,7 @@ export function RepositorySettings({ userId, owner, name, signingOut }: { userId
       {settings && notice ? <p role="status" className="session-notice">{notice}</p> : null}
     </section>
     {(settings || editing?.kind === 'topics' && !query.error && !signingOut) && !uncertain ? <section className="browser-panel credential-list-panel" aria-labelledby="repository-topics-title"><div className="browser-panel-heading"><h2 id="repository-topics-title">Topics</h2>{settings?.canEdit ? <button className="button secondary" disabled={Boolean(editing) || mutation.isPending} onClick={() => begin('topics')}>Edit topics</button> : null}</div>{editing?.kind === 'topics' && !query.error && !signingOut ? <div hidden={!settings} inert={!settings}>{settings && settings.revision !== editing.settings.revision ? <p className="field-help">Current values changed. Your unsaved draft is retained; inspect the new values before a separate edit.</p> : null}<TopicsEditor settings={editing.settings} pending={mutation.isPending || !settings?.canEdit} onSave={(topics) => save({ kind: 'topics', topics })} onCancel={cancel} />{validation ? <p role="alert" className="error">{validation}</p> : null}</div> : settings ? <div className="credential-form-content"><p>{settings.topics.length ? settings.topics.join(', ') : 'No topics configured.'}</p></div> : null}</section> : null}
+    {native && settings?.canEdit ? <RuntimeFeature id="repository.public-source"><NativeRepositoryVisibility userId={userId} repository={{owner,name}} repositoryId={settings.repositoryId} blocked={signingOut||query.isFetching||!!query.error}/></RuntimeFeature> : null}
     {native && settings ? <RuntimeFeature id="repository.packages"><NativePackages userId={userId} repository={{owner,name}} repositoryId={settings.repositoryId} settings blocked={signingOut||query.isFetching||!!query.error}/></RuntimeFeature> : null}
     {!native && (settings?.canEdit||settings?.mirror)?<RepositoryMirrors userId={userId} owner={owner} name={name} repositoryId={settings.repositoryId} blocked={signingOut||query.isFetching||!!query.error}/>:null}
     {!native && <RepositoryLifecycleSettings userId={userId} owner={owner} name={name} signingOut={signingOut} />}

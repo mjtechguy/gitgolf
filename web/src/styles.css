@@ -1591,3 +1591,28 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
   .settings-profile>div { padding-block:8px; }
   .organization-overview .data-table td { padding-block:10px; }
 }
+
+.public-workspace > main { max-width:1400px; margin:0 auto; padding:24px; }
+@media (max-width:600px) { .public-workspace > main { padding:16px; } }
+.public-profile-layout { display:grid; grid-template-columns:240px minmax(0,1fr); gap:28px; }
+.public-profile-identity { min-width:0; overflow-wrap:anywhere; }
+.public-profile-identity h1 { margin:12px 0 3px; font-size:24px; }
+.public-profile-identity p { margin:10px 0; }
+.public-profile-identity svg { vertical-align:middle; }
+.public-profile-avatar { display:grid; place-items:center; width:96px; height:96px; border:1px solid var(--line); border-radius:var(--radius-panel); background:var(--raised); color:var(--muted); margin-bottom:18px; }
+.public-profile-handle { color:var(--muted); }
+.public-pinned-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.public-repository-card { min-width:0; padding:16px; border:1px solid var(--line); border-radius:var(--radius-panel); background:var(--panel); overflow-wrap:anywhere; }
+.public-repository-card h3 { display:flex; align-items:center; gap:10px; font-size:15px; margin:0; }
+.public-repository-card p { margin:8px 0; font-size:13px; color:var(--muted); }
+.public-repository-list { display:grid; gap:8px; }
+.public-topics { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.public-topics a { font-size:12px; padding:3px 8px; background:var(--raised); border-radius:var(--radius-badge); }
+.public-search { display:flex; align-items:end; gap:12px; flex-wrap:wrap; }
+.public-search label:first-child { flex:1; min-width:180px; }
+.public-search label { display:grid; gap:5px; font-size:13px; }
+.public-profile-layout textarea { width:100%; }
+@media(max-width:800px) { .public-profile-layout { grid-template-columns:1fr; gap:20px; } .public-pinned-grid { grid-template-columns:1fr; } }
+
+:root[data-appearance=flare] .public-workspace .topbar .brand { display:inline-flex; }
+.public-profile-identity p:has(svg) { display:flex; align-items:center; gap:6px; }

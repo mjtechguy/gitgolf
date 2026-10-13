@@ -1,0 +1,44 @@
+{
+  "login": "mj",
+  "repositories": [
+    "mj/fastapi"
+  ],
+  "profiles": {
+    "mj": {
+      "enabled": true,
+      "displayName": "Mike Johnson",
+      "bio": "Building developer tools, cloud platforms and useful experiments.",
+      "location": "",
+      "website": "https://mjtechguy.com",
+      "readme": "## Building useful software\n\nDeveloper tools, cloud platforms and practical experiments.\n\nExplore the public source below. This Golf demo includes an imported FastAPI repository; original authorship and Git history are preserved.",
+      "pinned": [
+        "mj/fastapi"
+      ]
+    },
+    "mj-platform": {
+      "enabled": true,
+      "displayName": "MJ Platform",
+      "bio": "Shared web foundations, application infrastructure and reliable delivery.",
+      "location": "",
+      "website": "",
+      "readme": "## MJ Platform\n\nShared web foundations, application infrastructure and reliable delivery.\n\nOur project workspace brings together source, reviews and delivery. Public projects appear below when their maintainers publish them.",
+      "pinned": []
+    },
+    "mj-labs": {
+      "enabled": true,
+      "displayName": "MJ Labs",
+      "bio": "Developer tooling, command-line experiments and automation.",
+      "location": "",
+      "website": "",
+      "readme": "## MJ Labs\n\nDeveloper tooling, command-line experiments and automation.\n\nOur project workspace brings together source, reviews and delivery. Public projects appear below when their maintainers publish them.",
+      "pinned": []
+    }
+  },
+  "topics": {
+    "mj/fastapi": [
+      "python",
+      "api",
+      "web-framework"
+    ]
+  }
+}

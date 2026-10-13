@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FocusEvent, KeyboardEvent, ReactNode } from 'react';
-import { ArrowDown, Check, Copy, LoaderCircle, RefreshCw } from 'lucide-react';
+import { ArrowDown, Check, Copy, Globe, LoaderCircle, LockKeyhole, RefreshCw } from 'lucide-react';
 import type { PageResponse } from './gen/golf/v1/golf_pb';
 import { errorMessage } from './api';
+
+export function RepositoryVisibility({ isPrivate }: { isPrivate: boolean }) {
+  const Icon = isPrivate ? LockKeyhole : Globe;
+  return <span className={`visibility ${isPrivate ? 'private' : ''}`}><Icon size={12} aria-hidden="true" />{isPrivate ? 'Private' : 'Public'}</span>;
+}
 
 // Private panels revalidate on mount, discard inactive content, and hide data while revalidating.
 export const privateQuery = { staleTime: 0, gcTime: 0 };

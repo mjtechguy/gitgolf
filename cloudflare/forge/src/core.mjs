@@ -1,4 +1,6 @@
 import { ownerSlug, ownerJoin, ownerColumns, withOwner, creationOwner, ownersAPI } from './owners.mjs';
+import { publicReadRequest, repositoryVisibility } from './public-repositories.mjs';
+import { discover, publicProfile } from './public-profiles.mjs';
 import { fileIndex } from './file-index.mjs';
 import { pullCodeOwners } from './codeowners.mjs';
 import { reviewAuthoring, reviewAuthoringMethods } from './review-authoring.mjs';
@@ -30,7 +32,7 @@ import { appPolicy } from './app-policy.mjs';
 import { previewAPI, previewPolicy, previewRequest, cleanupPreviews } from './delivery.mjs';
 import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user } from './common.mjs';
 export { digest } from './common.mjs';
-import { defaultBranchAdvertisement, advertisedRefs, bounded, gitRequest, receiveCommand, remote, sha, validRef, GitProviderError } from './git.mjs';
+import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, remote, sha, validRef, GitProviderError } from './git.mjs';
 
 const jsonHeaders = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 export function serialize(handler, isRead = () => false) {
@@ -75,7 +77,7 @@ async function input(request) {
   return body;
 }
 
-async function actor(db, request) {
+async function actor(db, request, anonymous = false) {
   const authorization = request.headers.get('Authorization') || '';
   if (authorization.startsWith('Basic ') || authorization.startsWith('Bearer golf_git_')) return gitCredentialActor(db,request);
   const match = /^Bearer (golf_native_[A-Za-z0-9_-]{43})$/.exec(authorization);
@@ -88,15 +90,21 @@ async function actor(db, request) {
   } else if (!authorization && email) {
     row = await db.prepare('SELECT u.id,u.login,u.email,u.active,u.can_create,COALESCE(v.version,0) AS identity_version,COALESCE(p.full_name,u.full_name) AS full_name FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN native_identity_versions v ON v.user_id=u.id WHERE u.email=? AND u.active=1').bind(email).first();
   }
+  if (!row && anonymous && !authorization && !email) return { id: 0, anonymous: true, can_create: 0 };
   if (!row) throw new Fault('unauthenticated', 401, 'Sign-in required.');
   return row;
 }
 
 async function authorizedRepository(db, person, key, env, id) {
   if (!nameOK(key?.owner) || !nameOK(key?.name)) deny();
-  const row = await db.prepare(`SELECT r.*,g.role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,COALESCE(v.version,0) AS access_version,COALESCE(s.description,r.description) AS description FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN workspaces w ON w.slug=? AND w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id LEFT JOIN repository_access_versions v ON v.repository_id=r.id
+  let row = await db.prepare(`SELECT r.*,g.role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,COALESCE(v.version,0) AS access_version,COALESCE(s.description,r.description) AS description FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN workspaces w ON w.slug=? AND w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id LEFT JOIN repository_access_versions v ON v.repository_id=r.id
     WHERE r.name=? AND g.user_id=? AND r.state='ACTIVE'`).bind(env.WORKSPACE_SLUG, env.ARTIFACTS_NAMESPACE, key.name, person.id).first();
+  if (!row && env.publicRead && !person.git_repository_id) row = await db.prepare(`SELECT r.*,'public' AS role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,p.version AS access_version,COALESCE(s.description,r.description) AS description
+    FROM repositories r JOIN repository_visibility p ON p.repository_id=r.id AND p.is_public=1
+    JOIN workspaces w ON w.slug=? AND w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
+    WHERE r.name=? AND r.state='ACTIVE'`).bind(env.WORKSPACE_SLUG, env.ARTIFACTS_NAMESPACE, key.name).first();
   if (!row || ownerSlug(row,env) !== key.owner || id && String(row.id) !== id || person.git_repository_id && person.git_repository_id!==row.id) deny();
+  if (env.PUBLIC_REPOSITORIES === 'true') row.is_public = (await db.prepare('SELECT is_public FROM repository_visibility WHERE repository_id=?').bind(row.id).first())?.is_public || 0;
   return row;
 }
 
@@ -124,7 +132,7 @@ async function withArtifact(env, row, action, defaultHead = false) {
 
 function wireRepository(row, env, empty) {
   const fullName = `${ownerSlug(row,env)}/${row.name}`;
-  return { id: String(row.id), name: row.name, fullName, description: row.description, private: true,
+  return { id: String(row.id), name: row.name, fullName, description: row.description, private: !row.is_public,
     htmlUrl: `${env.PUBLIC_ORIGIN}/${fullName}`, cloneUrl: `${env.PUBLIC_ORIGIN}/git/${fullName}.git`,
     defaultBranch: row.default_branch, updatedAt: row.created_at, empty,
     issuesEnabled: true, pullRequestsEnabled: true, wikiEnabled: false };
@@ -194,7 +202,8 @@ async function git(db, env, person, request, url, providerFetch) {
       (advertisement ? request.method !== 'GET' || url.search !== '?service=' + service : request.method !== 'POST' || url.search)) invalid('Invalid Git request.');
   if (service === 'git-receive-pack' && !['write', 'admin'].includes(row.role)) deny();
   if (request.headers.has('Git-Protocol') && request.headers.get('Git-Protocol') !== 'version=1' && request.headers.get('Git-Protocol') !== 'version=2') invalid('Invalid Git protocol.');
-  // v0/v1 advertisement is intentionally used; Git clients can downgrade from v2.
+  // Preserve v2 shallow negotiation; receive-pack keeps its existing v0 contract.
+  const protocol = service === 'git-upload-pack' && request.headers.get('Git-Protocol') === 'version=2' ? 'version=2' : null;
   if (!advertisement && (request.headers.get('Content-Type') !== `application/x-${service}-request` || request.headers.has('Content-Encoding'))) invalid('Invalid Git content.');
   const body = advertisement ? null : await bounded(request.body, 8 * 1024 * 1024);
   let command, rulesVersion;
@@ -220,7 +229,7 @@ async function git(db, env, person, request, url, providerFetch) {
       ]);
       if (reserved[1].meta.changes !== 1) conflict();
     }
-    const result = await gitRequest(env, repo, row.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch);
+    const result = await gitRequest(env, repo, row.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
     if (operation) {
       const observed = (await refs(env, repo, row, providerFetch)).get(command.ref) || '0'.repeat(40);
       if (observed !== command.next) conflict();
@@ -230,7 +239,12 @@ async function git(db, env, person, request, url, providerFetch) {
       ]);
     }
     await confirmGitCredential(db,person,row);
-    const bytes=advertisement&&service==='git-upload-pack'?defaultBranchAdvertisement(result.bytes,row.default_branch):result.bytes;
+    let bytes=result.bytes;
+    if (service==='git-upload-pack') {
+      if (advertisement) bytes=defaultBranchAdvertisement(bytes,row.default_branch);
+      else if (!advertisement && protocol && gitV2Command(body)==='command=ls-refs')
+        bytes=defaultBranchRefsV2(bytes,row.default_branch,(await refs(env,repo,row,providerFetch)).get('refs/heads/'+row.default_branch));
+    }
     return new Response(bytes, { headers: { ...jsonHeaders, 'Content-Type': result.contentType } });
   });
 }
@@ -308,7 +322,16 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       async id => (await advanceEvidence(env,id,'authorize-test')).state === 'AUTHORIZED',
       (id,source) => testGit(env,id,source,undefined,providerFetch));
     }
-    const person = await env.timings.measure('actor', () => actor(db, request));
+    env.publicRead = env.PUBLIC_REPOSITORIES === 'true' && publicReadRequest(request);
+    const publicSession = env.PUBLIC_REPOSITORIES === 'true' && ['/rpc/golf.v1.SessionService/GetSession', '/rpc/golf.v1.SessionService/GetAuthenticationOptions', '/rpc/golf.v1.CapabilityService/ListCapabilities'].includes(url.pathname);
+    const person = await env.timings.measure('actor', () => actor(db, request, env.publicRead || publicSession));
+    if (person.anonymous && publicSession) {
+      if (request.method !== 'POST' || url.search || request.headers.get('Connect-Protocol-Version') !== '1') invalid('Use Connect JSON POST.');
+      await input(request);
+      if (url.pathname.endsWith('/GetSession')) return reply({});
+      if (url.pathname.endsWith('/GetAuthenticationOptions')) return reply({ providerLabel: 'Cloudflare Access' });
+      return reply({ runtimeProfile: 'cloudflare-native', capabilities: [] });
+    }
     // Connect streaming bodies must receive an availability error, not JSON parsing errors that retry forever.
     if (url.pathname === '/rpc/golf.v1.RepositoryActivityService/WatchRepository') {
       if (env.watchRepository) return await env.watchRepository(request);
@@ -322,6 +345,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (url.pathname.startsWith('/git/')) return await git(db, env, person, request, url, providerFetch);
     if (request.method !== 'POST' || url.search || request.headers.get('Connect-Protocol-Version') !== '1') invalid('Use Connect JSON POST.');
     const body = await input(request);
+    if (env.PUBLIC_REPOSITORIES === 'true' && url.pathname === '/native/discover') return reply(await discover(db, body));
+    if (env.PUBLIC_REPOSITORIES === 'true' && url.pathname === '/native/public-profile') return reply(await publicProfile(db, person, body));
     if (url.pathname === '/rpc/golf.v1.OperationsService/GetOperationsDashboard') return await operationsDashboard(db, env, person, request);
     if (url.pathname === '/native/diagnostics') {
       const columns = await db.prepare('PRAGMA table_info(repositories)').all();
@@ -329,7 +354,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const budget = await db.prepare('PRAGMA table_info(repository_index_budget)').all();
       const operations = await db.prepare('PRAGMA table_info(operations_maintenance)').all();
       const access = await db.prepare('PRAGMA table_info(repository_access_operations)').all();
-      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
+      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(repository_visibility)').all()).results.length ? 22 : (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
         configuration, runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG });
     }
     if (url.pathname === '/native/preview-resume') {
@@ -358,6 +383,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (body.repositoryId !== String(row.id)) deny();
       return reply({ role: row.role });
+    }
+    if (url.pathname === '/native/repository-visibility') {
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      return reply(await repositoryVisibility(db, env, person, row, body));
     }
     if (url.pathname === '/native/repository-packages') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
@@ -392,6 +421,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       unsupported();
     }
     if (service === 'CapabilityService' && method === 'ListCapabilities') return reply({ runtimeProfile: 'cloudflare-native', capabilities: [
+      { id: 'repository.public-source', label: 'Public repositories', state: env.PUBLIC_REPOSITORIES === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Administrators can publish source and Git history for anonymous browsing and HTTPS cloning. Collaboration and execution retain repository grants.' },
       { id: 'operations.dashboard', label: 'Operations dashboard', state: 'CAPABILITY_STATE_READY', reason: 'Current workspace administrators; durable inventories and maintenance observations. Provider usage/billing remain uncollected.' },
       { id: 'native-artifacts-git', label: 'Artifacts repositories', state: 'CAPABILITY_STATE_READY', reason: 'Private repositories; bounded unprotected single-ref Git.' },
       { id: 'native-forge-collaboration', label: 'Native collaboration', state: 'CAPABILITY_STATE_READY', reason: 'Issues/comments, same-repository PRs, overall reviews and reported checks.' },
@@ -454,8 +484,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     }
     if (method === 'ListRepositories') {
       const paging = page(body);
-      const { results } = await db.prepare(`SELECT r.*,${ownerColumns},COALESCE(s.description,r.description) AS description FROM repositories r JOIN grants g ON g.repository_id=r.id ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
-        WHERE g.user_id=? AND r.state='ACTIVE' AND (?='' OR COALESCE(o.slug,?)=?) ORDER BY r.id LIMIT ? OFFSET ?`).bind(person.id, body.owner || '', env.WORKSPACE_SLUG, body.owner || '', paging.limit + 1, paging.offset).all();
+      const visible = env.PUBLIC_REPOSITORIES === 'true';
+      const { results } = await db.prepare(`SELECT r.*,${ownerColumns},COALESCE(s.description,r.description) AS description${visible ? ',COALESCE(p.is_public,0) AS is_public' : ''} FROM repositories r LEFT JOIN grants g ON g.repository_id=r.id AND g.user_id=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
+        ${visible ? 'LEFT JOIN repository_visibility p ON p.repository_id=r.id' : ''}
+        WHERE (g.user_id IS NOT NULL ${visible ? 'OR p.is_public=1' : ''}) AND r.state='ACTIVE' AND (?='' OR COALESCE(o.slug,?)=?) ORDER BY r.id LIMIT ? OFFSET ?`).bind(person.id, body.owner || '', env.WORKSPACE_SLUG, body.owner || '', paging.limit + 1, paging.offset).all();
       const selected = results.slice(0, paging.limit);
       if (body.metadataOnly === true) return reply({ repositories: selected.map(row => wireRepository(row, env)), page: { nextPage: results.length > paging.limit ? paging.number + 1 : 0 } });
       const repositories = [];
@@ -498,7 +530,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const settings = await db.prepare('SELECT s.website,s.topics,(SELECT count(*) FROM repository_stars WHERE repository_id=r.id) AS stars FROM repositories r LEFT JOIN repository_settings s ON s.repository_id=r.id WHERE r.id=?').bind(row.id).first();
       const selected = body.ref || await withArtifact(env, row, async repo => (await repo.log({ ref: row.default_branch, limit: 1 }))[0]?.hash);
       const metadata = selected ? await indexedRead(db, env, row, { kind: 'overview', ref: selected }, () => withArtifact(env, row, async repo => {
-        if (env.metadataIndex) return env.metadataIndex(row, person, repo, selected);
+        if (env.metadataIndex && row.role !== 'public') return env.metadataIndex(row, person, repo, selected);
         const root = await rootMetadata(repo, selected);
         return { licenseIds: root.licenseIds, licensePaths: root.licensePaths, indexedCommitId: selected, languages: [], languagesState: 'REPOSITORY_OVERVIEW_SECTION_STATE_UNAVAILABLE', licensesState: 'REPOSITORY_OVERVIEW_SECTION_STATE_AVAILABLE' };
       })) : { languages: [], licenseIds: [], languagesState: 'REPOSITORY_OVERVIEW_SECTION_STATE_AVAILABLE', licensesState: 'REPOSITORY_OVERVIEW_SECTION_STATE_AVAILABLE' };
