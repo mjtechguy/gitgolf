@@ -86,7 +86,7 @@ export default Alchemy.Stack('GolfDemo', {
     name, main: main(), bundle: false, workersDev: false,
     domain: { name: input.hostname, zoneId: input.zone },
     compatibility: { date: '2026-10-08', flags: ['nodejs_compat'] },
-    observability: { enabled: false }, limits: { cpuMs: 100 }, crons: ['*/5 * * * *'],
+    observability: config().pipe(Output.map(value => value.observability)), limits: { cpuMs: 100 }, crons: ['*/5 * * * *'],
     entrypoints: { PackagesAuthority: {}, TestOutbound: {}, PreviewBroker: {} },
     env: {
       Workspace: Cloudflare.DurableObject('Workspace'),

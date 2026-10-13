@@ -1,5 +1,11 @@
 # Golf implementation plan
 
+Agent workspace increment (2026-10-13): the [staged plan](docs/AGENT_WORKSPACE_PLAN.md)
+now has a read-only native PR/evidence/preview view and measured source-read
+concurrency baseline. Existing Git storage, execution and merge authority remain
+unchanged. Selective job inputs and higher-throughput landing need their own
+acceptance gates; see the status ledger for the bounded live checks.
+
 Parallel deployment experiment (2026-10-13): [Alchemy deployment](deploy/alchemy/README.md)
 now provisions the retained Cloudflare demo using the same native build, approved
 CI image and pinned content. The Python/`cf` installer remains available. Alchemy

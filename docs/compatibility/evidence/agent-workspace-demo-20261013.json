@@ -1,0 +1,121 @@
+{
+  "schema": "golf.agent-workspace.demo.v1",
+  "url": "https://demo.gitgolf.mjtechguy.com/mj/canonical/agents/1",
+  "browser": {
+    "fetchRestored": true,
+    "overflow": false,
+    "previews": 2,
+    "restored": true,
+    "viewport": [
+      390,
+      844
+    ],
+    "desktop": [
+      1280,
+      800
+    ],
+    "profile": "Flare light",
+    "deepLink": true,
+    "reportOpened": true,
+    "injectedRevocationHidesInventoryAndReport": true,
+    "retryRecovered": true,
+    "anonymousEvidenceAndPreviewDenied": true,
+    "login": "mj",
+    "instanceAdmin": true
+  },
+  "rollout": {
+    "schema": 22,
+    "workerWorkspaceReleaseAndConfigurationMatch": true
+  },
+  "observability": {
+    "enabled": true,
+    "headSamplingRate": 0.01,
+    "redactQueryString": true,
+    "invocationLogs": false,
+    "traces": false,
+    "providerSettingsReadBack": true
+  },
+  "operations": {
+    "metrics": [
+      {
+        "id": "performance.source.p50",
+        "label": "Source read response time · p50",
+        "observedAt": "2026-10-13T19:32:49.234Z",
+        "source": "Retained workspace RPC observations",
+        "state": "available",
+        "unit": "ms",
+        "value": 362,
+        "window": "Latest 2048 RPCs within 30 minutes; streams excluded"
+      },
+      {
+        "id": "performance.source.p95",
+        "label": "Source read response time · p95",
+        "observedAt": "2026-10-13T19:32:49.234Z",
+        "source": "Retained workspace RPC observations",
+        "state": "available",
+        "unit": "ms",
+        "value": 737,
+        "window": "Latest 2048 RPCs within 30 minutes; streams excluded"
+      },
+      {
+        "id": "performance.evidence.p50",
+        "label": "Evidence API response time · p50",
+        "observedAt": "2026-10-13T19:32:49.234Z",
+        "source": "Retained workspace RPC observations",
+        "state": "available",
+        "unit": "ms",
+        "value": 2293,
+        "window": "Latest 2048 RPCs within 30 minutes; streams excluded"
+      },
+      {
+        "id": "performance.evidence.p95",
+        "label": "Evidence API response time · p95",
+        "observedAt": "2026-10-13T19:32:49.234Z",
+        "source": "Retained workspace RPC observations",
+        "state": "available",
+        "unit": "ms",
+        "value": 3581,
+        "window": "Latest 2048 RPCs within 30 minutes; streams excluded"
+      },
+      {
+        "id": "performance.preview.p50",
+        "label": "Preview API response time · p50",
+        "observedAt": "2026-10-13T19:32:49.234Z",
+        "source": "Retained workspace RPC observations",
+        "state": "available",
+        "unit": "ms",
+        "value": 2366,
+        "window": "Latest 2048 RPCs within 30 minutes; streams excluded"
+      },
+      {
+        "id": "performance.preview.p95",
+        "label": "Preview API response time · p95",
+        "observedAt": "2026-10-13T19:32:49.234Z",
+        "source": "Retained workspace RPC observations",
+        "state": "available",
+        "unit": "ms",
+        "value": 3804,
+        "window": "Latest 2048 RPCs within 30 minutes; streams excluded"
+      }
+    ],
+    "status": 200
+  },
+  "checks": {
+    "nativePassed": 293,
+    "nativeSkipped": 1,
+    "workspaceAndPreviewPassed": 4,
+    "privateCachePassed": 5,
+    "pythonAlchemyPassed": 6,
+    "alchemyBindingPassed": 2,
+    "alchemyTypecheck": "passed",
+    "nativeFrontendBuild": "passed",
+    "workerdRuntime": "passed"
+  },
+  "limits": [
+    "Read-only native view; existing PR pages provide action controls.",
+    "Agent execution is disabled in this retained demo; no model calls were made.",
+    "No full browser regression, cold-cache/large-monorepo qualification, checkout timing or CI queue measurement.",
+    "Lists load at most 100 PRs, 100 repository jobs and 100 previews.",
+    "Existing main frontend chunk still triggers Vite's size warning."
+  ]
+}

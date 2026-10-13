@@ -150,6 +150,13 @@ def verify_image(value, reference):
     return {'reference': reference, 'manifest': digest, 'config': manifest['config']['digest']}
 
 
+def enable_observability(directory, value):
+    operations = value['settings'].setdefault('operations', {})
+    operations['observability'] = {'enabled': True, 'sampling': 0.01}
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Bounded performance collection prepared; deploy to apply it with 1% redacted request logging.')
+
+
 def enable_public(directory, value):
     if not re.fullmatch(r'https://[a-z0-9-]+\.cloudflareaccess\.com', value['settings'].get('access_team_domain', '')):
         raise ValueError('Public sites require the configured Access issuer for signed login cookies')
@@ -306,7 +313,7 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public', 'enable-observability'])
     parser.add_argument('directory', nargs='?')
     args = parser.parse_args()
     os.umask(0o077)
@@ -316,6 +323,7 @@ def main():
     if args.action == 'seed-public':
         from cloudflare_public_demo import publish
         return publish(directory, ROOT)
+    if args.action == 'enable-observability': return enable_observability(directory, value)
     if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)
     if args.action == 'receipt': return receipt(directory, value)

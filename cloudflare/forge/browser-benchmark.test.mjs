@@ -25,7 +25,7 @@ test('invalid source identities or oversized loads fail before any network call'
   const original = globalThis.fetch; t.after(() => { globalThis.fetch = original; });
   globalThis.fetch = async () => assert.fail('Invalid benchmark must not send traffic');
   await assert.rejects(benchmarkRepositoryReads([{ ...repositories[0], ref: 'main' }]));
-  await assert.rejects(benchmarkRepositoryReads(repositories, { concurrency: 5 }));
+  await assert.rejects(benchmarkRepositoryReads(repositories, { concurrency: 17 }));
   await assert.rejects(benchmarkRepositoryReads(repositories, { iterations: 100 }));
   await assert.rejects(benchmarkRepositoryReads([{...repositories[0],path:'../private'}]));
 });
@@ -63,4 +63,18 @@ test('extended reads verify metadata, folder, history, diff and image identities
   assert.equal(seen.filter(method => method === 'GetContents').length, 3);
   await assert.rejects(benchmarkRepositoryReads([{ ...selected[0], folder: '../private' }], { extended: true }));
   await assert.rejects(benchmarkRepositoryReads(selected, { extended: 'true' }));
+});
+
+
+test('sixteen concurrent source reads stay within the explicit load bound', async t => {
+  const original=globalThis.fetch; t.after(()=>{globalThis.fetch=original;});
+  let active=0, maximum=0;
+  globalThis.fetch=async(url,request)=>{
+    active++; maximum=Math.max(maximum,active);
+    await new Promise(resolve=>setTimeout(resolve,1)); active--;
+    const body=JSON.parse(request.body);
+    return Response.json({repositoryId:body.repositoryId,commitId:body.ref,indexedCommitId:body.ref,path:'',languagesState:'REPOSITORY_OVERVIEW_SECTION_STATE_AVAILABLE',licensesState:'REPOSITORY_OVERVIEW_SECTION_STATE_AVAILABLE'});
+  };
+  const result=await benchmarkRepositoryReads(Array.from({length:8},(_,i)=>({...repositories[0],id:String(i+1),name:'repo'+i})),{iterations:1,concurrency:16});
+  assert.equal(maximum,16); assert.equal(result.cold.samples,16); assert.equal(result.cold.failures,0);
 });

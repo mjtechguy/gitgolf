@@ -174,7 +174,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
     const issue = search.issue === undefined ? undefined : typeof search.issue === 'number' ? search.issue : typeof search.issue === 'string' && /^[1-9][0-9]*$/.test(search.issue) ? Number(search.issue) : NaN;
     const pull = search.pull === undefined ? undefined : typeof search.pull === 'number' ? search.pull : typeof search.pull === 'string' && /^[1-9][0-9]*$/.test(search.pull) ? Number(search.pull) : NaN;
     return {
-      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' || search.view === 'releases' || search.view === 'deployments' || search.view === 'branches' || search.view === 'tags' || search.view === 'wiki' || search.view === 'packages' ? search.view : 'source',
+      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' || search.view === 'releases' || search.view === 'deployments' || search.view === 'branches' || search.view === 'tags' || search.view === 'wiki' || search.view === 'packages' || search.view === 'agents' ? search.view : 'source',
       q:typeof search.q==='string'?search.q:undefined,author:typeof search.author==='string'?search.author:undefined,assignee:typeof search.assignee==='string'?search.assignee:undefined,labels:typeof search.labels==='string'?search.labels:undefined,milestone:typeof search.milestone==='string'?search.milestone:undefined,sort:search.sort as RepositorySearch['sort'],
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       base:typeof search.base==='string'?search.base:undefined,head:typeof search.head==='string'?search.head:undefined,sourceOwner:typeof search.sourceOwner==='string'?search.sourceOwner:undefined,sourceName:typeof search.sourceName==='string'?search.sourceName:undefined,
@@ -246,6 +246,8 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
     if(isCommitID(item)) return {...location,view:'source' as const,ref:item,path:parts.slice(2).join('/'),sourceRoute:parts[0] as 'tree'|'blob'};
     return {...location,view:'source' as const,ref:'',path:'',sourceSuffix:suffix,sourceRoute:parts[0] as 'tree'|'blob'};
   }
+  if(tail==='agents')return {...location,view:'agents' as const,pull:undefined};
+  if(parts[0]==='agents'&&parts.length===2&&/^[1-9][0-9]{0,8}$/.test(parts[1]||''))return {...location,view:'agents' as const,pull:Number(parts[1])};
   if(tail==='packages')return {...location,view:'packages' as const};
   if(tail.startsWith('packages/')) {
     const parts=tail.split('/');

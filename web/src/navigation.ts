@@ -1,5 +1,5 @@
 export type RepositorySearch = {
-  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare' | 'releases' | 'deployments' | 'branches' | 'tags' | 'wiki' | 'packages';
+  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare' | 'releases' | 'deployments' | 'branches' | 'tags' | 'wiki' | 'packages' | 'agents';
   q?: string;
   author?: string;
   assignee?: string;
@@ -80,6 +80,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   let path = '';
   if(next.view==='branches'||next.view==='tags')path=next.view;
   else if(next.view==='deployments')path=next.deploymentId?`deployments/${next.deploymentId}`:'deployments';
+  else if(next.view==='agents')path=next.pull?`agents/${next.pull}`:'agents';
   else if(next.view==='packages')path=next.packageDigest?`packages/${next.packageDigest}/${next.packagePanel || 'overview'}`:'packages';
   else if(next.view==='wiki')path=next.wikiPage?`wiki/${next.wikiPage}`:'wiki';
   else if(next.view==='releases')path=next.releaseId?`releases/${next.releaseId}`:'releases';

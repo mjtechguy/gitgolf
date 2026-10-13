@@ -57,6 +57,17 @@ class SchemaBootstrap(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'Schema changed'): demo.build(directory, value)
 
 
+class Observability(unittest.TestCase):
+    def test_enabling_observability_preserves_existing_operations_and_is_repeatable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            value={'settings':{'operations':{'service_health':True,'analytics_secret':{'store':'store','name':'secret'}}}}
+            demo.enable_observability(directory,value)
+            demo.enable_observability(directory,value)
+            saved=json.loads((directory/'alchemy-input.json').read_text())['settings']['operations']
+            self.assertEqual(saved,{'service_health':True,'analytics_secret':{'store':'store','name':'secret'},'observability':{'enabled':True,'sampling':0.01}})
+
+
 class PublicMigration(unittest.TestCase):
     def test_public_enable_requires_owned_database_and_reviewed_predecessor(self):
         import hashlib

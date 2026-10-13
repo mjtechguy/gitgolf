@@ -1616,3 +1616,13 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 
 :root[data-appearance=flare] .public-workspace .topbar .brand { display:inline-flex; }
 .public-profile-identity p:has(svg) { display:flex; align-items:center; gap:6px; }
+
+.agent-workspace-heading { display:flex; align-items:start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.agent-workspace-heading h2 { margin:4px 0; font-size:20px; }
+.agent-workspace-heading p { margin:6px 0 0; color:var(--muted); }
+.agent-workspace-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; border:1px solid var(--line); border-radius:var(--radius-panel); overflow:hidden; background:var(--line); }
+.agent-workspace-summary > div { display:grid; gap:4px; padding:12px 16px; background:var(--panel); }
+.agent-workspace-summary span,.agent-workspace-summary small { font-size:12px; color:var(--muted); }
+.agent-workspace-summary strong { font-size:18px; overflow-wrap:anywhere; }
+.agent-workspace .data-table [aria-current=page] { font-weight:700; color:var(--accent); }
+@media(max-width:600px) { .agent-workspace-summary { grid-template-columns:1fr; } }

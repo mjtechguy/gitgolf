@@ -1,5 +1,42 @@
 # Golf implementation status
 
+## 2026-10-13 — Read-only Agent workspace and measured source reads
+
+Native repositories now expose `/agents` and `/agents/:number`: a compact PR work
+inventory with source freshness, agent/evidence/test states, current protected
+previews and reports loaded only on selection. It reuses current APIs, TanStack
+Query/Table, shared preview validation and global theme styles. It adds no schema,
+model call, mutation endpoint, automatic merge or dependency. Unallocated agent
+execution is explicit; this retained demo shows real CI evidence and previews.
+
+The lazy UI is approximately 3.2 kB gzip. Deep links, desktop/mobile layout,
+report opening, anonymous evidence/preview denial and an injected access-revocation
+response were checked. Revocation removes loaded workspace rows and report data;
+refresh resets failed observations before reopening the view. Current previews
+expire locally as well as being authorized by the server on access.
+
+Operations adds source/evidence/preview p50/p95 to existing D1, authority and cache
+metrics. Alchemy now applies the shared observability policy. Its repeatable
+`enable-observability` command enables the bounded 2048-request/30-minute history
+and 1% sampled redacted request logs; invocation logs/traces remain disabled.
+Live provider settings and populated Operations metrics were verified.
+[Hosted UI/metrics evidence](compatibility/evidence/agent-workspace-demo-20261013.json)
+records the observations and remaining limits.
+
+The [eight-repository benchmark](compatibility/evidence/agent-workspace-reads-20261013.json)
+passed all 96 reads at concurrency 1/4/16 with observability enabled. Warm p50 was
+268/313/531 ms and p95 was 432/786/690 ms respectively. These are indexed pinned
+snapshots and browser-to-server timings, not cold-cache, large-monorepo or fleet
+qualification. Evidence/preview inventory remains slower (roughly 2–4 seconds in
+the observed window); that admission/read path is the next measured target.
+
+Validation: 293 native tests passed, one skipped; four workspace/preview tests,
+five private-cache tests, six Python Alchemy tests, Alchemy typecheck/two binding
+tests, frontend build and real workerd/D1/DO runtime checks passed. Full browser
+regression and new agent execution were not run. Checkout/CI queue measurements,
+selective inputs and a portable Agent workspace remain open in the
+[staged plan](AGENT_WORKSPACE_PLAN.md).
+
 ## 2026-10-13 — Public source, profiles and discovery
 
 The native opt-in public mode adds anonymous source/history browsing and HTTPS
