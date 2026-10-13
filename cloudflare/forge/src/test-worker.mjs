@@ -4,6 +4,7 @@ import { digest, uuidOK } from './common.mjs';
 import { bounded, sha, validRef } from './git.mjs';
 import { executionDiagnostic, nativeTestContract, testModuleOK, testTerminal } from './test-policy.mjs';
 import { nativeWorkflowContract, nativeWorkflowPath, nativeWorkflowPlanOK } from './native-workflow.mjs';
+import { registryNameOK } from './managed-registry.mjs';
 
 const trust = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: '/auth',
   GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
@@ -43,7 +44,7 @@ export class PRTestTask extends DurableObject {
           !/^[a-f0-9]{64}$/.test(input.workflowSha256 || '') || input.workflowSha256 !== await digest(JSON.stringify(input.workflow)) : !testModuleOK(input.module)) ||
         !/^[a-f0-9]{64}$/.test(input.policySha256 || '') || !Number.isSafeInteger(input.deadline) || input.deadline <= Date.now() || input.deadline > Date.now() + 600000 ||
         typeof input.remote !== 'string' || !/^https:\/\/[a-f0-9]{32}\.artifacts\.cloudflare\.net\/git\/[a-z0-9-]{3,63}\/repo-[a-f0-9]{32}\.git$/.test(input.remote)) throw Error('Invalid test admission');
-    if(input.registry && (typeof input.registry !== 'object' || Array.isArray(input.registry) || Object.keys(input.registry).some(key=>!['origin','name'].includes(key)) || this.env.REGISTRY_CI_ENABLED!=='true' || input.registry.origin!==this.env.REGISTRY_ORIGIN || !new RegExp('^'+this.env.WORKSPACE_SLUG+'/[a-z0-9][a-z0-9._-]{0,99}$').test(input.registry.name))) throw Error('Invalid registry admission');
+    if(input.registry && (typeof input.registry !== 'object' || Array.isArray(input.registry) || Object.keys(input.registry).some(key=>!['origin','name'].includes(key)) || this.env.REGISTRY_CI_ENABLED!=='true' || input.registry.origin!==this.env.REGISTRY_ORIGIN || !registryNameOK(this.env,input.registry.name))) throw Error('Invalid registry admission');
     const hash = await digest(JSON.stringify(input));
     // One task ID admits one process; an uncertain dispatch never starts it again.
     if (this.record) {
@@ -79,7 +80,8 @@ export class PRTestTask extends DurableObject {
     await this.checked(['/bin/true'], '/workspace');
     await this.container.setInactivityTimeout(30000);
     this.phase('clone');
-    await this.checked(['timeout', '--signal=TERM', '--kill-after=5s', '60s', 'git', 'clone', '--depth', '1', '--branch', r.branch, '--', r.remote, '/workspace/repo'], '/workspace');
+    // Artifacts shallow negotiation failed hosted; full clones retain the 60s/32 MiB pack bounds.
+    await this.checked(['timeout', '--signal=TERM', '--kill-after=5s', '60s', 'git', 'clone', '--branch', r.branch, '--', r.remote, '/workspace/repo'], '/workspace');
     const head = await this.checked(['git', 'rev-parse', 'HEAD']), tree = await this.checked(['git', 'rev-parse', 'HEAD^{tree}']);
     if (head !== r.commitId || tree !== r.treeId) throw Error('Selected source moved');
     if (r.contract === nativeWorkflowContract && await this.checked(['git', 'rev-parse', 'HEAD:' + r.workflow.path]) !== r.workflow.blobId) throw Error('Selected workflow moved');
@@ -89,7 +91,8 @@ export class PRTestTask extends DurableObject {
     const run = async (argv, suffix = '', extraEnv = {}) => {
       const seconds = Math.min(60, Math.ceil((r.deadline - Date.now()) / 1000));
       if (seconds <= 0) return { exitCode: 124, stdout: '', stderr: '' };
-      const script = `ulimit -f 32; timeout --signal=TERM --kill-after=5s ${seconds}s "$@" > /workspace/task/stdout${suffix} 2> /workspace/task/stderr${suffix}`;
+      // Wheel/source artifacts share the registry's 32 MiB file bound; logs retain their separate read bound.
+      const script = `ulimit -f 65536; timeout --signal=TERM --kill-after=5s ${seconds}s "$@" > /workspace/task/stdout${suffix} 2> /workspace/task/stderr${suffix}`;
       const process = await this.container.exec(['/bin/sh', '-c', script, 'golf-test', ...argv], { cwd: '/workspace/repo', env: { ...environment, ...extraEnv }, user: '1000:1000' });
       const output = await process.output();
       const read = async path => new TextDecoder('utf-8', { fatal: true }).decode(await bounded((await this.files.readFile(path + suffix)).body, 32768));

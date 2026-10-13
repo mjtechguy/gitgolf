@@ -1,0 +1,56 @@
+{
+  "schema": "golf.retained-demo.session-preview-verification.v1",
+  "origin": "https://demo.gitgolf.mjtechguy.com",
+  "authentication": {
+    "release": "b585c7836f9d8977c4ba3eab5b817f6b2786dd034dd73330e90b97149662db90",
+    "reproduced": "Intermittent Access-context 401 on assets and repository image RPC after successful human login",
+    "fix": "Verify signed Access assertion against configured issuer/audience when runtime context is absent",
+    "browserRoutes": [
+      "/mj/fastapi",
+      "/mj/fastapi/packages",
+      "/mj-platform/jinja/packages",
+      "/account/settings",
+      "/admin"
+    ],
+    "sessionChecks": 15,
+    "adminPreserved": true,
+    "anonymousRequest": "opaqueredirect to Access",
+    "nativeTests": {
+      "passed": 283,
+      "skipped": 1
+    },
+    "workerdRuntime": "passed"
+  },
+  "previews": {
+    "release": "f972b89468e3cece37d05b788b5fe3d2e6465a37d94fd5c8ec8009d9635168a6",
+    "workerVersion": "ebeedc8f-a37e-4c54-9e27-4555cac3c0b5",
+    "nativeTestsPassed": 161,
+    "selectionTestsPassed": 2,
+    "frontendBuild": "passed",
+    "runtime": "passed",
+    "livePublication": "verified",
+    "testJob": "66d549d9-b642-4381-8c8e-96922ee246da",
+    "testState": "PASSED",
+    "coordinatorRelease": "f972b89468e3cece37d05b788b5fe3d2e6465a37d94fd5c8ec8009d9635168a6",
+    "pullRequest": "https://demo.gitgolf.mjtechguy.com/mj/canonical/pull/1",
+    "previewId": "1e90bdd7-134c-491d-a96a-5b80884ed897",
+    "previewExpiresAt": "2026-10-13T20:56:54.694Z",
+    "readyResponseToVisibleMs": 1067,
+    "requestToVisibleMs": 2439,
+    "reloadRequired": false,
+    "streamState": "Live",
+    "protectedPreviewOpened": true,
+    "uiCheck": "passed",
+    "testReport": {
+      "state": "PASSED",
+      "exitCode": 0,
+      "cleanup": "destroyed",
+      "imageDigest": "sha256:aaf246c97713db91e71ff49387079a7149f0f3d45e23c83c5e0e9bbbdc6d0b70"
+    }
+  },
+  "limits": [
+    "Full browser regression suite not rerun",
+    "Live timing is one observed publication, not a latency SLA",
+    "Previews retain a four-hour lease"
+  ]
+}

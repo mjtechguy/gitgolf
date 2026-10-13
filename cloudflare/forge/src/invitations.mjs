@@ -1,3 +1,4 @@
+import { ownerSlug } from './owners.mjs';
 import { digest, deny, invalid, unsupported, Fault, page, user, uuidOK } from './common.mjs';
 import { repositoryAccess } from './repository-settings.mjs';
 
@@ -6,14 +7,14 @@ export const invitationMethods = new Set(methods);
 export const ownInvitationMethods = new Set(['ListOwnRepositoryInvitations', 'RespondRepositoryInvitation', 'GetRepositoryInvitationOperation']);
 const stale = () => { throw new Fault('failed_precondition', 412, 'Invitation or repository authority changed. Refresh before continuing.'); };
 const rank = role => ['none', 'read', 'write', 'admin'].indexOf(role || 'none');
-const contextSQL = `SELECT i.*,r.name,r.state AS repository_state,r.artifact_name AS current_artifact,w.id AS owner_id,
+const contextSQL = `SELECT i.*,r.name,r.state AS repository_state,r.artifact_name AS current_artifact,COALESCE(o.id,w.id) AS owner_id,o.slug AS owner_slug,o.kind AS owner_kind,
   u.login AS issuer_login,u.full_name AS issuer_name,u.active AS issuer_active,
   t.login AS recipient_login,t.full_name AS recipient_name,t.active AS recipient_active,
   COALESCE(uv.version,0) AS current_issuer_version,COALESCE(tv.version,0) AS current_recipient_version,
   g.role AS issuer_role,rg.role AS recipient_role,
   COALESCE(gv.generation,0) AS current_issuer_generation,COALESCE(rv.generation,0) AS current_recipient_generation
   FROM repository_invitations i JOIN repositories r ON r.id=i.repository_id
-  JOIN workspaces w ON w.slug=? AND w.artifact_namespace=? JOIN users u ON u.id=i.issuer_id JOIN users t ON t.id=i.recipient_id
+  JOIN workspaces w ON w.slug=? AND w.artifact_namespace=? LEFT JOIN repository_owners ro ON ro.repository_id=r.id LEFT JOIN native_owners o ON o.id=ro.owner_id JOIN users u ON u.id=i.issuer_id JOIN users t ON t.id=i.recipient_id
   LEFT JOIN native_identity_versions uv ON uv.user_id=u.id LEFT JOIN native_identity_versions tv ON tv.user_id=t.id
   LEFT JOIN grants g ON g.repository_id=r.id AND g.user_id=u.id LEFT JOIN grants rg ON rg.repository_id=r.id AND rg.user_id=t.id
   LEFT JOIN collaborator_versions gv ON gv.repository_id=r.id AND gv.user_id=u.id
@@ -26,8 +27,8 @@ function eligible(i) { return i.repository_state === 'ACTIVE' && i.current_artif
 function wire(env, i, admin = false) {
   const detailsAvailable = admin || eligible(i) && (i.state !== 'ACCEPTED' || Boolean(i.recipient_role));
   const value = { id: i.id, revision: String(i.revision), state: i.state, expiresAt: i.expires_at, createdAt: i.created_at, detailsAvailable };
-  if (detailsAvailable) Object.assign(value, { repository: { owner: env.WORKSPACE_SLUG, name: i.name }, repositoryId: String(i.repository_id), ownerId: String(i.owner_id),
-    issuer: { id: String(i.issuer_id), login: i.issuer_login, fullName: i.issuer_name }, recipient: { id: String(i.recipient_id), login: i.recipient_login, fullName: i.recipient_name }, permission: i.permission, organizationOwned: true });
+  if (detailsAvailable) Object.assign(value, { repository: { owner: ownerSlug(i,env), name: i.name }, repositoryId: String(i.repository_id), ownerId: String(i.owner_id),
+    issuer: { id: String(i.issuer_id), login: i.issuer_login, fullName: i.issuer_name }, recipient: { id: String(i.recipient_id), login: i.recipient_login, fullName: i.recipient_name }, permission: i.permission, organizationOwned: i.owner_kind !== 'PERSONAL' });
   return value;
 }
 async function recipient(db, row, login) {

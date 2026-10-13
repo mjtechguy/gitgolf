@@ -1,3 +1,4 @@
+import { ownerSlug } from './owners.mjs';
 import { digest, uuidOK, deny, invalid, Fault } from './common.mjs';
 import { sha } from './git.mjs';
 import { pullReviewContext, review, completeReviewRequest } from './collaboration.mjs';
@@ -28,7 +29,7 @@ async function state(db,env,person,row,target,body,artifact) {
 export async function reviewAuthoring(db,env,person,row,request,method,body,artifact) {
  if(request.headers.has('Authorization')||request.headers.has('CF-Access-Client-Id')||request.headers.has('CF-Access-Client-Secret')||!request.headers.get('X-Golf-Native-Access-Email')) deny();
  const target=body.target;
- if(target?.repository?.owner!==env.WORKSPACE_SLUG||target?.repository?.name!==row.name||target?.repositoryId!==String(row.id)||!idOK(target?.pullRequestId)||!Number.isInteger(target.number)||target.number<1) deny();
+ if(target?.repository?.owner!==ownerSlug(row,env)||target?.repository?.name!==row.name||target?.repositoryId!==String(row.id)||!idOK(target?.pullRequestId)||!Number.isInteger(target.number)||target.number<1) deny();
  if(body.commentId||body.golfDraftId||body.expectedDraftVersion||body.expectedTargetGeneration) invalid('Saved inline drafts and comment editing are not supported by this native authoring adapter.');
  const submit=method==='SubmitPullReviewAuthoringOperation',lookup=method==='GetPullReviewAuthoringOperation';
  let original,hash,kind,decision;
@@ -41,7 +42,7 @@ export async function reviewAuthoring(db,env,person,row,request,method,body,arti
    if(kind==='SUBMIT_DRAFT'?!['COMMENT','APPROVED','REQUEST_CHANGES'].includes(decision):decision!=='UNSPECIFIED') invalid('Choose a review decision only when publishing.');
    const text=body.body===undefined?'':body.body;
    if(typeof text!=='string'||new TextEncoder().encode(text).length>6000||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text)||new TextDecoder().decode(new TextEncoder().encode(text))!==text|| (kind==='DISCARD_DRAFT'?(text||body.bodyHash):body.bodyHash!==await digest(text)||!text.trim()&&!(kind==='SUBMIT_DRAFT'&&decision==='APPROVED'))) invalid('Use review text up to 6,000 UTF-8 bytes with its SHA256.');
-   original={target:{repository:{owner:env.WORKSPACE_SLUG,name:row.name},repositoryId:target.repositoryId,pullRequestId:target.pullRequestId,number:target.number},kind:'PULL_REVIEW_AUTHORING_KIND_'+kind,reviewId:body.reviewId||'',reviewCommitId:body.reviewCommitId||'',expectedPullRevision:body.expectedPullRevision,expectedSnapshotRevision:body.expectedSnapshotRevision,bodyHash:body.bodyHash||'',decision:'PULL_REQUEST_REVIEW_STATE_'+decision,operationId:body.operationId};
+   original={target:{repository:{owner:ownerSlug(row,env),name:row.name},repositoryId:target.repositoryId,pullRequestId:target.pullRequestId,number:target.number},kind:'PULL_REVIEW_AUTHORING_KIND_'+kind,reviewId:body.reviewId||'',reviewCommitId:body.reviewCommitId||'',expectedPullRevision:body.expectedPullRevision,expectedSnapshotRevision:body.expectedSnapshotRevision,bodyHash:body.bodyHash||'',decision:'PULL_REQUEST_REVIEW_STATE_'+decision,operationId:body.operationId};
    hash=await digest(JSON.stringify(original));
   }
   const saved=await db.prepare('SELECT * FROM pull_review_operations WHERE actor_id=? AND operation_id=?').bind(person.id,body.operationId).first();

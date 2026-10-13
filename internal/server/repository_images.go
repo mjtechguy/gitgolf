@@ -22,8 +22,8 @@ import (
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 )
 
-// Images are bounded private RPC responses. External hosts and every redirect
-// are allowlisted; forge credentials never leave Golf through this path.
+// Images are bounded private RPC responses. Every external destination and redirect
+// is restricted to public HTTPS with DNS addresses pinned at connection time; forge credentials never leave Golf through this path.
 func repositoryImagePath(document, reference string) (string, error) {
 	u, e := url.Parse(reference)
 	if e != nil || u.IsAbs() || u.Host != "" || strings.ContainsAny(reference, "\\\x00\r\n") {
@@ -43,11 +43,16 @@ func externalImageURL(reference string) (*url.URL, error) {
 	if e != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || u.Fragment != "" || len(reference) > 2048 {
 		return nil, invalid("Unsupported external image URL.")
 	}
-	switch u.Host {
-	case "raw.githubusercontent.com", "img.shields.io", "avatars.githubusercontent.com", "user-images.githubusercontent.com", "github.githubassets.com", "badgen.net", "expressjs.com", "sindresorhus.com", "api.securityscorecards.dev", "github.com", "vite.dev", "sponsors.vite.dev":
-	default:
-		return nil, invalid("This image host is not supported.")
+	host := u.Hostname()
+	if host != u.Host || !strings.Contains(host, ".") || net.ParseIP(host) != nil || strings.ContainsAny(host, "\\% 	\r\n") {
+		return nil, invalid("Use a public HTTPS image hostname.")
 	}
+	for _, suffix := range []string{"localhost", "local", "internal", "invalid", "test", "onion"} {
+		if host == suffix || strings.HasSuffix(host, "."+suffix) {
+			return nil, invalid("Image destination is not public.")
+		}
+	}
+
 	return u, nil
 }
 func publicImageIP(ip net.IP) bool {

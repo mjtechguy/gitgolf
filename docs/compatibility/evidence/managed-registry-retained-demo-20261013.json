@@ -1,0 +1,339 @@
+{
+  "schema": "golf.retained-demo.v1",
+  "origin": "https://demo.gitgolf.mjtechguy.com",
+  "repositories": [
+    {
+      "name": "requests",
+      "upstream": "https://github.com/psf/requests",
+      "repository_id": "3",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "tree": "10caa09e09cd366febe74c2afa345939ffd5691f",
+      "shallow": true,
+      "ci": {
+        "job_id": "25c63e4d-5153-4ed4-bae0-cf336ab05ef7",
+        "number": 1,
+        "commit": "a62778119d635c0d26fc5af1c7e779c0f21cc0e4",
+        "image": {
+          "registry": "https://registry.cloudflare.com",
+          "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r3",
+          "tag": "ci-25c63e4d-5153-4ed4-bae0-cf336ab05ef7",
+          "digest": "sha256:66a3fb2d3b516162044fd017794fdb787cbcb8144f04b68dc10fa841cf3e3324",
+          "commitId": "a62778119d635c0d26fc5af1c7e779c0f21cc0e4"
+        },
+        "url": "https://demo.gitgolf.mjtechguy.com/alice/requests/pulls/1"
+      },
+      "tests": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed"
+      },
+      "inventory_digest_verified": true
+    },
+    {
+      "name": "flask",
+      "upstream": "https://github.com/pallets/flask",
+      "repository_id": "4",
+      "commit": "d086db856be187255b8ec61ef409357393020f32",
+      "tree": "b7c01f0b37b4ebe6c21d107b5f02632211f1c18b",
+      "shallow": true,
+      "ci": {
+        "job_id": "2028cae6-2a21-4c2e-934c-5a5e06cfbdb5",
+        "number": 1,
+        "commit": "d08189820bda97e3c3ce83ae3fb35239bdadf60f",
+        "image": {
+          "registry": "https://registry.cloudflare.com",
+          "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r4",
+          "tag": "ci-2028cae6-2a21-4c2e-934c-5a5e06cfbdb5",
+          "digest": "sha256:57ad3112f22a3c26cdb523ee63c3756d0f012a4957d07d805c7cda7941b29529",
+          "commitId": "d08189820bda97e3c3ce83ae3fb35239bdadf60f"
+        },
+        "url": "https://demo.gitgolf.mjtechguy.com/alice/flask/pulls/1"
+      },
+      "tests": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed"
+      },
+      "inventory_digest_verified": true
+    },
+    {
+      "name": "httpx",
+      "upstream": "https://github.com/encode/httpx",
+      "repository_id": "5",
+      "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "tree": "31ba94512339180efacceacc0646b56ee15eba63",
+      "shallow": true,
+      "ci": {
+        "job_id": "06c88f6e-0a18-48d7-adec-561ff8a1cc61",
+        "number": 1,
+        "commit": "c956f431e8454511d5cd269730ac0904d5b76a79",
+        "image": {
+          "registry": "https://registry.cloudflare.com",
+          "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r5",
+          "tag": "ci-06c88f6e-0a18-48d7-adec-561ff8a1cc61",
+          "digest": "sha256:680b7fecf7590ca55ffb41a4bee2fe404f10ad6c04b3bc8ea66e9486aae41779",
+          "commitId": "c956f431e8454511d5cd269730ac0904d5b76a79"
+        },
+        "url": "https://demo.gitgolf.mjtechguy.com/alice/httpx/pulls/1"
+      },
+      "tests": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed"
+      },
+      "inventory_digest_verified": true
+    },
+    {
+      "name": "starlette",
+      "upstream": "https://github.com/encode/starlette",
+      "repository_id": "6",
+      "commit": "96d5023c55b29224edb8d684868c49f681d079a9",
+      "tree": "b3f81eda310c8da2cab7500dd6821356b5c90da8",
+      "shallow": true,
+      "ci": {
+        "job_id": "69ad8de7-1e1c-4429-986c-fd78e34207f4",
+        "number": 1,
+        "commit": "0901715979e726618a61f40ab1dafb4373961336",
+        "image": {
+          "registry": "https://registry.cloudflare.com",
+          "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r6",
+          "tag": "ci-69ad8de7-1e1c-4429-986c-fd78e34207f4",
+          "digest": "sha256:aa06cb7eb92e997973f88eb7745474f9c62016cb9402aa12ddee183666b83201",
+          "commitId": "0901715979e726618a61f40ab1dafb4373961336"
+        },
+        "url": "https://demo.gitgolf.mjtechguy.com/alice/starlette/pulls/1"
+      },
+      "tests": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed"
+      },
+      "inventory_digest_verified": true
+    },
+    {
+      "name": "click",
+      "upstream": "https://github.com/pallets/click",
+      "repository_id": "7",
+      "commit": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+      "tree": "6b26180d3cc76de6213a1e998f1eaf821e7f0f3f",
+      "shallow": true,
+      "ci": {
+        "job_id": "6032f307-7d93-4046-ad70-4a63ddd42a6d",
+        "number": 1,
+        "commit": "28c53b4905842d740fd88c91530b525665781a04",
+        "image": {
+          "registry": "https://registry.cloudflare.com",
+          "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r7",
+          "tag": "ci-6032f307-7d93-4046-ad70-4a63ddd42a6d",
+          "digest": "sha256:c6a90280c5d7b1a34ce9bfe808e3f5afc15f7c2b63c9993ed1bff3aedfb7d870",
+          "commitId": "28c53b4905842d740fd88c91530b525665781a04"
+        },
+        "url": "https://demo.gitgolf.mjtechguy.com/alice/click/pulls/1"
+      },
+      "tests": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed"
+      },
+      "inventory_digest_verified": true
+    },
+    {
+      "name": "rich",
+      "upstream": "https://github.com/Textualize/rich",
+      "repository_id": "8",
+      "commit": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f",
+      "tree": "93aa807db25b745b28e18bf7f96f8173b564016e",
+      "shallow": true,
+      "ci": {
+        "job_id": "1e00cc43-0d22-46f8-a3e3-7be76e9da89b",
+        "number": 1,
+        "commit": "844df4a90de9111ac1ad0a9194a02f4843755750",
+        "image": {
+          "registry": "https://registry.cloudflare.com",
+          "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r8",
+          "tag": "ci-1e00cc43-0d22-46f8-a3e3-7be76e9da89b",
+          "digest": "sha256:72f098d0c2612face0114bcc0d9092e6cf0d66bc57edc33319950d80e1886027",
+          "commitId": "844df4a90de9111ac1ad0a9194a02f4843755750"
+        },
+        "url": "https://demo.gitgolf.mjtechguy.com/alice/rich/pulls/1"
+      },
+      "tests": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed"
+      },
+      "inventory_digest_verified": true
+    },
+    {
+      "name": "pytest",
+      "upstream": "https://github.com/pytest-dev/pytest",
+      "repository_id": "9",
+      "commit": "c9c19f8e62c12834ad83193a1869cc82fe9c700e",
+      "tree": "1b4202204042e52b81ba763cdc6310c7b789c975",
+      "shallow": true,
+      "ci": {
+        "job_id": "1a76640c-0b34-4429-9d5e-faa877db5c50",
+        "number": 1,
+        "commit": "1134554129869df4b1fb36865f0d7113b4d81084",
+        "image": {
+          "registry": "https://registry.cloudflare.com",
+          "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r9",
+          "tag": "ci-1a76640c-0b34-4429-9d5e-faa877db5c50",
+          "digest": "sha256:8cc1fee8c39834076c4e9faf855f54832e8faab655fc82162aa70290bb453ed0",
+          "commitId": "1134554129869df4b1fb36865f0d7113b4d81084"
+        },
+        "url": "https://demo.gitgolf.mjtechguy.com/alice/pytest/pulls/1"
+      },
+      "tests": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed"
+      },
+      "inventory_digest_verified": true
+    },
+    {
+      "name": "pydantic",
+      "upstream": "https://github.com/pydantic/pydantic",
+      "repository_id": "10",
+      "commit": "3eca5695dabc5a451ccfc0f4afa802166e61e27a",
+      "tree": "fb5996c01996afb03dded3047983a9d60ded1f22",
+      "shallow": true,
+      "ci": {
+        "job_id": "56b02e91-92a0-4c7c-b60a-476e9f78f97d",
+        "number": 1,
+        "commit": "660349bb9fc7691b2d37a6dd79cf68ad59eb380f",
+        "image": {
+          "registry": "https://registry.cloudflare.com",
+          "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r10",
+          "tag": "ci-56b02e91-92a0-4c7c-b60a-476e9f78f97d",
+          "digest": "sha256:5477c48bac9fbdeb64138ff4e56618a16544982570189df328b446a5299fb24c",
+          "commitId": "660349bb9fc7691b2d37a6dd79cf68ad59eb380f"
+        },
+        "url": "https://demo.gitgolf.mjtechguy.com/alice/pydantic/pulls/1"
+      },
+      "tests": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed"
+      },
+      "inventory_digest_verified": true
+    },
+    {
+      "name": "attrs",
+      "upstream": "https://github.com/python-attrs/attrs",
+      "repository_id": "11",
+      "commit": "644b4e165bfbeee7e127de6fcbda08b64014316f",
+      "tree": "3654f5f16007ebe30e06b0280b5d1ab5b819d076",
+      "shallow": true,
+      "ci": {
+        "job_id": "91347813-2601-4b8c-8a1a-477e0a005daa",
+        "number": 1,
+        "commit": "c0042f2505d93b9cab634a03acacc88e249e4c64",
+        "image": {
+          "registry": "https://registry.cloudflare.com",
+          "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r11",
+          "tag": "ci-91347813-2601-4b8c-8a1a-477e0a005daa",
+          "digest": "sha256:84db2c6b743b71125668129d0d60f86df3fd1987cb8670f5777ec89aff7bb7a6",
+          "commitId": "c0042f2505d93b9cab634a03acacc88e249e4c64"
+        },
+        "url": "https://demo.gitgolf.mjtechguy.com/alice/attrs/pulls/1"
+      },
+      "tests": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed"
+      },
+      "inventory_digest_verified": true
+    },
+    {
+      "name": "fastapi",
+      "upstream": "https://github.com/fastapi/fastapi",
+      "repository_id": "12",
+      "commit": "f5c6e9b4f9cadc1bf0f9a1fd672e621206b63007",
+      "tree": "9517233529e09d6421e49df7216f5cfc84baf4f4",
+      "shallow": true,
+      "ci": {
+        "job_id": "6319a0d5-cc1c-41e4-b9cb-ffd4d580222f",
+        "number": 1,
+        "commit": "5e11a4e96da8d168e6d39ee11c20e15657fa3297",
+        "image": {
+          "registry": "https://registry.cloudflare.com",
+          "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r12",
+          "tag": "ci-6319a0d5-cc1c-41e4-b9cb-ffd4d580222f",
+          "digest": "sha256:ebc6d2aae01d0af525066f12823449f7865801b03982fd9d9d38d907f125beb8",
+          "commitId": "5e11a4e96da8d168e6d39ee11c20e15657fa3297"
+        },
+        "url": "https://demo.gitgolf.mjtechguy.com/alice/fastapi/pulls/1"
+      },
+      "tests": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed"
+      },
+      "inventory_digest_verified": true
+    }
+  ],
+  "list_metadata": {
+    "elapsed_ms": 174,
+    "timing": "d1;dur=22.0;desc=\"2 calls\", actor;dur=9.0;desc=\"1 calls\", native;dur=22.0, queue;dur=0.0",
+    "release": "e1951d35e0a9e6a175060dd165d722d06b3c5f28d95ae305b3d2a8e16cca28c6"
+  },
+  "runner_read_admin": true,
+  "coordinator_release": "e1951d35e0a9e6a175060dd165d722d06b3c5f28d95ae305b3d2a8e16cca28c6",
+  "owned_ci_image_cleanup_inventory": [
+    "golf-native-20261013-bcd02761-r1:ci-e72186f9-8863-4d02-97e7-e3e148714f2f",
+    "golf-native-20261013-bcd02761-r10:ci-56b02e91-92a0-4c7c-b60a-476e9f78f97d",
+    "golf-native-20261013-bcd02761-r11:ci-91347813-2601-4b8c-8a1a-477e0a005daa",
+    "golf-native-20261013-bcd02761-r12:ci-6319a0d5-cc1c-41e4-b9cb-ffd4d580222f",
+    "golf-native-20261013-bcd02761-r2:ci-4021238b-54b3-4cd0-87d3-23612c489403",
+    "golf-native-20261013-bcd02761-r3:ci-25c63e4d-5153-4ed4-bae0-cf336ab05ef7",
+    "golf-native-20261013-bcd02761-r3:ci-64cdddae-58cf-4cda-8fed-974d2eacd610",
+    "golf-native-20261013-bcd02761-r4:ci-2028cae6-2a21-4c2e-934c-5a5e06cfbdb5",
+    "golf-native-20261013-bcd02761-r4:ci-b16879d4-89de-4408-a3ec-d537dce9819b",
+    "golf-native-20261013-bcd02761-r5:ci-06c88f6e-0a18-48d7-adec-561ff8a1cc61",
+    "golf-native-20261013-bcd02761-r5:ci-71be69bb-b9d1-4d0f-a7da-4cbf6dab4ea6",
+    "golf-native-20261013-bcd02761-r6:ci-69ad8de7-1e1c-4429-986c-fd78e34207f4",
+    "golf-native-20261013-bcd02761-r7:ci-6032f307-7d93-4046-ad70-4a63ddd42a6d",
+    "golf-native-20261013-bcd02761-r8:ci-1e00cc43-0d22-46f8-a3e3-7be76e9da89b",
+    "golf-native-20261013-bcd02761-r9:ci-1a76640c-0b34-4429-9d5e-faa877db5c50"
+  ],
+  "checked_at": "2026-10-13T05:52:47.249795+00:00",
+  "scope": {
+    "history": "shallow upstream snapshots",
+    "ci": "offline wheel builds and functional smoke against actual source",
+    "artifacts": [
+      "wheel",
+      "source.tar.gz",
+      "ci-report.json"
+    ],
+    "full_upstream_workflows": false,
+    "runnable_application_images": false,
+    "browser": "Shared T3 preview: built UI with authorized live read-only API proxy, desktop 1280x800 and mobile 390x844; runner current-value/edit/cancel; no human OTP impersonation",
+    "human_login": "User reported signed in; no independent automated human-login acceptance"
+  },
+  "checks": {
+    "native_unit": {
+      "passed": 277,
+      "skipped": 1
+    },
+    "demo_controller": {
+      "passed": 25
+    },
+    "runtime_workerd_d1_secrets_store": true,
+    "ui_workerd_d1_access": true,
+    "web_native_build": true,
+    "generated_files": true,
+    "portable_repository_images": true
+  },
+  "cached_root_read": {
+    "elapsed_ms": 246,
+    "timing": "d1;dur=50.0;desc=\"3 calls\", actor;dur=15.0;desc=\"1 calls\", grant;dur=18.0;desc=\"1 calls\", index_hit;dur=0.0;desc=\"1 calls\", authority_d1;dur=48.0;desc=\"1 calls\", authority_actor;dur=22.0;desc=\"1 calls\", authority_grant;dur=26.0;desc=\"1 calls\", authority_queue;dur=0.0;desc=\"1 calls\", authority;dur=72.0;desc=\"1 calls\", native;dur=122.0, queue;dur=0.0",
+    "release": "e1951d35e0a9e6a175060dd165d722d06b3c5f28d95ae305b3d2a8e16cca28c6"
+  },
+  "cached_file_index_read": {
+    "elapsed_ms": 237,
+    "timing": "d1;dur=57.0;desc=\"3 calls\", actor;dur=14.0;desc=\"1 calls\", grant;dur=17.0;desc=\"1 calls\", index_hit;dur=0.0;desc=\"1 calls\", authority_d1;dur=32.0;desc=\"1 calls\", authority_actor;dur=19.0;desc=\"1 calls\", authority_grant;dur=13.0;desc=\"1 calls\", authority_queue;dur=0.0;desc=\"1 calls\", authority;dur=79.0;desc=\"1 calls\", native;dur=136.0, queue;dur=0.0",
+    "release": "e1951d35e0a9e6a175060dd165d722d06b3c5f28d95ae305b3d2a8e16cca28c6",
+    "paths": 3182
+  }
+}

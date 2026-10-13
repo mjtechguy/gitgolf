@@ -1,7 +1,9 @@
 import { useLiveStatus } from './RepositoryLive';
+import { currentPullPreviews } from './nativePreviews';
 import { usePageVisible } from './RepositoryUI';
 import { Code, ConnectError } from '@connectrpc/connect';
-import { CopyButton, privateQuery } from './RepositoryUI';
+import { CopyButton, PageHeader, privateQuery } from './RepositoryUI';
+import { RefreshCw } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { repositoryOptions } from './navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -68,34 +70,46 @@ export function NativeSettings({ config }: { config: Config }) {
 }
 
 type Context = { repository: { owner: string; name: string }; repositoryId: string };
+export function NativePullPreviewSummary({ context, number, userId, commitId }: { context: Context; number: number; userId: string; commitId: string }) {
+  const live = useLiveStatus() === 'live', visible = usePageVisible();
+  const config = useQuery({ ...privateQuery, queryKey: ['native-config', userId], queryFn: ({ signal }) => api<Config>('/native/config', {}, signal) });
+  const enabled = config.data?.previews === true;
+  const jobs = useQuery({ ...privateQuery, queryKey: ['native-repository', context.repositoryId, number, 'jobs'], enabled, queryFn: ({ signal }) => api<{ jobs: Job[]; truncated: boolean }>('/native/pr-evidence', { ...context, action: 'list', number }, signal), refetchInterval: visible && !live ? 5000 : false });
+  const previews = useQuery({ ...privateQuery, queryKey: ['native-repository', context.repositoryId, number, 'previews'], enabled, queryFn: ({ signal }) => api<{ previews: Preview[]; truncated: boolean }>('/native/pr-preview', { ...context, action: 'list' }, signal), refetchInterval: visible && !live ? 5000 : false });
+  if (config.isSuccess && !enabled) return null;
+  const error = config.error || jobs.error || previews.error;
+  const ready = !error && jobs.isSuccess && previews.isSuccess ? currentPullPreviews(previews.data.previews, jobs.data.jobs, commitId) : [];
+  return <section className="browser-panel" aria-label="Preview deployments"><div className="browser-panel-heading"><h3>Preview deployments</h3><code>{commitId.slice(0, 8)}</code></div><ErrorMessage error={error}/><div aria-live="polite">{ready.length ? ready.map(preview => <NativePreviewLink key={preview.id} preview={preview}/>) : !error ? <p className="panel-footnote">{!jobs.isSuccess || !previews.isSuccess ? 'Checking preview deployments…' : 'No active preview for this commit. Links appear here when deployment completes.'}</p> : null}</div></section>;
+}
 export function NativePullTools({ context, number, userId, selectedCommitId }: { context: Context; number: number; userId: string; selectedCommitId?: string }) {
   const live = useLiveStatus() === 'live', visible = usePageVisible();
   const config = useQuery({ ...privateQuery, queryKey: ['native-config', userId], queryFn: ({ signal }) => api<Config>('/native/config', {}, signal), refetchInterval: 30000 });
   const access = useQuery({ ...privateQuery, queryKey: ['native-repository', context.repositoryId, 'access'], queryFn: ({ signal }) => api<{ role: string }>('/native/repository-access', context, signal), refetchInterval: visible && !live ? 15000 : false });
   if (config.isError || access.isError) return <ErrorMessage error={config.error || access.error} />;
   if (!config.isSuccess || !access.isSuccess) return <p role="status">Checking Cloudflare allocations and current repository access…</p>;
-  return <NativePullControls key={`${userId}-${context.repositoryId}-${number}`} repository={{ id: context.repositoryId, name: context.repository.name, fullName: '', cloneUrl: '', description: '' }} config={config.data} number={number} selectedCommitId={selectedCommitId} writable={['write', 'admin'].includes(access.data.role)} />;
+  return <NativePullControls key={`${userId}-${context.repositoryId}-${number}`} context={context} repository={{ id: context.repositoryId, name: context.repository.name, fullName: '', cloneUrl: '', description: '' }} config={config.data} number={number} selectedCommitId={selectedCommitId} writable={['write', 'admin'].includes(access.data.role)} />;
 }
 export function NativeRepositoryActions({ context, userId }: { context: Context; userId: string }) {
   const pulls = useQuery({ ...privateQuery, queryKey: ['native-repository', context.repositoryId, 'pulls'], queryFn: ({ signal }) => repositoryAPI<{ pullRequests: Pull[]; page: { nextPage: number } }>('ListPullRequests', { ...context, state: 'ISSUE_STATE_ALL', page: { limit: 100 } }, signal) });
   const [number, setNumber] = useState<number>();
+  const [runnersOpen, setRunnersOpen] = useState(false);
   const columns: DataTableColumn<Pull>[] = [
     { accessorKey: 'number', header: 'PR', cell: ({ row }) => <Link {...repositoryOptions({ ...context.repository, view: 'pulls', pull: row.original.number, pullView: 'checks' })}>#{row.original.number}</Link> },
     { accessorKey: 'title', header: 'Title' },
     { id: 'runs', header: 'Runs and previews', enableSorting: false, cell: ({ row }) => <button className="button secondary" onClick={() => setNumber(row.original.number)}>Inspect runs</button> },
   ];
-  return <><NativeRunnerPlacement context={context} /><section className="browser-panel"><div className="browser-panel-heading"><h2>Actions</h2><button className="button secondary" onClick={() => void pulls.refetch()}>Refresh pull requests</button></div><p className="field-help">Cloudflare runs approved exact-source tests and isolated agent proposals. Select a PR to inspect its private results and protected previews.</p><ErrorMessage error={pulls.error} />{pulls.isSuccess ? <DataTable data={pulls.data.pullRequests} columns={columns} getRowId={p => p.id} label="pull request execution" /> : <p role="status">Reading pull requests…</p>}{pulls.data?.page.nextPage ? <p className="field-help">Only the first 100 pull requests are loaded.</p> : null}</section>{number ? <NativePullTools key={number} context={context} userId={userId} number={number} /> : null}</>;
+  return <div className="page-stack repository-work-page"><PageHeader title="Actions" description="CI runs, test reports and previews for your pull requests." actions={<button className="button secondary" onClick={() => void pulls.refetch()}><RefreshCw size={15}/>Refresh</button>}/><section className="browser-panel"><div className="browser-panel-heading"><h3>Pull requests</h3></div><ErrorMessage error={pulls.error} />{pulls.isSuccess ? <DataTable data={pulls.data.pullRequests} columns={columns} getRowId={p => p.id} label="pull request execution" /> : <p role="status">Reading pull requests…</p>}{pulls.data?.page.nextPage ? <p className="panel-footnote">Only the first 100 pull requests are loaded.</p> : null}</section>{number ? <NativePullTools key={number} context={context} userId={userId} number={number} /> : null}<details className="metadata-details panel-disclosure" onToggle={event => setRunnersOpen(event.currentTarget.open)}><summary>Runner settings</summary>{runnersOpen ? <NativeRunnerPlacement context={context}/> : null}</details></div>;
 }
-function NativePullControls({ repository, config, number, writable, selectedCommitId }: { repository: Repository; config: Config; number: number; writable: boolean; selectedCommitId?: string }) {
+function NativePullControls({ context, repository, config, number, writable, selectedCommitId }: { context: Context; repository: Repository; config: Config; number: number; writable: boolean; selectedCommitId?: string }) {
   const live = useLiveStatus() === 'live', visible = usePageVisible();
-  const client = useQueryClient(), context = { repository: { owner: config.workspace, name: repository.name }, repositoryId: repository.id };
+  const client = useQueryClient();
   const [busy, setBusy] = useState(false), [error, setError] = useState<unknown>(), [intent, setIntent] = useState<string[]>([]), [agentsOpen, setAgentsOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]), [reports, setReports] = useState<ReportValue[]>([]), [resolution, setResolution] = useState('');
   const [snapshot, setSnapshot] = useState<string>();
   useEffect(() => () => { if (snapshot) URL.revokeObjectURL(snapshot); }, [snapshot]);
   const pull = useQuery({ ...privateQuery, queryKey: ['native-repository', repository.id, number, 'pull'], queryFn: ({ signal }) => repositoryAPI<{ pullRequest: Pull }>('GetPullRequest', { ...context, number }, signal), refetchInterval: visible && !live ? 15000 : false });
   const jobs = useQuery({ ...privateQuery, queryKey: ['native-repository', repository.id, number, 'jobs'], enabled: config.evidence, queryFn: ({ signal }) => api<{ jobs: Job[]; truncated: boolean }>('/native/pr-evidence', { ...context, action: 'list', number }, signal), refetchInterval: visible && !live ? 5000 : false });
-  const previews = useQuery({ ...privateQuery, queryKey: ['native-repository', repository.id, number, 'previews'], enabled: config.previews, queryFn: ({ signal }) => api<{ previews: Preview[]; truncated: boolean }>('/native/pr-preview', { ...context, action: 'list' }, signal), refetchInterval: visible && !live ? 15000 : false });
+  const previews = useQuery({ ...privateQuery, queryKey: ['native-repository', repository.id, number, 'previews'], enabled: config.previews, queryFn: ({ signal }) => api<{ previews: Preview[]; truncated: boolean }>('/native/pr-preview', { ...context, action: 'list' }, signal), refetchInterval: visible && !live ? 5000 : false });
   useEffect(() => { if (pull.isError || jobs.isError || previews.isError) { setReports([]); setSelected([]); setSnapshot(undefined); } }, [pull.isError, jobs.isError, previews.isError]);
   useEffect(() => { setReports([]); setResolution(''); setSelected([]); setSnapshot(undefined); }, [pull.data?.pullRequest.revision]);
   useEffect(() => { if (jobs.data && reports.some(r => jobs.data.jobs.find(j => j.id === r.job.id)?.stale || !jobs.data.jobs.some(j => j.id === r.job.id))) setReports([]); }, [jobs.data, reports]);

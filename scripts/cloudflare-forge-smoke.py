@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import hashlib
 import hmac
+import http.client
 import json
 import os
 from pathlib import Path
@@ -46,6 +47,18 @@ def await_session(read):
         return session
 
 
+def retry_native_http(call, path, payload, method):
+    reads = {'/native/pr-evidence': {'status', 'report'}, '/native/pr-preview': {'list'}, '/native/repository-packages': {'status'}}
+    safe = method == 'GET' or path.rsplit('/', 1)[-1].startswith(('Get', 'List', 'Resolve')) or bool((payload or {}).get('idempotencyKey')) or (payload or {}).get('action') in reads.get(path, set())
+    for attempt in range(6):
+        try:
+            return call()
+        except (TimeoutError, ConnectionError, http.client.RemoteDisconnected, http.client.IncompleteRead, urllib.error.URLError) as error:
+            reason = error.reason if isinstance(error, urllib.error.URLError) else error
+            if not isinstance(reason, (TimeoutError, ConnectionError, http.client.RemoteDisconnected, http.client.IncompleteRead)) or not safe or attempt == 5:
+                raise
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--account-id', required=True)
@@ -67,7 +80,18 @@ def main():
     parser.add_argument('--operations-rehearsal', action='store_true', help='Qualify guarded release/rollback and read-only Operations collectors in the disposable demo')
     parser.add_argument('--registry-host', help='Fresh dedicated CFCR hostname in the selected app zone; requires --apps')
     parser.add_argument('--registry-scanner-image', help='Approved local CFCR scanner image; requires --registry-host')
+    parser.add_argument('--managed-registry', action='store_true', help='Publish approved CI images into Cloudflare managed storage, without CFCR')
+    parser.add_argument('--retain-demo', action='store_true', help='Keep the populated human demo after preparation; explicit stop removes its owned resources')
+    parser.add_argument('--test-image', default='golf-cf-agent:qualification', help='Reviewed local linux/amd64 test image')
+    parser.add_argument('--evidence-daily-limit', type=int, help='Explicit native demo CI admission bound, 1–50')
+    parser.add_argument('--secrets-store-id', help='Explicit existing Secrets Store; only newly created, installation-prefixed secrets are owned')
     args = parser.parse_args()
+    if args.secrets_store_id and not re.fullmatch('[a-f0-9]{32}',args.secrets_store_id): parser.error('Canonical Secrets Store ID required')
+    if args.evidence_daily_limit is not None and not 1 <= args.evidence_daily_limit <= 50: parser.error('Evidence daily limit must be 1–50')
+    if args.managed_registry and (not args.apps or not args.container_tests or args.registry_host):
+        parser.error('--managed-registry requires --apps and --container-tests and excludes --registry-host')
+    if args.retain_demo and (not args.demo_host or not args.demo_email or args.unattended or not args.managed_registry):
+        parser.error('--retain-demo requires a human demo and --managed-registry')
     if args.registry_host and (not args.apps or not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)+', args.registry_host) or args.registry_host in [args.app_host, args.demo_host]):
         parser.error('--registry-host requires --apps and a distinct canonical hostname')
     if args.registry_scanner_image and not args.registry_host:
@@ -87,7 +111,7 @@ def main():
     if args.apps and (not args.delivery or not re.fullmatch('[a-f0-9]{32}', args.app_zone or '') or not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)+', args.app_host or '')):
         parser.error('--apps requires --delivery, canonical --app-zone and --app-host')
     demo = bool(args.demo_host or args.demo_email)
-    evidence_limit = 8 if demo else 4 if args.agents else 3 if args.ci_resilience or args.registry_scanner_image else 2
+    evidence_limit = args.evidence_daily_limit or (8 if demo else 4 if args.agents else 3 if args.ci_resilience or args.registry_scanner_image else 2)
     if args.unattended and (not args.demo_host or args.demo_email):
         parser.error('--unattended requires --demo-host and forbids --demo-email')
     if args.operations_rehearsal and not demo:
@@ -110,7 +134,7 @@ def main():
     if args.evidence:
         state['schema'] = 'golf.cloudflare.native-evidence.v1'
     state['source_sha256'] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in [
-        Path(__file__).resolve(), ROOT/'scripts/cloudflare_hosted_check.py', ROOT/'scripts/fixtures/registry_publish.py', ROOT/'scripts/cloudflare_registry_check.py', ROOT/'scripts/cloudflare_rehearsal.py', ROOT/'scripts/cloudflare_demo.py', ROOT/'cloudflare/forge/schema.sql', ROOT/'cloudflare/forge/prepare.mjs', ROOT/'internal/cli/cli.go', ROOT/'internal/cli/writes.go', ROOT/'cmd/golfctl/main.go', ROOT/'go.mod', ROOT/'go.sum',
+        Path(__file__).resolve(), ROOT/'scripts/cloudflare_retained_demo.py', ROOT/'scripts/cloudflare_hosted_check.py', ROOT/'scripts/fixtures/registry_publish.py', ROOT/'scripts/cloudflare_registry_check.py', ROOT/'scripts/cloudflare_rehearsal.py', ROOT/'scripts/cloudflare_demo.py', ROOT/'cloudflare/forge/schema.sql', ROOT/'cloudflare/forge/prepare.mjs', ROOT/'internal/cli/cli.go', ROOT/'internal/cli/writes.go', ROOT/'cmd/golfctl/main.go', ROOT/'go.mod', ROOT/'go.sum',
         *sorted((ROOT/'cloudflare/forge/src').glob('*.mjs'))]}
     if args.container_tests:
         state['source_sha256']['cloudflare/agents/Dockerfile'] = hashlib.sha256((ROOT/'cloudflare/agents/Dockerfile').read_bytes()).hexdigest()
@@ -203,7 +227,9 @@ def main():
                 return None
             return value['result']
 
-    def http(path, payload=None, token=owner, expected=200, routing_attempt=0, method='POST', raw=False):
+    def http_once(path, payload=None, token=owner, expected=200, routing_attempt=0, method='POST', raw=False):
+        state['current_http'] = {'path': path, 'method': method, 'action': (payload or {}).get('action')}
+        save()
         headers = {'User-Agent': 'GolfNativeForgeQualification/1'}
         if method != 'GET': headers.update({'Content-Type': 'application/json', 'Connect-Protocol-Version': '1'})
         if demo and settings.get('access_aud'):
@@ -234,11 +260,21 @@ def main():
                 raise RuntimeError('Private response cache policy missing')
             if owner.encode() in data or reader.encode() in data or b'art_v1_' in data:
                 raise RuntimeError('Credential disclosure')
-            value = data if raw else json.loads(data)
+            try:
+                value = data if raw else json.loads(data)
+            except json.JSONDecodeError:
+                prefix = data.decode(errors='replace')[:400]
+                for private in redactions: prefix = prefix.replace(private, '[private]')
+                state['checks']['non_json_response'] = {'path': path, 'status': response.status, 'type': response.headers.get('Content-Type'), 'bytes': len(data), 'prefix': prefix}
+                save()
+                raise RuntimeError('Native response is not JSON: ' + path) from None
             if path == '/native/diagnostics' and response.status == 200:
                 from cloudflare_rehearsal import require_converged_diagnostics
                 require_converged_diagnostics(value, response.headers.get('X-Golf-Worker-Release'), response.headers.get('X-Golf-Worker-Configuration'))
             return value
+
+    def http(path, payload=None, token=owner, expected=200, routing_attempt=0, method='POST', raw=False):
+        return retry_native_http(lambda: http_once(path, payload, token, expected, routing_attempt, method, raw), path, payload, method)
 
     def rpc(method, payload=None, **options):
         return http('/rpc/golf.v1.RepositoryService/' + method, payload, **options)
@@ -282,7 +318,7 @@ def main():
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
     signal.signal(signal.SIGALRM, interrupt)
-    signal.alarm(2700 if args.operations_rehearsal or args.unattended or args.registry_scanner_image else 900)
+    signal.alarm(2700 if args.operations_rehearsal or args.unattended or args.registry_scanner_image or args.retain_demo else 900)
     save()
     try:
         if args.unattended:
@@ -316,6 +352,9 @@ def main():
         query((ROOT/'cloudflare/forge/schema.sql').read_text())
         query('INSERT INTO workspaces(slug,artifact_namespace) VALUES(?,?)', ['alice', name])
         query("INSERT INTO users(id,login,can_create) VALUES(1,'alice',1),(2,'bob',0)")
+        if args.retain_demo:
+            query('UPDATE users SET email=?,login=? WHERE id=1', [args.demo_email, 'mike'])
+            query('INSERT INTO operations_admins(user_id) VALUES(1) ON CONFLICT(user_id) DO UPDATE SET active=1')
         for token, user in [(owner, 1), (reader, 2)]:
             query('INSERT INTO credentials(digest,user_id,expires_at) VALUES(?,?,?)', [hashlib.sha256(token.encode()).hexdigest(), user, int(time.time()) + (3600 if args.unattended or args.registry_scanner_image else 18000 if demo else 900)])
         settings = {'account': args.account_id, 'worker': name, 'namespace': name, 'workspace': 'alice',
@@ -348,7 +387,7 @@ def main():
             if len(selected) != 4:
                 raise RuntimeError('Application provisioning permissions unavailable')
             policies = [{'effect': 'allow', 'resources': {'com.cloudflare.api.account.' + args.account_id: '*'}, 'permission_groups': [{'id': g['id']} for g in selected]}]
-            expiry = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=60 if args.unattended else 300 if demo else 30)).strftime('%Y-%m-%dT%H:%M:%SZ')
+            expiry = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=10080 if args.retain_demo else 60 if args.unattended else 300 if demo else 30)).strftime('%Y-%m-%dT%H:%M:%SZ')
             management = cf('thirty-minute application provisioning credential', 'user', 'tokens', 'create', '--name', name, '--expires-on', expiry, '--policies', json.dumps(policies))
             redactions.extend([management['value'], signing_key])
             state['resources']['management_token'] = {'id': management['id'], 'expires_at': expiry}
@@ -364,19 +403,34 @@ def main():
                 save()
             prefix = '/accounts/' + args.account_id
             stores = provider(prefix + '/secrets_store/stores')
-            if stores:
-                raise RuntimeError('Use an explicitly selected existing Secrets Store; qualification never adopts it')
-            store = provider(prefix + '/secrets_store/stores', 'POST', {'name': name})
-            if store.get('name') != name or not re.fullmatch('[a-f0-9]{32}', store.get('id', '')):
+            if args.secrets_store_id:
+                store = next((s for s in stores if s['id']==args.secrets_store_id),None)
+                if not store: raise RuntimeError('Selected Secrets Store is unavailable')
+            else:
+                if stores: raise RuntimeError('Select the existing Secrets Store explicitly with --secrets-store-id')
+                store = provider(prefix + '/secrets_store/stores', 'POST', {'name': name})
+            if not re.fullmatch('[a-f0-9]{32}', store.get('id', '')) or not args.secrets_store_id and store.get('name') != name:
                 raise RuntimeError('Secrets Store identity differs')
-            state['resources']['secret_store'] = {'id': store['id'], 'name': name}
+            state['resources']['secret_store'] = {'id': store['id'], 'name': store['name'], 'shared':bool(args.secrets_store_id)}
+            secret_name = lambda suffix: name + '-' + suffix if args.secrets_store_id else suffix
             save()
             secrets_to_store = [
-                {'name': 'golf-management', 'value': management['value'], 'scopes': ['workers']},
-                {'name': 'demo-signing', 'value': signing_key, 'scopes': ['workers']}]
+                {'name': secret_name('golf-management'), 'value': management['value'], 'scopes': ['workers']},
+                {'name': secret_name('demo-signing'), 'value': signing_key, 'scopes': ['workers']}]
+            if args.managed_registry:
+                selected = [g for g in groups if g['name'] == 'Workers Containers Write' and g.get('is_selectable')]
+                if len(selected) != 1:
+                    raise RuntimeError('Managed registry permission unavailable')
+                policies = [{'effect': 'allow', 'resources': {'com.cloudflare.api.account.' + args.account_id: '*'}, 'permission_groups': [{'id': selected[0]['id']}]}]
+                registry_token = cf('separate managed registry credential', 'user', 'tokens', 'create', '--name', name + '-registry', '--expires-on', expiry, '--policies', json.dumps(policies))
+                redactions.append(registry_token['value'])
+                state['resources']['registry_token'] = {'id': registry_token['id'], 'expires_at': expiry}
+                secrets_to_store.append({'name': secret_name('managed-registry'), 'value': registry_token['value'], 'scopes': ['workers']})
+                settings['registry'] = {'provider': 'cloudflare', 'ci': True, 'apiToken': {'store': store['id'], 'name': secret_name('managed-registry')}}
+                save()
             if analytics:
-                secrets_to_store.append({'name': 'analytics-read', 'value': analytics['value'], 'scopes': ['workers']})
-                settings['operations'] = {'service_health': True, 'analytics_secret': {'store': store['id'], 'name': 'analytics-read'}, 'observability': {'enabled': True, 'sampling': .1}}
+                secrets_to_store.append({'name': secret_name('analytics-read'), 'value': analytics['value'], 'scopes': ['workers']})
+                settings['operations'] = {'service_health': True, 'analytics_secret': {'store': store['id'], 'name': secret_name('analytics-read')}, 'observability': {'enabled': True, 'sampling': .1}}
             stored = provider(prefix + '/secrets_store/stores/' + store['id'] + '/secrets', 'POST', secrets_to_store)
             if {s['name'] for s in stored} != {s['name'] for s in secrets_to_store} or any(s.get('value') for s in stored):
                 raise RuntimeError('Secrets Store metadata differs')
@@ -388,8 +442,8 @@ def main():
             state['resources']['dispatch'] = namespace
             save()
             settings['apps'] = {'policy': {'namespace': name, 'entry': 'worker.mjs', 'migration': 'schema.sql', 'ttl': 14400 if demo else 600, 'zone': args.app_zone,
-                'gateway': preview_name, 'outbound': name + '-outbound', 'secret': {'store': store['id'], 'name': 'demo-signing'}}, 'automatic': True,
-                'provisioner': {'store': store['id'], 'name': 'golf-management'}}
+                'gateway': preview_name, 'outbound': name + '-outbound', 'secret': {'store': store['id'], 'name': secret_name('demo-signing')}}, 'automatic': True,
+                'provisioner': {'store': store['id'], 'name': secret_name('golf-management')}}
         if demo:
             domains = provider(prefix + '/workers/domains')
             if any(d['hostname'] in [args.demo_host, args.app_host] for d in domains):
@@ -411,6 +465,8 @@ def main():
                 control_body.update(allowed_idps=[identity_provider['id']], auto_redirect_to_identity=True, policies=[human_policy, access_body['policies'][0]])
             control_access = cf('demo control Access before publication', 'zero-trust', 'access', 'applications', 'create', '--body', json.dumps(control_body))
             state['resources']['control_access'] = {'id': control_access['id'], 'name': control_access['name'], 'aud': control_access['aud']}
+            access_organization = cf('Access signing issuer', 'zero-trust', 'organization', 'get')
+            settings['access_team_domain'] = 'https://' + access_organization['auth_domain']
             settings.update(hostname=args.demo_host, origin='https://' + args.demo_host, access_aud=control_access['aud'], automatic_ci=True,
                 workers_dev=False, ui=True, web_assets=str(ROOT/'web/dist-native'))
             settings['previews']['ttl'] = 14400
@@ -424,7 +480,7 @@ def main():
                 raise RuntimeError('Container target already exists')
             if cf('fresh test image target', 'containers', 'images', 'list', '--filter', '^' + re.escape(name) + '$'):
                 raise RuntimeError('Image target already exists')
-            metadata = json.loads(command('approved test image identity', ['docker', 'image', 'inspect', 'golf-cf-agent:qualification', '--format', '{{json .}}']).stdout)
+            metadata = json.loads(command('approved test image identity', ['docker', 'image', 'inspect', args.test_image, '--format', '{{json .}}']).stdout)
             if metadata['Architecture'] != 'amd64' or metadata['Os'] != 'linux' or not re.fullmatch('sha256:[a-f0-9]{64}', metadata['Id']):
                 raise RuntimeError('Approved test image must be linux/amd64')
             if (metadata.get('Descriptor') or {}).get('mediaType') not in ['application/vnd.oci.image.manifest.v1+json', 'application/vnd.docker.distribution.manifest.v2+json']:
@@ -511,6 +567,12 @@ def main():
                 raise RuntimeError('Demo control domain identity differs')
             state['resources']['control_domain'] = allocated[0]
         save()
+        if args.retain_demo:
+            replace_private_json(directory/'retained-auth.json', {'origin': url, 'token': owner,
+                'access_client_id': machine['client_id'], 'access_client_secret': machine['client_secret']})
+            state['demo'] = {'url': url, 'retained': True, 'previews': [], 'human_login_verified': False,
+                'credentials_expire_at': expiry, 'stop_command': f'python3 scripts/cloudflare_demo.py stop {directory}/ownership.json'}
+            save()
         # Session lookup is side-effect free and may wait for fresh platform routing.
         await_session(lambda: http('/rpc/golf.v1.SessionService/GetSession'))
         if args.registry_host:
@@ -556,6 +618,25 @@ def main():
                 raise RuntimeError('Workflow identity mismatch')
             state['resources']['workflow'] = {'name': name, 'script_name': name, 'class_name': 'EvidenceWorkflow'}
             save()
+        if args.retain_demo:
+            from cloudflare_retained_demo import seed
+            def record(label, value):
+                state['checks'][label] = value
+                save()
+                print(json.dumps({'stage': label, 'repository': value.get('repository'), 'jobId': value.get('jobId')}), flush=True)
+            populated = seed(directory, ROOT, settings['workspace'], rpc, http, git, record)
+            query('UPDATE users SET email=?,login=? WHERE id=1', [args.demo_email, 'mike'])
+            query('INSERT INTO operations_admins(user_id) VALUES(1) ON CONFLICT(user_id) DO UPDATE SET active=1')
+            build()
+            command('production preview gateway deployment', ['cf', '--profile', args.profile, 'deploy', '--prebuilt', '--provision', 'false'], cwd=directory/'preview-worker', timeout=120)
+            replace_private_json(directory/'retained-auth.json', {'origin': url, 'token': owner,
+                'access_client_id': machine['client_id'], 'access_client_secret': machine['client_secret']})
+            state['demo'] = {**populated, 'url': url, 'credentials_expire_at': expiry,
+                'stop_command': f'python3 scripts/cloudflare_demo.py stop {directory}/ownership.json'}
+            state['state'] = 'retained'
+            save()
+            print(json.dumps({'state': 'retained', 'url': url, 'receipt': str(directory/'ownership.json'), 'credentials_expire_at': expiry}), flush=True)
+            return 0
         intent = {'name': 'canonical', 'description': 'Disposable native Git qualification', 'private': True, 'idempotencyKey': str(uuid.uuid4())}
         created = rpc('CreateRepository', intent)
         if created.get('creation', {}).get('state') != 'REPOSITORY_CREATION_STATE_SUCCEEDED':
@@ -711,8 +792,9 @@ def main():
                 shutil.copyfile(ROOT/'cloudflare/forge/demo/schema.sql', source/'schema.sql')
                 git('stage approved managed application', '-C', source, 'add', 'worker.mjs', 'schema.sql')
             git('stage operator-approved native tests', '-C', source, 'add', 'calc.py', 'test_calc.py')
-            if registry:
-                registry.enable(http, repository)
+            if registry or args.managed_registry:
+                if registry:
+                    registry.enable(http, repository)
                 if args.registry_scanner_image:
                     registry.enable_automatic_scans(http, repository)
                 publisher = ROOT / 'scripts/fixtures/registry_publish.py'
@@ -1047,6 +1129,11 @@ def main():
                     time.sleep(1)
             state['demo'] = {'url': url, 'repository_ids': [repository['id'], second['id']], 'pull_requests': [pr['number'], second_pull['number']], 'duration_seconds': 14400,
                 'begin_command': f'python3 scripts/cloudflare_demo.py begin {directory}/ownership.json', 'stop_command': f'python3 scripts/cloudflare_demo.py stop {directory}/ownership.json'}
+            if args.managed_registry:
+                packages = http('/native/repository-packages', {'repository': key, 'repositoryId': repository['id'], 'action': 'status'})
+                if packages.get('provider') != 'cloudflare' or not any(a['digest'] == tests.get('image', {}).get('digest') for a in packages.get('artifacts', [])):
+                    raise RuntimeError('Managed registry CI inventory differs')
+                state['checks']['managed_registry'] = {'image': tests['image'], 'inventory': True}
             if args.operations_rehearsal:
                 from cloudflare_rehearsal import rehearse
                 state['checks']['operations_rehearsal'] = rehearse(directory, args.profile, http, command, preview_context)
@@ -1206,12 +1293,17 @@ def main():
         state['demo']['stop_reason'] = str(error)
         save()
     except Exception as error:
-        state['state'] = 'failed'
+        state['state'] = 'needs_repair' if args.retain_demo and state.get('demo', {}).get('retained') else 'failed'
         state['failure'] = str(error)
+        state['failure_http'] = state.get('current_http')
         save()
+        if state['state'] == 'needs_repair':
+            print(json.dumps({'state': 'needs_repair', 'url': url, 'receipt': str(directory/'ownership.json'), 'failure': str(error)}), flush=True)
     finally:
         signal.alarm(0)
         (directory/'qualification-auth.json').unlink(missing_ok=True)
+        if state['state'] in ['retained', 'needs_repair']:
+            return 0 if state['state'] == 'retained' else 1
         cf('cleanup OAuth refresh', 'auth', 'whoami', required=False)
         # Each cleanup has its own command deadline; no broad account deletion.
         def cleanup(label, fn):
@@ -1493,10 +1585,11 @@ def main():
                     raise RuntimeError('Secrets Store identity changed')
                 current_secrets = provider(path + '/secrets')
                 acknowledged = {(s['id'], s['name']) for s in state['resources'].get('secrets', [])}
-                if not {(s['id'], s['name']) for s in current_secrets} <= acknowledged:
-                    raise RuntimeError('Secret inventory differs; deletion refused')
+                from cloudflare_demo_cleanup import owned_secrets
+                current_secrets = owned_secrets(original,state['resources'].get('secrets',[]),current_secrets)
                 for s in current_secrets:
                     provider(path + '/secrets/' + s['id'], 'DELETE', expected=(200, 202))
+                if original.get('shared'): return
                 provider(path, 'DELETE', expected=(200, 202))
                 for attempt in range(20):
                     if provider(path, expected=(200, 404)) is None:
@@ -1528,6 +1621,8 @@ def main():
                     provider('/user/tokens/' + revoker['id'], 'DELETE', token=revoker['value'])
                 state['cleanup']['cleanup_token'] = 'absent'
             cleanup('management_token', remove_management)
+        if state['resources'].get('registry_token'):
+            cleanup('registry_token', lambda: cf('delete owned registry API token', 'user', 'tokens', 'delete', state['resources']['registry_token']['id']))
         state['finished_at'] = dt.datetime.now(dt.timezone.utc).isoformat()
         save()
     print(json.dumps({'state': state['state'], 'receipt': str(directory/'ownership.json'), 'cleanup': state['cleanup']}))

@@ -1,0 +1,129 @@
+{
+  "schema": "golf.ui.density.evidence.v1",
+  "date": "2026-10-13",
+  "origin": "https://demo.gitgolf.mjtechguy.com",
+  "release": "936a534f8b861139be7853948260c2a25e78f080f0eed75510b3012f9c532750",
+  "version": "8c21b780-e59f-4918-a81a-7df58b7049c7",
+  "reference": [
+    "https://primer.style/product/components/page-layout/",
+    "https://primer.style/product/components/nav-list/"
+  ],
+  "measurement": {
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "appearance": "flare",
+    "theme": "dark",
+    "before": {
+      "appearance": "flare",
+      "intro": {
+        "height": 72,
+        "width": 1148,
+        "x": 256,
+        "y": 76
+      },
+      "list": {
+        "height": 1720,
+        "width": 1148,
+        "x": 256,
+        "y": 282
+      },
+      "main": {
+        "height": 2086,
+        "width": 1220,
+        "x": 220,
+        "y": 56
+      },
+      "row": {
+        "height": 95.5,
+        "width": 1146,
+        "x": 257,
+        "y": 283
+      },
+      "rows": 7,
+      "theme": "dark",
+      "topbar": {
+        "height": 56,
+        "width": 1220,
+        "x": 220,
+        "y": 0
+      }
+    },
+    "after": {
+      "list": {
+        "height": 1126,
+        "width": 1200,
+        "x": 216,
+        "y": 176
+      },
+      "main": {
+        "height": 1370,
+        "width": 1248,
+        "x": 192,
+        "y": 48
+      },
+      "overflow": false,
+      "row": {
+        "height": 62.5,
+        "width": 1198,
+        "x": 217,
+        "y": 177
+      },
+      "rows": 13,
+      "topbar": {
+        "height": 48,
+        "width": 1248,
+        "x": 192,
+        "y": 0
+      }
+    }
+  },
+  "checks": {
+    "native_build": true,
+    "workerd_ui_access": true,
+    "repo_settings_editor_open_cancel": true,
+    "profile_editor_open_cancel": true,
+    "installation_details_open": true,
+    "appearances": [
+      "flare",
+      "classic",
+      "golf"
+    ],
+    "no_page_overflow_at_widths": [
+      390,
+      900,
+      1440
+    ],
+    "source_row_height_desktop": 36,
+    "mobile_primary_controls_min_height": 44,
+    "pages": [
+      "repositories",
+      "organizations",
+      "source",
+      "actions",
+      "packages",
+      "pull request reading",
+      "repository settings",
+      "account settings"
+    ],
+    "managed_settings_has_artifact_table": false,
+    "package_page_has_artifact_table": true,
+    "live_html_release": "936a534f8b861139be7853948260c2a25e78f080f0eed75510b3012f9c532750",
+    "live_entry_and_css_bytes_match_build": true
+  },
+  "bundles_kb_gzip": {
+    "before": {
+      "entry": 175.33,
+      "css": 24.7
+    },
+    "after": {
+      "entry": 175.16,
+      "css": 25.09
+    }
+  },
+  "limits": [
+    "Browser acceptance used a temporary read-only operator proxy with deployed APIs and the matching frontend build.",
+    "Live streams and human-only write flows were not proxied; full browser regression was not rerun."
+  ]
+}

@@ -1,3 +1,4 @@
+import { ownerSlug } from './owners.mjs';
 import { digest, Fault, invalid, reply } from './common.mjs';
 import { bounded, remote } from './git.mjs';
 import { machineIdentity, nativeRunnerComplete, nativeRunnerMachine } from './native-runners.mjs';
@@ -28,7 +29,7 @@ export async function gitLabRunner(db, env, request, authorize, git) {
     const row = await db.prepare('SELECT id,name FROM repositories WHERE id=(SELECT repository_id FROM evidence_jobs WHERE id=?)').bind(a.jobId).first();
     const seconds = Math.max(1, Math.floor((a.deadline-Date.now())/1000));
     return json({ id: created.id, token: a.lease, allow_git_fetch: true,
-      job_info: { name: a.workflow.plan.jobId, stage: 'test', project_id: row.id, project_name: row.name, project_full_path: env.WORKSPACE_SLUG+'/'+row.name },
+      job_info: { name: a.workflow.plan.jobId, stage: 'test', project_id: row.id, project_name: row.name, project_full_path: ownerSlug(row,env)+'/'+row.name },
       git_info: { repo_url: `${env.PUBLIC_ORIGIN.replace('://','://gitlab-ci-token:'+a.lease+'@')}/api/v4/jobs/${created.id}/git`,
         ref: a.branch, sha: a.commitId, before_sha: '0'.repeat(40), ref_type: 'branch', refspecs: [`+${a.commitId}:refs/remotes/origin/${a.branch}`], depth: 1 },
       runner_info: { timeout: seconds }, variables: [{ key: 'GIT_STRATEGY', value: 'clone', public: true }, { key: 'GIT_DEPTH', value: '1', public: true }],

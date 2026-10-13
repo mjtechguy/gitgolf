@@ -1,4 +1,5 @@
 import { webhookBindings } from './src/webhooks.mjs';
+import { accessBindings } from './src/access.mjs';
 import { operationsPolicy } from './src/operations-provider.mjs';
 import { readFile, mkdir, rm, lstat } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
@@ -8,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as esbuild from '../agents/node_modules/esbuild/lib/main.js';
 import { readUIAssets } from './ui-assets.mjs';
+import { registryBindings } from './src/managed-registry.mjs';
 
 const [directory, executable, mode = 'build'] = process.argv.slice(2);
 if (!directory || !executable || !['build', 'retire'].includes(mode)) throw Error('Use INSTALL_DIRECTORY CF_EXECUTABLE [build|retire]');
@@ -40,14 +42,8 @@ if (mode === 'retire') {
     ARTIFACTS: { type: 'artifacts', namespace: settings.namespace },
   };
   config.exports.PackagesAuthority = { type: 'worker' };
-  if (settings.registry) {
-    const registry = settings.registry, origin = new URL(registry.origin);
-    if (!/^[a-z0-9][a-z0-9-]{2,62}$/.test(registry.worker) || registry.worker === settings.worker || origin.protocol !== 'https:' || origin.origin !== registry.origin || origin.origin === settings.origin) throw Error('Use a separate CFCR Worker and HTTPS registry origin');
-    config.env.REGISTRY = { type: 'worker', worker: registry.worker, exportName: 'GolfRegistry' };
-    config.env.REGISTRY_ORIGIN = { type: 'text', value: registry.origin };
-    if (registry.ci !== undefined && typeof registry.ci !== 'boolean' || registry.ci && !settings.tests) throw Error('Registry CI publishing requires an explicit boolean and an approved test allocation');
-    config.env.REGISTRY_CI_ENABLED = { type: 'text', value: String(registry.ci === true) };
-  }
+  Object.assign(config.env, registryBindings(settings));
+  Object.assign(config.env, accessBindings(settings));
   config.env.OPERATIONS_SERVICE_HEALTH = { type: 'text', value: String(operations.serviceHealth === true) };
   config.env.OPERATIONS_WORKER = { type: 'text', value: settings.worker };
   config.env.OPERATIONS_OBSERVABILITY = { type: 'text', value: String(operations.observability.enabled) };
@@ -56,7 +52,7 @@ if (mode === 'retire') {
   if (settings.evidence) {
     const e = settings.evidence;
     if (![e.bucket, e.queue, e.workflow].every(n => typeof n === 'string' && /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(n)) ||
-      !Number.isInteger(e.daily_limit) || e.daily_limit < 1 || e.daily_limit > 20 || typeof e.allow_ai !== 'boolean' ||
+      !Number.isInteger(e.daily_limit) || e.daily_limit < 1 || e.daily_limit > 50 || typeof e.allow_ai !== 'boolean' ||
       e.allow_ai && !(typeof e.gateway === 'string' && /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(e.gateway))) throw Error('Invalid evidence allocation');
     config.env.EVIDENCE_BUCKET = { type: 'r2', name: e.bucket };
     config.env.EVIDENCE_QUEUE = { type: 'queue', name: e.queue };

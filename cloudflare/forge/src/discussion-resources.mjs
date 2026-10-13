@@ -1,3 +1,4 @@
+import { ownerSlug } from './owners.mjs';
 import { engagementChange, discussionEvent } from './discussion-engagement.mjs';
 import { digest, uuidOK, deny, invalid, unsupported, Fault, page, user } from './common.mjs';
 
@@ -80,7 +81,7 @@ export async function discussionResources(db, env, person, row, method, body) {
   const current = create ? null : await db.prepare('SELECT * FROM discussion_resources WHERE id=? AND repository_id=? AND kind=? AND deleted=0').bind(body.resourceId, row.id, type).first();
   const currentRevision = create || current && await revision(current) === body.expectedRevision;
   const id = current?.id || (await db.prepare('SELECT COALESCE(max(id),0)+1 AS id FROM discussion_resources').first()).id;
-  const time = new Date().toISOString(), operation = { operationId: body.operationId, kind: 'DISCUSSION_RESOURCE_OPERATION_KIND_' + kind, phase: 'DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED', repository: { owner: env.WORKSPACE_SLUG, name: row.name }, repositoryId: String(row.id), resourceId: body.resourceId || '', observedResourceId: String(id), expectedRevision: body.expectedRevision || '', createdAt: time, updatedAt: time };
+  const time = new Date().toISOString(), operation = { operationId: body.operationId, kind: 'DISCUSSION_RESOURCE_OPERATION_KIND_' + kind, phase: 'DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED', repository: { owner: ownerSlug(row,env), name: row.name }, repositoryId: String(row.id), resourceId: body.resourceId || '', observedResourceId: String(id), expectedRevision: body.expectedRevision || '', createdAt: time, updatedAt: time };
   const refuse = async () => {
     operation.phase = 'DISCUSSION_RESOURCE_OPERATION_PHASE_REJECTED'; operation.failureCode = 'preflight_refused'; operation.observedResourceId = '';
     await db.prepare('INSERT INTO discussion_resource_operations VALUES(?,?,?,?,?)').bind(person.id, body.operationId, row.id, hash, JSON.stringify(operation)).run();
@@ -192,7 +193,7 @@ async function commentChange(db, env, person, row, kind, body) {
   const comment = await db.prepare(`SELECT c.* FROM discussion_comments c JOIN discussions d ON d.id=c.discussion_id
     WHERE c.id=? AND d.id=? AND d.repository_id=? AND d.number=? AND d.kind=?`).bind(body.resourceId, body.issueId, row.id, body.number, body.pullRequest ? 'pull' : 'issue').first();
   if (!comment || comment.author_id !== person.id && row.role !== 'admin') deny();
-  const now = new Date().toISOString(), operation = { operationId: body.operationId, kind: 'DISCUSSION_RESOURCE_OPERATION_KIND_' + kind, phase: 'DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED', repository: { owner: env.WORKSPACE_SLUG, name: row.name }, repositoryId: String(row.id), resourceId: body.resourceId, observedResourceId: body.resourceId, expectedRevision: body.expectedRevision, issueId: body.issueId, number: body.number, pullRequest: !!body.pullRequest, createdAt: now, updatedAt: now };
+  const now = new Date().toISOString(), operation = { operationId: body.operationId, kind: 'DISCUSSION_RESOURCE_OPERATION_KIND_' + kind, phase: 'DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED', repository: { owner: ownerSlug(row,env), name: row.name }, repositoryId: String(row.id), resourceId: body.resourceId, observedResourceId: body.resourceId, expectedRevision: body.expectedRevision, issueId: body.issueId, number: body.number, pullRequest: !!body.pullRequest, createdAt: now, updatedAt: now };
   const refuse = async () => {
     operation.phase = 'DISCUSSION_RESOURCE_OPERATION_PHASE_REJECTED'; operation.failureCode = 'preflight_refused'; operation.observedResourceId = '';
     await db.prepare('INSERT INTO discussion_resource_operations VALUES(?,?,?,?,?)').bind(person.id, body.operationId, row.id, hash, JSON.stringify(operation)).run();

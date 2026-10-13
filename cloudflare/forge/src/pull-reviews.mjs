@@ -1,3 +1,4 @@
+import { ownerSlug } from './owners.mjs';
 import { digest, uuidOK, deny, invalid, Fault, user } from './common.mjs';
 import { sha } from './git.mjs';
 import { pullReviewContext, review } from './collaboration.mjs';
@@ -10,7 +11,7 @@ export async function pullMergeObservation(db,env,person,row,body,artifact) {
   const {current}=await pullReviewContext(db,env,person,row,selected,artifact);
   if(current.revision!==body.expectedPullRevision || current.head.commitId!==selected.headCommitId || current.base.commitId!==selected.baseCommitId) throw new Fault('failed_precondition',412,'The pull request changed. Refresh before inspecting it.');
   const rule=await branchLockObservation(db,row,current.base.ref);
-  const source=current.head.retainedSnapshot?{}:{sourceRepository:{owner:env.WORKSPACE_SLUG,name:row.name},sourceRepositoryId:String(row.id),sourceOwnerId:String(row.workspace_id),source:{kind:'REPOSITORY_SOURCE_REF_KIND_BRANCH',name:current.head.ref,commitId:current.head.commitId}};
+  const source=current.head.retainedSnapshot?{}:{sourceRepository:{owner:ownerSlug(row,env),name:row.name},sourceRepositoryId:String(row.id),sourceOwnerId:String(row.workspace_id),source:{kind:'REPOSITORY_SOURCE_REF_KIND_BRANCH',name:current.head.ref,commitId:current.head.commitId}};
   const observation={selection:selected,pullRevision:current.revision,targetOwnerId:String(row.workspace_id),...source,
     ...(current.base.retainedSnapshot?{}:{base:{kind:'REPOSITORY_SOURCE_REF_KIND_BRANCH',name:current.base.ref,commitId:current.base.commitId},nativeCallerCanMerge:false}),
     targetProtection:'PULL_MERGE_TARGET_PROTECTION_'+(current.base.retainedSnapshot?'UNKNOWN':rule.locked?'PROTECTED':'UNPROTECTED'),
@@ -79,7 +80,7 @@ export async function pullReviews(db,env,person,row,request,method,body,artifact
     if(!uuidOK(body.operationId)) invalid('Use the original UUID v4 operation ID.');
     if(submit) {
       if(!revisionOK(body.expectedPullRevision)) invalid('Use the observed pull request revision.');
-      const common={repository:{owner:env.WORKSPACE_SLUG,name:row.name},repositoryId:body.repositoryId,pullRequestId:body.pullRequestId,number:body.number,expectedPullRevision:body.expectedPullRevision,operationId:body.operationId};
+      const common={repository:{owner:ownerSlug(row,env),name:row.name},repositoryId:body.repositoryId,pullRequestId:body.pullRequestId,number:body.number,expectedPullRevision:body.expectedPullRevision,operationId:body.operationId};
       if(kind==='request') {
         if(!revisionOK(body.expectedRequestsRevision)||!idOK(body.reviewerId)||typeof body.reviewerLogin!=='string'||!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(body.reviewerLogin)||body.requestReview!==undefined&&typeof body.requestReview!=='boolean'||body.reviewerTeam!==undefined&&body.reviewerTeam!==false) invalid('Select an enrolled account, exact requests revision and request/cancel action. Teams are not supported.');
         original={...common,expectedRequestsRevision:body.expectedRequestsRevision,reviewerId:body.reviewerId,reviewerLogin:body.reviewerLogin,requestReview:Boolean(body.requestReview),reviewerTeam:false};

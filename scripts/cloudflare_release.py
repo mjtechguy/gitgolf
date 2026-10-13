@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -117,6 +117,8 @@ class Release:
             self.check_pull_reviews_schema()
         if self.manifest['schema'] >= 19:
             self.check_runner_schema()
+        if self.manifest['schema'] >= 21:
+            self.check_owner_schema()
         deployments = self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -187,7 +189,36 @@ class Release:
             self.migrate_pull_reviews(applied)
         if self.manifest['schema'] >= 19:
             self.migrate_runner_schema(applied)
+        if self.manifest['schema'] >= 21:
+            self.migrate_owner_schema(applied)
         return applied or 'already-applied'
+
+    def check_owner_schema(self):
+        required = {'native_owners': {'id','slug','kind','user_id','full_name','description','creator_id','creation_key','input_hash'},
+                    'native_owner_members': {'owner_id','user_id','role'}, 'repository_owners': {'repository_id','owner_id'}}
+        for table, fields in required.items():
+            rows = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info(' + table + ')')[0]['results']
+            if {row['name'] for row in rows} != fields:
+                raise ValueError('Apply reviewed 0021 repository owner migration before releasing')
+
+    def migrate_owner_schema(self, applied):
+        sql = (ROOT / 'cloudflare/forge/migrations/0021_repository_owners.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0021') not in (None, digest):
+            raise ValueError('Recorded owner migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        prefixes = ['CREATE TABLE IF NOT EXISTS native_owners (', 'CREATE TABLE IF NOT EXISTS native_owner_members (', 'CREATE TABLE IF NOT EXISTS repository_owners (', 'CREATE INDEX IF NOT EXISTS repository_owners_owner ON repository_owners(']
+        if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement,prefix in zip(statements,prefixes)):
+            raise ValueError('Owner migration must only add reviewed tables and index')
+        ready = False
+        try:
+            self.check_owner_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0021') != digest or not ready:
+            self.command('d1','query',self.manifest['database'],'--sql',';\n'.join(statements)+';')
+            self.check_owner_schema()
+            self.state['migration0021'] = digest; self.save(); applied.append('0021')
 
     def check_access_schema(self):
         required = {'repository_access_versions': {'repository_id', 'version'},

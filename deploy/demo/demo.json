@@ -1,0 +1,126 @@
+{
+  "schema": "golf.demo.deployment.v1",
+  "personal": {
+    "login": "mj",
+    "fullName": "Mike Johnson",
+    "bio": "Building developer tools, cloud platforms and useful experiments.",
+    "website": "https://mjtechguy.com"
+  },
+  "organizations": [
+    {
+      "slug": "mj-platform",
+      "fullName": "MJ Platform",
+      "description": "Shared web foundations, application infrastructure and reliable delivery."
+    },
+    {
+      "slug": "mj-labs",
+      "fullName": "MJ Labs",
+      "description": "Developer tooling, command-line experiments and automation."
+    }
+  ],
+  "repositories": [
+    {
+      "owner": "mj",
+      "name": "requests",
+      "upstream": "https://github.com/psf/requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60"
+    },
+    {
+      "owner": "mj",
+      "name": "flask",
+      "upstream": "https://github.com/pallets/flask",
+      "commit": "d086db856be187255b8ec61ef409357393020f32"
+    },
+    {
+      "owner": "mj",
+      "name": "httpx",
+      "upstream": "https://github.com/encode/httpx",
+      "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254"
+    },
+    {
+      "owner": "mj",
+      "name": "starlette",
+      "upstream": "https://github.com/encode/starlette",
+      "commit": "96d5023c55b29224edb8d684868c49f681d079a9"
+    },
+    {
+      "owner": "mj",
+      "name": "click",
+      "upstream": "https://github.com/pallets/click",
+      "commit": "2247b35ea1c47c727d7a06e51fa280e12a863ff6"
+    },
+    {
+      "owner": "mj",
+      "name": "rich",
+      "upstream": "https://github.com/Textualize/rich",
+      "commit": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f"
+    },
+    {
+      "owner": "mj",
+      "name": "pytest",
+      "upstream": "https://github.com/pytest-dev/pytest",
+      "commit": "c9c19f8e62c12834ad83193a1869cc82fe9c700e"
+    },
+    {
+      "owner": "mj",
+      "name": "pydantic",
+      "upstream": "https://github.com/pydantic/pydantic",
+      "commit": "3eca5695dabc5a451ccfc0f4afa802166e61e27a",
+      "dependencies": [
+        {
+          "name": "pydantic_core-2.50.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+          "url": "https://files.pythonhosted.org/packages/f0/14/7122b78e9915e7dd50f9dcec6041a4e32874907b41b9e0880db2f1c7ae1a/pydantic_core-2.50.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+          "sha256": "ac223ea031905319a64d0df116979ae438b42d6265862a3d63c9f9808c2905a7"
+        }
+      ]
+    },
+    {
+      "owner": "mj",
+      "name": "attrs",
+      "upstream": "https://github.com/python-attrs/attrs",
+      "commit": "644b4e165bfbeee7e127de6fcbda08b64014316f"
+    },
+    {
+      "owner": "mj",
+      "name": "fastapi",
+      "upstream": "https://github.com/fastapi/fastapi",
+      "commit": "f5c6e9b4f9cadc1bf0f9a1fd672e621206b63007"
+    },
+    {
+      "owner": "mj-platform",
+      "name": "werkzeug",
+      "upstream": "https://github.com/pallets/werkzeug",
+      "commit": "15fc22b699ecacd04824092453c0cd2a8c4a3a67"
+    },
+    {
+      "owner": "mj-platform",
+      "name": "jinja",
+      "upstream": "https://github.com/pallets/jinja",
+      "commit": "5ef70112a1ff19c05324ff889dd30405b1002044"
+    },
+    {
+      "owner": "mj-platform",
+      "name": "itsdangerous",
+      "upstream": "https://github.com/pallets/itsdangerous",
+      "commit": "672971d66a2ef9f85151e53283113f33d642dabd"
+    },
+    {
+      "owner": "mj-labs",
+      "name": "typer",
+      "upstream": "https://github.com/fastapi/typer",
+      "commit": "b15210b71a5b9b35be82a1ffdb172ef7b3a89d85"
+    },
+    {
+      "owner": "mj-labs",
+      "name": "tenacity",
+      "upstream": "https://github.com/jd/tenacity",
+      "commit": "32ac68f0941319c0d2f4fb927f96e4ee29bb46c6"
+    },
+    {
+      "owner": "mj-labs",
+      "name": "structlog",
+      "upstream": "https://github.com/hynek/structlog",
+      "commit": "5686b0a6cf81505a71db7c69b3aee84d3a7730e0"
+    }
+  ]
+}

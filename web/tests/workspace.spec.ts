@@ -68,7 +68,7 @@ test('Access installations offer the enrolled sign-in path and no disabled passw
   await expect(page.getByText('Contact your installation administrator to enable sign-in.')).toHaveCount(0);
   state.signedIn = true;
   await page.getByRole('button', { name: 'Continue with Cloudflare Access' }).click();
-  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 1 })).toBeVisible();
   expect(state.passwordCalls).toBe(0); expect(state.beginCalls).toBe(0);
 });
 
@@ -81,7 +81,7 @@ test('ordinary sign-in offers Golf credentials without provider token authentica
   await page.getByLabel('Email or username', { exact: true }).fill('admin@golfgit.local');
   await page.getByLabel('Password', { exact: true }).fill('private-password-fixture');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 1 })).toBeVisible();
   expect(state.receivedUsername).toBe('admin@golfgit.local');
   expect(state.passwordCalls).toBe(1); expect(state.receivedToken).toBe('');
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('private-password-fixture');
@@ -105,7 +105,7 @@ test('Golf password sign-in clears the password while pending, prevents duplicat
   expect(state.passwordCalls).toBe(1);
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('private-password-fixture');
   release();
-  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 1 })).toBeVisible();
   expect(state.receivedUsername).toBe('alex'); expect(state.receivedPassword).toBe('private-password-fixture');
   await expect(page.getByText('Instance administrator', { exact: true })).toHaveCount(0);
   await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -296,7 +296,7 @@ test('OAuth initiation failures and unsafe destinations stay inline without navi
   await page.getByLabel('Email or username', { exact: true }).fill('alex');
   await page.getByLabel('Password', { exact: true }).fill('private-password-fixture');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 1 })).toBeVisible();
 });
 
 test('unconfigured and unavailable sign-in options show honest disabled state and allow retry', async ({ page }) => {
@@ -334,7 +334,7 @@ test('OAuth callback failures show only a generic error and never interrupt an a
   await expect(page.getByRole('alert')).toHaveCount(0);
   state.signedIn = true;
   await page.goto('/?auth_error=oauth_failed');
-  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
@@ -365,7 +365,7 @@ for (const width of [320, 390]) for (const theme of ['dark', 'light']) {
     await page.getByLabel('Email or username', { exact: true }).fill('admin@golfgit.local');
     await page.getByLabel('Password', { exact: true }).fill('private-mobile-fixture');
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 1 })).toBeVisible();
     expect(state.passwordCalls).toBe(1); expect(state.receivedToken).toBe('');
   });
 }

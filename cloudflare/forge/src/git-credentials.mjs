@@ -1,3 +1,4 @@
+import { ownerSlug } from './owners.mjs';
 import { digest, deny, invalid, Fault, page } from './common.mjs';
 
 export const gitCredentialMethods = new Set(['GetGitTransport','CreateGitCredential','ListGitCredentials','RevokeGitCredential']);
@@ -49,7 +50,7 @@ export async function gitCredentials(db,env,person,row,request,method,body) {
  const values=[row.id,row.artifact_name,person.id,row.role,generation,person.identity_version||0];
  const current=async()=>{if(!await db.prepare(`SELECT 1 WHERE ${guard}`).bind(...values).first())deny();};
  if (method==='GetGitTransport') {
-  await current();return {repository:body.repository,repositoryId:String(row.id),ownerId:String(row.workspace_id),enabled:true,cloneUrl:env.PUBLIC_ORIGIN+'/git/'+env.WORKSPACE_SLUG+'/'+row.name+'.git',readCredentialAvailable:true,
+  await current();return {repository:body.repository,repositoryId:String(row.id),ownerId:String(row.workspace_id),enabled:true,cloneUrl:env.PUBLIC_ORIGIN+'/git/'+ownerSlug(row,env)+'/'+row.name+'.git',readCredentialAvailable:true,
    writeCredentialAvailable:['write','admin'].includes(row.role),writeNotice:'Repository-only HTTPS credentials expire within one hour. Current Golf account and repository access are required; changing either revokes existing credentials. Access remains the outer gate: Git clients also need an approved Access session or machine credential. Pushes obey branch locks and tag restrictions; single-ref SHA-1 pushes are limited to 8 MiB.'};
  }
  if (method==='ListGitCredentials') {

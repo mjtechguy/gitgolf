@@ -2,11 +2,15 @@ import { Fault, deny, invalid } from './common.mjs';
 import { bounded, sha } from './git.mjs';
 
 const limit = 256 * 1024;
-const hosts = ['raw.githubusercontent.com', 'img.shields.io', 'avatars.githubusercontent.com', 'user-images.githubusercontent.com', 'github.githubassets.com', 'badgen.net', 'expressjs.com', 'sindresorhus.com', 'api.securityscorecards.dev', 'github.com', 'vite.dev', 'sponsors.vite.dev'];
+// Global Workers fetch uses public egress only; never route image reads through VPC bindings.
+export function publicImageHost(host) {
+  return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}$/.test(host) &&
+    !/(?:^|\.)(?:localhost|local|internal|invalid|test|onion)$/.test(host);
+}
 export function externalImageURL(reference) {
   let url; try { url = new URL(reference); } catch { invalid('Unsupported external image URL.'); }
   if (reference.length > 2048 || /[\x00-\x20\x7f\\]/.test(reference) || !/^https:\/\/[a-z\d.-]+(?:[/?]|$)/.test(reference) ||
-      url.protocol !== 'https:' || url.username || url.password || url.port || url.hash || !hosts.includes(url.host)) invalid('Unsupported external image URL.');
+      url.protocol !== 'https:' || url.username || url.password || url.port || url.hash || !publicImageHost(url.host)) invalid('Unsupported external image URL.');
   return url;
 }
 export function repositoryImagePath(document, reference, literalPath) {

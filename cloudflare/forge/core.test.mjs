@@ -157,6 +157,10 @@ test('repository inventories overlap four provider reads, preserve order and nev
   assert.equal(maximum, 4); assert.deepEqual(all.repositories.map(row => row.name), Array.from({length:7}, (_, i) => 'project-' + i));
   const reader = await (await f.call('ListRepositories', {}, readerToken)).json();
   assert.deepEqual(reader.repositories.map(row => row.id), ['1']);
+  f.env.ARTIFACTS.get = () => { throw Error('Inventory must not open Git storage'); };
+  const metadata = await (await f.call('ListRepositories', { metadataOnly: true }, readerToken)).json();
+  assert.deepEqual(metadata.repositories.map(row => row.id), ['1']);
+  assert.equal(Object.hasOwn(metadata.repositories[0], 'empty'), false);
 });
 
 test('imported default branches drive metadata, source resolution, history and settings revisions', async t => {
@@ -1143,10 +1147,17 @@ async function deliveryFixture(t) {
 
 test('tested native preview publication is immutable, replay-bound and private to current repository readers', async t => {
   const f = await deliveryFixture(t);
+  const published = [];
+  f.env.EVIDENCE_DAILY_LIMIT = '40';
+  f.env.previewChanged = id => {
+    assert.equal(f.sql.prepare('SELECT state FROM previews WHERE repository_id=?').get(id).state, 'READY');
+    published.push(String(id));
+  };
   assert.equal((await f.preview(f.publication, readerToken)).status, 404);
   const preview = (await value(await f.preview(f.publication))).preview;
   assert.equal(preview.state, 'READY'); assert.equal(preview.commitId, f.selection.headCommitId);
   assert.equal((await value(await f.preview(f.publication))).preview.id, preview.id);
+  assert.deepEqual(published, ['1']);
   assert.equal(f.sql.prepare('SELECT count(*) AS n FROM previews').get().n, 1);
   assert.equal((await f.preview({ ...f.publication, jobId: nonce() })).status, 409);
   const { grant } = await value(await f.preview({ action: 'grant', previewId: preview.id }, readerToken));
@@ -1510,6 +1521,7 @@ test('bounded reads overlap while a queued revocation fences later reads, includ
   finishWrite(); await Promise.all([revoke, after]); assert.equal(events.at(-1), 'read-after'); assert.equal(maximum, 8);
   const request = method => new Request('https://golf.example.com/rpc/golf.v1.RepositoryService/' + method, { method: 'POST' });
   assert.equal(concurrentRead(request('GetContents')), true);
+  assert.equal(concurrentRead(request('GetRepositoryFileIndex')), true);
   for (const method of ['CreateRepository', 'SetRepositoryStar', 'Unknown']) assert.equal(concurrentRead(request(method)), false);
   assert.equal(concurrentRead({ci:true}), false);
 });
@@ -2811,4 +2823,91 @@ test('CI registry broker requires an admitted exact-source job and never forward
   f.setRefs([['refs/heads/main',commit],['refs/heads/feature','c'.repeat(40)]]);
   assert.equal((await testRegistry(f.env,job.id,request())).status,403);
   assert.equal(forwarded,2);
+});
+
+test('managed package inventory joins real D1 source receipts and rejects mismatched image provenance', async t => {
+  const f = await evidenceFixture(t); allocateTests(f);
+  const name='a'.repeat(32)+'/golf-demo-r1', imageDigest='sha256:'+'d'.repeat(64);
+  let artifact;
+  Object.assign(f.env, { REGISTRY_PROVIDER:'cloudflare', REGISTRY_CI_ENABLED:'true', REGISTRY_ORIGIN:'https://registry.cloudflare.com', REGISTRY_ACCOUNT:'a'.repeat(32), REGISTRY_REPOSITORY_PREFIX:'a'.repeat(32)+'/golf-demo-r',
+    REGISTRY:{manage:async input=>({enabled:true,provider:'cloudflare',registry:'https://registry.cloudflare.com',name:input.binding.name,imageRepository:name,artifacts:[{...artifact}]})} });
+  const job=(await value(await f.evidence({...f.input,advice:false,runTests:true}))).job;
+  const selected=JSON.parse(f.sql.prepare('SELECT snapshot FROM evidence_jobs WHERE id=?').get(job.id).snapshot).selection;
+  const tests={state:'PASSED',cleanup:'destroyed',jobId:job.id,commitId:selected.headCommitId,finishedAt:Date.now(),image:{digest:imageDigest,repository:name}};
+  f.sql.prepare("UPDATE evidence_jobs SET state='SUCCEEDED',test_state='PASSED',test_result=? WHERE id=?").run(JSON.stringify(tests),job.id);
+  artifact={tag:'ci-'+job.id,digest:imageDigest,mediaType:'application/vnd.oci.image.manifest.v1+json',platforms:[],size:123,publishedAt:''};
+  const read=()=>handle(new Request(f.env.PUBLIC_ORIGIN+'/native/repository-packages',{method:'POST',headers:{Authorization:'Bearer '+ownerToken,'Content-Type':'application/json','Connect-Protocol-Version':'1'},body:JSON.stringify({repository:selected.repository,repositoryId:selected.repositoryId,action:'status'})}),f.env);
+  let response=await read(); assert.equal(response.status,200,await response.clone().text());
+  const inventory=await response.json();assert.deepEqual(inventory.artifacts[0].build,{jobId:job.id,commitId:selected.headCommitId,pullNumber:selected.number});
+  assert.equal(inventory.artifacts[0].publishedAt,new Date(tests.finishedAt).toISOString());
+  artifact.digest='sha256:'+'e'.repeat(64);assert.equal((await (await read()).json()).artifacts[0].build,undefined);
+  f.sql.exec('UPDATE users SET active=0 WHERE id=1');response=await read();assert.equal(response.status,401);assert.ok(!(await response.text()).includes(selected.headCommitId));
+});
+
+test('managed registry admission uses immutable repository IDs and fences cross-job writes, stale source and revoked users', async t => {
+  const { testRegistry, registryExecution } = await import('./src/core.mjs');
+  const { registryAuthority } = await import('./src/repository-settings.mjs');
+  const { managedRegistry, managedOrigin } = await import('./src/managed-registry.mjs');
+  const f = await evidenceFixture(t); allocateTests(f);
+  const account = 'a'.repeat(32), name = account + '/golf-demo-r1';
+  Object.assign(f.env, { REGISTRY_PROVIDER: 'cloudflare', REGISTRY_CI_ENABLED: 'true', REGISTRY_ORIGIN: managedOrigin, REGISTRY_ACCOUNT: account,
+    REGISTRY_REPOSITORY_PREFIX: account + '/golf-demo-r', REGISTRY_API_TOKEN: { get: async () => 'private-api-token' } });
+  f.env.REGISTRY = managedRegistry(f.env, input => registryAuthority(f.env, input));
+  let forwarded = 0;
+  f.env.registryProviderFetch = async (url, options) => {
+    if (url.startsWith('https://api.cloudflare.com/')) return Response.json({ success: true, result: { account_id: account, registry_host: 'registry.cloudflare.com', username: 'operator', password: 'private-registry-token' } });
+    forwarded++; assert.equal(options.headers.get('Authorization'), 'Basic ' + btoa('operator:private-registry-token'));
+    assert.equal(options.headers.get('Cookie'), null); return new Response(null, { status: 404 });
+  };
+  const job = (await value(await f.evidence({ ...f.input, advice: false, runTests: true }))).job;
+  const stored = f.sql.prepare('SELECT * FROM evidence_jobs WHERE id=?').get(job.id), snapshot = JSON.parse(stored.snapshot);
+  assert.equal(snapshot.execution.registry.name, name);
+  const request = (suffix, method = 'GET', body) => new Request(managedOrigin + '/v2/' + name + '/' + suffix, { method, body, headers: { Authorization: 'Bearer caller', Cookie: 'private' } });
+  assert.equal((await testRegistry(f.env, job.id, request('manifests/ci-' + job.id))).status, 403);
+  await f.advance(job.id, 'tests');
+  assert.equal((await testRegistry(f.env, job.id, request('manifests/ci-' + job.id))).status, 404);
+  for (const suffix of ['manifests/latest', 'tags/list', 'blobs/uploads/?mount=sha256:' + 'b'.repeat(64) + '&from=other']) {
+    assert.equal((await testRegistry(f.env, job.id, request(suffix, 'POST'))).status, 403);
+  }
+  assert.equal(forwarded, 1);
+  const row = f.sql.prepare('SELECT * FROM repositories WHERE id=1').get();
+  const execution = { contract: 'golf.registry-job.v1', jobId: job.id, commitId: snapshot.execution.commitId, policySha256: snapshot.execution.policySha256, expiresAt: Date.parse(stored.expires_at) };
+  assert.equal(await registryExecution(f.env, '1', row, execution), true);
+  f.sql.exec('UPDATE users SET active=0 WHERE id=1');
+  assert.equal((await testRegistry(f.env, job.id, request('manifests/ci-' + job.id))).status, 403);
+  assert.equal(forwarded, 1);
+});
+
+test('personal ownership and organizations preserve repository identity and fence foreign owners', async t => {
+  const f = await fixture(t); await f.create(); await f.sendPush();
+  const manage = (body,token=ownerToken) => f.call('',body,token,'/native/owners');
+  const adoption = {action:'ensurePersonal',userId:'1',expectedLogin:'alice',login:'mj'};
+  assert.equal((await manage({...adoption,userId:'2'})).status,400);
+  assert.equal((await manage(adoption,readerToken)).status,404);
+  assert.equal((await manage(adoption)).status,200);
+  assert.equal((await manage(adoption)).status,200);
+  const personal={owner:'mj',name:'project'};
+  assert.equal((await f.call('GetRepository',{repository:{owner:'alice',name:'project'}})).status,404);
+  const repository=(await (await f.call('GetRepository',{repository:personal})).json()).repository;
+  assert.equal(repository.id,'1');assert.equal(repository.fullName,'mj/project');assert.match(repository.cloneUrl,/\/git\/mj\/project\.git$/);
+  const access=(await (await f.call('GetRepositoryAccess',{repository:personal},ownerToken,'/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess')).json()).access;
+  assert.equal(access.owner.login,'mj');assert.equal(access.organizationOwned,false);
+  const input={action:'createOrganization',slug:'mj-platform',fullName:'MJ Platform',description:'Shared services',idempotencyKey:crypto.randomUUID()};
+  const organization=await (await manage(input)).json();assert.equal((await manage(input)).status,200);
+  assert.equal((await manage({...input,description:'changed'})).status,409);
+  const orgs=token=>f.call('ListOrganizations',{},token,'/rpc/golf.v1.OrganizationService/ListOrganizations');
+  assert.deepEqual((await (await orgs(ownerToken)).json()).organizations.map(o=>o.name),['mj-platform']);
+  assert.deepEqual((await (await orgs(readerToken)).json()).organizations,[]);
+  assert.equal((await manage({action:'listMembers',organization:'mj-platform'},readerToken)).status,404);
+  const members=await (await manage({action:'listMembers',organization:'mj-platform'})).json();assert.equal(members.members[0].login,'mj');assert.equal(members.members[0].role,'owner');
+  const creation={owner:'mj-platform',name:'api',private:true,idempotencyKey:crypto.randomUUID()};
+  f.sql.exec('UPDATE users SET can_create=1 WHERE id=2');
+  assert.equal((await f.call('CreateRepository',creation,readerToken)).status,404);
+  const created=await (await f.call('CreateRepository',creation)).json();assert.equal(created.repository.fullName,'mj-platform/api');
+  assert.equal((await f.call('GetRepository',{repository:{owner:'mj',name:'api'}})).status,404);
+  const inventory=await (await f.call('ListRepositories',{owner:'mj-platform',metadataOnly:true})).json();assert.deepEqual(inventory.repositories.map(r=>r.fullName),['mj-platform/api']);
+  assert.equal((await f.call('CreateRepository',creation)).status,200);
+  f.sql.prepare('DELETE FROM native_owner_members WHERE owner_id=?').run(organization.owner.id);
+  assert.equal((await f.call('CreateRepository',{...creation,name:'another',idempotencyKey:crypto.randomUUID()})).status,404);
+  assert.deepEqual((await (await orgs(ownerToken)).json()).organizations,[]);
 });

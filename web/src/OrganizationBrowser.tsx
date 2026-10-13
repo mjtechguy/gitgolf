@@ -1,3 +1,5 @@
+import { nativeAPI } from './NativeForge';
+import { DataTable } from './DataTable';
 import { useRuntimeCapabilities } from './useRuntimeCapabilities';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
@@ -84,6 +86,13 @@ function TeamDetail({ organization, teamId, queryKey }: { organization: string; 
   </>;
 }
 
+function NativeOrganizationMembers({ organization, userId }: { organization: string; userId: string }) {
+  const query = useQuery({ ...privateQuery, queryKey: ['native-organization-members',userId,organization], queryFn: ({ signal }) => nativeAPI<{ members: {id:number;login:string;fullName:string;role:string}[];truncated:boolean }>('/native/owners',{action:'listMembers',organization},signal) });
+  return <section className="browser-panel organization-panel"><div className="browser-panel-heading"><h2>Members</h2><Refresh label="Refresh members" busy={query.isFetching} refresh={() => void query.refetch()}/></div>
+    {query.error ? <Failure error={query.error} retry={() => void query.refetch()}/> : !query.data || query.isFetching ? <Loading label="Loading members…"/> : <><DataTable data={query.data.members} columns={[{id:'member',accessorFn: member => `${member.login} ${member.fullName}`,header:'Member',cell: info => <><strong>{info.row.original.login}</strong><small>{info.row.original.fullName}</small></>},{accessorKey:'role',header:'Role'}]} getRowId={m=>String(m.id)} label="organization members"/>{query.data.truncated && <p className="panel-footnote">Showing the first 100 members.</p>}</>}
+  </section>;
+}
+
 function OrganizationDetail({ organization: name, teamId, userId }: { organization: string; teamId?: string; userId: string }) {
   const runtime = useRuntimeCapabilities();
   const native = runtime.data?.runtimeProfile === 'cloudflare-native';
@@ -97,10 +106,9 @@ function OrganizationDetail({ organization: name, teamId, userId }: { organizati
   return <><Link to="/organizations" className="text-button repository-back"><ArrowLeft size={15} />All organizations</Link>
     {query.isError ? <Failure error={query.error} retry={() => void query.refetch()} /> : !organization ? <Loading label="Opening organization…" /> : <>
       <header className="repository-intro"><div><span className="eyebrow">ORGANIZATION</span><h1><Building2 size={29} />{organization.name}<span className="visibility">{OrganizationVisibility[organization.visibility]?.toLowerCase() || 'unknown'}</span></h1>{organization.fullName ? <p>{organization.fullName}</p> : null}<p>{organization.description || 'No description provided.'}</p></div><div className="panel-actions"><Link className="button secondary" to="/organizations/$organization/settings" params={{ organization: organization.name }}>Settings</Link><Refresh label="Refresh organization access" busy={query.isFetching} refresh={() => void query.refetch()} /></div></header>
-      <p className="organization-guidance">Golf requires your membership to browse this organization. Visibility labels describe organization settings; they do not grant access to this Golf page. Your account must have permission to read the organization and its teams.</p>
-      {native && !teamId ? <PagedPanel title="Repositories" queryKey={[...queryKey, 'repositories']} empty="No accessible repositories in this workspace."
-        load={async (page, signal) => { const response = await repositoryClient.listRepositories({ page: { page, limit: 20 } }, { signal, timeoutMs: 8000 }); return { items: response.repositories.filter(r => r.fullName.startsWith(name + '/')), page: response.page }; }}
-        render={repository => <><h3><Link {...repositoryOptions({ owner: name, name: repository.name })}>{repository.fullName}</Link></h3><p>{repository.description || 'No description provided.'}</p></>} /> : teamId ? <TeamDetail key={teamId} organization={name} teamId={teamId} queryKey={queryKey} /> : <PagedPanel title="Teams" queryKey={[...queryKey, 'teams']} empty="No visible teams in the loaded pages."
+      {native && !teamId ? <div className="organization-overview"><PagedPanel title="Repositories" queryKey={[...queryKey, 'repositories']} empty="No accessible repositories in this workspace."
+        load={async (page, signal) => { const response = await repositoryClient.listRepositories({ owner: name, metadataOnly: true, page: { page, limit: 20 } }, { signal, timeoutMs: 8000 }); return { items: response.repositories.filter(r => r.fullName.startsWith(name + '/')), page: response.page }; }}
+        render={repository => <><h3><Link {...repositoryOptions({ owner: name, name: repository.name })}>{repository.fullName}</Link></h3><p>{repository.description || 'No description provided.'}</p></>} /><NativeOrganizationMembers organization={name} userId={userId}/></div> : teamId ? <TeamDetail key={teamId} organization={name} teamId={teamId} queryKey={queryKey} /> : <PagedPanel title="Teams" queryKey={[...queryKey, 'teams']} empty="No visible teams in the loaded pages."
         load={async (page, signal) => { const response = await organizationClient.listTeams({ organization: name, page: { page, limit: 20 } }, { signal, timeoutMs: 8_000 }); return { items: response.teams, page: response.page }; }}
         render={(team) => <><div className="organization-row-title"><h3><Link {...organizationOptions({ organization: name, team: team.id })}>{team.name}</Link></h3><span className="visibility">{TeamVisibility[team.visibility]?.toLowerCase() || 'unknown'}</span></div><p>{team.description || 'No description provided.'}</p><p className="organization-native-permission">Native permission: {permission(team.permission)}</p></>} />}
     </>}

@@ -5967,8 +5967,13 @@ func (*LogoutResponse) Descriptor() ([]byte, []int) {
 }
 
 type ListRepositoriesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Page          *PageRequest           `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Page  *PageRequest           `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
+	// Skip source observations for inventories. GetRepository must be used before
+	// browsing source; empty is not observed in a metadata-only response.
+	MetadataOnly bool `protobuf:"varint,2,opt,name=metadata_only,json=metadataOnly,proto3" json:"metadata_only,omitempty"`
+	// Optional owner filter, applied before pagination by the native backend.
+	Owner         string `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6008,6 +6013,20 @@ func (x *ListRepositoriesRequest) GetPage() *PageRequest {
 		return x.Page
 	}
 	return nil
+}
+
+func (x *ListRepositoriesRequest) GetMetadataOnly() bool {
+	if x != nil {
+		return x.MetadataOnly
+	}
+	return false
+}
+
+func (x *ListRepositoriesRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
 }
 
 type ListRepositoriesResponse struct {
@@ -6072,8 +6091,10 @@ type CreateRepositoryRequest struct {
 	// the same account/key with different inputs is rejected. Keys do not expire.
 	IdempotencyKey string `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Optional public GitHub/GitLab source; credentialed/connected migration is separate.
-	SourceUrl     string `protobuf:"bytes,5,opt,name=source_url,json=sourceUrl,proto3" json:"source_url,omitempty"`
-	PullMirror    bool   `protobuf:"varint,6,opt,name=pull_mirror,json=pullMirror,proto3" json:"pull_mirror,omitempty"`
+	SourceUrl  string `protobuf:"bytes,5,opt,name=source_url,json=sourceUrl,proto3" json:"source_url,omitempty"`
+	PullMirror bool   `protobuf:"varint,6,opt,name=pull_mirror,json=pullMirror,proto3" json:"pull_mirror,omitempty"`
+	// Native personal/organization owner. Empty selects the current personal owner.
+	Owner         string `protobuf:"bytes,7,opt,name=owner,proto3" json:"owner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6148,6 +6169,13 @@ func (x *CreateRepositoryRequest) GetPullMirror() bool {
 		return x.PullMirror
 	}
 	return false
+}
+
+func (x *CreateRepositoryRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
 }
 
 type CreateRepositoryResponse struct {
@@ -59695,12 +59723,14 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x1bRevokeOtherSessionsResponse\x12#\n" +
 	"\rrevoked_count\x18\x01 \x01(\x04R\frevokedCount\"\x0f\n" +
 	"\rLogoutRequest\"\x10\n" +
-	"\x0eLogoutResponse\"C\n" +
+	"\x0eLogoutResponse\"~\n" +
 	"\x17ListRepositoriesRequest\x12(\n" +
-	"\x04page\x18\x01 \x01(\v2\x14.golf.v1.PageRequestR\x04page\"~\n" +
+	"\x04page\x18\x01 \x01(\v2\x14.golf.v1.PageRequestR\x04page\x12#\n" +
+	"\rmetadata_only\x18\x02 \x01(\bR\fmetadataOnly\x12\x14\n" +
+	"\x05owner\x18\x03 \x01(\tR\x05owner\"~\n" +
 	"\x18ListRepositoriesResponse\x127\n" +
 	"\frepositories\x18\x01 \x03(\v2\x13.golf.v1.RepositoryR\frepositories\x12)\n" +
-	"\x04page\x18\x02 \x01(\v2\x15.golf.v1.PageResponseR\x04page\"\xe3\x01\n" +
+	"\x04page\x18\x02 \x01(\v2\x15.golf.v1.PageResponseR\x04page\"\xf9\x01\n" +
 	"\x17CreateRepositoryRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1d\n" +
@@ -59709,7 +59739,8 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\n" +
 	"source_url\x18\x05 \x01(\tR\tsourceUrl\x12\x1f\n" +
 	"\vpull_mirror\x18\x06 \x01(\bR\n" +
-	"pullMirrorB\n" +
+	"pullMirror\x12\x14\n" +
+	"\x05owner\x18\a \x01(\tR\x05ownerB\n" +
 	"\n" +
 	"\b_private\"\x88\x01\n" +
 	"\x18CreateRepositoryResponse\x123\n" +

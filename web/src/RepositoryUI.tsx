@@ -72,6 +72,9 @@ export const disclosureDismiss = {
 export function Loading({ label }: { label: string }) {
   return <div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />{label}</div>;
 }
+export function PageHeader({ title, description, actions }: { title: string; description: string; actions?: ReactNode }) {
+  return <header className="page-header"><div><h2>{title}</h2><p>{description}</p></div>{actions}</header>;
+}
 export function PanelError({ error, retry }: { error: Error; retry: () => void }) {
   return <div className="panel-error"><p className="error" role="alert">{errorMessage(error)}</p><button type="button" className="button secondary" onClick={retry}><RefreshCw size={15} />Try again</button></div>;
 }

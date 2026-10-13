@@ -1,5 +1,158 @@
 # Golf implementation status
 
+## 2026-10-13 — Access session repair and live PR preview links
+
+The retained demo reproduced a valid human Access session followed by intermittent
+401 responses from Golf's outer Access-context check, including JavaScript assets
+and repository image RPCs. These failures produced blank pages or cleared the
+frontend session. The Worker now verifies the signed Access assertion when runtime
+context is absent, using a configured team issuer, exact audience, RS256 signature,
+required expiry/identity claims and cached public signing keys. Existing runtime
+context remains authoritative; unsigned email headers and cookies alone are refused.
+Golf still checks active enrollment and current repository grants. Signing-key
+service failures remain availability errors rather than signing the user out.
+
+The authentication release passed 283 native tests (one existing skip), workerd
+runtime checks, and signed-in browser navigation through source, packages, profile
+and admin. Fifteen concurrent/batched session reads retained admin access; a request
+without credentials was redirected to Access. The saved deployment records the
+account's team issuer for repeatable setup and release.
+
+Native PR conversations now show one current-commit deployment card above the
+discussion. Each confirmed preview publication immediately emits repository activity;
+the card shares TanStack queries with execution details and uses five-second polling
+only while a visible page lacks a live stream. Current passing jobs, commit identity,
+preview state and expiry filter links; previous commits and revoked/expired previews
+cannot become current deployment links. PR tools now retain their canonical owner
+instead of reconstructing the old installation partition. The preview daily cap
+remains 20 when an installation's evidence allowance is higher. This adapts the
+[Workers Builds fast preview feedback](https://developers.cloudflare.com/changelog/post/2026-10-12-faster-pull-request-comments/)
+to Golf's own PRs without posting to upstream GitHub/GitLab repositories.
+
+The preview changes passed 161 focused native tests, two preview-selection tests,
+the native frontend typecheck/build and real workerd/UI checks. The retained coordinator adopted the release. A real passing canonical CI run
+published a new static preview; its link appeared on the already-open PR 1,067 ms
+after the READY response (2,439 ms after submission), with the stream reporting Live
+and no page reload. Opening the link completed Access and current Golf permission
+checks and served the actual preview. This is one measured publication, not a latency
+SLA. See [session and preview evidence](compatibility/evidence/access-session-preview-links-20261013.json).
+The full browser regression suite was not rerun.
+
+## 2026-10-13 — Denser shared layout and Flare refinement
+
+The shared shell now uses smaller page gutters, headings and section gaps. The
+repository home opens directly with its inventory; desktop rows align branch and
+update metadata beside the name/description. At 1440×1000, the retained 18-repository
+inventory fits 13 complete rows instead of 7, with row height reduced from 95.5 to
+62.5 pixels. Flare keeps its orange identity and blue actions with clearer neutral
+surface levels in light/dark modes, a narrower sidebar and flatter content panels.
+
+Organization repositories and members share a two-column desktop layout that
+stacks on smaller screens. Settings use compact grouped navigation, aligned current
+values and bounded editor widths. Managed-registry settings show configuration and
+link to Packages rather than duplicating its artifact table. Installation allocation
+details mount only when their disclosure opens. Existing TanStack routing, queries,
+forms and shared tables remain in use; no dependency was added.
+
+The reference was GitHub's repository hierarchy and Primer's
+[page layout](https://primer.style/product/components/page-layout/) and
+[grouped navigation](https://primer.style/product/components/nav-list/).
+The changes adapt those information patterns to Golf's existing components.
+
+Native typecheck/build and real workerd UI/Access checks pass. Browser checks use
+the retained APIs through the temporary read-only operator preview, covering home,
+organizations, source, Actions, Packages, PR reading and account/repository settings;
+profile/general editors open and cancel, installation details expand, and Classic,
+Golf and Flare switches work. No page overflow was observed at the sampled 390,
+900 and 1440-pixel widths; mobile primary controls retain 44-pixel targets. The
+main entry bundle decreases from 175.33 to 175.16 KB gzip; CSS increases from 24.70
+to 25.09 KB gzip. Full browser regression and human-only mutation flows were not
+rerun for this visual pass. [Density and live asset evidence](compatibility/evidence/enterprise-ui-density-20261013.json)
+records the deployed Worker release and exact served entry/CSS bytes.
+
+## 2026-10-13 — Repeatable demo and real owner namespaces
+
+The retained demo now uses `mj` / Mike Johnson as the personal owner and retains
+the selected email's operations-admin login. `mj-platform` contains Werkzeug,
+Jinja and ItsDangerous; `mj-labs` contains Typer, Tenacity and structlog. Both have
+persisted owner membership for `mj`. The original ten imported repositories and
+two CI/application playgrounds remain personal. Native schema21 adds owner,
+membership and repository mapping tables; existing Git/DO identities stay stable.
+Repository reads, clone URLs, settings, discussions, CI and package inventories
+resolve the canonical owner. Membership listings and organization repository
+pagination use the current actor's access.
+
+The [deployment recipe](../deploy/demo/README.md) saves the pinned public manifest,
+CI image requirements, create/apply commands, bounded machine-authority renewal and
+owned cleanup. Reapplying the retained receipt verified the same owners, repositories
+and completed CI jobs; all sixteen language/file indexes were primed. A transient
+provider repository-read failure was safely resumed; that read now has bounded
+retries. Shared Secrets Store cleanup preserves unrelated secrets, and old-schema
+preview cleanup retains its legacy owner lookup.
+
+[Sanitized live evidence](compatibility/evidence/demo-owners-20261013.json) records
+the current owner URLs, hosted passing test reports, destroyed test allocations and
+matching managed-registry digests. The six added imports passed local preflight and
+hosted offline wheel-build/functional smoke tests. Browser checks against deployed
+APIs verified both organizations, real member rows and personal/organization package
+pages at desktop and phone widths. The checker used a temporary read-only operator
+proxy; it did not impersonate the human Access login.
+
+Validation: native suite 278 passed / one existing skip, release controller 26
+passed, demo controller/transport/seed/deployment checks 30 passed, focused Go
+repository creation/image tests, native frontend build, real workerd runtime/UI
+checks and capability inventory passed. The saved Python image recipe was rebuilt.
+No second fresh installation was created; complete upstream CI matrices, runnable
+application image builds and general native organization/team administration remain
+open. Current native repository names remain unique across the installation.
+
+## 2026-10-13 — Retained native demo, managed registry and shared UI
+
+The retained installation at https://demo.gitgolf.mjtechguy.com uses Cloudflare's
+managed image registry under [ADR 0010](decisions/0010-cloudflare-managed-image-registry.md).
+The selected login is enrolled as an operations administrator, and the user
+reported signing in. Automated browser acceptance did not impersonate that human
+login. Existing CFCR installations and historical evidence remain unchanged.
+
+[Sanitized live evidence](compatibility/evidence/managed-registry-retained-demo-20261013.json)
+records ten actual GitHub snapshots: requests, Flask, HTTPX, Starlette, Click,
+Rich, pytest, Pydantic, attrs and FastAPI. Their upstream main commit/tree identities
+remain intact. Separate demo-ci branches have real hosted passing offline wheel
+builds and functional smoke tests, destroyed test allocations, and matching
+managed registry digests. The OCI artifacts contain built wheels, source archives
+and JSON reports; they are not runnable application images. Full upstream workflow
+matrices were not executed. Earlier failed/rerun attempts remain in private
+receipts. The original two repositories also passed hosted CI and source-preview
+preparation; preview access remains subject to its lease.
+
+Packages and Actions share a compact page header, the existing TanStack DataTable,
+and global CSS tokens. Packages links verified build/source receipts, provides
+immutable reference copying and places registry coordinates in a disclosure.
+Runner settings leads with its current value and opens a TanStack Form only on
+Change runner. Desktop and phone layouts and runner edit/cancel were checked in
+T3 using the built UI and an authorized live read-only proxy. Its unsupported
+live stream is a preview-proxy limitation. The real runner read returned canEdit.
+No new frontend dependency was added.
+
+Repository lists request authorized metadata without per-repository Git provider
+observations. One live twelve-repository request took 174 ms end to end and 22 ms
+inside the Worker; this is a single observation, not a load benchmark. Fresh HTML
+embeds its already verified session, removing a duplicate bootstrap request.
+Opening a repository pre-reads exact-commit root entries, overview, latest commit
+and README without delaying that response. Language/license and full path indexes
+were primed for the imported main commits; bounded immutable caches keep current
+permission checks. Packages navigation no longer downloads inventory on every page.
+Public HTTPS README images no longer depend on a fixed domain list, while private
+host/IP rejection, byte limits and SVG sanitization remain in place.
+
+Validation: 277 native tests passed with one existing skip; 25 demo-controller tests,
+portable image tests, generated-file checks, the native web build and real local
+workerd/D1/Secrets Store and Access UI checks passed. Latest Worker and workspace
+coordinator releases match. Owned managed CI tags are included in scoped stop
+recovery; cleanup of this retained installation was not executed. Provider tokens
+expire after seven days, source-preview leases after four hours, and resources
+remain retained until explicitly stopped. Alchemy remains optional future work.
+
 ## 2026-10-12 — Disposable CFCR integration and guarded release rehearsal
 
 The [sanitized hosted receipt](compatibility/evidence/cfcr-hosted-rehearsal-20261012.json)

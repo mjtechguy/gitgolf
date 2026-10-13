@@ -411,6 +411,9 @@ func (s *Server) RevokeOtherSessions(ctx context.Context, req *connect.Request[g
 	return connect.NewResponse(&golfv1.RevokeOtherSessionsResponse{RevokedCount: count}), nil
 }
 func (s *Server) ListRepositories(ctx context.Context, req *connect.Request[golfv1.ListRepositoriesRequest]) (*connect.Response[golfv1.ListRepositoriesResponse], error) {
+	if req.Msg.Owner != "" {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("owner-filtered inventory is available on the native backend"))
+	}
 	token, err := rpcToken(ctx)
 	if err != nil {
 		return nil, err
@@ -442,6 +445,9 @@ func wireRepositoryCreation(record database.GolfRepositoryCreation) *golfv1.Repo
 		UpdatedAt: record.UpdatedAt.Format(time.RFC3339Nano), RepositoryId: repositoryID, FailureCode: record.FailureCode, InputSha256: hex.EncodeToString(record.PayloadFingerprint)}
 }
 func (s *Server) CreateRepository(ctx context.Context, req *connect.Request[golfv1.CreateRepositoryRequest]) (*connect.Response[golfv1.CreateRepositoryResponse], error) {
+	if req.Msg.Owner != "" {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("explicit repository ownership is available on the native backend"))
+	}
 	token, err := rpcToken(ctx)
 	if err != nil {
 		return nil, err
