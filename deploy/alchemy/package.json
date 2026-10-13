@@ -1,0 +1,18 @@
+{
+  "name": "golf-alchemy-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc -p . && node --test native-config.test.mjs"
+  },
+  "dependencies": {
+    "@distilled.cloud/cloudflare": "1.0.0-rc.15",
+    "@effect/platform-node": "4.0.4",
+    "alchemy": "2.0.0-beta.83",
+    "effect": "4.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "typescript": "7.0.2"
+  }
+}

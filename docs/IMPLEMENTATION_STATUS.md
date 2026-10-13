@@ -1,5 +1,48 @@
 # Golf implementation status
 
+## 2026-10-13 — Retained demo rebuilt with Alchemy
+
+The authorized Python/`cf` demo was backed up and removed, then replaced at the
+same hostname by a fresh Alchemy installation. The Python installer remains
+available. The [parallel recipe](../deploy/alchemy/README.md) pins Alchemy
+2.0.0-beta.83 and uses the shared native Worker build, Flare UI, approved Python
+runner and demo manifest. Alchemy/Effect are deployment dependencies only.
+
+The replacement contains 18 repositories: 12 under `mj` and three each under
+`mj-platform` and `mj-labs`. All 16 pinned GitHub imports passed their reviewed
+package-build/test profile and published digest-verified OCI artifacts to the
+Cloudflare managed registry. Both playgrounds passed canonical CI and published
+static and Worker previews. Upstream workflow matrices were not executed.
+The human browser session resolves to `mj` with instance administration; machine
+credentials retain ordinary repository authority. Static and Worker previews
+opened through Access and Golf's existing one-time reviewer grants.
+
+The trial caught three deployment differences: Alchemy requires an explicit
+Workflow environment binding, its default Docker provenance index did not start
+this runner, and its `Worker.domain` reconciliation deleted runtime-created
+preview domains on update. The shared Worker now supports both workflow binding
+forms; the deployer disables provenance indexes and verifies the remote runner
+manifest against the approved image. A narrowly owned gateway-domain resource
+preserves application domains; a live repeat deployment confirmed this. A second
+small resource applies the native Workflow concurrency/retention settings omitted
+by this Alchemy beta. Private schema receipts prevent bootstrap SQL replay.
+
+Initial infrastructure provisioning took 68.1 seconds; the final repeat deployment
+took 2.5 seconds, excluding content seeding. Both initial failed CI runs remain in
+history. A local package-preflight permissions failure was repaired and resumed.
+The teardown DNS gap produced cached NXDOMAIN on the user's Mac; flushing its
+resolver restored access. Installation state includes secrets and must remain
+private even when values carry Alchemy `Redacted` labels.
+
+Validation: 284 native tests passed (one existing skip), deployment TypeScript
+checks and two binding/domain tests passed, and 35 Python deployment/seeding tests
+passed. The native frontend build passed. Forty-three native control bindings
+matched the shared build. The new Alchemy destroy wrapper has not been live-tested;
+partial teardown recovery requires inspection. Runtime provider tokens expire
+after seven days; this is a retained experiment, not unattended production
+operations. Full browser regression and arbitrary upstream workflows were not
+rerun. [Deployment evidence](compatibility/evidence/alchemy-demo-20261013.json)
+
 ## 2026-10-13 — Access session repair and live PR preview links
 
 The retained demo reproduced a valid human Access session followed by intermittent

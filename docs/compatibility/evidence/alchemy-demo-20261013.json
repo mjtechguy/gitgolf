@@ -1,0 +1,298 @@
+{
+  "schema": "golf.alchemy.demo.v1",
+  "observed_at": "2026-10-13T18:20:17.952507+00:00",
+  "url": "https://demo.gitgolf.mjtechguy.com",
+  "alchemy_version": "2.0.0-beta.83",
+  "python_cf_installer_preserved": true,
+  "old_installation": {
+    "backup_retained_privately": true,
+    "owned_resources_removed": true
+  },
+  "repository_counts": {
+    "mj": 12,
+    "mj-platform": 3,
+    "mj-labs": 3
+  },
+  "imported_repositories": [
+    {
+      "owner": "mj",
+      "name": "requests",
+      "upstream": "https://github.com/psf/requests",
+      "upstream_commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "abec58584c93cc8650053b7aabca8a007999ff14",
+      "job_id": "f7597c47-bdda-42fb-990a-073830371faa",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:a4ef2de754d71d9fd5f17cdccaf32d1b5f507ef4add6c9567d7a0dd3f2da9008"
+    },
+    {
+      "owner": "mj",
+      "name": "flask",
+      "upstream": "https://github.com/pallets/flask",
+      "upstream_commit": "d086db856be187255b8ec61ef409357393020f32",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "0717a08ee87f1e986795cf46d47e3944aa591642",
+      "job_id": "a10bb399-2c8d-4e10-8a17-0c3d8f36dc2e",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:0253909a1bd12008ee0f2bb56f83daea59a8ab71e5afa976eb370dcbce5af3f4"
+    },
+    {
+      "owner": "mj",
+      "name": "httpx",
+      "upstream": "https://github.com/encode/httpx",
+      "upstream_commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "154394cdb3fbf103cfe474f8791700fb5c61ec56",
+      "job_id": "f865d807-dc33-4a0e-8476-6c44f8a7ce03",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:7c104c3aca5603a2956e0de450017ee7df234ca793873d210a33ad349564aeb7"
+    },
+    {
+      "owner": "mj",
+      "name": "starlette",
+      "upstream": "https://github.com/encode/starlette",
+      "upstream_commit": "96d5023c55b29224edb8d684868c49f681d079a9",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "006d6c2fcfce8d3841705e3a39701379340e5615",
+      "job_id": "c5c15e4c-659e-4a2d-9413-c1507e44ad47",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:8246d2ace202f9ff0cfed92d32f717ffb66ecca5e0838767348ea44c6522bc32"
+    },
+    {
+      "owner": "mj",
+      "name": "click",
+      "upstream": "https://github.com/pallets/click",
+      "upstream_commit": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "1774888ccccb878be245a75be9d25f61c4879426",
+      "job_id": "d468d3ee-4d42-4f49-9f46-03093d48fcfb",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:c33e1e21df3a293c246642bd6226aa8279c378fe26ce941d86da0a8f874f6623"
+    },
+    {
+      "owner": "mj",
+      "name": "rich",
+      "upstream": "https://github.com/Textualize/rich",
+      "upstream_commit": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "343701919cf1de01ee4deb968bf0a0ff2fee7955",
+      "job_id": "b2ee194f-a30b-4ee4-b4ff-166bca04974e",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:1616a79bef3fe394d60dc744f95cb049cd282d64c89b7954174b1cb6f94fd987"
+    },
+    {
+      "owner": "mj",
+      "name": "pytest",
+      "upstream": "https://github.com/pytest-dev/pytest",
+      "upstream_commit": "c9c19f8e62c12834ad83193a1869cc82fe9c700e",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "c5386fda74a60c0229d498db3e10e058b557223d",
+      "job_id": "2f48f514-25a2-4b44-95b0-00ff2a3cec9a",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:78aa8c7face939aa59ecf8f98449d887c8dfbcc1ff68c8ba23adba15d6f4825b"
+    },
+    {
+      "owner": "mj",
+      "name": "pydantic",
+      "upstream": "https://github.com/pydantic/pydantic",
+      "upstream_commit": "3eca5695dabc5a451ccfc0f4afa802166e61e27a",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "22b3ec2eaa3062460982a7de1b394769afae7c54",
+      "job_id": "25f60fce-2a6c-4ee2-b352-a9bfc4a07bfa",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:21c9a2a48a45565e48b75c48a7dcb897f0a3191d5184ae26c1051f2e2fb5a5e6"
+    },
+    {
+      "owner": "mj",
+      "name": "attrs",
+      "upstream": "https://github.com/python-attrs/attrs",
+      "upstream_commit": "644b4e165bfbeee7e127de6fcbda08b64014316f",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "1dcb615997bfa626f93b6c8cba51cacff6a7631b",
+      "job_id": "b2c3834b-52fa-4ec0-94ef-e568c8345a3d",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:894202dd30b3b4a677615283f78c01dc2eb2661ba90d659d7feb720f02a097b0"
+    },
+    {
+      "owner": "mj",
+      "name": "fastapi",
+      "upstream": "https://github.com/fastapi/fastapi",
+      "upstream_commit": "f5c6e9b4f9cadc1bf0f9a1fd672e621206b63007",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "20eec9c58f9bb3ee9380e196bb3fffb405ee0dd8",
+      "job_id": "3069c48f-2cae-4ec6-98bb-d3e2f3f45210",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:d5ad1908d88c131f3cb7995da286c23f7eda78a929f92be648de601adf601912"
+    },
+    {
+      "owner": "mj-platform",
+      "name": "werkzeug",
+      "upstream": "https://github.com/pallets/werkzeug",
+      "upstream_commit": "15fc22b699ecacd04824092453c0cd2a8c4a3a67",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "6031ab22e1813c7b6e189cd41747c03062ab9fb4",
+      "job_id": "89d8aa33-ad3b-4daf-a83f-ee6e25ec13df",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:99c7659812871459557904e23ce4dde91260418476c99cd7875b1caafdc726ad"
+    },
+    {
+      "owner": "mj-platform",
+      "name": "jinja",
+      "upstream": "https://github.com/pallets/jinja",
+      "upstream_commit": "5ef70112a1ff19c05324ff889dd30405b1002044",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "42e81412623e8feb7fc81905fc4181796069e5b2",
+      "job_id": "2f71c84a-e478-44bd-a3f2-e42293192dd3",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:ef2bfab4cc4b4fd5ad906621548a418f0a2bb345be5d0cfd9fb8f012949a3f16"
+    },
+    {
+      "owner": "mj-platform",
+      "name": "itsdangerous",
+      "upstream": "https://github.com/pallets/itsdangerous",
+      "upstream_commit": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "4201ea09ed83907c1fc91a97b8cb4767c711bf0b",
+      "job_id": "a41f03df-4ccf-4b0c-a148-5179de0f153d",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:7fd2806b3b43a02bee3246015be95db88c7f8f624bd4efa7b3e17723d3b6fc6f"
+    },
+    {
+      "owner": "mj-labs",
+      "name": "typer",
+      "upstream": "https://github.com/fastapi/typer",
+      "upstream_commit": "b15210b71a5b9b35be82a1ffdb172ef7b3a89d85",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "bcf393c0f6300b72fcfb83b560aab502799597d2",
+      "job_id": "66b5b42a-8a71-4aa3-802a-f1d342b1e161",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:a2e43f7cfc5941da1923af311564cabf0a33aed2f08221777885665a26fca3bd"
+    },
+    {
+      "owner": "mj-labs",
+      "name": "tenacity",
+      "upstream": "https://github.com/jd/tenacity",
+      "upstream_commit": "32ac68f0941319c0d2f4fb927f96e4ee29bb46c6",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "a7249538dea6cd3f232c123418fb1ecdb6a280c9",
+      "job_id": "16ad623b-65d1-4637-80f4-2df9d630b2ad",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:78b515bfe87b5157bbb4f877d0d394b7df2f84745e18f9559e2081c22cbe8f44"
+    },
+    {
+      "owner": "mj-labs",
+      "name": "structlog",
+      "upstream": "https://github.com/hynek/structlog",
+      "upstream_commit": "5686b0a6cf81505a71db7c69b3aee84d3a7730e0",
+      "source_history": "shallow snapshot",
+      "upstream_workflows_executed": false,
+      "ci_commit": "27d56ae1dc48fdd23d58ee70906b3c43634049b6",
+      "job_id": "eccef6c3-87af-4b12-bcc8-3b7c77ac7f93",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:ebeb8904ad913da21ca8d29605e9d607d32a86ec06c43b08f08680ace89281a9"
+    }
+  ],
+  "playgrounds": [
+    {
+      "repository": "canonical",
+      "job_id": "de5ea114-ed4d-4d0f-b042-edda4f93db17",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:22e3507ee8db4c3e90e1b0dcc1d3f7de1de333bfaacf5d7667775cdc915b9909"
+    },
+    {
+      "repository": "review-playground",
+      "job_id": "094dd92a-b46a-4a8e-84a8-d69165a513e7",
+      "tests": "PASSED",
+      "container_cleanup": "destroyed",
+      "image_digest": "sha256:22e3507ee8db4c3e90e1b0dcc1d3f7de1de333bfaacf5d7667775cdc915b9909"
+    }
+  ],
+  "native_control_bindings": {
+    "count": 43,
+    "matched": true
+  },
+  "runner_image": {
+    "manifest_digest": "sha256:81188fb3d1f40037b59b43aa9947f169ea80175cf6aec471bc0b57b979b33b39",
+    "config_digest": "sha256:b14ee95b4f981512c085c1dda08568a40fe1b4097a82738383302ed94d8a716a",
+    "matches_approved_local_image": true,
+    "provenance_index": false
+  },
+  "browser": {
+    "human_login": "mj",
+    "instance_admin": true,
+    "static_preview": "Golf static PR preview",
+    "worker_preview": "Golf PR application",
+    "fastapi_packages": {
+      "published_artifacts": 1,
+      "live": true
+    },
+    "full_regression": false
+  },
+  "repeat_deployment": {
+    "duration_seconds": 2.5,
+    "runtime_preview_domains_preserved": 2,
+    "gateway_domain_preserved": true,
+    "database_preserved": true
+  },
+  "initial_infrastructure_deploy_seconds": 68.1,
+  "tests": {
+    "native": {
+      "passed": 284,
+      "skipped": 1
+    },
+    "python_deployment_and_seeding": 35,
+    "alchemy_typecheck": "passed",
+    "alchemy_binding_and_domain_tests": 2,
+    "native_frontend_build": "passed"
+  },
+  "failures_retained": {
+    "initial_container_ci_runs": 2,
+    "cause": "Provenance index did not start this runner; rebuilt and verified a single-platform manifest.",
+    "package_preflight": "Flask checkout permissions corrected; resumed CI passed.",
+    "preview_domains": "Alchemy Worker.domain reconciliation removed two runtime domains; exact gateway resource installed and original journaled domain identities restored.",
+    "dns": "Teardown gap caused negative DNS caching on the user Mac; user flushed cache and confirmed load."
+  },
+  "limits": [
+    "Alchemy destroy wrapper not live-tested; partial failure recovery requires inspection.",
+    "Alchemy local state contains credentials and requires private storage.",
+    "Runtime provider tokens expire after seven days.",
+    "Only reviewed CI profiles run; upstream workflow matrices are not executed.",
+    "Preview leases last four hours; reviewer grants last five minutes."
+  ],
+  "metadata_indexing": {
+    "repositories": 16,
+    "completed": true
+  }
+}

@@ -23,3 +23,4 @@ cloudflare/**/.wrangler/
 __pycache__/
 /.cloudflare/
 .wrangler/
+.alchemy/
