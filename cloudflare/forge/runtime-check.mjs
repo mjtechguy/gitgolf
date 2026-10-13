@@ -12,23 +12,37 @@ if (JSON.parse(await readFile(resolve(cli, 'package.json'), 'utf8')).version !==
 const { Miniflare, convertV4MiniflareOptions } = await import(pathToFileURL(resolve(cli, 'node_modules/miniflare/dist/src/index.js')).href);
 const modules = [];
 const activity = await esbuild.build({ entryPoints: ['cloudflare/forge/src/activity.mjs'], outfile: 'cloudflare/forge/src/activity.runtime.mjs', bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./common.mjs', './git.mjs'] });
-for (const file of ['worker.mjs', 'operations.mjs', 'operations-provider.mjs', 'core.mjs', 'file-index.mjs', 'telemetry.mjs', 'repository-indexes.mjs', 'repository-metadata.mjs', 'metadata-jobs.mjs', 'repository-images.mjs', 'repository-reads.mjs', 'repository-cache.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'repository-diff.mjs', 'workspace-ui.mjs', 'git.mjs', 'common.mjs', 'collaboration.mjs', 'evidence.mjs', 'delivery.mjs', 'apps.mjs', 'app-policy.mjs', 'public.mjs', 'test-policy.mjs', 'agent-policy.mjs', 'agents.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: (await readFile(new URL('./src/' + file, import.meta.url), 'utf8')).replace("'../data/languages.json' with { type: 'json' }", "'../data/languages.mjs'") });
+for (const file of ['worker.mjs', 'owners.mjs', 'operations.mjs', 'operations-provider.mjs', 'core.mjs', 'file-index.mjs', 'telemetry.mjs', 'repository-indexes.mjs', 'repository-metadata.mjs', 'metadata-jobs.mjs', 'repository-images.mjs', 'repository-reads.mjs', 'repository-cache.mjs', 'repository-settings.mjs', 'managed-registry.mjs', 'native-runners.mjs', 'gitlab-runner.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'repository-diff.mjs', 'workspace-ui.mjs', 'git.mjs', 'common.mjs', 'collaboration.mjs', 'evidence.mjs', 'delivery.mjs', 'apps.mjs', 'app-policy.mjs', 'public.mjs', 'test-policy.mjs', 'agent-policy.mjs', 'agents.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: (await readFile(new URL('./src/' + file, import.meta.url), 'utf8')).replace("'../data/languages.json' with { type: 'json' }", "'../data/languages.mjs'") });
 modules.push({ type: 'ESModule', path: 'forge/src/performance.mjs', contents: await readFile(new URL('./src/performance.mjs', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'forge/src/activity.mjs', contents: activity.outputFiles[0].text });
+const access = await esbuild.build({ entryPoints: ['cloudflare/forge/src/access.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral' });
+modules.push({ type: 'ESModule', path: 'forge/src/access.mjs', contents: access.outputFiles[0].text });
+const nativeWorkflow = await esbuild.build({ entryPoints: ['cloudflare/forge/src/native-workflow.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./git.mjs'] });
+modules.push({ type: 'ESModule', path: 'forge/src/native-workflow.mjs', contents: nativeWorkflow.outputFiles[0].text });
 modules.push({ type: 'ESModule', path: 'forge/data/languages.mjs', contents: 'export default ' + await readFile(new URL('./data/languages.json', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'agents/src/policy.mjs', contents: await readFile(new URL('../agents/src/policy.mjs', import.meta.url), 'utf8') });
 let webhookRequests = 0;
 const webhookSecret = 'r'.repeat(40);
 const runtime = new Miniflare(convertV4MiniflareOptions({
   host: '127.0.0.1', port: 0, modules, compatibilityDate: '2026-10-08',
-  secretsStoreSecrets: { WEBHOOK_KEY: {store_id:'local-automation',secret_name:'webhook-key'} },
+  secretsStoreSecrets: { WEBHOOK_KEY: {store_id:'local-automation',secret_name:'webhook-key'}, REGISTRY_API_TOKEN: {store_id:'local-registry',secret_name:'registry-token'} },
   outboundService: async request => {
+    if (new URL(request.url).origin === 'https://api.cloudflare.com') {
+      assert.equal(request.headers.get('Authorization'), 'Bearer local-registry-api-token');
+      return Response.json({ success: true, result: { account_id: 'a'.repeat(32), registry_host: 'registry.cloudflare.com', username: 'operator', password: 'local-registry-password' } });
+    }
+    if (new URL(request.url).origin === 'https://registry.cloudflare.com') {
+      assert.equal(request.headers.get('Authorization'), 'Basic ' + btoa('operator:local-registry-password'));
+      assert.equal(new URL(request.url).pathname, '/v2/' + 'a'.repeat(32) + '/local-native-r1/tags/list');
+      return Response.json({ name: 'a'.repeat(32) + '/local-native-r1', tags: [] });
+    }
     assert.equal(new URL(request.url).origin,'https://receiver.example.com');
     const body = await request.text(), stamp = request.headers.get('X-Golf-Timestamp'), event = request.headers.get('X-Golf-Event-ID');
     assert.equal(request.headers.get('X-Golf-Signature-256'), 'sha256='+createHmac('sha256',webhookSecret).update(stamp+'\n'+event+'\n'+body).digest('hex'));
     webhookRequests++; return new Response(null,{status:204});
   },
-  bindings: { WEBHOOK_POLICY: JSON.stringify({origins:['https://receiver.example.com'],dailyLimit:10}), PUBLIC_ORIGIN: 'https://golf.example.com', WORKSPACE_SLUG: 'alice', ACCOUNT_ID: 'a'.repeat(32), ARTIFACTS_NAMESPACE: 'local-proof', EVIDENCE_DAILY_LIMIT: '2', EVIDENCE_ALLOW_AI: 'false',
+  bindings: { REGISTRY_PROVIDER: 'cloudflare', REGISTRY_ORIGIN: 'https://registry.cloudflare.com', REGISTRY_ACCOUNT: 'a'.repeat(32), REGISTRY_REPOSITORY_PREFIX: 'a'.repeat(32) + '/local-native-r', REGISTRY_CI_ENABLED: 'false',
+    WEBHOOK_POLICY: JSON.stringify({origins:['https://receiver.example.com'],dailyLimit:10}), PUBLIC_ORIGIN: 'https://golf.example.com', WORKSPACE_SLUG: 'alice', ACCOUNT_ID: 'a'.repeat(32), ARTIFACTS_NAMESPACE: 'local-proof', EVIDENCE_DAILY_LIMIT: '2', EVIDENCE_ALLOW_AI: 'false',
     EVIDENCE_DEAD_LETTER_QUEUE: 'local-failed-evidence', EVIDENCE_QUEUE_NAME: 'local-evidence', EVIDENCE_WORKFLOW_NAME: 'local-evidence', OPERATIONS_SERVICE_HEALTH: 'true' },
   d1Databases: { DB: 'local-native-proof' },
   r2Buckets: { EVIDENCE_BUCKET: 'local-evidence' },
@@ -41,6 +55,8 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
 try {
   const secrets = await runtime.getSecretsStoreSecretAPI('WEBHOOK_KEY');
   await secrets().create(Buffer.alloc(32,9).toString('base64'));
+  const registrySecret = await runtime.getSecretsStoreSecretAPI('REGISTRY_API_TOKEN');
+  await registrySecret().create('local-registry-api-token');
   const database = await runtime.getD1Database('DB');
   const schema = await readFile(new URL('./schema.sql', import.meta.url), 'utf8');
   for (const statement of schema.replace(/--[^\n]*/g, '').split(/;\s*(?=CREATE\b)/).filter(s => s.trim())) await database.prepare(statement).run();
@@ -58,6 +74,11 @@ try {
   await database.prepare(`INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at)
     VALUES(1,'runtime','',?,1,?,?,'ACTIVE',?)`).bind('repo-' + 'b'.repeat(32), crypto.randomUUID(), 'c'.repeat(64), new Date().toISOString()).run();
   await database.prepare("INSERT INTO grants VALUES(1,1,'admin')").run();
+  const packages = await call('/native/repository-packages', token, {}, { action: 'status', repository: { owner: 'alice', name: 'runtime' }, repositoryId: '1' });
+  assert.equal(packages.status, 200, await packages.clone().text());
+  assert.equal((await packages.json()).provider, 'cloudflare');
+  assert.equal((await call('/native/repository-packages', token, {}, { action: 'credential', repository: { owner: 'alice', name: 'runtime' }, repositoryId: '1' })).status, 501);
+  console.log('Real workerd/Secrets Store/D1 managed registry inventory passed; user credential issuance is unavailable');
   await database.prepare("INSERT INTO users(id,login) VALUES(2,'collaborator')").run();
   const accessCall = (method, body = {}) => call('/rpc/golf.v1.RepositoryAccessService/' + method, token, {}, { repository: { owner: 'alice', name: 'runtime' }, ...body });
   const { access } = await (await accessCall('GetRepositoryAccess')).json();

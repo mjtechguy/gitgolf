@@ -1,5 +1,9 @@
 # Native Packages integration
 
+New Cloudflare installations use the [managed image registry](CLOUDFLARE_MANAGED_REGISTRY.md)
+under [ADR 0010](decisions/0010-cloudflare-managed-image-registry.md). The following
+custom CFCR contract and historical receipts remain separate from that backend.
+
 The optional CFCR integration connects the native forge to the separate `golf-cfcr` Worker using private service RPC. It does not change the portable package backend.
 
 An installation adds `registry: {worker: "golf-cfcr", origin: "https://registry.example.com"}` to `forge.json` and reruns native preparation before deployment. Preparation exports `PackagesAuthority` even before the binding is added, allowing staged installation: updated Golf, CFCR bound to Golf, then Golf bound to CFCR. The authority refuses access until the registry integration is configured. No D1 migration is needed.

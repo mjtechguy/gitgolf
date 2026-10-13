@@ -1,5 +1,20 @@
 # Golf implementation plan
 
+Retained demo ownership (2026-10-13): the [saved deployment recipe](deploy/demo/README.md)
+adopts `mj`, adds `mj-platform` and `mj-labs` with three pinned upstream repositories
+each, and preserves existing Git identities and CI artifacts. Schema21 stores native
+owners and memberships separately from the stable installation partition. General
+organization/team administration and duplicate repository names across owners remain
+outside this bounded slice. See the implementation ledger for verified evidence.
+
+Registry direction (2026-10-13): the user selected Cloudflare's managed image
+registry for new demos/installations. Golf retains current repository/job authority
+and digest receipts; no new CFCR storage service is required.
+[ADR 0010](docs/decisions/0010-cloudflare-managed-image-registry.md) and the
+[managed registry setup](docs/CLOUDFLARE_MANAGED_REGISTRY.md) supersede the earlier
+custom-registry direction. Existing installations and historical evidence remain
+separate; scanning/policies and general image builds are not implicitly completed.
+
 Portable backend direction (2026-10-11): the user selected **Forgejo** to replace
 Gitea. [ADR 0009](docs/decisions/0009-forgejo-portable-backend.md) and the
 [Forgejo transition plan](docs/FORGEJO_MIGRATION_PLAN.md) supersede the earlier

@@ -1,6 +1,7 @@
 import { release, configuration, timings } from './telemetry.mjs';
 import { performanceSample } from './performance.mjs';
 import { bounded } from './git.mjs';
+import { accessContext } from './access.mjs';
 // Current assets are embedded; older hashes are retained in private R2 across releases.
 const builtAssets = typeof GOLF_NATIVE_ASSETS === 'undefined' ? null : GOLF_NATIVE_ASSETS;
 export const immutableAsset = path => /^\/assets\/[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8}\.(?:js|css|woff2?|svg)$/.test(path);
@@ -35,7 +36,8 @@ async function dispatch(request, env, ctx, clock) {
     if (url.origin !== env.PUBLIC_ORIGIN) return new Response('Unavailable', { status: 404 });
     // Configured Access is the outer gate for both people and machine callers.
     const machineRoute = url.pathname.startsWith('/native/runner-machine/') || url.pathname.startsWith('/api/v4/');
-    if (env.ACCESS_AUD && ctx.access?.aud !== env.ACCESS_AUD && !machineRoute) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });
+    const access = env.ACCESS_AUD && !machineRoute ? await clock.measure('access_auth', () => accessContext(request, env, ctx)) : null;
+    if (env.ACCESS_AUD && !access && !machineRoute) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });
     if (env.ACCESS_AUD && immutableAsset(url.pathname) && ['GET', 'HEAD'].includes(request.method) && !url.search && url.href.length <= 8192 && !request.headers.has('Upgrade')) {
       let response;
       if (builtAssets && Object.hasOwn(builtAssets, url.pathname)) response = embeddedAsset(request, builtAssets);
@@ -51,8 +53,8 @@ async function dispatch(request, env, ctx, clock) {
     }
     const headers = new Headers(request.headers);
     headers.delete('X-Golf-Native-Access-Email');
-    if (!headers.has('Authorization') && env.ACCESS_AUD && ctx.access?.aud === env.ACCESS_AUD) {
-      const identity = await clock.measure('access', () => ctx.access.getIdentity());
+    if (!headers.has('Authorization') && access) {
+      const identity = await clock.measure('access', () => access.getIdentity());
       if (typeof identity?.email === 'string' && identity.email.length <= 254) headers.set('X-Golf-Native-Access-Email', identity.email);
     }
     const workspace = ctx.exports.Workspace;
@@ -72,14 +74,21 @@ async function dispatch(request, env, ctx, clock) {
       outgoing.set('X-Content-Type-Options', 'nosniff');
       const appForms = env.APP_POLICY && env.PREVIEW_ORIGIN ? ' https://*.' + new URL(env.PREVIEW_ORIGIN).hostname : '';
       outgoing.set('Content-Security-Policy', `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' ${env.PREVIEW_ORIGIN || ''}${appForms}`);
+      if (screen && request.method === 'GET' && response.ok) {
+        // Reuse this request's fresh session; keep personalized HTML uncached.
+        const session = JSON.stringify(await auth.json()).replace(/</g, '\\u003c');
+        const html = (await response.text()).replace('<script id="golf-session" type="application/json">null</script>', () => `<script id="golf-session" type="application/json">${session}</script>`);
+        outgoing.set('Cache-Control', 'no-store'); outgoing.delete('Content-Length');
+        return new Response(html, { status: response.status, headers: outgoing });
+      }
       return new Response(response.body, { status: response.status, headers: outgoing });
     }
-    if (ctx.exports.RepositoryReads && request.method === 'POST' && /^\/rpc\/golf\.v1\.RepositoryService\/(GetRepository|GetRepositoryOverview|GetContents|GetRepositoryImage|ResolveRepositorySource|ListCommits|GetCommitDiff|GetRepositoryComparison)$/.test(url.pathname)) {
+    if (ctx.exports.RepositoryReads && request.method === 'POST' && /^\/rpc\/golf\.v1\.RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ResolveRepositorySource|ListCommits|GetCommitDiff|GetRepositoryComparison)$/.test(url.pathname)) {
       let body;
       try { body = JSON.parse(new TextDecoder().decode(await bounded(request.clone().body, 96 * 1024))); } catch { /* Core returns the usual validation error. */ }
-      if (body?.repository?.owner === env.WORKSPACE_SLUG && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(body.repository.name || '')) {
+      if (/^[a-z0-9][a-z0-9-]{0,99}$/.test(body?.repository?.owner || '') && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(body.repository.name || '')) {
         const reads = ctx.exports.RepositoryReads;
-        return reads.get(reads.idFromName(`${env.WORKSPACE_SLUG}/${body.repository.name}`)).fetch(new Request(request, { headers }));
+        return reads.get(reads.idFromName(`${body.repository.owner}/${body.repository.name}`)).fetch(new Request(request, { headers }));
       }
     }
     return owner.fetch(new Request(request, { headers }));

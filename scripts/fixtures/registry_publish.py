@@ -8,6 +8,7 @@ import pathlib
 import subprocess
 import tarfile
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -31,8 +32,20 @@ def publish():
         files = {'payload': 'Golf CI source ' + os.environ['GOLF_COMMIT'] + '\n',
                  'etc/os-release': 'ID=alpine\nVERSION_ID=3.16.0\n',
                  'lib/apk/db/installed': 'P:openssl\nV:1.1.1o-r0\nA:x86_64\nS:100\nI:100\nT:TLS\nU:https://openssl.org\nL:OpenSSL\no:openssl\nm:Fixture\nt:1650000000\nc:1234567890\n\n'}
+        if origin == 'https://registry.cloudflare.com':
+            files = {'payload': files['payload']}
+            for path in [pathlib.Path('README.md'), *sorted(pathlib.Path('public').rglob('*'))]:
+                if path.is_file() and not path.is_symlink():
+                    files[str(path)] = path.read_bytes()
+            for path in sorted(pathlib.Path('dist').glob('*')):
+                if path.is_file() and not path.is_symlink() and path.suffix in ['.whl', '.json', '.gz']:
+                    if path.stat().st_size > 24 * 1024 * 1024:
+                        raise ValueError('Demo artifact exceeds publication bound')
+                    files[str(path)] = path.read_bytes()
+        if sum(len(v.encode() if isinstance(v, str) else v) for v in files.values()) > 31 * 1024 * 1024:
+            raise ValueError('Demo image exceeds publication bound')
         for name, value in files.items():
-            data = value.encode(); entry = tarfile.TarInfo(name); entry.size = len(data)
+            data = value.encode() if isinstance(value, str) else value; entry = tarfile.TarInfo(name); entry.size = len(data)
             archive.addfile(entry, io.BytesIO(data))
     compressed = gzip.compress(layer.getvalue(), mtime=0)
     labels = {'org.opencontainers.image.revision': os.environ['GOLF_COMMIT']}
@@ -50,7 +63,10 @@ def publish():
                       'rootfs': {'type': 'layers', 'diff_ids': [sha(layer.getvalue())]}})
     descriptors = []
     for data, media in [(config, 'application/vnd.oci.image.config.v1+json'), (compressed, 'application/vnd.oci.image.layer.v1.tar+gzip')]:
-        request('/v2/' + image + '/blobs/uploads/?digest=' + sha(data), data, 'POST')
+        _, headers = request('/v2/' + image + '/blobs/uploads/', b'', 'POST', expected=202)
+        location = urllib.parse.urlsplit(urllib.parse.urljoin(origin, headers['Location']))
+        assert location.scheme + '://' + location.netloc == origin and location.path.startswith('/v2/' + image + '/blobs/uploads/')
+        request(location.path + ('?' + location.query + '&' if location.query else '?') + 'digest=' + sha(data), data, 'PUT')
         descriptors.append({'digest': sha(data), 'size': len(data), 'mediaType': media})
     manifest = encoded({'schemaVersion': 2, 'mediaType': 'application/vnd.oci.image.manifest.v1+json', 'config': descriptors[0], 'layers': descriptors[1:]})
     _, headers = request('/v2/' + image + '/manifests/' + tag, manifest, 'PUT', 'application/vnd.oci.image.manifest.v1+json')

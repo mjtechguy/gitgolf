@@ -415,6 +415,30 @@ class ReleaseTests(unittest.TestCase):
             release.state['migration0020'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_runner_schema([])
 
+    def test_owner_migration_is_additive_and_recovers_lost_ack(self):
+        release = self.release(); release.manifest['schema'] = 21
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            db.executescript(schema[:schema.index('-- Public ownership is separate')])
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith('PRAGMA'):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost owner migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError,'0021'): release.check_owner_schema()
+            with self.assertRaisesRegex(RuntimeError,'Lost owner'): release.migrate_owner_schema([])
+            applied=[]; release.migrate_owner_schema(applied)
+            self.assertEqual(applied,['0021']); release.check_owner_schema()
+            self.assertEqual(release.migrate_owner_schema([]),None)
+
     def test_uncertain_deployment_is_not_dispatched_twice(self):
         release = self.release(); release.check = lambda: 'previous'; release.retain = lambda: 1
         release.state['releases'][release.manifest['release']] = {'state':'dispatched'}

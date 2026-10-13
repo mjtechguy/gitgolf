@@ -1,0 +1,385 @@
+{
+  "schema": "golf.demo.owners.evidence.v1",
+  "checked_at": "2026-10-13T06:38:18.409054+00:00",
+  "origin": "https://demo.gitgolf.mjtechguy.com",
+  "runtime_schema": 21,
+  "release": "110ee84f0e2a8a8172e3147d4240466bdf161cdc0c9b19aad2e4f5681630cf7a",
+  "manifest_sha256": "d36e3aae679ce13bac7e183f8916ee157dab0664254c2e7434306dbe22227601",
+  "personal": {
+    "login": "mj",
+    "full_name": "Mike Johnson",
+    "operations_admin": true
+  },
+  "organizations": [
+    {
+      "id": "3",
+      "name": "mj-labs",
+      "fullName": "MJ Labs",
+      "description": "Developer tooling, command-line experiments and automation.",
+      "visibility": "ORGANIZATION_VISIBILITY_PRIVATE",
+      "members": [
+        {
+          "login": "mj",
+          "fullName": "Mike Johnson",
+          "role": "owner"
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "name": "mj-platform",
+      "fullName": "MJ Platform",
+      "description": "Shared web foundations, application infrastructure and reliable delivery.",
+      "visibility": "ORGANIZATION_VISIBILITY_PRIVATE",
+      "members": [
+        {
+          "login": "mj",
+          "fullName": "Mike Johnson",
+          "role": "owner"
+        }
+      ]
+    }
+  ],
+  "repositories": [
+    {
+      "owner": "mj",
+      "name": "requests",
+      "repository_id": "3",
+      "upstream": "https://github.com/psf/requests",
+      "upstream_commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "upstream_tree": "10caa09e09cd366febe74c2afa345939ffd5691f",
+      "ci_commit": "a62778119d635c0d26fc5af1c7e779c0f21cc0e4",
+      "job_id": "25c63e4d-5153-4ed4-bae0-cf336ab05ef7",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj/requests/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r3",
+        "tag": "ci-25c63e4d-5153-4ed4-bae0-cf336ab05ef7",
+        "digest": "sha256:66a3fb2d3b516162044fd017794fdb787cbcb8144f04b68dc10fa841cf3e3324",
+        "commitId": "a62778119d635c0d26fc5af1c7e779c0f21cc0e4"
+      }
+    },
+    {
+      "owner": "mj",
+      "name": "flask",
+      "repository_id": "4",
+      "upstream": "https://github.com/pallets/flask",
+      "upstream_commit": "d086db856be187255b8ec61ef409357393020f32",
+      "upstream_tree": "b7c01f0b37b4ebe6c21d107b5f02632211f1c18b",
+      "ci_commit": "d08189820bda97e3c3ce83ae3fb35239bdadf60f",
+      "job_id": "2028cae6-2a21-4c2e-934c-5a5e06cfbdb5",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj/flask/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r4",
+        "tag": "ci-2028cae6-2a21-4c2e-934c-5a5e06cfbdb5",
+        "digest": "sha256:57ad3112f22a3c26cdb523ee63c3756d0f012a4957d07d805c7cda7941b29529",
+        "commitId": "d08189820bda97e3c3ce83ae3fb35239bdadf60f"
+      }
+    },
+    {
+      "owner": "mj",
+      "name": "httpx",
+      "repository_id": "5",
+      "upstream": "https://github.com/encode/httpx",
+      "upstream_commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "upstream_tree": "31ba94512339180efacceacc0646b56ee15eba63",
+      "ci_commit": "c956f431e8454511d5cd269730ac0904d5b76a79",
+      "job_id": "06c88f6e-0a18-48d7-adec-561ff8a1cc61",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj/httpx/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r5",
+        "tag": "ci-06c88f6e-0a18-48d7-adec-561ff8a1cc61",
+        "digest": "sha256:680b7fecf7590ca55ffb41a4bee2fe404f10ad6c04b3bc8ea66e9486aae41779",
+        "commitId": "c956f431e8454511d5cd269730ac0904d5b76a79"
+      }
+    },
+    {
+      "owner": "mj",
+      "name": "starlette",
+      "repository_id": "6",
+      "upstream": "https://github.com/encode/starlette",
+      "upstream_commit": "96d5023c55b29224edb8d684868c49f681d079a9",
+      "upstream_tree": "b3f81eda310c8da2cab7500dd6821356b5c90da8",
+      "ci_commit": "0901715979e726618a61f40ab1dafb4373961336",
+      "job_id": "69ad8de7-1e1c-4429-986c-fd78e34207f4",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj/starlette/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r6",
+        "tag": "ci-69ad8de7-1e1c-4429-986c-fd78e34207f4",
+        "digest": "sha256:aa06cb7eb92e997973f88eb7745474f9c62016cb9402aa12ddee183666b83201",
+        "commitId": "0901715979e726618a61f40ab1dafb4373961336"
+      }
+    },
+    {
+      "owner": "mj",
+      "name": "click",
+      "repository_id": "7",
+      "upstream": "https://github.com/pallets/click",
+      "upstream_commit": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+      "upstream_tree": "6b26180d3cc76de6213a1e998f1eaf821e7f0f3f",
+      "ci_commit": "28c53b4905842d740fd88c91530b525665781a04",
+      "job_id": "6032f307-7d93-4046-ad70-4a63ddd42a6d",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj/click/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r7",
+        "tag": "ci-6032f307-7d93-4046-ad70-4a63ddd42a6d",
+        "digest": "sha256:c6a90280c5d7b1a34ce9bfe808e3f5afc15f7c2b63c9993ed1bff3aedfb7d870",
+        "commitId": "28c53b4905842d740fd88c91530b525665781a04"
+      }
+    },
+    {
+      "owner": "mj",
+      "name": "rich",
+      "repository_id": "8",
+      "upstream": "https://github.com/Textualize/rich",
+      "upstream_commit": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f",
+      "upstream_tree": "93aa807db25b745b28e18bf7f96f8173b564016e",
+      "ci_commit": "844df4a90de9111ac1ad0a9194a02f4843755750",
+      "job_id": "1e00cc43-0d22-46f8-a3e3-7be76e9da89b",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj/rich/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r8",
+        "tag": "ci-1e00cc43-0d22-46f8-a3e3-7be76e9da89b",
+        "digest": "sha256:72f098d0c2612face0114bcc0d9092e6cf0d66bc57edc33319950d80e1886027",
+        "commitId": "844df4a90de9111ac1ad0a9194a02f4843755750"
+      }
+    },
+    {
+      "owner": "mj",
+      "name": "pytest",
+      "repository_id": "9",
+      "upstream": "https://github.com/pytest-dev/pytest",
+      "upstream_commit": "c9c19f8e62c12834ad83193a1869cc82fe9c700e",
+      "upstream_tree": "1b4202204042e52b81ba763cdc6310c7b789c975",
+      "ci_commit": "1134554129869df4b1fb36865f0d7113b4d81084",
+      "job_id": "1a76640c-0b34-4429-9d5e-faa877db5c50",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj/pytest/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r9",
+        "tag": "ci-1a76640c-0b34-4429-9d5e-faa877db5c50",
+        "digest": "sha256:8cc1fee8c39834076c4e9faf855f54832e8faab655fc82162aa70290bb453ed0",
+        "commitId": "1134554129869df4b1fb36865f0d7113b4d81084"
+      }
+    },
+    {
+      "owner": "mj",
+      "name": "pydantic",
+      "repository_id": "10",
+      "upstream": "https://github.com/pydantic/pydantic",
+      "upstream_commit": "3eca5695dabc5a451ccfc0f4afa802166e61e27a",
+      "upstream_tree": "fb5996c01996afb03dded3047983a9d60ded1f22",
+      "ci_commit": "660349bb9fc7691b2d37a6dd79cf68ad59eb380f",
+      "job_id": "56b02e91-92a0-4c7c-b60a-476e9f78f97d",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj/pydantic/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r10",
+        "tag": "ci-56b02e91-92a0-4c7c-b60a-476e9f78f97d",
+        "digest": "sha256:5477c48bac9fbdeb64138ff4e56618a16544982570189df328b446a5299fb24c",
+        "commitId": "660349bb9fc7691b2d37a6dd79cf68ad59eb380f"
+      }
+    },
+    {
+      "owner": "mj",
+      "name": "attrs",
+      "repository_id": "11",
+      "upstream": "https://github.com/python-attrs/attrs",
+      "upstream_commit": "644b4e165bfbeee7e127de6fcbda08b64014316f",
+      "upstream_tree": "3654f5f16007ebe30e06b0280b5d1ab5b819d076",
+      "ci_commit": "c0042f2505d93b9cab634a03acacc88e249e4c64",
+      "job_id": "91347813-2601-4b8c-8a1a-477e0a005daa",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj/attrs/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r11",
+        "tag": "ci-91347813-2601-4b8c-8a1a-477e0a005daa",
+        "digest": "sha256:84db2c6b743b71125668129d0d60f86df3fd1987cb8670f5777ec89aff7bb7a6",
+        "commitId": "c0042f2505d93b9cab634a03acacc88e249e4c64"
+      }
+    },
+    {
+      "owner": "mj",
+      "name": "fastapi",
+      "repository_id": "12",
+      "upstream": "https://github.com/fastapi/fastapi",
+      "upstream_commit": "f5c6e9b4f9cadc1bf0f9a1fd672e621206b63007",
+      "upstream_tree": "9517233529e09d6421e49df7216f5cfc84baf4f4",
+      "ci_commit": "5e11a4e96da8d168e6d39ee11c20e15657fa3297",
+      "job_id": "6319a0d5-cc1c-41e4-b9cb-ffd4d580222f",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj/fastapi/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r12",
+        "tag": "ci-6319a0d5-cc1c-41e4-b9cb-ffd4d580222f",
+        "digest": "sha256:ebc6d2aae01d0af525066f12823449f7865801b03982fd9d9d38d907f125beb8",
+        "commitId": "5e11a4e96da8d168e6d39ee11c20e15657fa3297"
+      }
+    },
+    {
+      "owner": "mj-platform",
+      "name": "werkzeug",
+      "repository_id": "13",
+      "upstream": "https://github.com/pallets/werkzeug",
+      "upstream_commit": "15fc22b699ecacd04824092453c0cd2a8c4a3a67",
+      "upstream_tree": "fdb9ca5de6cd16edd1364038641a4a1fe8f33cda",
+      "ci_commit": "2d8a68a968e474183b1e9271a0d8d172cb7ba900",
+      "job_id": "991a58b9-bd69-4703-b6b1-346284b8d78e",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj-platform/werkzeug/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r13",
+        "tag": "ci-991a58b9-bd69-4703-b6b1-346284b8d78e",
+        "digest": "sha256:4cabdee12089e107e1e6dee091449196e609a57bf6e21149bae5920ff9befa9f",
+        "commitId": "2d8a68a968e474183b1e9271a0d8d172cb7ba900"
+      }
+    },
+    {
+      "owner": "mj-platform",
+      "name": "jinja",
+      "repository_id": "14",
+      "upstream": "https://github.com/pallets/jinja",
+      "upstream_commit": "5ef70112a1ff19c05324ff889dd30405b1002044",
+      "upstream_tree": "9cc8b01ae238ef334ec9ccfac656c703dc862331",
+      "ci_commit": "e0a900e7e103de7c2bae0be8eba47d0144c2f9fd",
+      "job_id": "7aca958a-5b09-4451-add2-4ac34a5c13da",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj-platform/jinja/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r14",
+        "tag": "ci-7aca958a-5b09-4451-add2-4ac34a5c13da",
+        "digest": "sha256:3789151e68aaa68822c8a74eb853d624567384a3966787815a5819f5421f6641",
+        "commitId": "e0a900e7e103de7c2bae0be8eba47d0144c2f9fd"
+      }
+    },
+    {
+      "owner": "mj-platform",
+      "name": "itsdangerous",
+      "repository_id": "15",
+      "upstream": "https://github.com/pallets/itsdangerous",
+      "upstream_commit": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "upstream_tree": "ef4287f82d8234404b58c7b29d38197e1f38e207",
+      "ci_commit": "883b1c165ea623e8d7ca3644a0555014b1d0bd2b",
+      "job_id": "8127b38c-67b8-426f-b3a9-4183afae2744",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj-platform/itsdangerous/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r15",
+        "tag": "ci-8127b38c-67b8-426f-b3a9-4183afae2744",
+        "digest": "sha256:359b744d233ca31f3363147832987cf6963b7cbbd12038d991c2236764796814",
+        "commitId": "883b1c165ea623e8d7ca3644a0555014b1d0bd2b"
+      }
+    },
+    {
+      "owner": "mj-labs",
+      "name": "typer",
+      "repository_id": "16",
+      "upstream": "https://github.com/fastapi/typer",
+      "upstream_commit": "b15210b71a5b9b35be82a1ffdb172ef7b3a89d85",
+      "upstream_tree": "7db616e4e0ca07080447e2909d21d6ddd91c70fe",
+      "ci_commit": "909290f0ad98df56b34267def23b25b2b5de5ebb",
+      "job_id": "8430768c-68a2-4684-8097-5bec51f463f2",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj-labs/typer/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r16",
+        "tag": "ci-8430768c-68a2-4684-8097-5bec51f463f2",
+        "digest": "sha256:4d5b3735a4f443dc285d911538db3a5c49ca54a350035f36d75cc1629997394b",
+        "commitId": "909290f0ad98df56b34267def23b25b2b5de5ebb"
+      }
+    },
+    {
+      "owner": "mj-labs",
+      "name": "tenacity",
+      "repository_id": "17",
+      "upstream": "https://github.com/jd/tenacity",
+      "upstream_commit": "32ac68f0941319c0d2f4fb927f96e4ee29bb46c6",
+      "upstream_tree": "cb8b024567419c7eb35bb34a2f81be334a9aa245",
+      "ci_commit": "f3136c51f40ee2c5f80835f1d3383086d2b95111",
+      "job_id": "472aecd7-a46a-4752-8337-47fc5432fea8",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj-labs/tenacity/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r17",
+        "tag": "ci-472aecd7-a46a-4752-8337-47fc5432fea8",
+        "digest": "sha256:49245f122645a77019bff1a6ee368e6d2fd8184c5b3720f2190ae0c5d86642ca",
+        "commitId": "f3136c51f40ee2c5f80835f1d3383086d2b95111"
+      }
+    },
+    {
+      "owner": "mj-labs",
+      "name": "structlog",
+      "repository_id": "18",
+      "upstream": "https://github.com/hynek/structlog",
+      "upstream_commit": "5686b0a6cf81505a71db7c69b3aee84d3a7730e0",
+      "upstream_tree": "1d78e30dac79c386f5aa18f1cbaaf1d6dd710f39",
+      "ci_commit": "69b022804a2e4f0392a85c70fac631253e1670ad",
+      "job_id": "1282ba51-bdfe-4ae9-a696-f860264b9b7d",
+      "pull_request_url": "https://demo.gitgolf.mjtechguy.com/mj-labs/structlog/pull/1",
+      "tests": "PASSED",
+      "cleanup": "destroyed",
+      "image": {
+        "registry": "https://registry.cloudflare.com",
+        "repository": "530bd01e3d3b298bac1f172ec1868f5a/golf-native-20261013-bcd02761-r18",
+        "tag": "ci-1282ba51-bdfe-4ae9-a696-f860264b9b7d",
+        "digest": "sha256:3a3cab0d8d786473feb608300554e2f9bafc80a79b5a4e324f0026bc95fd71bc",
+        "commitId": "69b022804a2e4f0392a85c70fac631253e1670ad"
+      }
+    }
+  ],
+  "replay": "verified existing repository and organization identities; skipped completed CI",
+  "browser": {
+    "method": "read-only operator proxy against deployed APIs and matching native build; no human login impersonation",
+    "organization_members_and_three_repositories_each": true,
+    "package_pages": [
+      "mj/fastapi",
+      "mj-labs/structlog"
+    ],
+    "viewports": [
+      1280,
+      390
+    ],
+    "horizontal_page_overflow": false
+  },
+  "limits": [
+    "Shallow pinned Git snapshots; complete upstream workflow matrices not executed.",
+    "OCI artifacts contain built wheels, source archives and reports, not runnable application images.",
+    "Existing retained deployment upgraded and replayed; no second fresh installation created.",
+    "Provider authority and preview leases retain bounded lifetimes documented in deploy/demo/README.md."
+  ]
+}

@@ -78,12 +78,13 @@ test('retained generic assets require Access but no Golf session or repository l
 test('native UI requires an active Golf identity and strips all credentials from asset reads', async () => {
   const env = { PUBLIC_ORIGIN: 'https://golf.example.com', ACCESS_AUD: 'a'.repeat(64), PREVIEW_ORIGIN: 'https://preview.example.net' };
   let received, assets = 0, authorized = true;
-  env.ASSETS = { async fetch(request) { assets++; assert.equal([...request.headers].length, 0); return new Response('<html>Golf</html>', { headers: { 'Content-Type': 'text/html' } }); } };
+  env.ASSETS = { async fetch(request) { assets++; assert.equal([...request.headers].length, 0); return new Response('<html><script id="golf-session" type="application/json">null</script>Golf</html>', { headers: { 'Content-Type': 'text/html' } }); } };
   const ctx = { access: { aud: env.ACCESS_AUD, async getIdentity() { return { email: 'owner@example.com' }; } }, exports: { Workspace: {
-    idFromName(value) { return value; }, get() { return { async fetch(request) { received = request; return authorized ? Response.json({ user: { id: '1' } }) : Response.json({ code: 'unauthenticated' }, { status: 401 }); } }; },
+    idFromName(value) { return value; }, get() { return { async fetch(request) { received = request; return authorized ? Response.json({ user: { id: '1', fullName: '</script><script>bad()</script>' } }) : Response.json({ code: 'unauthenticated' }, { status: 401 }); } }; },
   } } };
   const response = await publicFetch(new Request(env.PUBLIC_ORIGIN + '/', { headers: { 'X-Golf-Native-Access-Email': 'forged@example.com', Cookie: 'CF_Authorization=secret' } }), env, ctx);
   assert.equal(response.status, 200); assert.equal(assets, 1); assert.equal(received.headers.get('X-Golf-Native-Access-Email'), 'owner@example.com');
+  const html = await response.text(); assert.ok(html.includes('"id":"1"')); assert.ok(html.includes('\\u003c/script>')); assert.ok(!html.includes('<script>bad()'));
   assert.equal(response.headers.get('Referrer-Policy'), 'strict-origin'); assert.equal(response.headers.get('Cache-Control'), 'no-store'); assert.ok(response.headers.get('Content-Security-Policy').includes("form-action 'self' https://preview.example.net"));
   assert.equal((await publicFetch(new Request(env.PUBLIC_ORIGIN + '/alice/repo/blob/' + 'a'.repeat(40) + '/hello%20world.py?view=source'), env, ctx)).status, 200);
   assert.equal(assets, 2);
@@ -98,7 +99,8 @@ test('read routing is repository-scoped and compatible with a previous workspace
   const request = (owner = 'alice', method = 'GetContents') => new Request(env.PUBLIC_ORIGIN + '/rpc/golf.v1.RepositoryService/' + method, { method: 'POST', headers: { 'X-Golf-Native-Access-Email': 'forged', 'Content-Type': 'application/json' }, body: JSON.stringify({ repository: { owner, name: 'project' }, repositoryId: '1', ref: 'a'.repeat(40) }) });
   assert.equal(await (await publicFetch(request(), env, ctx)).text(), 'repository');
   assert.deepEqual(keys.at(-1), ['repository', 'alice/project']); assert.equal(requests.at(-1)[2], 'reader@example.com');
-  assert.equal(await (await publicFetch(request('other'), env, ctx)).text(), 'workspace');
+  assert.equal(await (await publicFetch(request('alice','GetRepositoryFileIndex'), env, ctx)).text(), 'repository');
+  assert.equal(await (await publicFetch(request('other'), env, ctx)).text(), 'repository');
   assert.equal(await (await publicFetch(request('alice', 'CreateRepository'), env, ctx)).text(), 'workspace');
   delete ctx.exports.RepositoryReads;
   assert.equal(await (await publicFetch(request(), env, ctx)).text(), 'workspace');

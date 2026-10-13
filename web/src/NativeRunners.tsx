@@ -83,22 +83,30 @@ export function NativeRunnerAdmin() {
 }
 
 export function NativeRunnerPlacement({ context }: { context: { repository: { owner: string; name: string }; repositoryId: string } }) {
-  const inventory = useQuery({ ...privateQuery, queryKey: ['native-runner-placement', context.repositoryId], queryFn: ({ signal }) => nativeAPI<{ placement: Placement; pools: Pool[]; canEdit: boolean }>('/native/runner-placement', { ...context, action: 'get' }, signal), refetchInterval: 30000 });
-  const [choice, setChoice] = useState<string>();
+  const [editing, setEditing] = useState(false);
+  const inventory = useQuery({ ...privateQuery, queryKey: ['native-runner-placement', context.repositoryId], queryFn: ({ signal }) => nativeAPI<{ placement: Placement; pools: Pool[]; canEdit: boolean }>('/native/runner-placement', { ...context, action: 'get' }, signal), refetchInterval: editing ? false : 30000 });
   const [busy, setBusy] = useState(false), [error, setError] = useState<unknown>();
-  const current = inventory.data;
-  async function save() {
-    if (!current || choice === undefined) return;
+  const current = inventory.isSuccess && !inventory.isFetching ? inventory.data : undefined;
+  async function save(choice: string) {
+    if (!current) return;
     const pool = current.pools.find(p => p.id === choice);
     setBusy(true); setError(undefined);
-    try { await nativeAPI('/native/runner-placement', { ...context, action: 'set', expectedVersion: current.placement.version, poolId: pool?.id || null, poolVersion: pool?.version || null }); setChoice(undefined); await inventory.refetch(); }
-    catch (cause) { setError(cause); setChoice(undefined); await inventory.refetch(); }
+    try { await nativeAPI('/native/runner-placement', { ...context, action: 'set', expectedVersion: current.placement.version, poolId: pool?.id || null, poolVersion: pool?.version || null }); setEditing(false); await inventory.refetch(); }
+    catch (cause) { setError(cause); setEditing(false); await inventory.refetch(); }
     finally { setBusy(false); }
   }
-  return <section className="browser-panel"><div className="browser-panel-heading"><h3>PR runner placement</h3><button className="button secondary" disabled={busy || inventory.isFetching} onClick={() => void inventory.refetch()}>Refresh</button></div>
-    <p className="field-help">Jobs use the selected active untrusted pool. A changed pool or placement stops a queued job until it is admitted again.</p>
+  return <section className="browser-panel"><div className="browser-panel-heading"><h3>Pull request runner</h3><button className="button secondary" disabled={busy || inventory.isFetching} onClick={() => void inventory.refetch()}>Refresh</button></div>
     {inventory.error && <p className="error" role="alert">{message(inventory.error)}</p>}{error ? <p className="error" role="alert">{message(error)} Inspect the refreshed placement before another edit.</p> : null}
-    {current && <><p>Current: {current.pools.find(p => p.id === current.placement.pool_id)?.name || (current.placement.pool_id ? 'Unavailable pool' : 'Managed Cloudflare Container')} · version {current.placement.version}</p>
-      {current.canEdit && <form className="credential-actions" onSubmit={event => { event.preventDefault(); void save(); }}><label>Runner pool <select value={choice ?? current.placement.pool_id ?? ''} disabled={busy} onChange={event => setChoice(event.target.value)}><option value="">Managed Cloudflare Container</option>{current.pools.map(p => <option key={p.id} value={p.id} disabled={p.state !== 'ACTIVE'}>{p.name} · {p.state.toLowerCase()} · capacity {p.max_parallel}</option>)}</select></label><button className="button primary" disabled={busy || choice === undefined || choice === (current.placement.pool_id || '')}>Save placement</button></form>}</>}
+    {current && <div className="credential-form-content"><dl className="settings-profile"><div><dt>Current runner</dt><dd>{current.pools.find(p => p.id === current.placement.pool_id)?.name || (current.placement.pool_id ? 'Unavailable pool' : 'Managed Cloudflare Container')}</dd></div></dl>
+      {current.canEdit && (editing ? <PlacementEditor key={current.placement.version} placement={current.placement} pools={current.pools} busy={busy} save={save} close={() => setEditing(false)}/> : <button className="button secondary" onClick={() => setEditing(true)}>Change runner</button>)}</div>}
+    {inventory.isFetching ? <p className="panel-footnote" role="status">Checking runner settings…</p> : null}
   </section>;
+}
+
+function PlacementEditor({ placement, pools, busy, save, close }: { placement: Placement; pools: Pool[]; busy: boolean; save: (choice: string) => Promise<void>; close: () => void }) {
+  const form = useForm({ defaultValues: { poolId: placement.pool_id || '' }, onSubmit: ({ value }) => save(value.poolId) });
+  return <form onSubmit={event => { event.preventDefault(); void form.handleSubmit(); }}>
+    <form.Field name="poolId">{field => <label>Runner pool<select value={field.state.value} disabled={busy} onChange={event => field.handleChange(event.target.value)}><option value="">Managed Cloudflare Container</option>{pools.map(pool => <option key={pool.id} value={pool.id} disabled={pool.state !== 'ACTIVE'}>{pool.name} · {pool.state.toLowerCase()} · capacity {pool.max_parallel}</option>)}</select></label>}</form.Field>
+    <p className="field-help">Changing the runner stops queued jobs until they are admitted again.</p><div className="credential-actions"><form.Subscribe selector={state => state.values.poolId}>{choice => <button className="button primary" disabled={busy || choice === (placement.pool_id || '')}>Save runner</button>}</form.Subscribe><button type="button" className="button secondary" disabled={busy} onClick={close}>Cancel</button></div>
+  </form>;
 }

@@ -5,7 +5,19 @@ export async function workspace(db, env) {
   if (!row) throw new Fault('failed_precondition', 412, 'The configured native workspace has not been enrolled.');
   return row;
 }
-export async function organizations(db, env, method, body) {
+export async function organizations(db, env, person, method, body) {
+  if (await db.prepare('SELECT id FROM native_owners LIMIT 1').first()) {
+    const paging = page(body);
+    const wire = o => ({ id: String(o.id), name: o.slug, fullName: o.full_name, description: o.description, visibility: 'ORGANIZATION_VISIBILITY_PRIVATE' });
+    if (method === 'ListOrganizations') {
+      const { results } = await db.prepare("SELECT o.* FROM native_owners o JOIN native_owner_members m ON m.owner_id=o.id WHERE m.user_id=? AND o.kind='ORGANIZATION' ORDER BY o.slug LIMIT ? OFFSET ?").bind(person.id,paging.limit+1,paging.offset).all();
+      return { organizations: results.slice(0,paging.limit).map(wire), page: { nextPage: results.length>paging.limit ? paging.number+1 : 0 } };
+    }
+    const row = await db.prepare("SELECT o.* FROM native_owners o JOIN native_owner_members m ON m.owner_id=o.id WHERE m.user_id=? AND o.slug=? AND o.kind='ORGANIZATION'").bind(person.id,body.organization).first();
+    if (!row) deny();
+    if (method === 'GetOrganization') return { organization: wire(row) };
+    unsupported();
+  }
   const row = await workspace(db, env);
   const organization = { id: String(row.id), name: row.slug, fullName: row.slug, visibility: 'ORGANIZATION_VISIBILITY_PRIVATE' };
   if (method === 'ListOrganizations') return { organizations: page(body).number === 1 ? [organization] : [], page: { nextPage: 0 } };
@@ -14,7 +26,7 @@ export async function organizations(db, env, method, body) {
   unsupported();
 }
 export async function stars(db, env, person, row, method, body) {
-  const owner = await workspace(db, env);
+  const owner = row.owner_id ? { id: row.owner_id } : await workspace(db, env);
   if (body.repositoryId !== String(row.id)) deny();
   if (method === 'SetRepositoryStar') {
     if (body.nativeUserId !== String(person.id) || body.ownerId !== String(owner.id)) deny();

@@ -1,6 +1,8 @@
+import { ownerSlug } from './owners.mjs';
 import { collaboration } from './collaboration.mjs';
 import { digest, uuidOK, Fault, deny, invalid, reply, conflict } from './common.mjs';
 import { remote } from './git.mjs';
+import { registryRepository } from './managed-registry.mjs';
 import { nativeTestContract, testPolicy, testResult } from './test-policy.mjs';
 import { nativeActionsBuildContract, nativeActionsContract, nativeWorkflowContract, nativeWorkflowSource } from './native-workflow.mjs';
 import { nativeRunnerAdmission, nativeRunnerProgress } from './native-runners.mjs';
@@ -19,7 +21,7 @@ export function publicEvidenceExecution(execution) {
 }
 export function evidencePolicy(env) {
   const limit = Number(env.EVIDENCE_DAILY_LIMIT);
-  return Boolean(env.EVIDENCE_BUCKET && env.EVIDENCE_QUEUE && env.EVIDENCE_QUEUE_NAME && env.EVIDENCE_WORKFLOW_NAME && Number.isInteger(limit) && limit >= 1 && limit <= 20);
+  return Boolean(env.EVIDENCE_BUCKET && env.EVIDENCE_QUEUE && env.EVIDENCE_QUEUE_NAME && env.EVIDENCE_WORKFLOW_NAME && Number.isInteger(limit) && limit >= 1 && limit <= 50);
 }
 function policy(env, advice) {
   if (!evidencePolicy(env) || advice && !(env.EVIDENCE_ALLOW_AI === 'true' && env.AI && env.EVIDENCE_GATEWAY)) {
@@ -28,15 +30,15 @@ function policy(env, advice) {
 }
 function selection(body, row, env) {
   const s = body.selection;
-  if (!s || s.repository?.owner !== env.WORKSPACE_SLUG || s.repository?.name !== row.name || s.repositoryId !== String(row.id)) deny();
+  if (!s || s.repository?.owner !== ownerSlug(row,env) || s.repository?.name !== row.name || s.repositoryId !== String(row.id)) deny();
   if (!/^[1-9][0-9]{0,15}$/.test(s.pullRequestId || '') || !Number.isInteger(s.number) || s.number < 1 ||
       !/^[a-f0-9]{40}$/.test(s.baseCommitId || '') || !/^[a-f0-9]{40}$/.test(s.headCommitId || '') ||
       !uuidOK(body.idempotencyKey) || typeof body.advice !== 'boolean') invalid('Use the exact PR selection, UUID v4 key and explicit advice boolean.');
-  return { repository: { owner: env.WORKSPACE_SLUG, name: row.name }, repositoryId: String(row.id),
+  return { repository: { owner: ownerSlug(row,env), name: row.name }, repositoryId: String(row.id),
     pullRequestId: s.pullRequestId, number: s.number, baseCommitId: s.baseCommitId, headCommitId: s.headCommitId };
 }
 async function current(db, env, person, row, artifact, s, observed) {
-  const pr = observed || (await collaboration(db, env, person, 'GetPullRequest', { repository: s.repository, number: s.number }, row, artifact)).pullRequest;
+  const pr = observed || (await collaboration(db, env, person, 'GetPullRequest', { repository: { owner: ownerSlug(row,env), name: row.name }, number: s.number }, row, artifact)).pullRequest;
   return { pr, matches: pr.id === s.pullRequestId && pr.base.commitId === s.baseCommitId && pr.head.commitId === s.headCommitId &&
     !pr.base.retainedSnapshot && !pr.head.retainedSnapshot };
 }
@@ -64,7 +66,7 @@ export async function evidenceAPI(db, env, person, row, artifact, body) {
     const { results } = await db.prepare('SELECT * FROM evidence_jobs WHERE repository_id=? ORDER BY created_at DESC,id DESC LIMIT 101').bind(row.id).all();
     const jobs = [], matching = results.slice(0, 100).filter(job => JSON.parse(job.snapshot).selection.number === body.number);
     // One live ref observation per inventory, rather than one paid Git read per row.
-    const pr = matching.length ? (await collaboration(db, env, person, 'GetPullRequest', { repository: { owner: env.WORKSPACE_SLUG, name: row.name }, number: body.number }, row, artifact)).pullRequest : null;
+    const pr = matching.length ? (await collaboration(db, env, person, 'GetPullRequest', { repository: { owner: ownerSlug(row,env), name: row.name }, number: body.number }, row, artifact)).pullRequest : null;
     for (const job of matching) jobs.push(await view(db, env, person, row, artifact, job, pr));
     return reply({ jobs, truncated: results.length > 100 });
   }
@@ -100,7 +102,7 @@ export async function evidenceAPI(db, env, person, row, artifact, body) {
       if (count.total >= Number(env.EVIDENCE_DAILY_LIMIT)) exhausted();
       const observed = await current(db, env, person, row, artifact, s);
       if (!observed.matches || observed.pr.state !== 'ISSUE_STATE_OPEN') throw new Fault('failed_precondition', 412, 'The selected open PR commits changed.');
-      const reviews = await collaboration(db, env, person, 'ListPullRequestReviews', { repository: s.repository, number: s.number, page: { limit: 100 } }, row, artifact);
+      const reviews = await collaboration(db, env, person, 'ListPullRequestReviews', { repository: { owner: ownerSlug(row,env), name: row.name }, number: s.number, page: { limit: 100 } }, row, artifact);
       const checks = await collaboration(db, env, person, 'ListPullRequestChecks', { selection: s, page: { limit: 100 } }, row, artifact);
       let execution, agent;
       if (runAgent) agent = await artifact(async repo => {
@@ -127,7 +129,7 @@ export async function evidenceAPI(db, env, person, row, artifact, body) {
           ...(workflow ? { workflow, workflowSha256: await digest(JSON.stringify(workflow)) } : { module: env.TEST_MODULE }), policySha256: env.TEST_POLICY_SHA256,
           ...(env.TEST_SOCKETLESS_BUILD === 'true' ? { build: true } : {}),
           ...(runner ? { runner } : {}),
-          ...(env.REGISTRY_CI_ENABLED === 'true' && env.REGISTRY ? { registry: { origin:env.REGISTRY_ORIGIN, name:env.WORKSPACE_SLUG+'/'+row.name } } : {}) };
+          ...(env.REGISTRY_CI_ENABLED === 'true' && env.REGISTRY ? { registry: { origin:env.REGISTRY_ORIGIN, name:registryRepository(env,row) } } : {}) };
       });
       const snapshot = JSON.stringify({ selection: s, pullRequest: observed.pr, reviews: reviews.reviews, reportedChecks: checks.checks,
         ...(execution ? { execution } : {}), ...(agent ? { agent, artifactName: row.artifact_name } : {}),

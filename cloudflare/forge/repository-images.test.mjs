@@ -32,7 +32,9 @@ test('image paths normalize inside this repository and reject traversal, schemes
   assert.equal(repositoryImagePath('docs/README.md','/logo.svg',literalPath),'logo.svg');
   for (const reference of ['../../x','../%2e%2e/x','a%2fb','a%5cb','//evil.test/x','https://evil.test/x','data:image/svg+xml,x','a\n']) assert.throws(()=>repositoryImagePath('docs/README.md',reference,literalPath));
 });
-test('external images admit known HTTPS hosts without credentials, explicit ports or ambiguous authorities', () => {
+test('external images admit public HTTPS hosts without credentials, explicit ports or ambiguous authorities', () => {
+  assert.equal(externalImageURL('https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png').host, 'fastapi.tiangolo.com');
+  assert.equal(externalImageURL('https://images.another-public-brand.dev/logo.png').host, 'images.another-public-brand.dev');
   for (const reference of ['https://vite.dev/vite-dark.svg','https://sponsors.vite.dev/sponsors.svg','https://github.com/vitejs/vite/actions/workflows/ci.yml/badge.svg?branch=main','https://img.shields.io/npm/v/vite.svg']) assert.equal(externalImageURL(reference).href,reference);
   for (const reference of ['https://localhost/x','https://127.0.0.1/x','https://raw.githubusercontent.com:443/x','https://user:pass@raw.githubusercontent.com/x','https://raw.githubusercontent.com.evil.test/x','http://raw.githubusercontent.com/x','https:raw.githubusercontent.com/x','https://raw%2egithubusercontent.com/x','https://vite.dev/x#fragment']) assert.throws(()=>externalImageURL(reference));
 });

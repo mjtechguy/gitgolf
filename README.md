@@ -1,5 +1,10 @@
 # Golf
 
+New Cloudflare demos use the [managed container image registry](docs/CLOUDFLARE_MANAGED_REGISTRY.md),
+with Golf-scoped CI publishing and digest-verified image inventories.
+The [repeatable demo recipe](deploy/demo/README.md) provisions `mj`, two organizations,
+pinned GitHub repositories, hosted CI and registry artifacts.
+
 Forgejo is the default Git backend for new portable installs. See [Forgejo setup](docs/FORGEJO_SETUP.md).
 
 Golf is an agent-ready Git and developer-workflow platform with two infrastructure tracks:

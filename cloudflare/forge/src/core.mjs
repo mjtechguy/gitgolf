@@ -1,3 +1,4 @@
+import { ownerSlug, ownerJoin, ownerColumns, withOwner, creationOwner, ownersAPI } from './owners.mjs';
 import { fileIndex } from './file-index.mjs';
 import { pullCodeOwners } from './codeowners.mjs';
 import { reviewAuthoring, reviewAuthoringMethods } from './review-authoring.mjs';
@@ -18,6 +19,7 @@ import { rootMetadata } from './repository-metadata.mjs';
 import { timings, timedDatabase, timedResponse, release, configuration } from './telemetry.mjs';
 import { repositoryImage } from './repository-images.mjs';
 import { repositorySettings, repositoryCollaborators, repositoryPackages } from './repository-settings.mjs';
+import { managedJobRequest, registryRepository } from './managed-registry.mjs';
 import { comparison, diff } from './repository-diff.mjs';
 import { organizations, profile, stars } from './workspace-ui.mjs';
 import { collaboration, collaborationMethods, operationRepository } from './collaboration.mjs';
@@ -91,10 +93,10 @@ async function actor(db, request) {
 }
 
 async function authorizedRepository(db, person, key, env, id) {
-  if (key?.owner !== env.WORKSPACE_SLUG || !nameOK(key?.name)) deny();
-  const row = await db.prepare(`SELECT r.*,g.role,w.id AS workspace_id,COALESCE(v.version,0) AS access_version,COALESCE(s.description,r.description) AS description FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN workspaces w ON w.slug=? AND w.artifact_namespace=? LEFT JOIN repository_settings s ON s.repository_id=r.id LEFT JOIN repository_access_versions v ON v.repository_id=r.id
+  if (!nameOK(key?.owner) || !nameOK(key?.name)) deny();
+  const row = await db.prepare(`SELECT r.*,g.role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,COALESCE(v.version,0) AS access_version,COALESCE(s.description,r.description) AS description FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN workspaces w ON w.slug=? AND w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id LEFT JOIN repository_access_versions v ON v.repository_id=r.id
     WHERE r.name=? AND g.user_id=? AND r.state='ACTIVE'`).bind(env.WORKSPACE_SLUG, env.ARTIFACTS_NAMESPACE, key.name, person.id).first();
-  if (!row || id && String(row.id) !== id || person.git_repository_id && person.git_repository_id!==row.id) deny();
+  if (!row || ownerSlug(row,env) !== key.owner || id && String(row.id) !== id || person.git_repository_id && person.git_repository_id!==row.id) deny();
   return row;
 }
 
@@ -121,7 +123,7 @@ async function withArtifact(env, row, action, defaultHead = false) {
 }
 
 function wireRepository(row, env, empty) {
-  const fullName = `${env.WORKSPACE_SLUG}/${row.name}`;
+  const fullName = `${ownerSlug(row,env)}/${row.name}`;
   return { id: String(row.id), name: row.name, fullName, description: row.description, private: true,
     htmlUrl: `${env.PUBLIC_ORIGIN}/${fullName}`, cloneUrl: `${env.PUBLIC_ORIGIN}/git/${fullName}.git`,
     defaultBranch: row.default_branch, updatedAt: row.created_at, empty,
@@ -146,7 +148,8 @@ async function createRepository(db, env, person, body) {
     invalid('Provide a private repository, canonical name and UUID v4 operation key.');
   }
   if (body.sourceUrl || body.pullMirror) unsupported();
-  const hash = await digest(JSON.stringify([body.name, body.description || '', true]));
+  const owner = await creationOwner(db, person, body.owner);
+  const hash = await digest(JSON.stringify([body.name, body.description || '', true, ...(owner ? [owner.id] : [])]));
   let row = await db.prepare('SELECT * FROM repositories WHERE creator_id=? AND creation_key=?').bind(person.id, body.idempotencyKey).first();
   if (row) {
     if (row.input_hash !== hash) throw new Fault('already_exists', 409, 'Operation key belongs to different inputs.');
@@ -155,6 +158,7 @@ async function createRepository(db, env, person, body) {
     const artifactName = 'repo-' + crypto.randomUUID().replaceAll('-', '');
     const created = await db.prepare(`INSERT INTO repositories(name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at)
       VALUES(?,?,?,?,?,?,'CREATING',?) RETURNING *`).bind(body.name, body.description || '', artifactName, person.id, body.idempotencyKey, hash, new Date().toISOString()).first();
+    if (owner) await db.prepare('INSERT INTO repository_owners(repository_id,owner_id) VALUES(?,?)').bind(created.id,owner.id).run();
     // The durable CREATING row precedes dispatch. Ambiguous create is never replayed.
     const provider = await env.ARTIFACTS.create(artifactName, { readOnly: false, setDefaultBranch: 'main' });
     if (provider.name !== artifactName || provider.remote !== remote(env, artifactName) || typeof provider.token !== 'string') throw Error('invalid created repository');
@@ -169,7 +173,8 @@ async function createRepository(db, env, person, body) {
   }
   const result = { creation: creation(row) };
   if (row.state === 'ACTIVE') {
-    await authorizedRepository(db, person, { owner: env.WORKSPACE_SLUG, name: row.name }, env);
+    row = await withOwner(db,row);
+    await authorizedRepository(db, person, { owner: ownerSlug(row,env), name: row.name }, env);
     result.repository = await repository(row, env);
   }
   return result;
@@ -324,18 +329,19 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const budget = await db.prepare('PRAGMA table_info(repository_index_budget)').all();
       const operations = await db.prepare('PRAGMA table_info(operations_maintenance)').all();
       const access = await db.prepare('PRAGMA table_info(repository_access_operations)').all();
-      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
+      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
         configuration, runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG });
     }
     if (url.pathname === '/native/preview-resume') {
       if (!uuidOK(body.previewId)) invalid('Use a canonical preview ID.');
       const preview = await db.prepare('SELECT * FROM previews WHERE id=?').bind(body.previewId).first();
       if (!preview) deny();
-      const stored = await db.prepare('SELECT * FROM repositories WHERE id=?').bind(preview.repository_id).first();
+      const stored = await withOwner(db, await db.prepare('SELECT * FROM repositories WHERE id=?').bind(preview.repository_id).first());
       if (!stored) deny();
-      const row = await authorizedRepository(db, person, { owner: env.WORKSPACE_SLUG, name: stored.name }, env, String(stored.id));
+      const row = await authorizedRepository(db, person, { owner: ownerSlug(stored,env), name: stored.name }, env, String(stored.id));
       return await previewAPI(db, env, person, row, action => withArtifact(env, row, action), { action: 'grant', previewId: preview.id });
     }
+    if (url.pathname === '/native/owners') return reply(await ownersAPI(db, person, body));
     if (url.pathname === '/native/config') return reply({ runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG, accessLogin: Boolean(env.ACCESS_AUD), canCreate: Boolean(person.can_create),
       evidence: evidencePolicy(env), tests: Boolean(testPolicy(env)), agents: Boolean(agentPolicy(env)),
       advice: env.EVIDENCE_ALLOW_AI === 'true', previews: previewPolicy(env), apps: Boolean(appPolicy(env)), automaticCI: env.CI_AUTO === 'true', appPath: appPolicy(env)?.entry || '',
@@ -379,7 +385,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     const [, service, method] = route;
     if (service === 'PullReviewAuthoringService' && !reviewAuthoringMethods.has(method) || service === 'PullReviewRequestService' && !pullReviewMethods.has(method) || service === 'RepositoryRulesService' && !ruleMethods.has(method) || service === 'GitTransportService' && !gitCredentialMethods.has(method)) unsupported();
     if (service === 'ProfileService') return reply(await profile(db, person, method, body));
-    if (service === 'OrganizationService') return reply(await organizations(db, env, method, body));
+    if (service === 'OrganizationService') return reply(await organizations(db, env, person, method, body));
     if (service === 'SessionService') {
       if (method === 'GetSession') return reply({ user: { ...user(person), isInstanceAdmin: await operationsAdmin(db, person, request) } });
       if (method === 'GetAuthenticationOptions') return reply({ providerLabel: 'Cloudflare Access' });
@@ -399,7 +405,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'native-ci-automatic', label: 'Automatic PR push tests', state: env.CI_AUTO === 'true' && testPolicy(env) && evidencePolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.TEST_WORKFLOW_FORMAT === 'actions-act' ? 'Confirmed single-ref pushes can request pinned act PR jobs on the selected customer pool under current writer authority.' : env.TEST_WORKFLOW_FORMAT ? 'Confirmed single-ref pushes; one exact-source native Actions or GitLab shell job under the operator-approved profile and current writer authority.' : 'Confirmed single-ref pushes only; durable admission uses current writer permissions and the approved exact-source test policy.' },
       { id: 'settings.repository-general', label: 'Repository general settings', state: 'CAPABILITY_STATE_READY', reason: 'Current administrators can edit description, website, topics and an existing default branch with atomic authority/revision checks. Feature policies remain operator-managed.' },
       { id: 'ci.registry-publish', label: 'Job-scoped image publishing', state: env.REGISTRY && env.REGISTRY_CI_ENABLED === 'true' && testPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Operator-enabled OCI publishing from approved PR jobs. Job-only tags, current source/access checks and immutable digest receipts; general Docker build workflows remain separate.' },
-      { id: 'repository.packages', label: 'OCI packages', state: env.REGISTRY && env.REGISTRY_ORIGIN ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Separate CFCR service; administrator enablement, current Git access and repository-scoped registry credentials.' },
+      { id: 'repository.packages', label: 'OCI packages', state: env.REGISTRY && env.REGISTRY_ORIGIN ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.REGISTRY_PROVIDER === 'cloudflare' ? 'Cloudflare managed image storage; repository-scoped inventory and trusted CI publishing. Direct user credentials, scanning and registry policy are unavailable.' : 'Separate CFCR service; administrator enablement, current Git access and repository-scoped registry credentials.' },
       { id: 'repository.live', label: 'Live activity stream', state: env.watchRepository ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.watchRepository ? 'Authorized, resumable Connect streams; source snapshots stay pinned.' : 'No live stream coordinator is installed.' },
       { id: 'settings.repository-rules', label: 'Rules and merge policy', state: 'CAPABILITY_STATE_READY', reason: 'Enforced branch locks and tag account restrictions on Golf-brokered Git writes, including administrators. Literal and trailing-prefix patterns; protected merge, review/check requirements and direct provider writes are not covered.' },
       { id: 'settings.repository-webhooks', label: 'Webhooks', state: webhookPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: webhookPolicy(env) ? 'Encrypted subscriptions, signed delivery and retries to operator-approved HTTPS origins; current sponsor authority, delivery history and daily attempt limits. Actions events cover native test jobs.' : 'Configure a dedicated Secrets Store encryption key and approved HTTPS webhook origins.' },
@@ -440,27 +446,28 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (method === 'CreateRepository') return reply(await createRepository(db, env, person, body));
     if (method === 'GetRepositoryCreation') {
       if (!uuidOK(body.idempotencyKey)) invalid('Use the original operation key.');
-      const row = await db.prepare('SELECT * FROM repositories WHERE creator_id=? AND creation_key=?').bind(person.id, body.idempotencyKey).first();
+      const row = await withOwner(db,await db.prepare('SELECT * FROM repositories WHERE creator_id=? AND creation_key=?').bind(person.id, body.idempotencyKey).first());
       if (!row) deny();
       const value = { creation: creation(row) };
-      if (row.state === 'ACTIVE') value.repository = await repository(await authorizedRepository(db, person, { owner: env.WORKSPACE_SLUG, name: row.name }, env), env);
+      if (row.state === 'ACTIVE') value.repository = await repository(await authorizedRepository(db, person, { owner: ownerSlug(row,env), name: row.name }, env), env);
       return reply(value);
     }
     if (method === 'ListRepositories') {
       const paging = page(body);
-      const { results } = await db.prepare(`SELECT r.*,COALESCE(s.description,r.description) AS description FROM repositories r JOIN grants g ON g.repository_id=r.id LEFT JOIN repository_settings s ON s.repository_id=r.id
-        WHERE g.user_id=? AND r.state='ACTIVE' ORDER BY r.id LIMIT ? OFFSET ?`).bind(person.id, paging.limit + 1, paging.offset).all();
-      const repositories = [];
+      const { results } = await db.prepare(`SELECT r.*,${ownerColumns},COALESCE(s.description,r.description) AS description FROM repositories r JOIN grants g ON g.repository_id=r.id ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
+        WHERE g.user_id=? AND r.state='ACTIVE' AND (?='' OR COALESCE(o.slug,?)=?) ORDER BY r.id LIMIT ? OFFSET ?`).bind(person.id, body.owner || '', env.WORKSPACE_SLUG, body.owner || '', paging.limit + 1, paging.offset).all();
       const selected = results.slice(0, paging.limit);
+      if (body.metadataOnly === true) return reply({ repositories: selected.map(row => wireRepository(row, env)), page: { nextPage: results.length > paging.limit ? paging.number + 1 : 0 } });
+      const repositories = [];
       // Bound independent provider reads; preserve the authorized inventory order.
       for (let offset = 0; offset < selected.length; offset += 4)
         repositories.push(...await Promise.all(selected.slice(offset, offset + 4).map(row => repository(row, env))));
       return reply({ repositories, page: { nextPage: results.length > paging.limit ? paging.number + 1 : 0 } });
     }
     const row = ['GetIssueMutation', 'GetPullRequestReviewMutation'].includes(method)
-      ? await operationRepository(db, person, body.idempotencyKey)
+      ? await withOwner(db,await operationRepository(db, person, body.idempotencyKey))
       : await env.timings.measure('grant', () => authorizedRepository(db, person, body.repository || body.selection?.repository || body.target?.repository, env, body.repositoryId || body.selection?.repositoryId || body.target?.repositoryId));
-    env.readAuthority = { repository: { owner: env.WORKSPACE_SLUG, name: row.name }, repositoryId: String(row.id), role: row.role };
+    env.readAuthority = { repository: { owner: ownerSlug(row,env), name: row.name }, repositoryId: String(row.id), role: row.role };
     if (service === 'DiscussionCollaborationService' && engagementMethods.has(method)) return reply(await engagement(db, env, person, row, method, body));
     if (service === 'RepositorySettingsService') return reply(await repositorySettings(db, env, person, row, method, body, action=>withArtifact(env,row,action)));
     if (service === 'RepositoryInvitationService') return reply(await invitations(db, env, person, row, method, body, request));
@@ -625,7 +632,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
 
 export async function servePreview(env, input) {
   return previewRequest(env, input, async (db, person, id) => {
-    const row = await db.prepare(`SELECT r.*,g.role FROM repositories r JOIN grants g ON g.repository_id=r.id
+    const row = await db.prepare(`SELECT r.*,g.role,o.slug AS owner_slug,o.kind AS owner_kind,o.id AS owner_id FROM repositories r LEFT JOIN repository_owners ro ON ro.repository_id=r.id LEFT JOIN native_owners o ON o.id=ro.owner_id JOIN grants g ON g.repository_id=r.id
       WHERE r.id=? AND g.user_id=? AND r.state='ACTIVE'`).bind(id, person.id).first();
     return row ? { row, artifact: action => withArtifact(env, row, action) } : null;
   });
@@ -637,7 +644,7 @@ export async function runCI(env) {
   const db = env.DB.withSession('first-primary');
   const context = async (userId, repositoryId) => {
     const person = await db.prepare('SELECT * FROM users WHERE id=? AND active=1').bind(userId).first();
-    const row = await db.prepare("SELECT r.*,g.role FROM repositories r JOIN grants g ON g.repository_id=r.id WHERE r.id=? AND r.state='ACTIVE' AND g.user_id=? AND g.role IN ('admin','write')").bind(repositoryId, userId).first();
+    const row = await db.prepare("SELECT r.*,g.role,o.slug AS owner_slug,o.kind AS owner_kind,o.id AS owner_id FROM repositories r LEFT JOIN repository_owners ro ON ro.repository_id=r.id LEFT JOIN native_owners o ON o.id=ro.owner_id JOIN grants g ON g.repository_id=r.id WHERE r.id=? AND r.state='ACTIVE' AND g.user_id=? AND g.role IN ('admin','write')").bind(repositoryId, userId).first();
     return person && row && !row.write_pending ? { person, row, artifact: action => withArtifact(env, row, action) } : null;
   };
   const { results: pushes } = await db.prepare("SELECT * FROM git_operations WHERE state='APPLIED' AND ci_state='PENDING' ORDER BY created_at,id LIMIT 10").all();
@@ -651,9 +658,9 @@ export async function runCI(env) {
     if (results.length > 10) { await db.prepare("UPDATE git_operations SET ci_state='REFUSED' WHERE id=?").bind(push.id).run(); continue; }
     const statements = [];
     for (const selected of results) {
-      const pr = (await collaboration(db, env, c.person, 'GetPullRequest', { repository: { owner: env.WORKSPACE_SLUG, name: c.row.name }, number: selected.number }, c.row, c.artifact)).pullRequest;
+      const pr = (await collaboration(db, env, c.person, 'GetPullRequest', { repository: { owner: ownerSlug(c.row,env), name: c.row.name }, number: selected.number }, c.row, c.artifact)).pullRequest;
       if ((pr.head.ref === branch ? pr.head.commitId : pr.base.commitId) !== push.new_sha || pr.head.retainedSnapshot || pr.base.retainedSnapshot) continue;
-      const selection = { repository: { owner: env.WORKSPACE_SLUG, name: c.row.name }, repositoryId: String(c.row.id), pullRequestId: pr.id,
+      const selection = { repository: { owner: ownerSlug(c.row,env), name: c.row.name }, repositoryId: String(c.row.id), pullRequestId: pr.id,
         number: pr.number, headCommitId: pr.head.commitId, baseCommitId: pr.base.commitId };
       statements.push(db.prepare('INSERT INTO ci_intake(id,operation_id,repository_id,user_id,number,selection,created_at) VALUES(?,?,?,?,?,?,?)')
         .bind(crypto.randomUUID(), push.id, c.row.id, c.person.id, pr.number, JSON.stringify(selection), new Date().toISOString()));
@@ -685,7 +692,7 @@ export async function advanceEvidence(env, id, phase, workflows) {
   let context;
   if (job) {
     const person = await db.prepare('SELECT * FROM users WHERE id=? AND active=1').bind(job.user_id).first();
-    const row = await db.prepare(`SELECT r.*,g.role FROM repositories r JOIN grants g ON g.repository_id=r.id
+    const row = await db.prepare(`SELECT r.*,g.role,o.slug AS owner_slug,o.kind AS owner_kind,o.id AS owner_id FROM repositories r LEFT JOIN repository_owners ro ON ro.repository_id=r.id LEFT JOIN native_owners o ON o.id=ro.owner_id JOIN grants g ON g.repository_id=r.id
       WHERE r.id=? AND r.state='ACTIVE' AND g.user_id=? AND g.role IN ('admin','write')`).bind(job.repository_id, job.user_id).first();
     if (person && row) context = { person, row, artifact: action => withArtifact(env, row, action) };
   }
@@ -732,14 +739,17 @@ export async function registryExecution(env, actorId, row, execution) {
   const job=await env.DB.withSession('first-primary').prepare('SELECT * FROM evidence_jobs WHERE id=? AND repository_id=? AND user_id=?').bind(execution.jobId,row.id,actorId).first();
   if (!job || job.state!=='QUEUED' || job.test_state!=='RUNNING' || row.write_pending || Date.parse(job.expires_at)!==execution.expiresAt) return false;
   const snapshot=JSON.parse(job.snapshot);
-  if (snapshot.execution?.commitId!==execution.commitId || snapshot.execution.policySha256!==execution.policySha256 || snapshot.execution.registry?.origin!==env.REGISTRY_ORIGIN || snapshot.execution.registry?.name!==env.WORKSPACE_SLUG+'/'+row.name) return false;
+  if (snapshot.execution?.commitId!==execution.commitId || snapshot.execution.policySha256!==execution.policySha256 || snapshot.execution.registry?.origin!==env.REGISTRY_ORIGIN || snapshot.execution.registry?.name!==registryRepository(env,row)) return false;
   return (await advanceEvidence(env,job.id,'authorize-test')).state==='AUTHORIZED';
 }
 
 // Credentials stay in the trusted broker; repository code receives only OCI responses.
 export async function testRegistry(env,id,request) {
   try { return await brokerRegistry(env,id,request); }
-  catch (error) { return new Response(executionDiagnostic(error), { status: 503, headers: { 'X-Golf-Registry-Broker-Error': '1', 'Cache-Control': 'no-store' } }); }
+  catch (error) {
+    if (error instanceof Fault && error.status < 500) return new Response('denied', { status: error.status, headers: { 'Cache-Control': 'no-store' } });
+    return new Response(executionDiagnostic(error), { status: 503, headers: { 'X-Golf-Registry-Broker-Error': '1', 'Cache-Control': 'no-store' } });
+  }
 }
 
 async function brokerRegistry(env,id,request) {
@@ -751,10 +761,12 @@ async function brokerRegistry(env,id,request) {
   if(!job) return refused();
   const row=await db.prepare("SELECT * FROM repositories WHERE id=? AND state='ACTIVE'").bind(job.repository_id).first();
   if(!row) return refused();
-  const name=env.WORKSPACE_SLUG+'/'+row.name;
+  const name=registryRepository(env,row);
   if(url.pathname!=='/v2/' && !url.pathname.startsWith('/v2/'+name+'/')) return refused();
   const snapshot=JSON.parse(job.snapshot),execution={contract:'golf.registry-job.v1',jobId:id,commitId:snapshot.execution?.commitId,policySha256:snapshot.execution?.policySha256,expiresAt:Date.parse(job.expires_at)};
   if(!await registryExecution(env,String(job.user_id),row,execution)) return refused();
+  if (env.REGISTRY_PROVIDER === 'cloudflare') return managedJobRequest(env, name, execution, request, env.registryProviderFetch || fetch,
+    async () => { if (!await registryExecution(env, String(job.user_id), row, execution)) throw new Fault('permission_denied', 403, 'Registry request denied.'); });
   const cache=env.registryCredentials ||= new Map();
   for(const [key,value] of cache) if(value.expiresAt<=Date.now()) cache.delete(key);
   if(!cache.has(id)) {

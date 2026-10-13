@@ -16,6 +16,25 @@ from cloudflare_setup import stop_owned_image_uploads
 from unittest.mock import Mock
 
 class PublicationTests(unittest.TestCase):
+    def test_managed_publication_preserves_binary_build_artifacts_and_omits_symlinks(self):
+        calls=[]
+        class Response:
+            def __init__(self, status, headers): self.status,self.headers=status,headers
+            def __enter__(self): return self
+            def __exit__(self,*_): pass
+            def read(self,_): return b''
+        def request(req, timeout):
+            calls.append(req)
+            return Response(202,{'Location':req.full_url+'owned'}) if req.method=='POST' else Response(403 if req.full_url.endswith('/unauthorized') else 201,{'Docker-Content-Digest':'sha256:'+hashlib.sha256(req.data).hexdigest()})
+        with tempfile.TemporaryDirectory() as directory, chdir(directory):
+            Path('dist').mkdir();Path('dist/project.whl').write_bytes(b'PK\x03\x04\xff\x00wheel')
+            Path('dist/ci-report.json').write_text('{"state":"PASSED"}')
+            Path('dist/private.whl').symlink_to('project.whl')
+            with patch.dict(os.environ,{'GOLF_REGISTRY':'https://registry.cloudflare.com','GOLF_IMAGE':'account/repo:ci-owned','GOLF_COMMIT':'a'*40},clear=True),patch('urllib.request.urlopen',request): registry_publish.publish()
+        with tarfile.open(fileobj=io.BytesIO(gzip.decompress(calls[3].data))) as archive:
+            self.assertEqual(archive.extractfile('dist/project.whl').read(),b'PK\x03\x04\xff\x00wheel')
+            self.assertNotIn('dist/private.whl',archive.getnames())
+
     def test_static_bundle_is_embedded_in_the_published_image_config(self):
         calls = []
         class Response:
@@ -25,6 +44,8 @@ class PublicationTests(unittest.TestCase):
             def read(self, _): return b''
         def request(req, timeout):
             calls.append(req)
+            if req.method == 'POST':
+                return Response(202, {'Location': req.full_url + 'upload-id'})
             return Response(403 if req.full_url.endswith('/unauthorized') else 201,
                             {'Docker-Content-Digest': 'sha256:' + hashlib.sha256(req.data).hexdigest()})
         with tempfile.TemporaryDirectory() as directory, chdir(directory):
@@ -33,7 +54,7 @@ class PublicationTests(unittest.TestCase):
             with patch.dict(os.environ, {'GOLF_REGISTRY': 'https://registry.test', 'GOLF_IMAGE': 'alice/repo:ci-owned', 'GOLF_COMMIT': 'a'*40}, clear=True), \
                  patch('urllib.request.urlopen', request), patch('subprocess.check_output', return_value='f'*40):
                 registry_publish.publish()
-        config = json.loads(calls[0].data)
+        config = json.loads(calls[1].data)
         bundle = json.loads(config['config']['Labels']['dev.golf.static-preview.v1'])
         self.assertEqual(bundle['commitId'], 'a'*40)
         self.assertEqual(bundle['treeId'], 'f'*40)
@@ -49,16 +70,19 @@ class PublicationTests(unittest.TestCase):
         def request(req, timeout):
             calls.append(req)
             digest = 'sha256:' + hashlib.sha256(req.data).hexdigest()
-            if req.method == 'POST': self.assertTrue(req.full_url.endswith(digest))
+            if req.method == 'POST':
+                self.assertEqual(req.data, b'')
+                return Response(202, {'Location': req.full_url + 'upload-id'})
+            if '/blobs/uploads/' in req.full_url: self.assertTrue(req.full_url.endswith(digest))
             return Response(403 if req.full_url.endswith('/unauthorized') else 201, {'Docker-Content-Digest': digest})
         with patch.dict(os.environ, {'GOLF_REGISTRY': 'https://registry.test', 'GOLF_IMAGE': 'alice/repo:ci-owned', 'GOLF_COMMIT': 'a'*40}, clear=True), patch('urllib.request.urlopen', request):
             registry_publish.publish()
-        self.assertEqual(len(calls), 4)
-        manifest = json.loads(calls[2].data)
-        config = json.loads(calls[0].data)
-        layer = gzip.decompress(calls[1].data)
+        self.assertEqual(len(calls), 6)
+        manifest = json.loads(calls[4].data)
+        config = json.loads(calls[1].data)
+        layer = gzip.decompress(calls[3].data)
         self.assertEqual(config['rootfs']['diff_ids'], ['sha256:' + hashlib.sha256(layer).hexdigest()])
-        self.assertEqual(manifest['layers'][0]['size'], len(calls[1].data))
+        self.assertEqual(manifest['layers'][0]['size'], len(calls[3].data))
         with tarfile.open(fileobj=io.BytesIO(layer)) as archive:
             self.assertIn(b'a'*40, archive.extractfile('payload').read())
         self.assertTrue(all('Authorization' not in req.headers for req in calls))

@@ -1,3 +1,4 @@
+import { ownerSlug, withOwner } from './owners.mjs';
 import { advertisedRefs, gitRequest, validRef } from './git.mjs';
 import { digest, deny, invalid, unsupported, Fault, page, user, uuidOK } from './common.mjs';
 
@@ -66,9 +67,9 @@ function settingsAuthority(person,row) {
 
 export async function repositoryAccess(db, env, person, row, version) {
   if (!Number.isSafeInteger(row.workspace_id) || row.workspace_id < 1) deny();
-  const owner = { id: row.workspace_id, slug: env.WORKSPACE_SLUG };
+  const owner = { id: row.workspace_id, slug: ownerSlug(row,env) };
   if (version === undefined) version = row.access_version ?? ((await db.prepare('SELECT version FROM repository_access_versions WHERE repository_id=?').bind(row.id).first())?.version || 0);
-  return { access: { repositoryId: String(row.id), ownerId: String(owner.id), owner: { id: String(owner.id), login: owner.slug }, organizationOwned: true,
+  return { access: { repositoryId: String(row.id), ownerId: String(owner.id), owner: { id: String(owner.id), login: owner.slug }, organizationOwned: row.owner_kind !== 'PERSONAL',
     canManage: row.role === 'admin', currentPermission: row.role, revision: await digest(JSON.stringify([row.id, row.artifact_name, owner.id, person.id, row.role, version])) } };
 }
 
@@ -128,7 +129,7 @@ export async function repositoryCollaborators(db, env, person, row, method, body
   if (body.expectedCollaboratorRevision !== current.revision || remove && !current.isDirect) accessStale();
   const generation = Number(current.generation) + 1, time = new Date().toISOString();
   if (!Number.isSafeInteger(generation)) throw Error('Access generation limit reached');
-  const operation = { idempotencyKey: body.idempotencyKey, repository: { owner: env.WORKSPACE_SLUG, name: row.name }, repositoryId: String(row.id), ownerId: String(row.workspace_id),
+  const operation = { idempotencyKey: body.idempotencyKey, repository: { owner: ownerSlug(row,env), name: row.name }, repositoryId: String(row.id), ownerId: String(row.workspace_id),
     recipientId: String(recipient.id), recipientLogin: recipient.login, actorId: String(person.id), requestedPermission: remove ? '' : body.permission, remove,
     generation: String(generation), phase: 'SUCCEEDED', failureCode: '', createdAt: time, updatedAt: time, observedEffectivePermission: remove ? 'none' : body.permission, observedDirectMembership: !remove };
   // The receipt and grant commit in one D1 transaction. Admission is rechecked inside
@@ -155,7 +156,7 @@ export async function repositoryPackages(env, person, row, body) {
   const operations = ['trust', 'updateTrust', 'verification', 'verify', 'scan', 'jobs', 'cancelScan', 'settings', 'updateSettings', 'policy', 'hold', 'promote', 'retention', 'retentionApply', 'inventory', 'artifact', 'attachments', 'activity', 'report', 'downloadReport', 'downloadImageConfig', 'compareSbom', 'link'];
   if (body.repositoryId !== String(row.id) || !['status', 'enable', 'credential', 'revoke', ...operations].includes(body.action)) invalid('Use the current repository and a supported package action.');
   if (body.action === 'enable' && row.role !== 'admin') deny();
-  const binding = { contract: 1, installation: env.PUBLIC_ORIGIN, name: `${env.WORKSPACE_SLUG}/${row.name}`, repositoryId: String(row.id), artifactName: row.artifact_name };
+  const binding = { contract: 1, installation: env.PUBLIC_ORIGIN, name: `${ownerSlug(row,env)}/${row.name}`, repositoryId: String(row.id), artifactName: row.artifact_name };
   const input = Object.fromEntries(['reference', 'kind', 'query', 'cursor', 'limit', 'expectedRevision', 'links', 'attachment', 'blob', 'settings', 'reason', 'enabled', 'tag', 'digests', 'jobId', 'idempotencyKey', 'force', 'keys', 'baseline'].filter(key => Object.hasOwn(body, key)).map(key => [key, body[key]]));
   const result = await env.REGISTRY.manage({ ...input, action: body.action, binding, actorId: String(person.id), canPush: ['write', 'admin'].includes(row.role) });
   if (result.registryError) {
@@ -164,6 +165,16 @@ export async function repositoryPackages(env, person, row, body) {
     throw new Fault(error.status === 403 ? 'permission_denied' : error.status === 409 ? 'failed_precondition' : error.status === 404 ? 'not_found' : error.status === 429 ? 'resource_exhausted' : error.status >= 500 ? 'unavailable' : 'invalid_argument', error.status, error.message);
   }
   if (result.registry && result.registry !== env.REGISTRY_ORIGIN || result.name && result.name !== binding.name) throw Error('Registry binding receipt differs from the configured destination');
+  if (result.provider === 'cloudflare' && result.artifacts?.length) {
+    const records = (await env.DB.withSession('first-primary').prepare("SELECT id,json_extract(snapshot,'$.selection') AS selection,test_result FROM evidence_jobs WHERE repository_id=? AND state='SUCCEEDED' AND test_state='PASSED' ORDER BY updated_at DESC LIMIT 100").bind(row.id).all()).results;
+    for (const artifact of result.artifacts) {
+      const saved = records.find(job => artifact.tag === 'ci-' + job.id);
+      if (!saved) continue;
+      const tests = JSON.parse(saved.test_result), selected = JSON.parse(saved.selection);
+      if (tests?.state === 'PASSED' && tests.cleanup === 'destroyed' && tests.jobId === saved.id && tests.image?.digest === artifact.digest && tests.image.repository === result.imageRepository && tests.commitId === selected.headCommitId && Number.isSafeInteger(tests.finishedAt))
+        Object.assign(artifact, { publishedAt: new Date(tests.finishedAt).toISOString(), build: { jobId: saved.id, commitId: tests.commitId, pullNumber: selected.number } });
+    }
+  }
   return { ...result, repositoryId: String(row.id), canManage: row.role === 'admin', canPush: ['write', 'admin'].includes(row.role) };
 }
 
@@ -173,10 +184,10 @@ export async function registryAuthority(env, input) {
   if (!env.REGISTRY || !binding || binding.contract !== 1 || binding.installation !== env.PUBLIC_ORIGIN ||
       !/^[1-9][0-9]*$/.test(actorId || '') || !/^[1-9][0-9]*$/.test(binding.repositoryId || '') ||
       env.DEMO_STOP_AT && Date.parse(env.DEMO_STOP_AT) <= Date.now()) return refused;
-  const row = await env.DB.withSession('first-primary').prepare(`SELECT r.*,g.role FROM repositories r
+  const row = await withOwner(env.DB.withSession('first-primary'),await env.DB.withSession('first-primary').prepare(`SELECT r.*,g.role FROM repositories r
     JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id
-    WHERE r.id=? AND u.id=? AND u.active=1 AND r.state='ACTIVE'`).bind(binding.repositoryId, actorId).first();
-  if (!row || row.artifact_name !== binding.artifactName || binding.name !== `${env.WORKSPACE_SLUG}/${row.name}`) return refused;
+    WHERE r.id=? AND u.id=? AND u.active=1 AND r.state='ACTIVE'`).bind(binding.repositoryId, actorId).first());
+  if (!row || row.artifact_name !== binding.artifactName || binding.name !== `${ownerSlug(row,env)}/${row.name}`) return refused;
   if (input.execution) {
     if (!['write','admin'].includes(row.role) || env.REGISTRY_CI_ENABLED !== 'true' || !env.registryExecution || !await env.registryExecution(actorId,row,input.execution)) return refused;
     return { read:true, write:true, admin:false, execution:true };

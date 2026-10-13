@@ -36,6 +36,34 @@ def index_inventory(rows):
     return {row['key']: {'sha256': row['payload_hash'], 'bytes': row['payload_bytes']} for row in rows}
 
 
+def owned_secrets(store, recorded, current):
+    acknowledged = {(s['id'],s['name']) for s in recorded}
+    if any(s['id'] in {r['id'] for r in recorded} and (s['id'],s['name']) not in acknowledged for s in current):
+        raise ValueError('Owned secret identity changed')
+    if not store.get('shared') and not {(s['id'],s['name']) for s in current} <= acknowledged:
+        raise ValueError('Secrets Store inventory changed')
+    return [s for s in current if (s['id'],s['name']) in acknowledged]
+
+
+def managed_image_inventory(name, jobs, rows):
+    expected = {name + '-r' + str(job['repository_id']) + ':ci-' + job['id'] for job in jobs
+                if re.fullmatch(r'[a-f0-9-]{36}', job['id']) and re.fullmatch(r'[1-9][0-9]*', str(job['repository_id']))}
+    if not isinstance(rows, list) or len(rows) > 100:
+        raise ValueError('Managed image inventory exceeds the cleanup bound')
+    images = []
+    for row in rows:
+        if not re.fullmatch(re.escape(name) + r'-r[1-9][0-9]*', row.get('name', '')) or not isinstance(row.get('tags'), list):
+            raise ValueError('Managed image repository ownership differs')
+        for tag in row['tags']:
+            image = row['name'] + ':' + str(tag)
+            if image not in expected or image in images:
+                raise ValueError('Managed image job ownership differs')
+            images.append(image)
+    if len(images) > 100:
+        raise ValueError('Managed image inventory exceeds the cleanup bound')
+    return images
+
+
 def retire_owned(label, inspect, delete, original, fields, journal, save):
     current = inspect()
     if current is None:
@@ -64,7 +92,8 @@ def retire_demo_apps(state, settings, previews, cf, query, post):
         raise ValueError('Pending application differs from the original demo')
     if settings['origin'] != state['demo']['url'].rstrip('/') or settings['workspace'] != 'alice':
         raise ValueError('Demo application cleanup origin or workspace differs')
-    rows = query('SELECT p.id,p.repository_id,r.name,r.creator_id FROM previews p JOIN repositories r ON r.id=p.repository_id', [])
+    owners = query('PRAGMA table_info(native_owners)', [])
+    rows = query('SELECT p.id,p.repository_id,r.name,r.creator_id' + (',o.slug AS owner_slug' if owners else '') + ' FROM previews p JOIN repositories r ON r.id=p.repository_id' + (' LEFT JOIN repository_owners ro ON ro.repository_id=r.id LEFT JOIN native_owners o ON o.id=ro.owner_id' if owners else ''), [])
     selected = [next((row for row in rows if row['id'] == p['id']), None) for p in pending]
     if any(row is None or row['creator_id'] != 1 for row in selected):
         raise ValueError('Demo application cleanup owner differs')
@@ -81,7 +110,7 @@ def retire_demo_apps(state, settings, previews, cf, query, post):
                    'CF-Access-Client-Id': rotated['client_id'], 'CF-Access-Client-Secret': rotated['client_secret']}
         for row in selected:
             value = post(settings['origin'] + '/native/pr-preview', {'action': 'revoke', 'previewId': row['id'],
-                         'repository': {'owner': 'alice', 'name': row['name']}, 'repositoryId': str(row['repository_id'])}, headers)
+                         'repository': {'owner': row.get('owner_slug') or settings['workspace'], 'name': row['name']}, 'repositoryId': str(row['repository_id'])}, headers)
             if value.get('preview', {}).get('id') != row['id'] or not value['preview'].get('purged'):
                 raise RuntimeError('Owned application retirement is not confirmed')
     finally:
@@ -240,7 +269,8 @@ def recover(receipt, check=False):
     repositories = inventory.get('repos') if isinstance(inventory, dict) else inventory
     if not isinstance(repositories, list) or len(repositories) >= 100 or any(not re.fullmatch('repo-[a-f0-9]{32}', row['name']) for row in repositories):
         raise ValueError('Unexpected Artifacts namespace inventory')
-    result['storage_snapshot'] = {'jobs': jobs, 'previews': previews, 'indexes': indexes}
+    managed_images = managed_image_inventory(name, jobs, cf('containers', 'images', 'list', '--filter', name + '-r*')) if settings.get('registry', {}).get('provider') == 'cloudflare' else []
+    result['storage_snapshot'] = {'jobs': jobs, 'previews': previews, 'indexes': indexes, 'managed_images': managed_images}
     save()
     if check:
         result.update(state='checked', jobs=len(jobs), previews=len(previews)); save(); return result
@@ -336,7 +366,17 @@ def recover(receipt, check=False):
             for row in applications:
                 cf('containers', 'applications', 'delete', row['id'], '--force')
         removed('test_applications')
+        for image in managed_images:
+            cf('containers', 'images', 'delete', image, '--force', missing=True)
+        if managed_images and cf('containers', 'images', 'list', '--filter', name + '-r*'):
+            raise RuntimeError('Owned managed image deletion is still pending')
+        removed('managed_images')
         cf('containers', 'images', 'delete', resources['test_image']['tag'], '--force', missing=True); removed('test_image')
+        for image in resources.get('previous_test_images', []):
+            if not image.startswith(name + ':') or not re.fullmatch(r'[a-z0-9._-]{1,64}', image.split(':',1)[1]):
+                raise ValueError('Previous test image differs from owned installation')
+            cf('containers', 'images', 'delete', image, '--force', missing=True)
+        removed('previous_test_images')
         if namespace is not None and api(prefix + '/workers/dispatch/namespaces/' + name + '/scripts'):
             raise ValueError('Owned dispatch namespace is not empty')
         retire_cf('dispatch', ('workers-for-platforms', 'dispatch-namespaces', 'get', name), ('workers-for-platforms', 'dispatch-namespaces', 'delete', name, '--force'), resources['dispatch'], ['namespace_id'])
@@ -366,12 +406,14 @@ def recover(receipt, check=False):
         if current_store is not None:
             same(current_store, store, ['id','name'])
         secrets = api(path + '/secrets') if current_store is not None else []
-        if not {(s['id'],s['name']) for s in secrets} <= {(s['id'],s['name']) for s in resources['secrets']}:
-            raise ValueError('Secrets Store inventory changed')
+        secrets = owned_secrets(store,resources['secrets'],secrets)
         for secret in secrets:
             api(path + '/secrets/' + secret['id'], 'DELETE')
-        retire_owned('secret_store', lambda: api(path,missing=True), lambda: api(path,'DELETE',missing=True), store, ['id','name'], result['cleanup'], save)
-        for category in ['management_token','analytics_token']:
+        if store.get('shared'):
+            removed('owned_secrets')
+        else:
+            retire_owned('secret_store', lambda: api(path,missing=True), lambda: api(path,'DELETE',missing=True), store, ['id','name'], result['cleanup'], save)
+        for category in ['management_token','analytics_token','registry_token']:
             if category in resources:
                 api('/user/tokens/' + resources[category]['id'], 'DELETE', missing=True)
                 if api('/user/tokens/' + resources[category]['id'], missing=True) is not None:

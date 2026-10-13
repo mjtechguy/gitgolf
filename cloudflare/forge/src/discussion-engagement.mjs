@@ -1,3 +1,4 @@
+import { ownerSlug } from './owners.mjs';
 import { digest, deny, invalid, Fault, page, user } from './common.mjs';
 
 export const engagementMethods = new Set(['GetDiscussionEngagement', 'ListDiscussionTimeline', 'ListOwnForgeNotifications']);
@@ -27,12 +28,12 @@ export async function engagement(db, env, person, row, method, body) {
   const paging = page(body);
   if (method === 'ListOwnForgeNotifications') {
     if (body.includeRead !== undefined && typeof body.includeRead !== 'boolean') invalid('Use an explicit read filter.');
-    const rows = await db.prepare(`SELECT n.*,d.title,d.number,d.kind,r.id AS repository_id,r.name FROM discussion_notifications n
-      JOIN discussions d ON d.id=n.discussion_id JOIN repositories r ON r.id=d.repository_id JOIN grants g ON g.repository_id=r.id AND g.user_id=n.user_id
+    const rows = await db.prepare(`SELECT n.*,d.title,d.number,d.kind,r.id AS repository_id,r.name,o.slug AS owner_slug FROM discussion_notifications n
+      JOIN discussions d ON d.id=n.discussion_id JOIN repositories r ON r.id=d.repository_id LEFT JOIN repository_owners ro ON ro.repository_id=r.id LEFT JOIN native_owners o ON o.id=ro.owner_id JOIN grants g ON g.repository_id=r.id AND g.user_id=n.user_id
       WHERE n.user_id=? AND r.state='ACTIVE' ${body.includeRead ? '' : 'AND n.unread=1'} ORDER BY n.id DESC LIMIT ? OFFSET ?`)
       .bind(person.id, paging.limit + 1, paging.offset).all();
     return { notifications: await Promise.all(rows.results.slice(0, paging.limit).map(async n => ({ id: String(n.id), title: n.title, unread: Boolean(n.unread), pinned: false,
-      updatedAt: n.created_at, revision: await notificationRevision(n), target: { repository: { owner: env.WORKSPACE_SLUG, name: n.name }, repositoryId: String(n.repository_id), issueId: String(n.discussion_id), number: n.number, pullRequest: n.kind === 'pull' } }))),
+      updatedAt: n.created_at, revision: await notificationRevision(n), target: { repository: { owner: ownerSlug(n,env), name: n.name }, repositoryId: String(n.repository_id), issueId: String(n.discussion_id), number: n.number, pullRequest: n.kind === 'pull' } }))),
       page: { nextPage: rows.results.length > paging.limit ? paging.number + 1 : 0 } };
   }
   const d = await target(db, row, body.target);
@@ -74,7 +75,7 @@ export async function engagementChange(db, env, person, row, kind, body) {
   const d = await target(db, row, { ...body, commentId: commentId ? body.resourceId : '' });
   const observed = mark ? await db.prepare('SELECT * FROM discussion_notifications WHERE id=? AND user_id=? AND discussion_id=?').bind(body.resourceId, person.id, d.id).first() : await observation(db, person, d, commentId);
   if (!observed) deny();
-  const time = new Date().toISOString(), operation = { operationId: body.operationId, kind: 'DISCUSSION_RESOURCE_OPERATION_KIND_' + kind, phase: 'DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED', repository: { owner: env.WORKSPACE_SLUG, name: row.name }, repositoryId: String(row.id), resourceId: body.resourceId, observedResourceId: body.resourceId, expectedRevision: body.expectedRevision, issueId: body.issueId, number: body.number, pullRequest: !!body.pullRequest, reactionComment: !!body.reactionComment, createdAt: time, updatedAt: time };
+  const time = new Date().toISOString(), operation = { operationId: body.operationId, kind: 'DISCUSSION_RESOURCE_OPERATION_KIND_' + kind, phase: 'DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED', repository: { owner: ownerSlug(row,env), name: row.name }, repositoryId: String(row.id), resourceId: body.resourceId, observedResourceId: body.resourceId, expectedRevision: body.expectedRevision, issueId: body.issueId, number: body.number, pullRequest: !!body.pullRequest, reactionComment: !!body.reactionComment, createdAt: time, updatedAt: time };
   const refuse = async () => {
     operation.phase = 'DISCUSSION_RESOURCE_OPERATION_PHASE_REJECTED'; operation.failureCode = 'preflight_refused'; operation.observedResourceId = '';
     await db.prepare('INSERT INTO discussion_resource_operations VALUES(?,?,?,?,?)').bind(person.id, body.operationId, row.id, hash, JSON.stringify(operation)).run();

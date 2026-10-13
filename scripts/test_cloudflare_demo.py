@@ -14,6 +14,25 @@ from cloudflare_setup import replace_private_json
 
 
 class DemoSupervisorTest(unittest.TestCase):
+    def test_shared_secret_store_cleanup_preserves_other_installations(self):
+        owned={'id':'a','name':'owned'};other={'id':'b','name':'other'}
+        select=cloudflare_demo_cleanup.owned_secrets
+        self.assertEqual(select({'shared':True},[owned],[owned,other]),[owned])
+        self.assertEqual(select({'shared':True},[owned],[other]),[])
+        with self.assertRaises(ValueError):select({},[owned],[owned,other])
+        with self.assertRaises(ValueError):select({'shared':True},[owned],[{**owned,'name':'changed'}])
+
+    def test_managed_image_cleanup_requires_an_owned_repository_and_recorded_job(self):
+        name = 'golf-native-20261013-12345678'
+        job = {'repository_id': 12, 'id': '6319a0d5-cc1c-41e4-b9cb-ffd4d580222f'}
+        row = {'name': name + '-r12', 'tags': ['ci-' + job['id']]}
+        inventory = cloudflare_demo_cleanup.managed_image_inventory
+        self.assertEqual(inventory(name, [job], [row]), [row['name'] + ':' + row['tags'][0]])
+        self.assertEqual(inventory(name, [job], []), [])
+        for changed in [{**row, 'name': name + '-r13'}, {**row, 'name': 'foreign-r12'},
+                        {**row, 'tags': ['latest']}, {**row, 'tags': row['tags'] * 2}]:
+            with self.assertRaises(ValueError): inventory(name, [job], [changed])
+
     def test_orphaned_app_cleanup_uses_original_identity_and_revokes_credential(self):
         state = {'demo': {'url': 'https://demo.example', 'previews': [{'id': 'app', 'kind': 'WORKER'}]},
                  'resources': {'preview_service_token': {'id': 'service', 'name': 'owned'}}}
@@ -25,6 +44,8 @@ class DemoSupervisorTest(unittest.TestCase):
             return {'id': 'service', 'name': 'owned', 'client_id': 'client', 'client_secret': 'secret'}
         def query(sql, params):
             calls.append((sql, params))
+            if sql.startswith('PRAGMA'): return []
+            self.assertNotIn('native_owners', sql)
             return [{'id': 'app', 'repository_id': 7, 'name': 'canonical', 'creator_id': 1}]
         def post(url, payload, headers):
             self.assertEqual(url, 'https://demo.example/native/pr-preview')
@@ -57,6 +78,22 @@ class DemoSupervisorTest(unittest.TestCase):
         cloudflare_demo_cleanup.retire_workers(resources, retire, lambda: events.append('detach'))
         self.assertEqual(events, ['preview_worker', 'detach', 'worker', 'app_outbound'])
         self.assertEqual(remaining, set())
+
+    def test_adopted_demo_app_cleanup_uses_canonical_owner(self):
+        state = {'demo': {'url': 'https://demo.example', 'previews': [{'id': 'app', 'kind': 'WORKER'}]},
+                 'resources': {'preview_service_token': {'id': 'service', 'name': 'owned'}}}
+        def query(sql, params):
+            if sql.startswith('PRAGMA'): return [{'name': 'slug'}]
+            if sql.startswith('SELECT'):
+                self.assertIn('LEFT JOIN native_owners', sql)
+                return [{'id':'app','repository_id':7,'name':'canonical','creator_id':1,'owner_slug':'mj'}]
+            return []
+        def post(url, payload, headers):
+            self.assertEqual(payload['repository'], {'owner':'mj','name':'canonical'})
+            return {'preview': {'id':'app','purged':True}}
+        cloudflare_demo_cleanup.retire_demo_apps(state, {'origin':'https://demo.example','workspace':'alice'},
+            [{'id':'app','kind':'WORKER','purged':0}],
+            lambda *args: {'id':'service','name':'owned','client_id':'client','client_secret':'secret'}, query, post)
 
     def test_partial_setup_retires_only_recorded_workers(self):
         resources = {'worker': {'id': 'owned', 'name': 'owned'}}

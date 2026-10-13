@@ -51,13 +51,13 @@ export function RepositoryPicture({node,context}:{node?:Element;context?:Documen
  return <RepositoryImage src={string(properties.src)} alt={string(properties.alt)} width={dimension(properties.width)} height={dimension(properties.height)} context={context}/>;
 }
 export function RepositoryImage({src,alt,height,width,context}:{src?:string;alt?:string;height?:number|string;width?:number|string;context?:DocumentContext}){
- const allowed=(value:string)=>{if(!/^https?:/i.test(value))return !/^[a-z][a-z\d+.-]*:/i.test(value);try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&!url.port&&['raw.githubusercontent.com','img.shields.io','avatars.githubusercontent.com','user-images.githubusercontent.com','github.githubassets.com','badgen.net','expressjs.com','sindresorhus.com','api.securityscorecards.dev','github.com','vite.dev','sponsors.vite.dev'].includes(url.host);}catch{return false;}};
+ const allowed=(value:string)=>{if(!/^https?:/i.test(value))return !/^[a-z][a-z\d+.-]*:/i.test(value);try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&!url.port;}catch{return false;}};
  const supported=!!context&&sourceRepositoryID(context.repositoryId)&&!!src&&allowed(src)&&/^[a-f\d]{40}(?:[a-f\d]{24})?$/.test(context.ref)&&!/^\s*(?:javascript|data|blob):|^\/\//i.test(src);
  const query=useQuery({...privateNavigationQuery,queryKey:['repository',context?.userId,context?.owner,context?.name,'image',context?.repositoryId,context?.ref,context?.path,src],enabled:supported,queryFn:async({signal})=>{
   const response=await repositoryClient.getRepositoryImage({repository:{owner:context!.owner,name:context!.name},repositoryId:context!.repositoryId,commitId:context!.ref,documentPath:context!.path,imageUrl:src!},{signal,timeoutMs:10000});signal.throwIfAborted();validateSourceImage(response,context!.repositoryId,context!.ref,context!.path,src!);return imageDataURL(response.content,response.mediaType);
  }});
  const dimension=(value:unknown)=>/^\d{1,4}$/.test(String(value))&&Number(value)>0&&Number(value)<=4096?Number(value):undefined;
- if(!supported||query.isError)return <span className="markdown-image-placeholder" title={query.isError?'Image could not be loaded safely':undefined}>{alt||'Image'} (image preview unavailable)</span>;
+ if(!supported||query.isError)return alt?<span className="markdown-image-placeholder" title="Image unavailable" aria-label={`${alt}: image unavailable`}>{alt}</span>:null;
  if(!query.data||query.isFetching)return <span className="markdown-image-placeholder" role="status">Loading {alt||'image'}…</span>;
  return <img src={query.data} alt={alt||''} height={dimension(height)} width={dimension(width)} loading="lazy" decoding="async" referrerPolicy="no-referrer"/>;
 }

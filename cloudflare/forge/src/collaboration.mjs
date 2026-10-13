@@ -1,3 +1,4 @@
+import { ownerSlug } from './owners.mjs';
 import { discussionEvent } from './discussion-engagement.mjs';
 import { discussionMetadata, metadataBatch, metadataFilter, metadataChange, resourceAuthority, authorityValues } from './discussion-resources.mjs';
 import { digest, uuidOK, Fault, deny, invalid, unsupported, conflict, page, user } from './common.mjs';
@@ -102,7 +103,7 @@ async function pullRow(db, repository, num) {
   return row;
 }
 function url(env, repository, d) {
-  return `${env.PUBLIC_ORIGIN}/${env.WORKSPACE_SLUG}/${repository.name}/${d.kind === 'pull' ? 'pull' : 'issues'}/${d.number}`;
+  return `${env.PUBLIC_ORIGIN}/${ownerSlug(repository,env)}/${repository.name}/${d.kind === 'pull' ? 'pull' : 'issues'}/${d.number}`;
 }
 async function issue(db, env, repository, d, metadata, authors) {
   const counts = d.comment_count === undefined ? await db.prepare('SELECT count(*) AS total FROM discussion_comments WHERE discussion_id=?').bind(d.id).first() : { total: d.comment_count };
@@ -120,8 +121,8 @@ async function pull(db, env, repository, d, refs, metadata, authors) {
   return { id: String(d.pull_id), number: d.number, title: d.title, body: d.body, state: 'ISSUE_STATE_' + d.state,
     user: authors?.get(d.author_id) || await author(db, d.author_id), createdAt: d.created_at, updatedAt: d.updated_at, htmlUrl: url(env, repository, d),
     draft: Boolean(d.draft), merged: false,
-    head: { repositoryId: String(repository.id), label: `${env.WORKSPACE_SLUG}:${d.head_branch}`, ref: d.head_branch, commitId: headCommit, retainedSnapshot: !head },
-    base: { repositoryId: String(repository.id), label: `${env.WORKSPACE_SLUG}:${d.base_branch}`, ref: d.base_branch, commitId: baseCommit, retainedSnapshot: !base },
+    head: { repositoryId: String(repository.id), label: `${ownerSlug(repository,env)}:${d.head_branch}`, ref: d.head_branch, commitId: headCommit, retainedSnapshot: !head },
+    base: { repositoryId: String(repository.id), label: `${ownerSlug(repository,env)}:${d.base_branch}`, ref: d.base_branch, commitId: baseCommit, retainedSnapshot: !base },
     revision: await digest(JSON.stringify([d.id, d.revision, baseCommit, headCommit, Boolean(d.draft)])),
     metadata: metadata || await discussionMetadata(db, d) };
 }
@@ -143,7 +144,7 @@ async function check(db, c, authors) {
 }
 async function result(db, env, person, repository, op, artifact) {
   const common = { id: op.id, idempotencyKey: op.operation_key, state: 'ISSUE_MUTATION_STATE_SUCCEEDED',
-    repository: { owner: env.WORKSPACE_SLUG, name: repository.name }, repositoryId: String(repository.id), createdAt: op.created_at, updatedAt: op.created_at };
+    repository: { owner: ownerSlug(repository,env), name: repository.name }, repositoryId: String(repository.id), createdAt: op.created_at, updatedAt: op.created_at };
   if (op.result_kind === 'check') {
     const c = await db.prepare('SELECT * FROM reported_checks WHERE id=? AND repository_id=?').bind(op.result_id, repository.id).first();
     if (!c) deny();
@@ -304,7 +305,7 @@ export async function collaboration(db, env, person, method, body, row, artifact
     if (isPull) {
       if (!writable(row)) deny();
       if (row.write_pending) conflict();
-      if (body.sourceRepositoryId !== String(row.id) || body.sourceRepository?.owner !== env.WORKSPACE_SLUG || body.sourceRepository?.name !== row.name) unsupported();
+      if (body.sourceRepositoryId !== String(row.id) || body.sourceRepository?.owner !== ownerSlug(row,env) || body.sourceRepository?.name !== row.name) unsupported();
       if (!validRef('refs/heads/' + body.baseBranch) || !validRef('refs/heads/' + body.headBranch) || body.baseBranch === body.headBranch ||
           !sha(body.baseCommitId) || !sha(body.headCommitId) || body.baseCommitId === body.headCommitId || body.draft !== undefined && typeof body.draft !== 'boolean') invalid('Use two different named branches and exact displayed commits.');
       const refs = await artifact(repo => inventory(env, row, repo));
@@ -390,7 +391,7 @@ export async function collaboration(db, env, person, method, body, row, artifact
 
 export async function pullReviewContext(db, env, person, row, body, artifact) {
   exactRepository(body, row);
-  if(body.repository?.owner!==env.WORKSPACE_SLUG||body.repository?.name!==row.name) deny();
+  if(body.repository?.owner!==ownerSlug(row,env)||body.repository?.name!==row.name) deny();
   const d = await pullRow(db, row, body.number);
   if (body.pullRequestId !== String(d.pull_id)) deny();
   const current = await artifact(async repo => pull(db, env, row, d, await inventory(env, row, repo)));

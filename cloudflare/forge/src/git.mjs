@@ -94,7 +94,7 @@ export async function gitRequest(env, repo, name, suffix, service, body, provide
     const response = await providerFetch(remote(env, name) + '/' + suffix, {
       method: body ? 'POST' : 'GET', headers, body, redirect: 'manual', signal: AbortSignal.timeout(30000),
     });
-    const bytes = await bounded(response.body, body && service === 'git-upload-pack' ? 16 * 1024 * 1024 : 2 * 1024 * 1024);
+    const bytes = await bounded(response.body, body && service === 'git-upload-pack' ? 32 * 1024 * 1024 : 2 * 1024 * 1024);
     if (response.status !== 200) throw new GitProviderError(`Provider Git HTTP status ${response.status}.`);
     if (response.headers.get('Content-Type') !== `application/x-${service}-${body ? 'result' : 'advertisement'}`) throw new GitProviderError('Provider Git content type is unsupported.');
     return { bytes, contentType: response.headers.get('Content-Type') };

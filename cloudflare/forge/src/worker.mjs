@@ -14,6 +14,7 @@ import { registryAuthority } from './repository-settings.mjs';
 import { PerformanceHistory } from './performance.mjs';
 import { executionDiagnostic } from './test-policy.mjs';
 import { nativeRunnerStop } from './native-runners.mjs';
+import { managedRegistry } from './managed-registry.mjs';
 
 
 export class Workspace extends DurableObject {
@@ -21,7 +22,11 @@ export class Workspace extends DurableObject {
     super(ctx, env);
     this.performance = new PerformanceHistory(ctx.storage.sql);
     this.activity = new RepositoryActivity(ctx.storage, (request, input) => this.authority({ activity: true, request, input }));
-    const configured = this.configured = { ...env, performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask };
+    const configured = this.configured = { ...env, previewChanged: id => this.activity.publish(String(id), ['actions', 'pulls']), performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask };
+    if (env.REGISTRY_PROVIDER === 'cloudflare') {
+      configured.registryUploadStore = ctx.storage;
+      configured.REGISTRY = managedRegistry(configured, input => registryAuthority(configured, input));
+    }
     this.dispatch = serialize(async event => {
       const selection = await activitySelection(event);
       let result;
@@ -80,6 +85,7 @@ export class RepositoryReads extends DurableObject {
     super(ctx, env);
     initializeMetadataJobs(ctx);
     const cache = { objects: new Map(), pending: new Map(), bytes: 0 };
+    this.warmed = new Set();
     const owner = ctx.exports.Workspace.get(ctx.exports.Workspace.idFromName(env.WORKSPACE_SLUG));
     // Indexing mutates only its own journal; it must not queue foreground reads.
     this.index = serialize(() => advanceMetadataJobs(ctx, { ...env, notifyMetadata: id => owner.activityChanged(String(id), ['issues']), waitUntil: promise => ctx.waitUntil(promise) }));
@@ -100,7 +106,40 @@ export class RepositoryReads extends DurableObject {
       } });
     }, event => event instanceof Request);
   }
-  fetch(request) { return this.dispatch(request); }
+  fetch(request) {
+    const result = this.dispatch(request);
+    if (this.env.READ_INDEXES === 'true' && new URL(request.url).pathname.endsWith('/GetRepository'))
+      this.ctx.waitUntil(result.then(async response => {
+        if (!response.ok) return;
+        const value = await response.clone().json(), commitId = value.sourceSelection?.commitId;
+        if (!commitId || !value.repository?.id) return;
+        const key = value.repository.id + ':' + commitId;
+        if (this.warmed.has(key)) return;
+        if (this.warmed.size >= 64) this.warmed.delete(this.warmed.values().next().value);
+        this.warmed.add(key);
+        try { await this.prewarm(request, value.repository, commitId); } catch { this.warmed.delete(key); }
+      }).catch(() => {}));
+    return result;
+  }
+  async prewarm(request, repository, commitId) {
+    const base = { repository: { owner: repository.fullName.split('/')[0], name: repository.name }, repositoryId: repository.id };
+    const read = async (method, input) => {
+      const headers = new Headers(request.headers); headers.set('Content-Type', 'application/json'); headers.set('Connect-Protocol-Version', '1');
+      const response = await this.dispatch(new Request(this.env.PUBLIC_ORIGIN+'/rpc/golf.v1.RepositoryService/'+method, { method:'POST', headers, body:JSON.stringify({...base,...input}) }));
+      if (!response.ok) throw Error('Repository pre-read unavailable');
+      return response.json();
+    };
+    const contents = path => read('GetContents', { ref:commitId, path, includeLatestChanges:true, page:{page:1,limit:100} });
+    // Pre-read the next screen, without making its provider work block this response.
+    const results = await Promise.allSettled([contents(''), read('GetRepositoryOverview',{ref:commitId}), read('ListCommits',{ref:commitId,page:{page:1,limit:1}})]);
+    if (results[0].status !== 'fulfilled') throw results[0].reason;
+    const root = results[0].value.entries || [], choose = entries => entries?.find(entry => /^readme\.(md|markdown|mdown)$/i.test(entry.name));
+    let readme;
+    if (root.some(entry => entry.name === '.github' && entry.type === 'SOURCE_ENTRY_TYPE_DIRECTORY')) readme = choose((await contents('.github')).entries);
+    readme ||= choose(root);
+    if (!readme && root.some(entry => entry.name === 'docs' && entry.type === 'SOURCE_ENTRY_TYPE_DIRECTORY')) readme = choose((await contents('docs')).entries);
+    if (readme) await contents(readme.path);
+  }
   alarm() { return this.index(); }
 }
 

@@ -75,11 +75,12 @@ export function RepositorySettingsLayout({ children, owner, name }: { children: 
 export function AccountSettings({ user, signingOut }: { user: User; signingOut: boolean }) {
   const runtime = useRuntimeCapabilities();
   const native = runtime.data?.runtimeProfile === 'cloudflare-native';
+  const [showInstallation, setShowInstallation] = useState(false);
   return <section className="page-stack" aria-labelledby="settings-title">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1 id="settings-title"><UserRound size={29} />Profile</h1><p>Your identity, access and account preferences.</p></div></header>
     <ProfileSettings key={user.id} userId={user.id} signingOut={signingOut} isInstanceAdmin={user.isInstanceAdmin} />
     <AppearanceSettings />
-    {native ? <NativeInstallationSettings/> : runtime.isSuccess ? <Suspense fallback={<Loading label="Opening notification settings…" />}><OwnEmailNotifications userId={user.id} signingOut={signingOut} /></Suspense> : null}
+    {native ? <details className="settings-diagnostics" onToggle={event=>setShowInstallation(event.currentTarget.open)}><summary>Installation details</summary>{showInstallation && <NativeInstallationSettings/>}</details> : runtime.isSuccess ? <Suspense fallback={<Loading label="Opening notification settings…" />}><OwnEmailNotifications userId={user.id} signingOut={signingOut} /></Suspense> : null}
     <SettingsInventory scope="personal" />
   </section>;
 }

@@ -1,3 +1,4 @@
+import { ownerSlug } from './owners.mjs';
 import { digest, uuidOK, Fault, deny, invalid, reply } from './common.mjs';
 import { collaboration } from './collaboration.mjs';
 import { evidenceAPI } from './evidence.mjs';
@@ -54,7 +55,7 @@ async function current(db, env, person, row, artifact, preview) {
 
 async function imageBundle(env, person, row, image, canonical) {
   // shortcut: static assets live in a bounded OCI config label; extract image layers when general build and container deployment land.
-  if (!env.REGISTRY || !env.REGISTRY_ORIGIN || image.registry !== env.REGISTRY_ORIGIN || image.repository !== `${env.WORKSPACE_SLUG}/${row.name}` ||
+  if (!env.REGISTRY || !env.REGISTRY_ORIGIN || image.registry !== env.REGISTRY_ORIGIN || image.repository !== `${ownerSlug(row,env)}/${row.name}` ||
       image.commitId !== canonical.commitId) throw new Fault('failed_precondition', 412, 'The tested image receipt does not match this repository and commit.');
   const input = { repositoryId: String(row.id), reference: image.digest };
   const decision = await repositoryPackages(env, person, row, { ...input, action: 'policy' });
@@ -159,8 +160,8 @@ export async function previewAPI(db, env, person, row, artifact, body) {
     }
     if ((await db.prepare("SELECT count(*) AS total FROM previews WHERE purged=0").first()).total >= 4) throw new Fault('resource_exhausted', 429, 'Clean up prior previews before allocating another.');
     const dailyLimit = Number(env.EVIDENCE_DAILY_LIMIT);
-    if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 20 ||
-        (await db.prepare('SELECT count(*) AS total FROM previews WHERE created_at>=?').bind(now().slice(0, 10)).first()).total >= dailyLimit) {
+    if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 50 ||
+        (await db.prepare('SELECT count(*) AS total FROM previews WHERE created_at>=?').bind(now().slice(0, 10)).first()).total >= Math.min(dailyLimit, 20)) {
       throw new Fault('resource_exhausted', 429, 'The workspace daily preview allocation is used.');
     }
     const evidence = await (await evidenceAPI(db, env, person, row, artifact, { action: 'report', jobId: body.jobId })).json();
@@ -196,6 +197,7 @@ export async function previewAPI(db, env, person, row, artifact, body) {
     await db.prepare("UPDATE previews SET state='READY' WHERE id=? AND state='PUBLISHING' AND EXISTS(SELECT 1 FROM users u JOIN grants g ON g.user_id=u.id WHERE u.id=? AND u.active=1 AND g.repository_id=previews.repository_id AND g.role IN ('admin','write'))")
       .bind(id, person.id).run();
     if ((await db.prepare('SELECT state FROM previews WHERE id=?').bind(id).first())?.state !== 'READY') deny();
+    env.previewChanged?.(row.id);
     return reply({ preview: wire({ ...saved, state: 'READY' }, env) });
   }
   if (!uuidOK(body.previewId)) invalid('Use the original preview ID.');

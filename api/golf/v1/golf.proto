@@ -347,7 +347,14 @@ message RevokeOtherSessionsResponse { uint64 revoked_count = 1; }
 message LogoutRequest {}
 message LogoutResponse {}
 
-message ListRepositoriesRequest { PageRequest page = 1; }
+message ListRepositoriesRequest {
+  PageRequest page = 1;
+  // Skip source observations for inventories. GetRepository must be used before
+  // browsing source; empty is not observed in a metadata-only response.
+  bool metadata_only = 2;
+  // Optional owner filter, applied before pagination by the native backend.
+  string owner = 3;
+}
 message ListRepositoriesResponse {
   repeated Repository repositories = 1;
   PageResponse page = 2;
@@ -363,6 +370,8 @@ message CreateRepositoryRequest {
   // Optional public GitHub/GitLab source; credentialed/connected migration is separate.
   string source_url = 5;
   bool pull_mirror = 6;
+  // Native personal/organization owner. Empty selects the current personal owner.
+  string owner = 7;
 }
 message CreateRepositoryResponse {
   Repository repository = 1;
