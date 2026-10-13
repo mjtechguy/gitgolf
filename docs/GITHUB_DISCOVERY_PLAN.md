@@ -124,5 +124,6 @@ live demo complete.
 
 The separate [Agent workspace proposal](AGENT_WORKSPACE_PLAN.md) applies lessons
 from Anthropic’s Scion article to a Git-compatible, optional task/proposal view
-and measured source/CI improvements. This is future planning, not an implemented
-mode or a change to repository storage and merge authority.
+and measured source/CI improvements. A first read-only native workspace now shows
+existing PRs, evidence and previews. Selective inputs and execution improvements
+remain staged proposals; repository storage and merge authority are unchanged.

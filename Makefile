@@ -105,7 +105,7 @@ compatibility-check:
 .PHONY: cloudflare-check
 cloudflare-check:
 	node cloudflare/forge/capabilities-check.mjs
-	node --test web/tests/runtime-capabilities.test.ts web/tests/repository-picture.test.ts web/tests/navigation-cache.test.ts web/tests/rpc-fetch.test.ts web/tests/operations-metrics.test.ts
+	node --test web/tests/runtime-capabilities.test.ts web/tests/repository-picture.test.ts web/tests/navigation-cache.test.ts web/tests/rpc-fetch.test.ts web/tests/native-api.test.ts web/tests/operations-metrics.test.ts
 	node --test cloudflare/forge/*.test.mjs
 	node --check cloudflare/forge/prepare.mjs
 	node --check cloudflare/forge/prepare-proof.mjs

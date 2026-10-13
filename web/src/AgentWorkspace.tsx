@@ -39,8 +39,8 @@ export function AgentWorkspace({ location, repositoryId, userId }: Props) {
 function SelectedWork({context,scope,number,config,interval,location,onError}:{onError:(error:Error)=>void;context:{repository:{owner:string;name:string};repositoryId:string};scope:string[];number:number;config:Config;interval:number|false;location:RepositoryLocation}) {
   const cache=useQueryClient();
   const pull=useQuery({...privateQuery,queryKey:[...scope,number,'pull'],queryFn:({signal})=>nativeAPI<{pullRequest:Pull}>('/rpc/golf.v1.RepositoryService/GetPullRequest',{...context,number},signal),refetchInterval:interval});
-  const jobs=useQuery({...privateQuery,queryKey:[...scope,number,'jobs'],enabled:config.evidence,queryFn:({signal})=>nativeAPI<{jobs:Job[];truncated:boolean}>('/native/pr-evidence',{...context,action:'list',number},signal),refetchInterval:interval});
-  const previews=useQuery({...privateQuery,queryKey:[...scope,'previews'],enabled:config.previews,queryFn:({signal})=>nativeAPI<{previews:Preview[];truncated:boolean}>('/native/pr-preview',{...context,action:'list'},signal),refetchInterval:interval});
+  const jobs=useQuery({...privateQuery,queryKey:[...scope,number,'jobs'],enabled:config.evidence,queryFn:({signal})=>nativeAPI<{jobs:Job[];truncated:boolean}>('/native/pr-evidence/read',{...context,action:'list',number},signal),refetchInterval:interval});
+  const previews=useQuery({...privateQuery,queryKey:[...scope,'previews'],enabled:config.previews,queryFn:({signal})=>nativeAPI<{previews:Preview[];truncated:boolean}>('/native/pr-preview/read',{...context,action:'list'},signal),refetchInterval:interval});
   const [reportId,setReportId]=useState(''),[now,setNow]=useState(Date.now);
   useEffect(()=>{
     const expires=Math.min(...(previews.data?.previews||[]).map(p=>Date.parse(p.expiresAt)).filter(t=>t>now));
@@ -50,7 +50,7 @@ function SelectedWork({context,scope,number,config,interval,location,onError}:{o
   },[previews.data,now]);
   const pr=pull.data?.pullRequest;
   const report=useQuery({...privateQuery,queryKey:[...scope,number,'report',reportId,pr?.revision],enabled:!!reportId&&!!pr&&!!jobs.data?.jobs.some(j=>j.id===reportId&&j.state==='SUCCEEDED'),queryFn:async({signal})=>{
-    const result=await nativeAPI<ReportValue>('/native/pr-evidence',{...context,action:'report',jobId:reportId},signal);
+    const result=await nativeAPI<ReportValue>('/native/pr-evidence/read',{...context,action:'report',jobId:reportId},signal);
     if(result.job.id!==reportId||result.job.selection.repositoryId!==context.repositoryId||result.job.selection.pullRequestId!==pr!.id)throw Error('Report identity changed. Refresh the workspace.');
     return result;
   }});

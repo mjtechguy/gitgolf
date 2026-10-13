@@ -72,9 +72,10 @@ export class Workspace extends DurableObject {
     // One partition owner serializes provider effects and permission changes.
     // Durable pending records fence writes after restart or an ambiguous response.
     // Streams re-enter the admission queue only for short authorization reads.
+    // Native reads overlap in both queues, but cannot pass a pending client revocation.
     const path = new URL(request.url).pathname;
     const response = path === activityPath ? handle(request, this.configured)
-      : path === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' || !concurrentRead(request) ? this.authority(request) : this.dispatch(request);
+      : path === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' || path.startsWith('/native/') || !concurrentRead(request) ? this.authority(request) : this.dispatch(request);
     if (this.env.CI_AUTO === 'true' && request.method === 'POST' && new URL(request.url).pathname.endsWith('/git-receive-pack')) this.ctx.waitUntil(response.then(() => this.runCI()));
     return response;
   }
