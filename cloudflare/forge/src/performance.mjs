@@ -3,7 +3,7 @@ const counters = ['object_hit', 'object_miss', 'object_shared', 'index_hit', 'in
 
 export function performanceSample(request, response, duration) {
   const path = new URL(request.url).pathname;
-  const native = {'/native/pr-evidence':'NativeEvidence','/native/pr-preview':'NativePreview'}[path];
+  const native = {'/native/pr-evidence':'NativeEvidence','/native/pr-evidence/read':'NativeEvidence','/native/pr-preview':'NativePreview','/native/pr-preview/read':'NativePreview'}[path];
   const match = /^\/rpc\/golf\.v1\.[A-Za-z]+Service\/([A-Za-z]{1,80})$/.exec(path);
   if (!match && !native || match?.[1] === 'WatchRepository') return null;
   const timing = {};

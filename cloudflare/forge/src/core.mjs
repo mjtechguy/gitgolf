@@ -61,6 +61,7 @@ export function serialize(handler, isRead = () => false) {
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
+  if (['/native/pr-evidence/read', '/native/pr-preview/read'].includes(new URL(request.url).pathname)) return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
@@ -392,12 +393,14 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       return reply(await repositoryPackages(env, person, row, body));
     }
-    if (url.pathname === '/native/pr-preview') {
+    if (url.pathname === '/native/pr-preview' || url.pathname === '/native/pr-preview/read') {
+      if (url.pathname.endsWith('/read') && body.action !== 'list') invalid('This route only lists previews.');
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (body.repositoryId !== String(row.id)) deny();
       return await previewAPI(db, env, person, row, action => withArtifact(env, row, action), body);
     }
-    if (url.pathname === '/native/pr-evidence') {
+    if (url.pathname === '/native/pr-evidence' || url.pathname === '/native/pr-evidence/read') {
+      if (url.pathname.endsWith('/read') && !['list', 'status', 'report', 'compare'].includes(body.action)) invalid('This route only reads evidence.');
       const key = body.action === 'create' ? body.selection?.repository : body.repository;
       const id = body.action === 'create' ? body.selection?.repositoryId : body.repositoryId;
       const row = await authorizedRepository(db, person, key, env, id);

@@ -1145,6 +1145,30 @@ async function deliveryFixture(t) {
   return { ...f, job, preview, publication: { action: 'create', jobId: job.id, idempotencyKey: nonce() }, broker: input => servePreview(f.env, input) };
 }
 
+test('native read routes preserve current evidence and access while rejecting every mutation action', async t => {
+  const f = await deliveryFixture(t);
+  const context = { repository: key, repositoryId: '1', number: 1, jobId: f.job.id };
+  const read = (path, body, token = ownerToken) => f.call('', { ...context, ...body }, token, '/native/' + path + '/read');
+  for (const action of ['list', 'status', 'report']) {
+    assert.deepEqual(await value(await read('pr-evidence', { action })), await value(await f.evidence({ ...context, action })));
+  }
+  assert.deepEqual(await value(await read('pr-preview', { action: 'list' })), await value(await f.preview({ action: 'list' })));
+  const original = f.sql.prepare('SELECT * FROM evidence_jobs').all();
+  for (const action of ['create','cancel','grant','revoke','capture','renew','unknown',undefined]) {
+    assert.equal((await read('pr-evidence', { ...f.input, action })).status, 400);
+    assert.equal((await read('pr-preview', { ...f.publication, action })).status, 400);
+  }
+  assert.deepEqual(f.sql.prepare('SELECT * FROM evidence_jobs').all(), original);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM previews').get().n, 0);
+  assert.equal((await read('pr-evidence', { action: 'compare', jobIds: [f.job.id,f.job.id] })).status, 400);
+  for (const path of ['pr-evidence','pr-preview']) {
+    assert.equal((await read(path, { action: 'list', repositoryId: '2' })).status, 404);
+    assert.equal((await read(path, { action: 'list' }, 'invalid')).status, 401);
+  }
+  f.sql.prepare('DELETE FROM grants WHERE user_id=1').run();
+  for (const path of ['pr-evidence','pr-preview']) assert.equal((await read(path, { action: 'list' })).status, 404);
+});
+
 test('tested native preview publication is immutable, replay-bound and private to current repository readers', async t => {
   const f = await deliveryFixture(t);
   const published = [];
@@ -1327,13 +1351,17 @@ test('native proposal comparison checks current readers, exact source and human 
   const input = { action: 'compare', repository: key, repositoryId: '1', jobIds: jobs.map(j => j.id) };
   const compared = await value(await f.evidence(input, readerToken));
   assert.equal(compared.resolution, 'REQUIRES_HUMAN_RESOLUTION'); assert.equal(compared.proposals.length, 2); assert.equal(compared.advisoryOnly, true);
+  const readCompare = () => f.call('', input, readerToken, '/native/pr-evidence/read');
+  assert.deepEqual(await value(await readCompare()), compared);
   assert.equal((await f.evidence({ ...input, jobIds: [jobs[0].id, jobs[0].id] })).status, 400);
   const listed = await value(await f.evidence({ action: 'list', repository: key, repositoryId: '1', number: f.selection.number }, readerToken));
   assert.equal(listed.jobs.length, 2); assert.equal(listed.jobs.some(j => j.prompt || j.patch), false);
   f.setRefs([['refs/heads/main', commit], ['refs/heads/feature', 'c'.repeat(40)]]);
   assert.equal((await f.evidence(input)).status, 412);
+  assert.equal((await readCompare()).status, 412);
   await value(await f.call('', { ...f.grant, role: 'none' }, ownerToken, '/native/repository-grant'));
   assert.equal((await f.evidence(input, readerToken)).status, 404);
+  assert.equal((await readCompare()).status, 404);
 });
 
 test('Browser Run snapshot is once-only, bound to private immutable assets and removed on revocation', async t => {
@@ -2932,6 +2960,12 @@ test('public source visibility gates anonymous reads, Git, mutations and immedia
   assert.equal((await anonymous('GetContents', { ...target, ref: commit, path: 'hello.txt' })).status, 200);
   assert.equal((await clone()).status, 200);
   assert.equal((await anonymous('GetRepositoryAccess', target, 'RepositoryAccessService')).status, 200);
+  for (const path of ['pr-evidence', 'pr-preview']) {
+    const response = await f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/native/' + path + '/read', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify({ ...target, action: 'list', number: 1 }),
+    }));
+    assert.equal(response.status, 401);
+  }
   assert.equal((await anonymous('GetRepository', target, 'RepositoryService', { Authorization: 'Bearer invalid' })).status, 401);
   for (const [service, method] of [['RepositoryService', 'CreateRepository'], ['RepositoryService', 'ListIssues'], ['RepositorySettingsService', 'GetRepositorySettings'], ['OperationsService', 'GetOperationsDashboard']])
     assert.equal((await anonymous(method, target, service)).status, 401);

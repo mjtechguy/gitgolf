@@ -92,8 +92,10 @@ exact identities, request outcomes, bytes and stage totals.
 
 Stage 0 remains partial: checkout bytes/time, CI queue delay, index lag, large
 monorepos and multi-tenant load still need measurements. Current cached reads
-spend substantial time in D1 and final authority checks; evidence/preview APIs
-also pass through serialized admission. A follow-up should measure and reduce
-redundant current-authority reads or add a bounded read projection, preserving
-revocation ordering. Do not infer that caching permissions or relaxing mutation
+spend substantial time in D1 and final authority checks. Evidence and preview
+inventories now use explicit read-only routes that overlap within the existing
+eight-reader limit. Both authority and execution queues retain mutation fences;
+the original mixed-action routes remain exclusive. No permission cache was added.
+Further work should measure redundant current-source observations or a bounded
+read projection. Do not infer that caching permissions or relaxing mutation
 fences is safe from these timings.

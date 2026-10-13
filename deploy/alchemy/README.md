@@ -165,6 +165,12 @@ at `/agents/:number`. It assembles existing evidence and previews without
 starting agents or changing merge policy. An installation without agent
 execution still shows existing CI and review evidence with an explicit notice.
 
+PR, Actions and Agent workspace inventories use bounded concurrent read routes.
+During Worker/DO propagation, the UI retries an unsupported read route once on
+the existing API. Permission failures and mutations are never retried this way.
+This ships through the ordinary build/deploy command in both deployment paths;
+there is no new binding, migration or seed operation.
+
 Enable bounded performance observations on a retained installation with:
 
 ```sh

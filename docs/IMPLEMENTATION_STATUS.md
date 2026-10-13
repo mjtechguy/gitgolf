@@ -1,5 +1,38 @@
 # Golf implementation status
 
+## 2026-10-13 — Concurrent evidence and preview reads
+
+PR, Actions and Agent workspace inventories now use explicit read-only native
+routes. Evidence list/status/report/compare and preview list reuse existing
+handlers and current grants. Reads overlap within the existing eight-reader
+limit, while both authority and dispatch admission preserve queued mutation and
+revocation ordering. Mixed-action routes remain exclusive; the read routes
+reject creation, cancellation, grants, renewal, capture and unknown actions.
+
+The shared native transport handles Worker/DO rolling updates with one retry on
+the original route only for an unsupported read. Permission failures, unavailable
+services and mutations are not retried. The retained Alchemy rollout exercised
+that fallback on real requests. Both installation paths use the same source;
+there are no new dependencies, bindings, migrations or content-seeding steps.
+
+The [retained browser comparison](compatibility/evidence/native-concurrent-reads-20261013.json)
+records 120 successful reads with unchanged PR/evidence/preview identities.
+With both tabs updated, alternating old/new routes on two PRs improved evidence
+p50/p95 from 1585/2676 ms to 644/802 ms and preview p50/p95 from 1131/2802 ms to
+253/322 ms. Each endpoint has eight observations per phase. Initial measurements
+with an older tab and a page reload retained multi-second queue delays; those
+results are included. This is bounded API evidence, not an instant-page or load
+guarantee. The deployed Worker and workspace release/configuration agree; public
+FastAPI still denies anonymous evidence/preview access. Desktop/mobile inventories
+and on-demand report opening passed.
+
+Validation: 296 native tests passed, one skipped; six frontend transport/workspace/
+preview tests and the native frontend build passed. Real workerd/D1/DO checks
+passed with the new read route and mutation/identity denial. Local admission
+tests cover overlapping reads and a revocation waiting in either queue; existing
+proposal-comparison tests also cover current, stale and revoked read aliases.
+Full browser regression, multi-tenant load and new agent execution remain unrun.
+
 ## 2026-10-13 — Read-only Agent workspace and measured source reads
 
 Native repositories now expose `/agents` and `/agents/:number`: a compact PR work

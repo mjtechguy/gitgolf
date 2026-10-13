@@ -1,0 +1,334 @@
+{
+  "date": "2026-10-13",
+  "origin": "https://demo.gitgolf.mjtechguy.com",
+  "runtime": "cloudflare-native via Alchemy",
+  "release": "acd190a2413e58756d9a0781af87bff0b6b377fee1bb802ac728aaa4603f878b",
+  "method": "Authenticated shared browser, two PRs, six simultaneous requests per round (GetPullRequest, evidence list, preview list for each repository). Four rounds per path. The final comparison alternated control/concurrent order each round after both tabs loaded the new frontend. Timing includes response body consumption. No credentials are recorded.",
+  "limits": [
+    "Eight observations per endpoint per phase; p95 is the largest observation in each group.",
+    "Existing indexed demo snapshots; not cold-cache, large-monorepo, multi-tenant or full-page-load qualification.",
+    "Initial concurrent measurements overlapped a page reload and requests from an older UI tab. They retain the resulting queue delays; the final comparison reloads both tabs and allows initial loads to settle.",
+    "Client mutations and background execution still fence reads. This change does not promise instant responses during those operations.",
+    "No new agent execution or full browser regression."
+  ],
+  "fixtures": {
+    "canonical": {
+      "pull": {
+        "base": "b1d0ef2730d386ce98d3a6fdef891c693f0f6fbb",
+        "head": "8db896631a6a39b7cc04b4597dfdceabef0ccd91",
+        "id": "1"
+      },
+      "evidence": [
+        {
+          "id": "de5ea114-ed4d-4d0f-b042-edda4f93db17",
+          "selection": {
+            "baseCommitId": "b1d0ef2730d386ce98d3a6fdef891c693f0f6fbb",
+            "headCommitId": "8db896631a6a39b7cc04b4597dfdceabef0ccd91",
+            "number": 1,
+            "pullRequestId": "1",
+            "repository": {
+              "name": "canonical",
+              "owner": "alice"
+            },
+            "repositoryId": "1"
+          },
+          "stale": false,
+          "state": "SUCCEEDED"
+        },
+        {
+          "id": "a669a66a-4b89-46bf-a9b9-32042e01031a",
+          "selection": {
+            "baseCommitId": "b1d0ef2730d386ce98d3a6fdef891c693f0f6fbb",
+            "headCommitId": "8db896631a6a39b7cc04b4597dfdceabef0ccd91",
+            "number": 1,
+            "pullRequestId": "1",
+            "repository": {
+              "name": "canonical",
+              "owner": "alice"
+            },
+            "repositoryId": "1"
+          },
+          "stale": false,
+          "state": "SUCCEEDED"
+        },
+        {
+          "id": "4f23fd26-b29f-4290-9cce-415689fd2e58",
+          "selection": {
+            "baseCommitId": "b1d0ef2730d386ce98d3a6fdef891c693f0f6fbb",
+            "headCommitId": "8db896631a6a39b7cc04b4597dfdceabef0ccd91",
+            "number": 1,
+            "pullRequestId": "1",
+            "repository": {
+              "name": "canonical",
+              "owner": "alice"
+            },
+            "repositoryId": "1"
+          },
+          "stale": false,
+          "state": "SUCCEEDED"
+        }
+      ],
+      "preview": [
+        {
+          "expiresAt": "2026-10-13T21:57:03.511Z",
+          "id": "c1402c54-8712-45ce-87e1-b7df4e3489a4",
+          "state": "READY"
+        },
+        {
+          "expiresAt": "2026-10-13T21:57:01.739Z",
+          "id": "68ab0207-3d30-4cb3-b04c-8309527cb7e6",
+          "state": "READY"
+        }
+      ]
+    },
+    "fastapi": {
+      "pull": {
+        "base": "f5c6e9b4f9cadc1bf0f9a1fd672e621206b63007",
+        "head": "20eec9c58f9bb3ee9380e196bb3fffb405ee0dd8",
+        "id": "11"
+      },
+      "evidence": [
+        {
+          "id": "3069c48f-2cae-4ec6-98bb-d3e2f3f45210",
+          "selection": {
+            "baseCommitId": "f5c6e9b4f9cadc1bf0f9a1fd672e621206b63007",
+            "headCommitId": "20eec9c58f9bb3ee9380e196bb3fffb405ee0dd8",
+            "number": 1,
+            "pullRequestId": "11",
+            "repository": {
+              "name": "fastapi",
+              "owner": "mj"
+            },
+            "repositoryId": "12"
+          },
+          "stale": false,
+          "state": "SUCCEEDED"
+        }
+      ],
+      "preview": []
+    }
+  },
+  "summary": {
+    "before": {
+      "pull": {
+        "samples": 8,
+        "p50Ms": 554,
+        "p95Ms": 1728
+      },
+      "evidence": {
+        "samples": 8,
+        "p50Ms": 1547,
+        "p95Ms": 2518
+      },
+      "preview": {
+        "samples": 8,
+        "p50Ms": 1063,
+        "p95Ms": 1990
+      }
+    },
+    "initialConcurrent": {
+      "pull": {
+        "samples": 8,
+        "p50Ms": 902,
+        "p95Ms": 2522
+      },
+      "evidence": {
+        "samples": 8,
+        "p50Ms": 1492,
+        "p95Ms": 3443
+      },
+      "preview": {
+        "samples": 8,
+        "p50Ms": 566,
+        "p95Ms": 2969
+      }
+    },
+    "initialControl": {
+      "pull": {
+        "samples": 8,
+        "p50Ms": 502,
+        "p95Ms": 872
+      },
+      "evidence": {
+        "samples": 8,
+        "p50Ms": 1396,
+        "p95Ms": 2273
+      },
+      "preview": {
+        "samples": 8,
+        "p50Ms": 1488,
+        "p95Ms": 1785
+      }
+    },
+    "steadyConcurrent": {
+      "pull": {
+        "samples": 8,
+        "p50Ms": 638,
+        "p95Ms": 806
+      },
+      "evidence": {
+        "samples": 8,
+        "p50Ms": 644,
+        "p95Ms": 802
+      },
+      "preview": {
+        "samples": 8,
+        "p50Ms": 253,
+        "p95Ms": 322
+      }
+    },
+    "steadyControl": {
+      "pull": {
+        "samples": 8,
+        "p50Ms": 813,
+        "p95Ms": 1112
+      },
+      "evidence": {
+        "samples": 8,
+        "p50Ms": 1585,
+        "p95Ms": 2676
+      },
+      "preview": {
+        "samples": 8,
+        "p50Ms": 1131,
+        "p95Ms": 2802
+      }
+    }
+  },
+  "checks": {
+    "requests": 120,
+    "all200AndSameIdentity": true,
+    "workerWorkspaceReleaseMatchedForAllPostDeploySamples": true,
+    "anonymousEvidenceAndPreviewDeniedOnPublicFastAPI": true,
+    "rollingUpdateFallbackObserved": true,
+    "nativeTests": {
+      "passed": 296,
+      "skipped": 1
+    },
+    "frontendTests": 6,
+    "frontendBuild": true,
+    "workerdD1DO": true
+  },
+  "samples": [
+    {"phase":"before","iteration":0,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":1188,"bytes":960,"queueMs":311,"nativeMs":632},
+    {"phase":"before","iteration":0,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":441,"bytes":2085,"queueMs":0,"nativeMs":331},
+    {"phase":"before","iteration":0,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":1827,"bytes":1219,"queueMs":1529,"nativeMs":104},
+    {"phase":"before","iteration":0,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":1728,"bytes":1105,"queueMs":316,"nativeMs":1198},
+    {"phase":"before","iteration":0,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":2518,"bytes":712,"queueMs":1782,"nativeMs":517},
+    {"phase":"before","iteration":0,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":1990,"bytes":33,"queueMs":1682,"nativeMs":103},
+    {"phase":"before","iteration":1,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":541,"bytes":960,"queueMs":48,"nativeMs":375},
+    {"phase":"before","iteration":1,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":1435,"bytes":2085,"queueMs":960,"nativeMs":335},
+    {"phase":"before","iteration":1,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":1709,"bytes":1219,"queueMs":1440,"nativeMs":152},
+    {"phase":"before","iteration":1,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":593,"bytes":1105,"queueMs":22,"nativeMs":421},
+    {"phase":"before","iteration":1,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":2324,"bytes":712,"queueMs":1707,"nativeMs":502},
+    {"phase":"before","iteration":1,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":1827,"bytes":33,"queueMs":1588,"nativeMs":128},
+    {"phase":"before","iteration":2,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":554,"bytes":960,"queueMs":0,"nativeMs":466},
+    {"phase":"before","iteration":2,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":1547,"bytes":2085,"queueMs":704,"nativeMs":816},
+    {"phase":"before","iteration":2,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":793,"bytes":1219,"queueMs":625,"nativeMs":81},
+    {"phase":"before","iteration":2,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":621,"bytes":1105,"queueMs":0,"nativeMs":536},
+    {"phase":"before","iteration":2,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":2262,"bytes":712,"queueMs":1516,"nativeMs":759},
+    {"phase":"before","iteration":2,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":709,"bytes":33,"queueMs":534,"nativeMs":95},
+    {"phase":"before","iteration":3,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":441,"bytes":960,"queueMs":0,"nativeMs":309},
+    {"phase":"before","iteration":3,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":828,"bytes":2085,"queueMs":350,"nativeMs":357},
+    {"phase":"before","iteration":3,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":940,"bytes":1219,"queueMs":701,"nativeMs":111},
+    {"phase":"before","iteration":3,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":473,"bytes":1105,"queueMs":0,"nativeMs":341},
+    {"phase":"before","iteration":3,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":1556,"bytes":712,"queueMs":929,"nativeMs":515},
+    {"phase":"before","iteration":3,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":1063,"bytes":33,"queueMs":809,"nativeMs":133},
+    {"phase":"initialConcurrent","iteration":0,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":2309,"bytes":960,"queueMs":1402,"nativeMs":563},
+    {"phase":"initialConcurrent","iteration":0,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":3422,"bytes":2085,"queueMs":2358,"nativeMs":582},
+    {"phase":"initialConcurrent","iteration":0,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":2961,"bytes":1219,"queueMs":2361,"nativeMs":282},
+    {"phase":"initialConcurrent","iteration":0,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":2522,"bytes":1105,"queueMs":1402,"nativeMs":765},
+    {"phase":"initialConcurrent","iteration":0,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":3443,"bytes":712,"queueMs":2358,"nativeMs":626},
+    {"phase":"initialConcurrent","iteration":0,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":2969,"bytes":33,"queueMs":2355,"nativeMs":290},
+    {"phase":"initialConcurrent","iteration":1,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":809,"bytes":960,"queueMs":431,"nativeMs":406},
+    {"phase":"initialConcurrent","iteration":1,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":1666,"bytes":2085,"queueMs":1052,"nativeMs":537},
+    {"phase":"initialConcurrent","iteration":1,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":1357,"bytes":1219,"queueMs":1243,"nativeMs":124},
+    {"phase":"initialConcurrent","iteration":1,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":902,"bytes":1105,"queueMs":426,"nativeMs":485},
+    {"phase":"initialConcurrent","iteration":1,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":2158,"bytes":712,"queueMs":1047,"nativeMs":1243},
+    {"phase":"initialConcurrent","iteration":1,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":1274,"bytes":33,"queueMs":1047,"nativeMs":249},
+    {"phase":"initialConcurrent","iteration":2,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":1127,"bytes":960,"queueMs":0,"nativeMs":931},
+    {"phase":"initialConcurrent","iteration":2,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":1127,"bytes":2085,"queueMs":0,"nativeMs":931},
+    {"phase":"initialConcurrent","iteration":2,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":241,"bytes":1219,"queueMs":0,"nativeMs":151},
+    {"phase":"initialConcurrent","iteration":2,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":1486,"bytes":1105,"queueMs":0,"nativeMs":1321},
+    {"phase":"initialConcurrent","iteration":2,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":1492,"bytes":712,"queueMs":0,"nativeMs":1321},
+    {"phase":"initialConcurrent","iteration":2,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":566,"bytes":33,"queueMs":0,"nativeMs":513},
+    {"phase":"initialConcurrent","iteration":3,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":559,"bytes":960,"queueMs":0,"nativeMs":380},
+    {"phase":"initialConcurrent","iteration":3,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":554,"bytes":2085,"queueMs":0,"nativeMs":383},
+    {"phase":"initialConcurrent","iteration":3,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":235,"bytes":1219,"queueMs":0,"nativeMs":127},
+    {"phase":"initialConcurrent","iteration":3,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":756,"bytes":1105,"queueMs":0,"nativeMs":608},
+    {"phase":"initialConcurrent","iteration":3,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":603,"bytes":712,"queueMs":0,"nativeMs":431},
+    {"phase":"initialConcurrent","iteration":3,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":198,"bytes":33,"queueMs":0,"nativeMs":123},
+    {"phase":"initialControl","iteration":0,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":596,"bytes":960,"queueMs":78,"nativeMs":479},
+    {"phase":"initialControl","iteration":0,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":1081,"bytes":2085,"queueMs":640,"nativeMs":497},
+    {"phase":"initialControl","iteration":0,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":1543,"bytes":1219,"queueMs":1469,"nativeMs":102},
+    {"phase":"initialControl","iteration":0,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":683,"bytes":1105,"queueMs":88,"nativeMs":550},
+    {"phase":"initialControl","iteration":0,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":1935,"bytes":712,"queueMs":1571,"nativeMs":432},
+    {"phase":"initialControl","iteration":0,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":118,"bytes":33,"queueMs":0,"nativeMs":93},
+    {"phase":"initialControl","iteration":1,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":502,"bytes":960,"queueMs":0,"nativeMs":369},
+    {"phase":"initialControl","iteration":1,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":2105,"bytes":2085,"queueMs":1714,"nativeMs":443},
+    {"phase":"initialControl","iteration":1,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":1666,"bytes":1219,"queueMs":1630,"nativeMs":86},
+    {"phase":"initialControl","iteration":1,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":550,"bytes":1105,"queueMs":0,"nativeMs":411},
+    {"phase":"initialControl","iteration":1,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":1396,"bytes":712,"queueMs":562,"nativeMs":877},
+    {"phase":"initialControl","iteration":1,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":1582,"bytes":33,"queueMs":1541,"nativeMs":89},
+    {"phase":"initialControl","iteration":2,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":472,"bytes":960,"queueMs":0,"nativeMs":365},
+    {"phase":"initialControl","iteration":2,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":888,"bytes":2085,"queueMs":381,"nativeMs":404},
+    {"phase":"initialControl","iteration":2,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":995,"bytes":1219,"queueMs":769,"nativeMs":104},
+    {"phase":"initialControl","iteration":2,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":492,"bytes":1105,"queueMs":0,"nativeMs":373},
+    {"phase":"initialControl","iteration":2,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":1402,"bytes":712,"queueMs":873,"nativeMs":420},
+    {"phase":"initialControl","iteration":2,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":1488,"bytes":33,"queueMs":1290,"nativeMs":98},
+    {"phase":"initialControl","iteration":3,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":430,"bytes":960,"queueMs":0,"nativeMs":378},
+    {"phase":"initialControl","iteration":3,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":1259,"bytes":2085,"queueMs":828,"nativeMs":381},
+    {"phase":"initialControl","iteration":3,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":1785,"bytes":1219,"queueMs":1534,"nativeMs":151},
+    {"phase":"initialControl","iteration":3,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":872,"bytes":1105,"queueMs":447,"nativeMs":368},
+    {"phase":"initialControl","iteration":3,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":2273,"bytes":712,"queueMs":1661,"nativeMs":508},
+    {"phase":"initialControl","iteration":3,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":504,"bytes":33,"queueMs":378,"nativeMs":82},
+    {"phase":"steadyConcurrent","iteration":0,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":501,"bytes":960,"queueMs":0,"nativeMs":342},
+    {"phase":"steadyConcurrent","iteration":0,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":627,"bytes":2085,"queueMs":0,"nativeMs":439},
+    {"phase":"steadyConcurrent","iteration":0,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":216,"bytes":1219,"queueMs":0,"nativeMs":112},
+    {"phase":"steadyConcurrent","iteration":0,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":806,"bytes":1105,"queueMs":0,"nativeMs":604},
+    {"phase":"steadyConcurrent","iteration":0,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":802,"bytes":712,"queueMs":0,"nativeMs":596},
+    {"phase":"steadyConcurrent","iteration":0,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":263,"bytes":33,"queueMs":0,"nativeMs":141},
+    {"phase":"steadyConcurrent","iteration":1,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":655,"bytes":960,"queueMs":0,"nativeMs":373},
+    {"phase":"steadyConcurrent","iteration":1,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":655,"bytes":2085,"queueMs":0,"nativeMs":373},
+    {"phase":"steadyConcurrent","iteration":1,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":208,"bytes":1219,"queueMs":0,"nativeMs":99},
+    {"phase":"steadyConcurrent","iteration":1,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":729,"bytes":1105,"queueMs":0,"nativeMs":483},
+    {"phase":"steadyConcurrent","iteration":1,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":730,"bytes":712,"queueMs":0,"nativeMs":473},
+    {"phase":"steadyConcurrent","iteration":1,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":265,"bytes":33,"queueMs":0,"nativeMs":119},
+    {"phase":"steadyConcurrent","iteration":2,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":592,"bytes":960,"queueMs":0,"nativeMs":365},
+    {"phase":"steadyConcurrent","iteration":2,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":644,"bytes":2085,"queueMs":0,"nativeMs":405},
+    {"phase":"steadyConcurrent","iteration":2,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":322,"bytes":1219,"queueMs":0,"nativeMs":139},
+    {"phase":"steadyConcurrent","iteration":2,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":683,"bytes":1105,"queueMs":0,"nativeMs":429},
+    {"phase":"steadyConcurrent","iteration":2,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":684,"bytes":712,"queueMs":0,"nativeMs":439},
+    {"phase":"steadyConcurrent","iteration":2,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":253,"bytes":33,"queueMs":0,"nativeMs":131},
+    {"phase":"steadyConcurrent","iteration":3,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":492,"bytes":960,"queueMs":0,"nativeMs":349},
+    {"phase":"steadyConcurrent","iteration":3,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":490,"bytes":2085,"queueMs":0,"nativeMs":342},
+    {"phase":"steadyConcurrent","iteration":3,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":249,"bytes":1219,"queueMs":0,"nativeMs":156},
+    {"phase":"steadyConcurrent","iteration":3,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":638,"bytes":1105,"queueMs":0,"nativeMs":483},
+    {"phase":"steadyConcurrent","iteration":3,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":577,"bytes":712,"queueMs":0,"nativeMs":431},
+    {"phase":"steadyConcurrent","iteration":3,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":253,"bytes":33,"queueMs":0,"nativeMs":168},
+    {"phase":"steadyControl","iteration":0,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":411,"bytes":960,"queueMs":0,"nativeMs":287},
+    {"phase":"steadyControl","iteration":0,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":2223,"bytes":2085,"queueMs":1440,"nativeMs":626},
+    {"phase":"steadyControl","iteration":0,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":499,"bytes":1219,"queueMs":284,"nativeMs":101},
+    {"phase":"steadyControl","iteration":0,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":1112,"bytes":1105,"queueMs":385,"nativeMs":600},
+    {"phase":"steadyControl","iteration":0,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":1604,"bytes":712,"queueMs":985,"nativeMs":467},
+    {"phase":"steadyControl","iteration":0,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":2332,"bytes":33,"queueMs":2065,"nativeMs":113},
+    {"phase":"steadyControl","iteration":1,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":982,"bytes":960,"queueMs":470,"nativeMs":542},
+    {"phase":"steadyControl","iteration":1,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":471,"bytes":2085,"queueMs":0,"nativeMs":480},
+    {"phase":"steadyControl","iteration":1,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":1131,"bytes":1219,"queueMs":1054,"nativeMs":133},
+    {"phase":"steadyControl","iteration":1,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":1024,"bytes":1105,"queueMs":470,"nativeMs":584},
+    {"phase":"steadyControl","iteration":1,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":1585,"bytes":712,"queueMs":1280,"nativeMs":399},
+    {"phase":"steadyControl","iteration":1,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":1215,"bytes":33,"queueMs":1187,"nativeMs":93},
+    {"phase":"steadyControl","iteration":2,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":443,"bytes":960,"queueMs":0,"nativeMs":368},
+    {"phase":"steadyControl","iteration":2,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":1797,"bytes":2085,"queueMs":940,"nativeMs":890},
+    {"phase":"steadyControl","iteration":2,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":2802,"bytes":1219,"queueMs":2751,"nativeMs":126},
+    {"phase":"steadyControl","iteration":2,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":912,"bytes":1105,"queueMs":0,"nativeMs":940},
+    {"phase":"steadyControl","iteration":2,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":2676,"bytes":712,"queueMs":1943,"nativeMs":809},
+    {"phase":"steadyControl","iteration":2,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":1924,"bytes":33,"queueMs":1827,"nativeMs":117},
+    {"phase":"steadyControl","iteration":3,"repository":"canonical","kind":"pull","status":200,"exact":true,"ms":797,"bytes":960,"queueMs":400,"nativeMs":332},
+    {"phase":"steadyControl","iteration":3,"repository":"canonical","kind":"evidence","status":200,"exact":true,"ms":1338,"bytes":2085,"queueMs":944,"nativeMs":353},
+    {"phase":"steadyControl","iteration":3,"repository":"canonical","kind":"preview","status":200,"exact":true,"ms":920,"bytes":1219,"queueMs":787,"nativeMs":109},
+    {"phase":"steadyControl","iteration":3,"repository":"fastapi","kind":"pull","status":200,"exact":true,"ms":813,"bytes":1105,"queueMs":433,"nativeMs":348},
+    {"phase":"steadyControl","iteration":3,"repository":"fastapi","kind":"evidence","status":200,"exact":true,"ms":434,"bytes":712,"queueMs":0,"nativeMs":441},
+    {"phase":"steadyControl","iteration":3,"repository":"fastapi","kind":"preview","status":200,"exact":true,"ms":1006,"bytes":33,"queueMs":880,"nativeMs":109}
+  ]
+}

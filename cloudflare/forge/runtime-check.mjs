@@ -74,6 +74,13 @@ try {
   await database.prepare(`INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at)
     VALUES(1,'runtime','',?,1,?,?,'ACTIVE',?)`).bind('repo-' + 'b'.repeat(32), crypto.randomUUID(), 'c'.repeat(64), new Date().toISOString()).run();
   await database.prepare("INSERT INTO grants VALUES(1,1,'admin')").run();
+  const readContext = { repository: { owner: 'alice', name: 'runtime' }, repositoryId: '1', number: 1 };
+  const evidenceInventory = await call('/native/pr-evidence/read', token, {}, { ...readContext, action: 'list' });
+  assert.equal(evidenceInventory.status, 200); assert.deepEqual(await evidenceInventory.json(), { jobs: [], truncated: false });
+  for (const path of ['pr-evidence', 'pr-preview']) {
+    assert.equal((await call('/native/' + path + '/read', token, {}, { ...readContext, action: 'create' })).status, 400);
+    assert.equal((await call('/native/' + path + '/read', 'invalid', {}, { ...readContext, action: 'list' })).status, 401);
+  }
   const publicCall = (path, payload) => runtime.dispatchFetch('https://golf.example.com'+path, {
     method:'POST',headers:{'Content-Type':'application/json','Connect-Protocol-Version':'1'},body:JSON.stringify(payload),
   });

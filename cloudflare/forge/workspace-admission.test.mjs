@@ -55,6 +55,44 @@ test('unknown client writes also fence authority and failed writes release the a
   f.background.resolve(); await work; assert.equal(await write, 'failed write'); assert.equal(await (await read).text(), 'allowed');
 });
 
+test('native evidence and preview reads overlap without passing pending revocations', async () => {
+  const f = fixture(), hold = deferred(), entered = [];
+  const original = f.workspace.configured.handle;
+  f.workspace.configured.handle = async req => {
+    if (new URL(req.url).pathname.endsWith('/read')) { entered.push(req.url); await hold.promise; }
+    return original(req);
+  };
+  const read = path => new Request('https://golf.test/native/' + path, { method: 'POST', body: '{}' });
+  const before = ['pr-evidence/read','pr-preview/read'].map(path => f.workspace.fetch(read(path)));
+  await tick(); assert.equal(entered.length, 2);
+  const revoke = f.workspace.fetch(request('RevokeRepositoryCollaborator'));
+  const after = f.workspace.fetch(read('pr-preview/read'));
+  await tick(); assert.equal(entered.length, 2);
+  hold.resolve();
+  assert.deepEqual(await Promise.all(before.map(async r => (await r).text())), ['allowed','allowed']);
+  await revoke; assert.equal(await (await after).text(), 'denied');
+  // Mixed-action routes remain exclusive, even when the caller claims a read.
+  for (const path of ['pr-evidence','pr-preview','pr-evidence/read/','pr-preview/read-extra']) assert.equal(concurrentRead(read(path)), false);
+  assert.equal(concurrentRead(new Request('https://golf.test/native/pr-evidence/read')), false);
+});
+
+test('native reads cannot slip past a revocation waiting in the authority queue', async () => {
+  const f = fixture(), hold = deferred();
+  const original = f.workspace.configured.handle;
+  f.workspace.configured.handle = async req => {
+    if (new URL(req.url).pathname.endsWith('/GetRepositoryAccess')) await hold.promise;
+    return original(req);
+  };
+  const authority = f.workspace.fetch(request('GetRepositoryAccess'));
+  await tick();
+  const revoke = f.workspace.fetch(request('RevokeRepositoryCollaborator'));
+  let completed = false;
+  const after = f.workspace.fetch(new Request('https://golf.test/native/pr-evidence/read', { method: 'POST', body: '{}' })).then(r => { completed = true; return r; });
+  await tick(); assert.equal(completed, false); assert.deepEqual(f.events, []);
+  hold.resolve(); await authority; await revoke;
+  assert.equal(await (await after).text(), 'denied');
+});
+
 test('authority admission remains bounded under slow readers and preserves write ordering', async () => {
   const f = fixture(), hold = deferred(); let reads = 0;
   const original = f.workspace.configured.handle;
