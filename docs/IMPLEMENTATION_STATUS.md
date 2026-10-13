@@ -52,7 +52,23 @@ Narrower than the design study, and still open:
   a Helm value and server-backed per-user preferences are not implemented.
 - Signed-out pages keep the top bar in every layout.
 
-VALIDATION_PLACEHOLDER
+Validation: typecheck, both frontend builds, `go vet`, `go test ./...`, the
+generation, engine and compatibility checks, and 296 native Worker tests (one
+skipped) pass. `make cloudflare-check` stops at `web/tests/navigation-cache.test.ts`,
+which fails the same way on `main` (module resolution); its remaining steps pass
+when run directly. The new `web/tests/layout-presets.spec.ts` (15 tests) covers
+all nine layouts at 1440 and 390 pixels, the picker and per-appearance memory,
+operator and native defaults, the keyboard layer and signed-out pages.
+
+The full browser suite ran on the final branch: 2,028 passed and 197 failed in
+25.8 minutes. The suite is not green on `main`: 189 of those 197 fail there in
+the same environment. Of the other eight, the appearance test fails on `main`
+at the same top-bar height assertion, and seven passed when rerun on the branch.
+Eight existing test definitions that measure the standard arrangement or use the top-bar
+workspace menu now select that layout or navigate from the side navigation.
+Screenshots were reviewed for every layout; dark mode was checked for the
+keyboard layout only. This was not exercised against a live backend before
+rollout.
 
 ## 2026-10-13 — Concurrent evidence and preview reads
 
