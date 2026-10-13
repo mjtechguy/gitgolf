@@ -1,5 +1,11 @@
 # Golf implementation plan
 
+Parallel deployment experiment (2026-10-13): [Alchemy deployment](deploy/alchemy/README.md)
+now provisions the retained Cloudflare demo using the same native build, approved
+CI image and pinned content. The Python/`cf` installer remains available. Alchemy
+owns a separate installation and local state; it is not an application dependency.
+See the implementation ledger for live verification and beta/cleanup limits.
+
 Retained demo ownership (2026-10-13): the [saved deployment recipe](deploy/demo/README.md)
 adopts `mj`, adds `mj-platform` and `mj-labs` with three pinned upstream repositories
 each, and preserves existing Git identities and CI artifacts. Schema21 stores native

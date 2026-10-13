@@ -1,5 +1,8 @@
 # Repeatable Cloudflare demo
 
+An optional [Alchemy deployment](../alchemy/README.md) provisions the same retained
+demo while preserving this Python/`cf` path. Use one resource owner per installation.
+
 `demo.json` is the reviewed public content manifest: the `mj` personal owner,
 `mj-platform` and `mj-labs`, ten personal repositories and three repositories per
 organization. Every GitHub snapshot is pinned to a full commit. The two original

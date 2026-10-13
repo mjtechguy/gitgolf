@@ -21,6 +21,7 @@ export class Workspace extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.performance = new PerformanceHistory(ctx.storage.sql);
+    const workflows = env.EvidenceWorkflow || ctx.exports.EvidenceWorkflow;
     this.activity = new RepositoryActivity(ctx.storage, (request, input) => this.authority({ activity: true, request, input }));
     const configured = this.configured = { ...env, previewChanged: id => this.activity.publish(String(id), ['actions', 'pulls']), performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask };
     if (env.REGISTRY_PROVIDER === 'cloudflare') {
@@ -32,8 +33,8 @@ export class Workspace extends DurableObject {
       let result;
       try {
         result = await (event instanceof Request ? handle(event, configured) : event.ci ? runCI(configured) : event.preview ? servePreview(configured, event.preview) : event.cleanup ? cleanupPreviews(configured) : event.git
-          ? event.phase ? agentGit(configured, event.id, event.git, event.phase, ctx.exports.EvidenceWorkflow) : testGit(configured, event.id, event.git, ctx.exports.EvidenceWorkflow)
-          : event.registry ? testRegistry(configured,event.id,event.registry) : event.notify ? undefined : advanceEvidence(configured, event.id, event.phase, ctx.exports.EvidenceWorkflow));
+          ? event.phase ? agentGit(configured, event.id, event.git, event.phase, workflows) : testGit(configured, event.id, event.git, workflows)
+          : event.registry ? testRegistry(configured,event.id,event.registry) : event.notify ? undefined : advanceEvidence(configured, event.id, event.phase, workflows));
         return result;
       } finally {
         if (result?.ok && (selection || event instanceof Request && /\/golf\.v1\.RepositoryWebhookService\/(?:Test|Redeliver)RepositoryWebhook$/.test(new URL(event.url).pathname)))

@@ -10,7 +10,7 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
   if (specifier === './core.mjs' && context.parentURL.endsWith('/src/worker.mjs')) source = `
     export const {serialize,concurrentRead}=globalThis.golfAdmissionTest;
     export const handle=(request,env)=>env.handle(request);
-    export const advanceEvidence=(env,id,phase)=>env.background(id,phase);
+    export const advanceEvidence=(env,id,phase,workflows)=>env.background(id,phase,workflows);
     export const activityAuthority=(request,env,input)=>env.handle(request);
     export const testGit=()=>{},testRegistry=()=>{},registryExecution=()=>{},agentGit=()=>{},servePreview=()=>{},cleanupPreviews=()=>{},runCI=()=>{};`;
   return source ? { url: 'data:text/javascript,' + encodeURIComponent(source), shortCircuit: true } : next(specifier, context);
@@ -66,4 +66,17 @@ test('authority admission remains bounded under slow readers and preserves write
   hold.resolve(); await Promise.all(active); await write;
   assert.ok((await Promise.all(queued)).every(r=>r.status===200));
   assert.equal(await (await f.workspace.fetch(request('GetRepositoryAccess'))).text(),'denied');
+});
+
+// cf exposes workflows through ctx.exports; Alchemy emits an environment binding.
+test('both deployment paths pass the real workflow binding to evidence admission', async () => {
+  const exported = { create() {} }, bound = { create() {} };
+  for (const [exports, binding, expected] of [[{ EvidenceWorkflow: exported }, undefined, exported], [{}, bound, bound], [{ EvidenceWorkflow: exported }, bound, bound]]) {
+    let observed;
+    const workspace = new Workspace({ storage: { sql: { exec() {} } }, exports, waitUntil() {} }, {
+      EvidenceWorkflow: binding, background: async (id, phase, workflows) => { observed = workflows; return {}; },
+    });
+    await workspace.evidence('job', 'start');
+    assert.equal(observed, expected);
+  }
 });
