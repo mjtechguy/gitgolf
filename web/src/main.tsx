@@ -5,6 +5,12 @@ import { RouterProvider } from '@tanstack/react-router';
 import { router } from './router';
 import { createQueryClient } from './queryClient';
 import './styles.css';
+import { reloadOnceForBuild } from './staleBuild';
+
+window.addEventListener('vite:preloadError', event => {
+  const build = document.querySelector<HTMLScriptElement>('script[type=module][src]')?.src || '';
+  if (reloadOnceForBuild(sessionStorage, build, () => location.reload())) event.preventDefault();
+});
 
 const client = createQueryClient();
 
