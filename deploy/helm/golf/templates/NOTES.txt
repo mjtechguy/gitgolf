@@ -1,11 +1,50 @@
+{{- $golf := include "golf.fullname" . -}}
+{{- $ns := .Release.Namespace -}}
+{{- $golfHost := (urlParse .Values.publicURL).host -}}
+{{- $golfLocal := "8080" -}}
+{{- if and (not .Values.ingress.enabled) (regexMatch "^(localhost|127\\.0\\.0\\.1):[0-9]+$" $golfHost) -}}{{- $golfLocal = last (splitList ":" $golfHost) -}}{{- end -}}
+{{- $forgeHost := (urlParse .Values.forgejo.publicURL).host -}}
+{{- $forgeLocal := "3000" -}}
+{{- if and (not .Values.ingress.enabled) (regexMatch "^(localhost|127\\.0\\.0\\.1):[0-9]+$" $forgeHost) -}}{{- $forgeLocal = last (splitList ":" $forgeHost) -}}{{- end -}}
 Golf public origin: {{ .Values.publicURL }}
 Configured {{ .Values.forge.kind }} public origin: {{ .Values.forgejo.publicURL }}
 
 This chart installs the current portable core. It creates no Secrets, runners,
 Cloudflare resources or load balancers. Secret {{ .Values.existingSecret }} must
-already exist in namespace {{ .Release.Namespace }}; see the chart README for keys.
+already exist in namespace {{ $ns }}; see the chart README for keys.
 
+Add the same --kubeconfig/--context you used for Helm to every kubectl command.
+
+1. Reach Golf{{ if .Values.forgejo.enabled }} and Forgejo{{ end }} (keep each port-forward running in its own terminal):
+
+  kubectl -n {{ $ns }} port-forward service/{{ $golf }} {{ $golfLocal }}:8080
 {{- if .Values.forgejo.enabled }}
+  kubectl -n {{ $ns }} port-forward service/{{ $golf }}-forgejo {{ $forgeLocal }}:3000 {{ .Values.forgejo.sshPort }}:2222
+{{- end }}
+{{- if .Values.ingress.enabled }}
+
+  Through ingress, browse {{ .Values.publicURL }} and {{ .Values.forgejo.publicURL }}.
+{{- else }}
+
+  Browse {{ .Values.publicURL }} exactly: Golf rejects RPCs from any other origin.
+{{- end }}
+
+2. Check readiness (database and forge, not just a running pod):
+
+  curl --fail http://localhost:{{ $golfLocal }}/readyz
+
+3. Enroll the first account. Registration is disabled: create a Forgejo user
+   with its administrator CLI, then enroll it in Golf with a separate password:
+{{ if .Values.forgejo.enabled }}
+  kubectl -n {{ $ns }} exec {{ $golf }}-forgejo-0 -- forgejo --config /etc/gitea/app.ini \
+    admin user create --username golf-owner --email owner@example.com --admin \
+    --random-password --must-change-password=false
+{{- end }}
+  kubectl -n {{ $ns }} exec -i deployment/{{ $golf }} -- \
+    golf local-account create < .tmp/kubernetes/account.json
+
+   account.json shape and token scopes: https://docs.gitgolf.app/docs/kubernetes/
+{{ if .Values.forgejo.enabled }}
 Forgejo has exactly one canonical writer and retained data/config PVCs. Ordinary
 StatefulSet replacements stop the old Pod first. RWO and StatefulSet identity do
 NOT fence a partitioned node: never force-delete/recreate a writer until the old
@@ -15,18 +54,22 @@ node is fenced from storage. No Forgejo HA or safe forced failover is claimed.
 Bundled PostgreSQL is a single persistent instance, not an HA database. Its init
 script only runs on an empty volume. Secret edits do not rotate database roles.
 {{- end }}
-
-PVCs remain after uninstall. Retain the release name to reattach them, and verify
-backups before removing any PVC. Secret rotation needs coordinated provider/DB
-updates and a workload restart; the chart never reads Secret values into Helm.
-
-{{- if not .Values.ingress.enabled }}
-For local port-forwarding, publicURL must match the browser origin exactly.
-Service: {{ include "golf.fullname" . }} port 8080.
+{{- if and .Values.disruptionBudget.enabled (gt (int .Values.replicaCount) 1) }}
+PodDisruptionBudget {{ $golf }} allows at most one of {{ .Values.replicaCount }} Golf API replicas to be
+voluntarily evicted at a time. It does not make Forgejo or PostgreSQL highly available.
+{{- else }}
+With {{ .Values.replicaCount }} Golf API replica{{ if ne (int .Values.replicaCount) 1 }}s{{ end }} and no PodDisruptionBudget, a node drain briefly interrupts
+the API. Set replicaCount >= 2 for drain protection.
 {{- end }}
 {{- if .Values.networkPolicy.enabled }}
 NetworkPolicy requires an enforcing CNI. Public ingress is denied unless explicit
 ingressFrom peers are configured; kubectl port-forward is not a policy test.
 {{- end }}
 
+Uninstall (PVCs are retained; deleting them or the namespace destroys data):
+
+  helm uninstall {{ .Release.Name }} -n {{ $ns }}
+
+Secret rotation needs coordinated provider/DB updates and a workload restart; the
+chart never reads Secret values into Helm. Retain the release name to reattach PVCs.
 Forge profile: {{ .Values.forge.kind }}. This chart requires a fresh Forgejo release and database.

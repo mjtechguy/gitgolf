@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
-"""Qualify Golf's Helm chart in an explicitly selected disposable k3d cluster.
+"""Qualify Golf's Helm chart in an explicitly selected disposable local cluster.
 
-Requires kubectl, Helm, Git, Python and a built Golf CLI. The image must already
-be imported into the supplied cluster. Creates a unique namespace, private
+Accepts only dedicated local k3d (`k3d-golf-*`) or kind (`kind-golf-*`)
+contexts whose API server is on loopback; any other context, including a remote
+or production one, is refused before anything beyond reading that context's
+server address. Requires kubectl, Helm, Git, Python and a built Golf CLI. The
+image must already be available to the cluster: `k3d image import`,
+`kind load docker-image`, or a tag in a registry the nodes pull from (for
+example a kind-connected `localhost:5001` registry). Storage uses the cluster's
+default StorageClass (k3d `local-path`, kind `standard`) unless
+--storage-class names one. --preflight performs only read-only checks. Creates a unique namespace, private
 existing Secret and two Helm releases; checks real Git, authentication, source,
 replicas, persistence, external dependencies and retained PVCs; then removes its
 namespace. Never uses or changes the default kubeconfig/context, Compose, .env
 or a pre-existing namespace. The caller owns cluster creation and deletion.
 
-Example: python3 scripts/kubernetes-smoke.py --kubeconfig /tmp/private/config \
+Examples: python3 scripts/kubernetes-smoke.py --kubeconfig /tmp/private/config \
   --context k3d-golf-smoke --image golf-local:revision --cli bin/golf
+python3 scripts/kubernetes-smoke.py --kubeconfig ~/.kube/config --context kind-golf-ci \
+  --image localhost:5001/golf:revision --cli bin/golf --preflight
 """
 import argparse
 import base64
@@ -54,15 +63,21 @@ def wait_for(check, description, seconds=180):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--kubeconfig', required=True, type=Path)
-    parser.add_argument('--context', required=True, help='explicit dedicated k3d-golf-* context')
-    parser.add_argument('--image', required=True, help='already imported Golf image with an explicit tag')
+    parser.add_argument('--context', required=True, help='explicit dedicated local k3d-golf-* or kind-golf-* context')
+    parser.add_argument('--image', required=True, help='Golf image with an explicit tag, already imported or pullable by the cluster')
     parser.add_argument('--cli', required=True, type=Path)
+    parser.add_argument('--storage-class', default='', help='StorageClass for bundled claims; empty uses the cluster default')
+    parser.add_argument('--preflight', action='store_true',
+                        help='only verify context, loopback API, nodes, storage class and free ports; create nothing')
     args = parser.parse_args()
     config, binary = args.kubeconfig.resolve(), args.cli.resolve()
     if not config.is_file() or not binary.is_file():
         parser.error('The explicit kubeconfig and CLI binary must already exist')
-    if not args.context.startswith('k3d-golf-'):
-        parser.error('Only a dedicated k3d-golf-* context is accepted')
+    # Both prefixes are what `k3d cluster create golf-...` and
+    # `kind create cluster --name golf-...` produce. The loopback API check
+    # below is a second, independent guard against non-local clusters.
+    if not args.context.startswith(('k3d-golf-', 'kind-golf-')):
+        parser.error('Only a dedicated local k3d-golf-* or kind-golf-* context is accepted')
     if ':' not in args.image.rsplit('/', 1)[-1] or '@' in args.image:
         parser.error('--image must include an explicit tag')
     for port in (8086, 8087, 8088, 3006):
@@ -144,8 +159,19 @@ def main():
     # Read only the selected context's server; never serialize kubeconfig tokens.
     server = run(*kube_args, 'config', 'view', '--minify', '-o', 'jsonpath={.clusters[0].cluster.server}', env=env)
     if urllib.parse.urlsplit(server).hostname not in ('localhost', '127.0.0.1', '::1', '0.0.0.0'):
-        parser.error('The dedicated k3d API must be on loopback')
+        parser.error('The dedicated local cluster API must be on loopback')
     run(*kube_args, 'get', 'nodes', '-o', 'name', env=env)
+    classes = json.loads(run(*kube_args, 'get', 'storageclass', '-o', 'json', env=env))['items']
+    default_class = 'storageclass.kubernetes.io/is-default-class'
+    if args.storage_class:
+        if args.storage_class not in {item['metadata']['name'] for item in classes}:
+            parser.error(f'StorageClass {args.storage_class} does not exist in the selected cluster')
+    elif not any(item['metadata'].get('annotations', {}).get(default_class) == 'true' for item in classes):
+        parser.error('The selected cluster has no default StorageClass; pass --storage-class')
+    if args.preflight:
+        print(f'PASS: preflight for {args.context}: loopback API, reachable nodes, storage class '
+              f'{args.storage_class or "(cluster default)"} and free loopback ports; nothing was created', flush=True)
+        return
     smoke.GOLF, smoke.GITEA = 'http://localhost:8086', 'http://localhost:3006'
     users, installed, created = [], [], False
     with tempfile.TemporaryDirectory(prefix='golf-kubernetes-smoke-', dir='/tmp') as directory:
@@ -169,6 +195,9 @@ def main():
                       'publicURL': smoke.GOLF, 'allowInsecureCookies': True, 'existingSecret': 'golf-existing', 'replicaCount': 2,
                       'forgejo': {'publicURL': smoke.GITEA + '/'},
                       'networkPolicy': {'enabled': True, 'forgejoIngressFrom': [peer], 'postgresIngressFrom': [peer]}}
+            if args.storage_class:
+                values['forgejo']['persistence'] = {'storageClass': args.storage_class}
+                values['postgresql'] = {'persistence': {'storageClass': args.storage_class}}
             values_path = path / 'values.json'
             private_json(values_path, values)
             installed.append(release)

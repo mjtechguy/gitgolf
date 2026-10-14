@@ -30,15 +30,18 @@ All Golf replicas must share the same label/material mapping and database active
 
 ## Disposable local installation
 
-Use an explicitly selected local cluster and context; these commands do not change your current kubectl context. Create/import the Golf image using your cluster's normal image workflow first. The local profile below is for loopback port-forwarding only.
+The [Kubernetes installation guide](../../../docs/KUBERNETES.md) (published at https://docs.gitgolf.app/docs/kubernetes/) is the authoritative step-by-step procedure; this section is a condensed version of it. Use an explicitly selected local cluster and context; these commands do not change your current kubectl context. Build the image with `docker build -f deploy/docker/Dockerfile` and make it available to the cluster first (`k3d image import`, `kind load docker-image`, or a registry the nodes pull from). The local profile below is for loopback port-forwarding only.
 
 ```sh
 export KUBECONFIG=/absolute/path/to/dedicated-kubeconfig
 export KUBE_CONTEXT=your-dedicated-local-context
 kubectl --kubeconfig "$KUBECONFIG" --context "$KUBE_CONTEXT" create namespace golf-dev
+umask 077
+mkdir -p .tmp/kubernetes
+chmod 700 .tmp/kubernetes
 ```
 
-For this disposable development namespace only, the following Python snippet creates a private temporary Secret manifest with fresh local credentials. It prints no credential values and refuses to overwrite an existing file. Production installations should obtain credentials through their established secret-management process.
+For this disposable development namespace only, the following Python snippet writes a private Secret manifest with fresh local credentials into the ignored `.tmp/kubernetes` directory. It prints no credential values and refuses to overwrite an existing file. Production installations should obtain credentials through their established secret-management process.
 
 ```sh
 python3 - <<'PY'
@@ -52,15 +55,14 @@ passwords["DATABASE_URL"] = (
 secret = {"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
           "metadata": {"name": "golf-existing", "namespace": "golf-dev"},
           "stringData": passwords}
-fd = os.open("/tmp/golf-k8s-secret.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+fd = os.open(".tmp/kubernetes/secret.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, "w") as output:
     json.dump(secret, output)
 PY
-kubectl --kubeconfig "$KUBECONFIG" --context "$KUBE_CONTEXT" apply -f /tmp/golf-k8s-secret.json
-rm /tmp/golf-k8s-secret.json
+kubectl --kubeconfig "$KUBECONFIG" --context "$KUBE_CONTEXT" apply -f .tmp/kubernetes/secret.json
 ```
 
-Create `/tmp/golf-dev-values.yaml` with configuration references only. Replace the image tag with the image you built/imported, and replace the example `forge.instanceID` with a unique lowercase UUID v4 generated once for this installation:
+Store the Secret material securely; do not regenerate it for retained volumes. Create `.tmp/kubernetes/values.yaml` with configuration references only. Replace the image tag with the image you built/imported, and replace the example `forge.instanceID` with a unique lowercase UUID v4 generated once for this installation:
 
 ```yaml
 image:
@@ -79,18 +81,20 @@ forgejo:
 ```sh
 helm upgrade --install golf-dev ./deploy/helm/golf \
   --kubeconfig "$KUBECONFIG" --kube-context "$KUBE_CONTEXT" \
-  --namespace golf-dev -f /tmp/golf-dev-values.yaml --wait --timeout 10m
+  --namespace golf-dev -f .tmp/kubernetes/values.yaml --wait --timeout 10m
 kubectl --kubeconfig "$KUBECONFIG" --context "$KUBE_CONTEXT" -n golf-dev \
   port-forward service/golf-dev-golf 8086:8080
 ```
 
-In another terminal, forward `service/golf-dev-golf-forgejo` with `3006:3000 2226:2222` using the same kubeconfig/context/namespace. Open `http://localhost:8086` exactly: Golf's RPC Origin checks deliberately reject a different browser origin. Registration is disabled and installation is locked. Create a Forgejo user with its supported administrator CLI, then enroll a mapped Golf account with a separate password. Follow the [account-enrollment commands](../../../docs/KUBERNETES.md#6-enroll-your-first-golf-account). The chart passed a fresh one-node Kubernetes core runtime proof on October 14, 2026; broader production qualification remains open.
+In another terminal, forward `service/golf-dev-golf-forgejo` with `3006:3000 2226:2222` using the same kubeconfig/context/namespace. Open `http://localhost:8086` exactly: Golf's RPC Origin checks deliberately reject a different browser origin. Check `curl --fail http://localhost:8086/readyz`. Registration is disabled and installation is locked. Create a Forgejo user with `forgejo admin user create`, then enroll a mapped Golf account with `golf local-account create` (stdin JSON from a private `.tmp/kubernetes/account.json`) and sign in to Golf with that account's own password. Follow the [account-enrollment commands](../../../docs/KUBERNETES.md#6-enroll-your-first-golf-account). The post-install NOTES print these commands with your release's actual names.
+
+On October 14, 2026 the chart passed one-node Kubernetes runtime proofs: the k3d disposable smoke, and a kind install that covered install, account enrollment, password sign-in, repository push, an idempotent upgrade, restart persistence and enforced NetworkPolicy. Multi-node failover, public ingress/TLS, private-CA rotation and other CNI/storage profiles remain unqualified.
 
 For OAuth, first register a confidential Forgejo application with the exact callback `http://localhost:8086/auth/forgejo/callback`, add its ID and secret to the existing Secret, and set `oauth.enabled: true`. Production uses the corresponding HTTPS callback. The current flow requests `write:user`, `write:repository`, `read:issue` and `read:organization`; see the [OAuth decision](../../../docs/decisions/0003-gitea-oauth-and-session-refresh.md).
 
 ## Production and external dependencies
 
-The bundled database is one persistent PostgreSQL instance, not an HA database or a managed backup system. Prefer an operator-managed/external database when that meets your reliability requirements. Provision separate `golf` and `forgejo` roles/databases, assign least privilege, and use their distinct credentials. `DATABASE_URL` configures Golf; `forgejo.database.*` configures internal Forgejo independently. External databases must be reachable through explicit policy rules; use certificate-verified TLS with a trusted CA. The optional `postgresql.existingCASecret` mounts an existing `ca.crt` read-only at `/etc/golf/postgres/ca.crt` and adds it to system certificate directories; Golf’s DSN must explicitly use `sslrootcert` when required.
+The bundled database is one persistent PostgreSQL instance, not an HA database or a managed backup system. Prefer an operator-managed/external database when that meets your reliability requirements. Provision separate `golf` and `forgejo` roles/databases, assign least privilege, and use their distinct credentials. `DATABASE_URL` configures Golf; `forgejo.database.*` configures internal Forgejo independently. External databases must be reachable through explicit policy rules; use certificate-verified TLS with a trusted CA. Private CA injection is supported for external PostgreSQL: `postgresql.existingCASecret` names an existing Secret whose `ca.crt` key is mounted read-only at `/etc/golf/postgres/ca.crt` in Golf, Forgejo and the optional webhook worker, with `SSL_CERT_DIR=/etc/ssl/certs:/etc/golf/postgres`. Set Golf’s DSN to `sslmode=verify-full&sslrootcert=/etc/golf/postgres/ca.crt`. The chart refuses this setting with bundled PostgreSQL.
 
 Example configuration for **internal Forgejo with external PostgreSQL** (replace the illustrative private subnet with your database's actual route):
 
@@ -186,6 +190,6 @@ Configured/enabled subscriptions are distinct from delivery receipts. Test queue
 
 ## October 14 chart hardening
 
-Chart 0.2.0 fences the existing Forgejo UUID and bound API endpoint during upgrades, adds soft hostname spread and a multi-replica Golf-only PodDisruptionBudget, retains a five-second API endpoint drain within the existing graceful shutdown budget, and supports explicit DNS peers and read-only external PostgreSQL CA Secrets. The render fixture and runtime smoke now use Forgejo consistently. Existing non-root, read-only filesystem, seccomp, capability-drop, retained PVC, probe and default-deny controls remain in place.
+Chart 0.2.0 fences the existing Forgejo UUID and bound API endpoint during upgrades, adds soft hostname spread and a multi-replica Golf-only PodDisruptionBudget, retains a five-second API endpoint drain within the existing graceful shutdown budget, and supports explicit DNS peers (`networkPolicy.dnsPeers`) and read-only external PostgreSQL CA Secrets (`postgresql.existingCASecret`). The API Deployment uses `minReadySeconds: 5`, `progressDeadlineSeconds: 600` and a five-second `preStop` sleep. The PodDisruptionBudget (`maxUnavailable: 1`) renders only when `disruptionBudget.enabled` and `replicaCount >= 2`, so a single replica never blocks node drains. Post-install NOTES print the release's port-forward, readiness, enrollment and uninstall commands. The render fixture and runtime smoke now use Forgejo consistently. Existing non-root, read-only filesystem, seccomp, capability-drop, retained PVC, probe and default-deny controls remain in place.
 
 The [complete Golf Kubernetes installation guide](../../../docs/KUBERNETES.md) explains each component, values, private credential setup, image distribution, storage, networking/TLS, enrollment, external trust, upgrades and recovery limits. It is the step-by-step guide; this file is the chart reference. A PDB is not whole-stack HA or writer fencing.

@@ -52,7 +52,7 @@ docker build -f deploy/docker/Dockerfile -t registry.example.com/your-team/golf:
 docker push registry.example.com/your-team/golf:YOUR_REVIEWED_COMMIT
 ```
 
-Authenticate your registry through its normal credential mechanism. If Kubernetes requires registry credentials, create a namespace image-pull Secret through your secret manager and reference its name under `imagePullSecrets`; never put a registry password in Helm values or command arguments. For a local k3d cluster, import the local image instead of pushing it; see the qualification section.
+Authenticate your registry through its normal credential mechanism. If Kubernetes requires registry credentials, create a namespace image-pull Secret through your secret manager and reference its name under `imagePullSecrets`; never put a registry password in Helm values or command arguments. For a local cluster, import the local image instead of pushing it (`k3d image import`, or `kind load docker-image`), or push to a registry the local nodes pull from; see the qualification section.
 
 Use either one explicit tag or a digest. When setting `image.digest`, set `image.tag: ""`. `latest`, a tag inside `image.repository`, and contradictory tag/digest settings are refused.
 
@@ -164,7 +164,7 @@ kubectl --kubeconfig "$GOLF_KUBECONFIG" --context "$GOLF_KUBE_CONTEXT" \
   -n "$GOLF_NAMESPACE" port-forward service/"$GOLF_RELEASE"-golf-forgejo 3006:3000 2226:2222
 ```
 
-Keep both port forwards running. In a third terminal, check readiness:
+The chart's post-install NOTES print these port-forward, readiness, enrollment and uninstall commands with your release's actual names. Keep both port forwards running. In a third terminal, check readiness:
 
 ```sh
 curl --fail http://localhost:8086/readyz
@@ -272,7 +272,7 @@ An external Forgejo is also supported through `forgejo.enabled=false`, explicit 
 
 ## 9. Rollouts, maintenance and recovery
 
-Golf API replicas prefer different nodes using soft hostname spread. With at least two replicas, an enabled API PodDisruptionBudget permits at most one unavailable replica during voluntary eviction. A five-second pre-stop delay lets service endpoints drain before Golf’s existing graceful shutdown; readiness must remain stable for five seconds before a new replica is available.
+Golf API replicas prefer different nodes using soft hostname spread. With at least two replicas, an enabled API PodDisruptionBudget permits at most one unavailable replica during voluntary eviction. A five-second pre-stop delay lets service endpoints drain before Golf’s existing graceful shutdown; readiness must remain stable for five seconds before a new replica is available. With `replicaCount: 1` no budget is rendered, so node drains are never blocked (and the API is briefly unavailable during one); set `disruptionBudget.enabled: false` to omit the budget at any replica count.
 
 Budgets do not prevent node crashes, direct pod deletion or controller rollouts, and do not make Forgejo/PostgreSQL highly available. Stateful writer replacement can cause downtime. Never force-delete an unreachable writer or use `helm --force` to bypass immutable claim-template errors. Establish real node/storage fencing first.
 
@@ -308,13 +308,13 @@ Ordinary uninstall retains the three claims. Deleting the namespace/PVCs/backing
 | DNS cannot resolve | Actual cluster/NodeLocal resolver and DNS peers | Open all egress |
 | Upgrade rejects identity | Original UUID and bound endpoint | Create a new UUID for the retained database |
 
-Offline checks: `python3 deploy/helm/golf/check.py` validates actual fixtures, bundled/external profiles, CA/DNS paths, disruption/placement and refused configurations. The disposable smoke exercises real Forgejo Git, sessions/authorization, two API replicas, restart persistence, denied network access, external dependencies, upgrade identity refusal and retained claims. It requires a dedicated loopback k3d cluster and imported image; it does not use your default context.
+Offline checks: `python3 deploy/helm/golf/check.py` validates actual fixtures, bundled/external profiles, CA/DNS paths, disruption/placement and refused configurations. The disposable smoke exercises real Forgejo Git, sessions/authorization, two API replicas, restart persistence, denied network access, external dependencies, upgrade identity refusal and retained claims. It requires a dedicated loopback k3d or kind cluster and an image the cluster can use; it does not use your default context.
 
 The exact observed runtime results belong in `docs/IMPLEMENTATION_STATUS.md`. Single-node proof does not qualify multi-node failover, public ingress/TLS, private-CA rotation, every CNI/storage class or whole-stack disaster recovery.
 
 ### Run the disposable Kubernetes proof
 
-From the product checkout, use Helm, kubectl, k3d, Docker, Go and a supported working container daemon. The smoke requires an explicit loopback API endpoint and a dedicated context. It creates and deletes its own namespace, native users, repositories and claims; never point it at a retained installation.
+From the product checkout, use Helm, kubectl, k3d or kind, Docker, Go and a supported working container daemon. The smoke accepts only a `k3d-golf-*` or `kind-golf-*` context whose API server is on loopback; any other context is refused. It creates and deletes its own namespace, native users, repositories and claims; never point it at a retained installation.
 
 ```sh
 docker build -f deploy/docker/Dockerfile -t golf-local:kubernetes-proof .
@@ -333,6 +333,8 @@ python3 scripts/kubernetes-smoke.py \
   --image golf-local:kubernetes-proof --cli bin/golf
 k3d cluster delete golf-kubernetes-proof
 ```
+
+For kind, create the cluster as `kind create cluster --name golf-kubernetes-proof`, run `kind load docker-image golf-local:kubernetes-proof --name golf-kubernetes-proof` (or use a tag from a registry connected to kind such as `localhost:5001/golf:TAG`), and pass `--context kind-golf-kubernetes-proof`. kind's default `standard` StorageClass is used automatically; `--storage-class NAME` selects another. Add `--preflight` to check only the context, loopback API, nodes, storage class and free ports without creating anything. The full smoke needs loopback ports 8086, 8087, 8088 and 3006 free.
 
 If your image builder and k3d use different Docker daemons, save the exact image and import that archive with k3d on the cluster daemon. The 2026-10-14 proof used this arrangement because rootless k3d DNS preparation failed locally; the isolated rootful cluster passed. Run cluster cleanup after either success or failure. The smoke's `PASS` output identifies each proven behavior.
 

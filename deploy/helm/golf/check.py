@@ -190,3 +190,27 @@ assert "cidr: 169.254.20.10/32" in find(custom_dns, "NetworkPolicy", "check-golf
 assert "kubernetes.io/metadata.name: \"kube-system\"" not in find(custom_dns, "NetworkPolicy", "check-golf")
 render(merge(BASE, {"networkPolicy": {"dnsPeers": [{}]}}), expected=False)
 print("Fixture, API disruption/spread/drain, private CA mounts and custom DNS checks passed")
+
+
+def notes(values):
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as file:
+        json.dump(values, file)
+        file.flush()
+        proc = subprocess.run([HELM, "install", "check", str(CHART), "-n", "golf-notes", "--dry-run=client", "-f", file.name],
+                              capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout.split("\nNOTES:\n", 1)[1]
+
+
+loopback = merge(BASE, {"publicURL": "http://localhost:8086", "allowInsecureCookies": True,
+                        "forgejo": {"publicURL": "http://localhost:3006", "sshPort": 2226}})
+single = notes(loopback)
+assert "port-forward service/check-golf 8086:8080" in single
+assert "port-forward service/check-golf-forgejo 3006:3000 2226:2222" in single
+assert "curl --fail http://localhost:8086/readyz" in single
+assert "golf local-account create" in single and "https://docs.gitgolf.app/docs/kubernetes/" in single
+assert "helm uninstall check -n golf-notes" in single and "no PodDisruptionBudget" in single
+assert "PodDisruptionBudget check-golf allows" in notes(merge(loopback, {"replicaCount": 2}))
+external_notes = notes(external)
+assert "check-golf-forgejo" not in external_notes and "port-forward service/check-golf 8080:8080" in external_notes
+print("NOTES port-forward, readiness, enrollment, disruption and uninstall guidance passed")
