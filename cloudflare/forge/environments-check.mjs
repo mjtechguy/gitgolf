@@ -31,7 +31,7 @@ try {
   await db.prepare("INSERT INTO grants VALUES(1,1,'admin')").run();
   const rpc = (path, body = {}, headers = {}) => runtime.dispatchFetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Origin: origin, ...headers }, body: JSON.stringify(body) });
   const call = async (method, body, status = 200) => { const response = await rpc('/rpc/golf.v1.RepositoryEnvironmentService/' + method, body); assert.equal(response.status, status, await response.clone().text()); return response.json(); };
-  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 27);
+  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 28);
   const capability = (await (await rpc('/rpc/golf.v1.CapabilityService/ListCapabilities')).json()).capabilities.find(c => c.id === 'settings.repository-environments');
   assert.equal(capability.state, 'CAPABILITY_STATE_READY'); assert.match(capability.reason, /^One environment named preview governs protected pull-request previews/);
   const repository = { owner: 'local-access-proof', name: 'env-proof' };

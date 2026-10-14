@@ -37,6 +37,7 @@ import { executionDiagnostic, testPolicy } from './test-policy.mjs';
 import { appPolicy } from './app-policy.mjs';
 import { previewAPI, previewPolicy, environmentPolicy, previewRequest, cleanupPreviews } from './delivery.mjs';
 import { repositoryEnvironments, environmentMethods } from './environments.mjs';
+import { releases, releaseMethods, releaseReadMethods, releaseAssetGrant } from './releases.mjs';
 import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user, bodyLimit } from './common.mjs';
 export { digest } from './common.mjs';
 import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, remote, sha, validRef, GitProviderError } from './git.mjs';
@@ -72,6 +73,7 @@ export function concurrentRead(request) {
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
   if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
   if (/^\/rpc\/golf\.v1\.EmailNotificationService\/(GetOwnEmailNotifications|GetRepositoryEmailSubscription|ListOwnEmailDeliveries)$/.test(new URL(request.url).pathname)) return true;
+  if (/^\/(?:native\/release-asset\/read|rpc\/golf\.v1\.(?:RepositoryService\/(?:ListRepositoryReleases|GetRepositoryRelease)|RepositoryReleasePublicationService\/GetRepositoryReleasePublicationOperation))$/.test(new URL(request.url).pathname)) return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
@@ -365,7 +367,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const budget = await db.prepare('PRAGMA table_info(repository_index_budget)').all();
       const operations = await db.prepare('PRAGMA table_info(operations_maintenance)').all();
       const access = await db.prepare('PRAGMA table_info(repository_access_operations)').all();
-      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(email_deliveries)').all()).results.length ? 27 : (await db.prepare('PRAGMA table_info(execution_value_brokers)').all()).results.length ? 26 : (await db.prepare('PRAGMA table_info(repository_execution_policy)').all()).results.length ? 25 : (await db.prepare('PRAGMA table_info(pull_merge_operations)').all()).results.length ? 24 : (await db.prepare('PRAGMA table_info(repository_environment_operations)').all()).results.length ? 23 : (await db.prepare('PRAGMA table_info(repository_visibility)').all()).results.length ? 22 : (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
+      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(repository_release_operations)').all()).results.length ? 28 : (await db.prepare('PRAGMA table_info(email_deliveries)').all()).results.length ? 27 : (await db.prepare('PRAGMA table_info(execution_value_brokers)').all()).results.length ? 26 : (await db.prepare('PRAGMA table_info(repository_execution_policy)').all()).results.length ? 25 : (await db.prepare('PRAGMA table_info(pull_merge_operations)').all()).results.length ? 24 : (await db.prepare('PRAGMA table_info(repository_environment_operations)').all()).results.length ? 23 : (await db.prepare('PRAGMA table_info(repository_visibility)').all()).results.length ? 22 : (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
         configuration, runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG });
     }
     if (url.pathname === '/native/preview-resume') {
@@ -402,6 +404,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (url.pathname === '/native/repository-packages') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       return reply(await repositoryPackages(env, person, row, body));
+    }
+    if (url.pathname === '/native/release-asset/read') {
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      return reply(await releaseAssetGrant(db, env, row, body));
     }
     if (url.pathname === '/native/pr-preview' || url.pathname === '/native/pr-preview/read') {
       if (url.pathname.endsWith('/read') && body.action !== 'list') invalid('This route only lists previews.');
@@ -451,6 +457,12 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const row = body.target ? await authorizedRepository(db, person, body.target.repository, env, body.target.repositoryId) : null;
       return reply(await emailNotifications(db, env, person, row, request, mail[1], body));
     }
+    const releaseRoute = /^\/rpc\/golf\.v1\.(RepositoryReleasePublicationService|RepositoryReleaseManagementService)\/([A-Za-z]+)$/.exec(url.pathname);
+    if (releaseRoute) {
+      if (!releaseMethods[releaseRoute[1]].has(releaseRoute[2])) unsupported();
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      return reply(await releases(db, env, person, row, releaseRoute[2], body, () => withArtifact(env, row, repo => refs(env, repo, row, providerFetch))));
+    }
     const route = /^\/rpc\/golf\.v1\.(SessionService|RepositoryService|CapabilityService|ProfileService|OrganizationService|RepositorySettingsService|RepositoryAccessService|RepositoryInvitationService|RepositoryWebhookService|RepositoryRulesService|GitTransportService|PullReviewRequestService|PullReviewAuthoringService|PullMergeObservationService|StandardPullMergeService|DiscussionCollaborationService)\/([A-Za-z]+)$/.exec(url.pathname);
     if (!route) unsupported();
     const [, service, method] = route;
@@ -494,8 +506,9 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
         ['settings.repository-agents', 'Agent policy editor'],
         ['repository.source-write', 'Browser file editing'], ['pull.advanced-reviews', 'Inline and pending reviews'],
         ['discussion.attachments', 'Discussion attachments'],
-        ['repository.releases', 'Releases'], ['repository.wiki', 'Wiki workspace'],
+        ['repository.wiki', 'Wiki workspace'],
       ].map(([id, label, reason]) => ({ id, label, state: 'CAPABILITY_STATE_DISABLED', reason: reason || 'This feature is not available in the Cloudflare-native installation yet.' })),
+      { id: 'repository.releases', label: 'Releases', state: env.EVIDENCE_BUCKET ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.EVIDENCE_BUCKET ? 'Releases for existing tags by current administrators while the repository has no tag rules; tags arrive by git push, never from this page. Notes up to 16 KiB; up to 25 assets of at most 256 KiB each, stored privately in R2 and downloadable only with current repository access. Not available to anonymous visitors of public repositories. No source archives, signatures or deployment.' : 'Releases need the private R2 bucket binding on this installation.' },
       { id: 'settings.repository-workflows', label: 'Workflows', state: 'CAPABILITY_STATE_READY', reason: workflowCapability(env, Boolean(testPolicy(env)) && evidencePolicy(env)) },
       { id: 'settings.repository-execution-policy', label: 'Repository execution switch', state: testPolicy(env) && evidencePolicy(env) && env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: executionPolicyCapability(Boolean(testPolicy(env)) && evidencePolicy(env), Boolean(env.ACCESS_AUD)) },
       { id: 'settings.native', label: 'Cloudflare allocation settings', state: 'CAPABILITY_STATE_READY', reason: 'Current allocations are readable. Operators change the separate native installation configuration; provider credentials are never exposed in the UI.' },
@@ -561,6 +574,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (service === 'RepositoryAccessService') return reply(await repositoryCollaborators(db, env, person, row, method, body));
     if (service === 'RepositoryService' && resourceMethods.has(method)) return reply(await discussionResources(db, env, person, row, method, body));
     if (service === 'RepositoryWebhookService') return reply(await repositoryWebhooks(db, env, person, row, method, body));
+    if (service === 'RepositoryService' && releaseReadMethods.has(method)) return reply(await releases(db, env, person, row, method, body));
     if (collaborationMethods.has(method)) return reply(await collaboration(db, env, person, method, body, row, action => withArtifact(env, row, action)));
     if (method === 'GetRepository') return reply(await withArtifact(env, row, async (_repo, _info, commits) => {
       const head = commits[0]?.hash;

@@ -474,7 +474,7 @@ class ReleaseTests(unittest.TestCase):
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0027_email_notifications.sql').read_text()
-            self.assertTrue(schema.endswith(';\n\n' + migration))
+            self.assertIn(';\n\n' + migration, schema)
             db.executescript(schema[:schema.index(migration)])
             lost = True
             def command(*args, **kwargs):
@@ -753,16 +753,14 @@ class ExecutionValueMigrationTest(unittest.TestCase):
     setUp = ReleaseTests.setUp
     release = ReleaseTests.release
 
-    def test_execution_value_migration_is_the_schema_tail_resumes_and_adds_only_reviewed_objects(self):
+    def test_execution_value_migration_follows_its_predecessor_resumes_and_adds_only_reviewed_objects(self):
         release = self.release(); release.manifest['schema'] = 26
         with sqlite3.connect(':memory:') as db:
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0026_execution_values.sql').read_text()
-            # 0026 is followed only by the 0027 email migration, each after one blank line.
-            tail = '\n'+migration+'\n'+(ROOT/'cloudflare/forge/migrations/0027_email_notifications.sql').read_text()
-            self.assertTrue(schema.endswith(';\n'+tail))
-            db.executescript(schema[:-len(tail)])
+            self.assertIn(';\n\n'+migration, schema)
+            db.executescript(schema[:schema.index('\n'+migration)])
             lost = True
             def command(*args, **kwargs):
                 nonlocal lost
@@ -784,5 +782,36 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             self.assertEqual(applied, [])
             release.state['migration0026'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_execution_value_schema([])
+
+    def test_release_migration_is_the_schema_tail_resumes_without_replaying(self):
+        release = self.release(); release.manifest['schema'] = 28
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0028_releases.sql').read_text()
+            self.assertTrue(schema.endswith(';\n\n'+migration))
+            db.executescript(schema[:-len('\n'+migration)])
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith('PRAGMA'):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost release migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0028'): release.check_release_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost release'): release.migrate_release_schema([])
+            applied = []; release.migrate_release_schema(applied)
+            self.assertEqual(applied, ['0028']); release.check_release_schema()
+            self.assertEqual(db.execute('SELECT count(*) FROM repository_releases').fetchone()[0], 0)
+            applied = []; release.migrate_release_schema(applied)
+            self.assertEqual(applied, [])
+            self.assertEqual(db.execute("SELECT sql FROM sqlite_master WHERE name='repository_release_assets_name'").fetchone()[0].split(' WHERE ')[1], 'deleted=0')
+            release.state['migration0028'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_release_schema([])
 
 if __name__ == '__main__': unittest.main()

@@ -3,6 +3,7 @@ import { performanceSample } from './performance.mjs';
 import { bounded } from './git.mjs';
 import { accessContext } from './access.mjs';
 import { anonymousLimit } from './rate-limit.mjs';
+import { releaseAssetDownload } from './asset-download.mjs';
 
 // "appearance" or "appearance/layout", matching web/public/theme.js.
 export const defaultAppearance = /^(classic(\/(primer|workbench|reader))?|golf(\/(refined|strokes|tiles))?|flare(\/(kumo|overview|console))?)$/;
@@ -73,6 +74,7 @@ async function dispatch(request, env, ctx, clock) {
     }
     const workspace = ctx.exports.Workspace;
     const owner = workspace.get(workspace.idFromName(env.WORKSPACE_SLUG));
+    if (url.pathname.startsWith('/api/repositories/')) return releaseAssetDownload(request, env, owner, headers);
     if ((builtAssets || env.ASSETS) && !url.pathname.startsWith('/native/') && !url.pathname.startsWith('/rpc/') && !url.pathname.startsWith('/git/') && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/auth/')) {
       if (!['GET', 'HEAD'].includes(request.method) || url.href.length > 8192 || /[\\]/.test(url.pathname) || request.headers.has('Upgrade')) return new Response('Unavailable', { status: 404 });
       const auth = await owner.fetch(new Request(env.PUBLIC_ORIGIN + '/rpc/golf.v1.SessionService/GetSession', {

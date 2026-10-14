@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -17,6 +17,7 @@ modules.push({ type: 'ESModule', path: 'forge/src/performance.mjs', contents: aw
 modules.push({ type: 'ESModule', path: 'forge/src/rate-limit.mjs', contents: await readFile(new URL('./src/rate-limit.mjs', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'forge/src/activity.mjs', contents: activity.outputFiles[0].text });
 for (const file of ['execution-values.mjs', 'sealed.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: await readFile(new URL('./src/' + file, import.meta.url), 'utf8') });
+for (const file of ['releases.mjs', 'asset-download.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: await readFile(new URL('./src/' + file, import.meta.url), 'utf8') });
 const access = await esbuild.build({ entryPoints: ['cloudflare/forge/src/access.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral' });
 modules.push({ type: 'ESModule', path: 'forge/src/access.mjs', contents: access.outputFiles[0].text });
 const nativeWorkflow = await esbuild.build({ entryPoints: ['cloudflare/forge/src/native-workflow.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./git.mjs'] });
@@ -295,6 +296,36 @@ try {
   await bucket.put('test/report.json', 'original', { onlyIf: { etagDoesNotMatch: '*' } });
   assert.equal(await bucket.put('test/report.json', 'replacement', { onlyIf: { etagDoesNotMatch: '*' } }), null);
   assert.equal(await (await bucket.get('test/report.json')).text(), 'original');
+  // Release assets on real workerd, D1 and R2: one checked write, an authorized stream from the public Worker, confirmed removal.
+  const releaseTarget = { repository: { owner: 'alice', name: 'runtime' }, repositoryId: '1' };
+  await database.prepare("INSERT INTO repository_releases(id,repository_id,artifact_name,tag_name,tag_object_id,commit_id,title,body,author_id,created_at,published_at) VALUES(1,1,?,'v1',?,?,'Runtime release','',1,?,?)")
+    .bind('repo-' + 'b'.repeat(32), 'a'.repeat(40), 'a'.repeat(40), new Date().toISOString(), new Date().toISOString()).run();
+  const releaseAccess = async () => (await (await call('/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess', token, {}, releaseTarget)).json()).access;
+  const releaseRead = async () => (await (await call('/rpc/golf.v1.RepositoryService/GetRepositoryRelease', token, {}, { ...releaseTarget, releaseId: '1' })).json()).release;
+  const releaseChange = async change => { const access = await releaseAccess(), response = await call('/rpc/golf.v1.RepositoryReleaseManagementService/SubmitRepositoryReleaseOperation', token, {}, { ...releaseTarget, ownerId: access.ownerId, accessRevision: access.revision, operationId: crypto.randomUUID(), releaseId: '1', expectedRevision: (await releaseRead()).revision, ...change });
+    assert.equal(response.status, 200, await response.clone().text()); const { operation } = await response.json(); assert.equal(operation.phase, 'REPOSITORY_RELEASE_PUBLICATION_PHASE_SUCCEEDED', JSON.stringify(operation)); return operation; };
+  const assetBytes = new Uint8Array(256 * 1024); for (let offset = 0; offset < assetBytes.length; offset += 65536) crypto.getRandomValues(assetBytes.subarray(offset, offset + 65536));
+  const uploadStarted = performance.now(), uploaded = await releaseChange({ kind: 3, assetName: 'runtime ✓.bin', assetContent: Buffer.from(assetBytes).toString('base64') }), uploadMs = performance.now() - uploadStarted;
+  const stored = (await bucket.list({ prefix: 'releases/1/1/', include: ['customMetadata'] })).objects;
+  assert.equal(stored.length, 1); assert.equal(stored[0].size, assetBytes.length); assert.equal(stored[0].customMetadata.sha256, createHash('sha256').update(assetBytes).digest('hex'));
+  assert.equal(Buffer.from(stored[0].checksums.sha256).toString('hex'), stored[0].customMetadata.sha256);
+  await assert.rejects(bucket.put('test/checksum', 'bytes', { sha256: '0'.repeat(64) }));
+  const assetPath = 'https://golf.example.com/api/repositories/alice/runtime/1/releases/1/assets/' + uploaded.assetId + '/download';
+  const streamed = await runtime.dispatchFetch(assetPath, { headers: { Authorization: 'Bearer ' + token } });
+  assert.equal(streamed.status, 200, await streamed.clone().text());
+  assert.deepEqual(['Content-Type', 'Content-Length', 'X-Content-Type-Options', 'Content-Security-Policy', 'Cache-Control'].map(name => streamed.headers.get(name)), ['application/octet-stream', String(assetBytes.length), 'nosniff', "sandbox; default-src 'none'", 'no-store']);
+  assert.match(streamed.headers.get('Content-Disposition'), /^attachment; filename="runtime _\.bin"; filename\*=UTF-8''runtime%20%E2%9C%93\.bin$/);
+  assert.deepEqual(new Uint8Array(await streamed.arrayBuffer()), assetBytes);
+  assert.equal((await releaseRead()).assets[0].downloadCount, '1');
+  assert.equal((await runtime.dispatchFetch(assetPath)).status, 401);
+  assert.equal((await runtime.dispatchFetch(assetPath, { headers: { Authorization: 'Bearer ' + token, 'Sec-Fetch-Site': 'cross-site' } })).status, 404);
+  await database.prepare('DELETE FROM grants WHERE repository_id=1').run();
+  assert.equal((await runtime.dispatchFetch(assetPath, { headers: { Authorization: 'Bearer ' + token } })).status, 404);
+  await database.prepare("INSERT INTO grants VALUES(1,1,'admin')").run();
+  await releaseChange({ kind: 5, assetId: uploaded.assetId });
+  assert.equal((await bucket.list({ prefix: 'releases/' })).objects.length, 0);
+  assert.equal((await runtime.dispatchFetch(assetPath, { headers: { Authorization: 'Bearer ' + token } })).status, 404);
+  console.log(`Real workerd/D1/R2 release asset: 256 KiB checked conditional write in ${uploadMs.toFixed(0)} ms wall time, authorized public-Worker stream, grant revocation and confirmed removal passed`);
   const expired = crypto.randomUUID();
   await database.prepare(`INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,advice_state,created_at,updated_at,expires_at)
     VALUES(?,1,1,?,'hash','{}','NONE',?,?,?)`).bind(expired, crypto.randomUUID(), new Date().toISOString(), new Date().toISOString(), '2000-01-01').run();

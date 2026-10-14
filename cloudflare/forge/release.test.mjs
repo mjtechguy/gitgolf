@@ -10,12 +10,12 @@ test('release retention parses only bounded embedded static manifests without ex
   for (const invalid of [bundle.replace('old-abcd1234.js', '../private-abcd1234.js'), bundle.replace('"aGk="', 'process.exit()'), bundle.replace('"aGk="', '"not base64!"'), 'no manifest']) assert.throws(() => embeddedAssets(invalid));
 });
 
-test('release schema 27 is the latest migration and ends schema.sql after 25 and 26; schema 24 bounds merge operations', async t => {
+test('the release migration ends schema.sql after every earlier migration; schema 24 bounds merge operations', async t => {
   const migrations = (await readdir(new URL('./migrations/', import.meta.url))).filter(name => /^\d{4}_.+\.sql$/.test(name)).sort();
-  assert.equal(migrations.at(-1), '0027_email_notifications.sql');
-  const latest = await readFile(new URL('./migrations/0025_repository_execution_policy.sql', import.meta.url), 'utf8') + '\n' + await readFile(new URL('./migrations/0026_execution_values.sql', import.meta.url), 'utf8') + '\n' + await readFile(new URL('./migrations/0027_email_notifications.sql', import.meta.url), 'utf8');
+  assert.equal(migrations.at(-1), '0028_releases.sql');
+  const latest = (await Promise.all(migrations.filter(name => name >= '0025').map(name => readFile(new URL('./migrations/' + name, import.meta.url), 'utf8')))).join('\n');
   const migration = await readFile(new URL('./migrations/0024_pull_merges.sql', import.meta.url), 'utf8'), schema = await readFile(new URL('./schema.sql', import.meta.url), 'utf8');
-  assert.match(await readFile(new URL('./release.mjs', import.meta.url), 'utf8'), /contract: 1, schema: 27, /);
+  assert.match(await readFile(new URL('./release.mjs', import.meta.url), 'utf8'), /contract: 1, schema: 28, /);
   // Tail migrations are appended after one blank line; the Alchemy migrate step peels exactly that.
   assert.ok(schema.endsWith(';\n\n' + migration + '\n' + latest));
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());

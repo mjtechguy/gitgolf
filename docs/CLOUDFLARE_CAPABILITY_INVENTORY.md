@@ -12,7 +12,7 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | ApiCredentialService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
 | GitAccessService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
 | RepositorySettingsService | 3 | 0 | Description, website, topics and existing default branch; atomic current-authority and revision checks. Feature policy remains operator-managed. |
-| RepositoryService | 39 | 8 | Bounded Git/read contract, immutable source pages and complete bounded filename/path indexes, overall reviews and same-repository PRs. Repository labels/milestones, issue/PR assignment and author/admin comment editing; no protected merge, inline review threads or organization labels. Pending overall drafts use PullReviewAuthoringService. |
+| RepositoryService | 41 | 6 | Bounded Git/read contract, immutable source pages and complete bounded filename/path indexes, overall reviews and same-repository PRs. Repository labels/milestones, issue/PR assignment and author/admin comment editing; no protected merge, inline review threads or organization labels. Pending overall drafts use PullReviewAuthoringService. |
 | OrganizationService | 2 | 4 | One independently provisioned workspace; membership administration remains open. |
 | OrganizationAdminService | 0 | 4 | Native migration required; portable service remains available on its own setup path. |
 | InstanceAdminService | 0 | 9 | Native migration required; portable service remains available on its own setup path. |
@@ -50,12 +50,12 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | PullMergeObservationService | 1 | 0 | Exact current same-repository comparison, branch locks, retained source, current writer and base-ancestry observations. No executable merge authority; merge commits are reported only for a pull request the native merge slice would currently admit. |
 | StandardPullMergeService | 2 | 0 | Same-repository merge commits when the base tip is already contained in the head: writer authority, rules, one journaled single-ref write and ref/commit readback; original receipts. Squash, diverged branches, forks and locked targets are durably refused; an unconfirmed write stays unknown and fences the repository. Provider acceptance of the generated pack needs hosted proof. |
 | WorkflowArtifactService | 0 | 1 | Native migration required; portable service remains available on its own setup path. |
-| RepositoryReleasePublicationService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
+| RepositoryReleasePublicationService | 2 | 0 | One publication per existing tag by a current administrator while the repository has no tag rules; never creates or moves a tag. Atomic D1 release and original receipt. |
 | RepositoryDeploymentService | 0 | 7 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryRefMutationService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryFileMutationService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
 | DiscussionCollaborationService | 4 | 0 | Current-authority reactions, own subscriptions and in-app inbox; transaction-bound timeline since schema14. Historical activity is not backfilled. Issue templates and forms are read from the default-branch head with the portable limits; email remains separate. |
-| RepositoryReleaseManagementService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
+| RepositoryReleaseManagementService | 2 | 0 | Revision-fenced edits, removal and up to 25 assets of 256 KiB in private R2 under original receipts; an unacknowledged upload settles by readback and is never sent twice. Downloads stream only with current repository access. |
 | PullReviewRequestService | 8 | 3 | Human account review assignments, cancellation and admin dismissal/restoration with original receipts. Current direct grants and exact-base GitHub-format CODEOWNERS suggestions; no team assignments, inline comments, automatic routing or protected approval authority. |
 | RepositoryMirrorService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryWikiService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
@@ -107,8 +107,8 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | RepositoryService/GetRepositoryOverview | golf.proto | Bounded adapter |
 | RepositoryService/GetRepositoryStar | golf.proto | Bounded adapter |
 | RepositoryService/SetRepositoryStar | golf.proto | Bounded adapter |
-| RepositoryService/ListRepositoryReleases | golf.proto | Missing native adapter |
-| RepositoryService/GetRepositoryRelease | golf.proto | Missing native adapter |
+| RepositoryService/ListRepositoryReleases | golf.proto | Bounded adapter |
+| RepositoryService/GetRepositoryRelease | golf.proto | Bounded adapter |
 | RepositoryService/ListBranches | golf.proto | Bounded adapter |
 | RepositoryService/ListTags | golf.proto | Bounded adapter |
 | RepositoryService/ListCommits | golf.proto | Bounded adapter |
@@ -306,8 +306,8 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | StandardPullMergeService/SubmitStandardPullMerge | golf.proto | Bounded adapter |
 | StandardPullMergeService/GetStandardPullMergeOperation | golf.proto | Bounded adapter |
 | WorkflowArtifactService/GetWorkflowArtifact | golf.proto | Missing native adapter |
-| RepositoryReleasePublicationService/SubmitRepositoryReleasePublication | golf.proto | Missing native adapter |
-| RepositoryReleasePublicationService/GetRepositoryReleasePublicationOperation | golf.proto | Missing native adapter |
+| RepositoryReleasePublicationService/SubmitRepositoryReleasePublication | golf.proto | Bounded adapter |
+| RepositoryReleasePublicationService/GetRepositoryReleasePublicationOperation | golf.proto | Bounded adapter |
 | RepositoryDeploymentService/PrepareStaticDeployment | golf.proto | Missing native adapter |
 | RepositoryDeploymentService/CreateRepositoryDeployment | golf.proto | Missing native adapter |
 | RepositoryDeploymentService/GetRepositoryDeployment | golf.proto | Missing native adapter |
@@ -324,8 +324,8 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | DiscussionCollaborationService/ListDiscussionTimeline | golf.proto | Bounded adapter |
 | DiscussionCollaborationService/ListOwnForgeNotifications | golf.proto | Bounded adapter |
 | DiscussionCollaborationService/ListIssueTemplates | golf.proto | Bounded adapter |
-| RepositoryReleaseManagementService/SubmitRepositoryReleaseOperation | golf.proto | Missing native adapter |
-| RepositoryReleaseManagementService/GetRepositoryReleaseOperation | golf.proto | Missing native adapter |
+| RepositoryReleaseManagementService/SubmitRepositoryReleaseOperation | golf.proto | Bounded adapter |
+| RepositoryReleaseManagementService/GetRepositoryReleaseOperation | golf.proto | Bounded adapter |
 | PullReviewRequestService/GetPullReviewLifecycleState | golf.proto | Bounded adapter |
 | PullReviewRequestService/SubmitPullReviewLifecycle | golf.proto | Bounded adapter |
 | PullReviewRequestService/GetPullReviewLifecycleOperation | golf.proto | Bounded adapter |
