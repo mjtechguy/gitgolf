@@ -95,3 +95,25 @@ test('GitLab byte traces keep offsets, redact secrets byte for byte and refuse g
   await p.finishPipelineJob(f.db, f.env, claim.job, { result: 'cancelled' });
   assert.equal(f.sql.prepare('SELECT state FROM pipeline_runs WHERE id=?').get(created.runId).state, 'CANCELLED');
 });
+
+test('environments: auto-created unprotected, protected ones wait for a reviewer, branch rules refuse, deployments are recorded', async t => {
+  const f = await pipelineFixture(t);
+  f.sql.exec("INSERT INTO pipeline_environments(repository_id,artifact_name,name,reviewers,prevent_self_review,branches,created_by,created_at,updated_at) VALUES(1,'repo-" + 'b'.repeat(32) + "','prod','[2]',1,'[\"main\"]',1,'t','t'),(1,'repo-" + 'b'.repeat(32) + "','other','[]',1,'[\"release/*\"]',1,'t','t')");
+  const created = await p.createPipelineRun(f.db, f.env, run(), [job('build'), job('deploy', ['build'], { environment: { name: 'prod', url: 'https://x.example' } }), job('staging', [], { environment: { name: 'staging' } }), job('blocked', [], { environment: { name: 'other' } })]);
+  const state = () => Object.fromEntries(f.sql.prepare('SELECT name,state,failure_reason FROM pipeline_jobs WHERE run_id=? ORDER BY id').all(created.runId).map(row => [row.name, row.state + (row.failure_reason ? ':' + row.failure_reason : '')]));
+  assert.deepEqual(state(), { build: 'QUEUED', deploy: 'BLOCKED', staging: 'QUEUED', blocked: 'FAILURE:environment_branch' });
+  assert.ok(f.sql.prepare("SELECT 1 FROM pipeline_environments WHERE name='staging'").get());
+  f.sql.prepare("INSERT INTO pipeline_runners(uuid,engine,scope,scope_id,name,labels,token_digest,created_by,created_at) VALUES('r','forgejo-actions','installation','','r','[\"ubuntu-latest\"]','z',1,'t')").run();
+  const runner = f.sql.prepare("SELECT * FROM pipeline_runners WHERE uuid='r'").get();
+  for (let i = 0; i < 2; i++) { const claim = await p.claimPipelineJob(f.db, f.env, runner); await p.finishPipelineJob(f.db, f.env, claim.job, { result: 'success' }); }
+  assert.equal(state().deploy, 'APPROVAL');
+  assert.equal(f.sql.prepare('SELECT state FROM pipeline_runs WHERE id=?').get(created.runId).state, 'WAITING');
+  const deploy = f.sql.prepare("SELECT id FROM pipeline_jobs WHERE name='deploy'").get().id;
+  await assert.rejects(p.approveEnvironmentJob(f.db, f.env, { id: 1 }, deploy, { approve: true }), /required reviewer/);
+  await p.approveEnvironmentJob(f.db, f.env, { id: 2 }, deploy, { approve: true });
+  assert.equal(state().deploy, 'QUEUED');
+  const claim = await p.claimPipelineJob(f.db, f.env, runner);
+  await p.finishPipelineJob(f.db, f.env, claim.job, { result: 'success' });
+  assert.deepEqual(f.sql.prepare('SELECT d.url,d.state,e.name FROM pipeline_deployments d JOIN pipeline_environments e ON e.id=d.environment_id ORDER BY d.id').all().map(row => ({ ...row })),
+    [{ url: '', state: 'SUCCESS', name: 'staging' }, { url: 'https://x.example', state: 'SUCCESS', name: 'prod' }]);
+});

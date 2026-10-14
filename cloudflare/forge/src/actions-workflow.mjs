@@ -219,7 +219,6 @@ export function expandWorkflow(root, path, { github, inputs = {}, vars = {} }) {
     if (!jobKeyOK(key)) refuse(`Job id ${key} is not a valid identifier.`);
     if (!object(job)) refuse(`Job ${key} must be a mapping.`);
     if (job.uses !== undefined) refuse(`Job ${key} calls a reusable workflow; reusable workflows are not available on Golf yet.`);
-    if (job.environment !== undefined) refuse(`Job ${key} targets an environment; environment protection rules and environment secrets are not available for Actions on Golf yet.`);
     if (job['runs-on'] === undefined) refuse(`Job ${key} has no runs-on.`);
     if (!Array.isArray(job.steps) || !job.steps.length) refuse(`Job ${key} has no steps.`);
     if (job.concurrency !== undefined) notes.push(`Job-level concurrency of ${key} is not applied.`);
@@ -245,8 +244,20 @@ export function expandWorkflow(root, path, { github, inputs = {}, vars = {} }) {
       const workflow = { ...(root.name !== undefined ? { name: root.name } : {}), on: root.on, ...(root.env !== undefined ? { env: root.env } : {}), ...(root.defaults !== undefined ? { defaults: root.defaults } : {}),
         ...(root.permissions !== undefined ? { permissions: root.permissions } : {}), jobs: { [key]: single } };
       const payload = stringify(workflow, { aliasDuplicateObjects: false, lineWidth: 0 });
+      let environment;
+      if (job.environment !== undefined) {
+        try {
+          const value = object(job.environment) ? job.environment : { name: job.environment };
+          const name = expressionText(interpolate(String(value.name ?? ''), context)).trim();
+          if (!/^[A-Za-z0-9 _./-]{1,255}$/.test(name)) refuse(`Job ${key}: environment names use letters, digits, space, _ . / - (at most 255).`);
+          // The url may use step outputs, which only the runner knows; such a url is recorded empty.
+          let url = '';
+          try { url = value.url === undefined ? '' : expressionText(interpolate(String(value.url), context)); } catch (error) { if (!(error instanceof ExpressionUnsupported)) throw error; }
+          environment = { name, url: /^https?:\/\//.test(url) ? url.slice(0, 2048) : '', action: 'start' };
+        } catch (error) { if (error instanceof ExpressionUnsupported) refuse(`Job ${key}: ${error.message}`); throw error; }
+      }
       const continueOnError = job['continue-on-error'] === true;
-      jobs.push({ key, name, needs, runsOn: labels, payload, when: job.if !== undefined ? 'conditional' : 'on_success', allowFailure: continueOnError, timeoutSeconds: timeoutSeconds(job['timeout-minutes'], context) });
+      jobs.push({ key, name, needs, runsOn: labels, payload, when: job.if !== undefined ? 'conditional' : 'on_success', allowFailure: continueOnError, timeoutSeconds: timeoutSeconds(job['timeout-minutes'], context), ...(environment ? { environment } : {}) });
     }
   }
   if (jobs.length > workflowLimits.jobs) refuse(`A workflow may expand to at most ${workflowLimits.jobs} jobs.`);

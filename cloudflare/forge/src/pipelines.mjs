@@ -59,11 +59,15 @@ function checkJobs(jobs) {
         !Array.isArray(job.needs) || job.needs.some(need => !keys.has(need) || need === job.key) || !Array.isArray(job.runsOn) || job.runsOn.length > 16 ||
         job.runsOn.some(label => typeof label !== 'string' || !label || label.length > 128) || typeof job.payload !== 'string' || text.encode(job.payload).length > 256 * 1024 ||
         job.when !== undefined && !whens.includes(job.when) || job.timeoutSeconds !== undefined && !(Number.isInteger(job.timeoutSeconds) && job.timeoutSeconds >= 60 && job.timeoutSeconds <= 21600) ||
-        job.retryMax !== undefined && !(Number.isInteger(job.retryMax) && job.retryMax >= 0 && job.retryMax <= 2))
+        job.retryMax !== undefined && !(Number.isInteger(job.retryMax) && job.retryMax >= 0 && job.retryMax <= 2) || job.environment !== undefined && job.environment !== null && !environmentOK(job.environment))
       invalid('Invalid pipeline job: ' + String(job?.name || job?.key || '').slice(0, 80));
     names.add(job.name);
   }
 }
+export const environmentActions = ['start', 'prepare', 'stop', 'verify', 'access'];
+const environmentNameOK = name => typeof name === 'string' && /^[A-Za-z0-9 _./-]{1,255}$/.test(name) && name.trim() === name;
+const environmentOK = e => e && typeof e === 'object' && environmentNameOK(e.name) && (e.url === undefined || typeof e.url === 'string' && e.url.length <= 2048) && (e.action === undefined || environmentActions.includes(e.action));
+const environmentJSON = e => e ? JSON.stringify({ name: e.name, url: typeof e.url === 'string' && !e.url.includes('${{') ? e.url : '', action: e.action || 'start' }) : null;
 const runColumns = 'repository_id,artifact_name,engine,number,workflow_path,workflow_name,workflow_blob,event,ref,commit_id,before_sha,pull_number,head_ref,base_ref,actor_id,trusted,inputs,event_payload,title,state,reason,attempt,concurrency_group,concurrency_cancel,intake_id,created_at,updated_at';
 async function insertRun(db, run, state, reason) {
   const { payload, inputs } = checkRun(run), time = now();
@@ -90,9 +94,9 @@ export async function createPipelineRun(db, env, run, jobs) {
     return { ...created, jobs: results };
   }
   const time = now();
-  const statements = jobs.map(job => db.prepare(`INSERT INTO pipeline_jobs(run_id,attempt,engine,job_key,name,stage,stage_index,needs,runs_on,payload,state,when_mode,allow_failure,timeout_seconds,retry_max,created_at,updated_at)
-    VALUES(?,1,?,?,?,?,?,?,?,?,'BLOCKED',?,?,?,?,?,?)`).bind(created.runId, run.engine, job.key, job.name, job.stage || '', job.stageIndex || 0, JSON.stringify(job.needs), JSON.stringify(job.runsOn),
-    job.payload, job.when || 'on_success', job.allowFailure ? 1 : 0, job.timeoutSeconds || 3600, job.retryMax || 0, time, time));
+  const statements = jobs.map(job => db.prepare(`INSERT INTO pipeline_jobs(run_id,attempt,engine,job_key,name,stage,stage_index,needs,runs_on,payload,state,when_mode,allow_failure,timeout_seconds,retry_max,environment,created_at,updated_at)
+    VALUES(?,1,?,?,?,?,?,?,?,?,'BLOCKED',?,?,?,?,?,?,?)`).bind(created.runId, run.engine, job.key, job.name, job.stage || '', job.stageIndex || 0, JSON.stringify(job.needs), JSON.stringify(job.runsOn),
+    job.payload, job.when || 'on_success', job.allowFailure ? 1 : 0, job.timeoutSeconds || 3600, job.retryMax || 0, environmentJSON(job.environment), time, time));
   try { await db.batch(statements); }
   catch (error) {
     await db.prepare("UPDATE pipeline_runs SET state='REFUSED',reason=?,updated_at=?,finished_at=? WHERE id=?").bind('The run could not record its jobs.', now(), now(), created.runId).run();
@@ -249,7 +253,12 @@ export async function runnerJob(db, env, runner, jobId) {
 
 // ---------- values and redaction ----------
 const valueCache = new Map();
-export async function pipelineValues(db, env, run) {
+export async function pipelineValues(db, env, run, job) {
+  const scoped = job?.environment ? await environmentValues(db, env, run, job) : null;
+  const base = await repositoryValues(db, env, run);
+  return scoped ? { secrets: { ...base.secrets, ...scoped.secrets }, variables: { ...base.variables, ...scoped.variables } } : base;
+}
+async function repositoryValues(db, env, run) {
   const key = run.id + ':' + run.attempt, cached = valueCache.get(key);
   if (cached && cached.at > Date.now() - 60_000) return cached.value;
   const repository = await db.prepare("SELECT id,artifact_name FROM repositories WHERE id=? AND state='ACTIVE'").bind(run.repository_id).first();
@@ -288,7 +297,7 @@ export async function appendJobLogLines(db, env, job, index, lines) {
   if (!lines.length || index > ack || index + lines.length <= ack) return { ack };
   if (fresh.log_complete) return { ack };
   const run = await db.prepare('SELECT * FROM pipeline_runs WHERE id=?').bind(fresh.run_id).first();
-  const redact = redactor((await pipelineValues(db, env, run)).secrets);
+  const redact = redactor((await pipelineValues(db, env, run, fresh)).secrets);
   const body = lines.slice(ack - index).map(line => redact(String(line).replace(/\r?\n$/, '')) + '\n').join(''), bytes = text.encode(body).length;
   if (bytes > maxChunkBytes || fresh.log_bytes + bytes > maxLogBytes) refuse('Job log exceeds the 64 MiB bound.');
   const count = lines.length - (ack - index);
@@ -302,7 +311,7 @@ export async function appendJobLogBytes(db, env, job, offset, bytes) {
   if (!bytes.length) return { ack: fresh.log_bytes };
   if (bytes.length > maxChunkBytes || fresh.log_bytes + bytes.length > maxLogBytes) refuse('Job log exceeds the 64 MiB bound.');
   const run = await db.prepare('SELECT * FROM pipeline_runs WHERE id=?').bind(fresh.run_id).first();
-  const secrets = (await pipelineValues(db, env, run)).secrets;
+  const secrets = (await pipelineValues(db, env, run, fresh)).secrets;
   let body = bytes;
   // Redaction keeps the stored byte count equal to the runner's offsets: each secret byte becomes '*'.
   if (Object.keys(secrets).length) {
@@ -364,7 +373,7 @@ export async function updateJobSteps(db, job, steps) {
 
 // ---------- completion and the run DAG ----------
 const results = { success: 'SUCCESS', failure: 'FAILURE', cancelled: 'CANCELLED', skipped: 'SKIPPED' };
-export async function finishPipelineJob(db, env, job, { result, exitCode = null, outputs = {}, failureReason = '' }) {
+export async function finishPipelineJob(db, env, job, { result, exitCode = null, outputs = {}, failureReason = '', url }) {
   const state = results[result];
   if (!state || exitCode !== null && !Number.isInteger(exitCode) || !outputs || typeof outputs !== 'object' || typeof failureReason !== 'string') invalid('Invalid job result.');
   const outputJSON = JSON.stringify(outputs);
@@ -386,6 +395,7 @@ export async function finishPipelineJob(db, env, job, { result, exitCode = null,
   const changed = await db.prepare("UPDATE pipeline_jobs SET state=?,exit_code=?,outputs=?,failure_reason=?,token_digest=NULL,token_expires_at=NULL,log_complete=1,finished_at=?,updated_at=? WHERE id=? AND state='RUNNING'")
     .bind(state, exitCode, outputJSON, failureReason.slice(0, 500), time, time, job.id).run();
   if (changed.meta.changes !== 1) refuse('The job changed; refresh.');
+  await recordDeployment(db, fresh, state, url);
   await advancePipelineRun(env, fresh.run_id);
   return { state, replayed: false };
 }
@@ -409,7 +419,7 @@ export async function advanceRunNow(env, runId) {
   for (const job of jobs) job.previous = job.state;
   const allowed = await pipelineAllowed(db, env, run.repository_id);
   if (run.cancel_requested || !allowed) {
-    for (const job of jobs) if (['BLOCKED', 'QUEUED', 'MANUAL'].includes(job.state)) set(job, 'CANCELLED', allowed ? '' : 'actions_disabled');
+    for (const job of jobs) if (['BLOCKED', 'QUEUED', 'MANUAL', 'APPROVAL'].includes(job.state)) set(job, 'CANCELLED', allowed ? '' : 'actions_disabled');
   } else {
     // Concurrency: an earlier unfinished run in the group holds the jobs of this one.
     const waiting = run.concurrency_group && await db.prepare("SELECT 1 AS busy FROM pipeline_runs WHERE repository_id=? AND concurrency_group=? AND id<? AND state IN ('QUEUED','RUNNING','WAITING') LIMIT 1").bind(run.repository_id, run.concurrency_group, run.id).first();
@@ -433,6 +443,10 @@ export async function advanceRunNow(env, runId) {
         const next = job.when_mode === 'always' || job.when_mode === 'conditional' ? 'QUEUED'
           : job.when_mode === 'on_failure' ? (failed ? 'QUEUED' : 'SKIPPED')
           : job.when_mode === 'manual' ? (failed ? 'SKIPPED' : 'MANUAL') : (failed ? 'SKIPPED' : 'QUEUED');
+        if (next === 'QUEUED' && job.environment) {
+          const gate = await environmentGate(db, run, job);
+          if (gate.state !== 'QUEUED') { set(job, gate.state, gate.reason); changed = true; continue; }
+        }
         set(job, next); changed = true;
       }
     }
@@ -481,8 +495,8 @@ export async function rerunPipelineRun(db, env, person, runId, { failedOnly = fa
   const statements = [db.prepare("UPDATE pipeline_runs SET attempt=?,state='QUEUED',cancel_requested=0,actor_id=?,finished_at=NULL,started_at=NULL,updated_at=? WHERE id=? AND attempt=?").bind(attempt, person.id, time, runId, run.attempt)];
   for (const job of jobs) {
     const again = rerun.has(job.job_key);
-    statements.push(db.prepare(`INSERT INTO pipeline_jobs(run_id,attempt,engine,job_key,name,stage,stage_index,needs,runs_on,payload,state,when_mode,allow_failure,timeout_seconds,retry_max,outputs,exit_code,log_lines,log_bytes,log_chunks,log_complete,failure_reason,created_at,updated_at,started_at,finished_at)
-      SELECT run_id,?,engine,job_key,name,stage,stage_index,needs,runs_on,payload,?,when_mode,allow_failure,timeout_seconds,retry_max,?,?,0,0,0,?,?,?,?,?,? FROM pipeline_jobs WHERE id=? AND changes()=1`)
+    statements.push(db.prepare(`INSERT INTO pipeline_jobs(run_id,attempt,engine,job_key,name,stage,stage_index,needs,runs_on,payload,environment,state,when_mode,allow_failure,timeout_seconds,retry_max,outputs,exit_code,log_lines,log_bytes,log_chunks,log_complete,failure_reason,created_at,updated_at,started_at,finished_at)
+      SELECT run_id,?,engine,job_key,name,stage,stage_index,needs,runs_on,payload,environment,?,when_mode,allow_failure,timeout_seconds,retry_max,?,?,0,0,0,?,?,?,?,?,? FROM pipeline_jobs WHERE id=? AND changes()=1`)
       .bind(attempt, again ? 'BLOCKED' : 'SUCCESS', again ? '{}' : job.outputs, again ? null : job.exit_code, again ? 0 : 1, again ? '' : 'reused:' + job.id, time, time, again ? null : job.started_at, again ? null : job.finished_at, job.id));
   }
   const saved = await db.batch(statements);
@@ -540,4 +554,84 @@ export async function openArtifact(db, env, artifactId) {
     },
   });
   return { row, body };
+}
+
+// ---------- deployment environments ----------
+const environmentRow = async (db, repositoryId, name) => db.prepare('SELECT * FROM pipeline_environments WHERE repository_id=? AND name=? AND deleted=0').bind(repositoryId, name).first();
+// A job reaching its turn: auto-create the environment unprotected (GitHub), refuse a disallowed ref, wait for a reviewer when protected.
+async function environmentGate(db, run, job) {
+  const target = parse(job.environment, null);
+  if (!target) return { state: 'QUEUED' };
+  let row = await environmentRow(db, run.repository_id, target.name);
+  if (!row) {
+    const time = now();
+    await db.prepare('INSERT INTO pipeline_environments(repository_id,artifact_name,name,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING').bind(run.repository_id, run.artifact_name, target.name, run.actor_id, time, time).run();
+    row = await environmentRow(db, run.repository_id, target.name);
+  }
+  const branches = parse(row.branches, []), refName = run.ref.replace(/^refs\/(heads|tags)\//, '');
+  if (branches.length && !branches.some(pattern => new RegExp('^' + pattern.replace(/[.+^$|(){}[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*') + '$').test(refName)))
+    return { state: 'FAILURE', reason: 'environment_branch' };
+  if (!['start', 'stop', 'prepare'].includes(target.action) || !parse(row.reviewers, []).length) return { state: 'QUEUED' };
+  const decision = await db.prepare('SELECT decision FROM pipeline_approvals WHERE job_id=?').bind(job.id).first();
+  if (decision?.decision === 'APPROVED') return { state: 'QUEUED' };
+  if (decision?.decision === 'REJECTED') return { state: 'FAILURE', reason: 'environment_rejected' };
+  return { state: 'APPROVAL' };
+}
+async function approvalHolds(db, run, job) {
+  const target = parse(job.environment, null), row = target && await environmentRow(db, run.repository_id, target.name);
+  if (!row) return false;
+  if (!['start', 'stop', 'prepare'].includes(target.action) || !parse(row.reviewers, []).length) return row;
+  return (await db.prepare("SELECT 1 AS ok FROM pipeline_approvals WHERE job_id=? AND decision='APPROVED'").bind(job.id).first()) ? row : false;
+}
+const environmentKey = env => import('./sealed.mjs').then(({ sealingKey }) => sealingKey(env.EXECUTION_VALUE_KEY, 'Environment value'));
+const environmentAD = (env, row, name, kind, version, bytes) => ['golf.native.pipeline-environment-value.v1', env.PUBLIC_ORIGIN, row.repository_id, row.artifact_name, row.id, name, kind, version, bytes];
+async function environmentValues(db, env, run, job) {
+  const row = await approvalHolds(db, run, job);
+  if (!row || !env.EXECUTION_VALUE_KEY?.get || row.artifact_name !== run.artifact_name) return null;
+  if (!(await repositoryFeatures(db, env, run.repository_id)).get('secrets')?.effective) return null;
+  const { open } = await import('./sealed.mjs'), { key, id } = await environmentKey(env);
+  const { results } = await db.prepare('SELECT * FROM pipeline_environment_values WHERE environment_id=? ORDER BY name LIMIT 100').bind(row.id).all();
+  const secrets = {}, variables = {};
+  for (const value of results) {
+    if (value.key_id !== id) continue;
+    const plain = await open(key, environmentAD(env, row, value.name, value.kind, value.version, value.value_bytes), value.encrypted);
+    if (value.kind === 'variable') variables[value.name] = plain; else if (run.trusted) secrets[value.name] = plain;
+  }
+  return { secrets, variables };
+}
+export async function saveEnvironmentValue(db, env, person, environment, { name, kind, value }) {
+  if (!/^[A-Z][A-Z0-9_]{0,63}$/.test(name || '') || /^(GITHUB_|ACTIONS_|RUNNER_|FORGEJO_|GITEA_|CI_|GITLAB_)/.test(name) || !['secret', 'variable'].includes(kind) || typeof value !== 'string' || !value || new TextEncoder().encode(value).length > 65536) invalid('Use an uppercase name and a value up to 64 KiB.');
+  if (!env.EXECUTION_VALUE_KEY?.get) refuse('Configure the repository value encryption key to store environment values.');
+  const { seal } = await import('./sealed.mjs'), { key, id } = await environmentKey(env);
+  const current = await db.prepare('SELECT version FROM pipeline_environment_values WHERE environment_id=? AND name=?').bind(environment.id, name).first();
+  const version = (current?.version || 0) + 1, bytes = new TextEncoder().encode(value).length, time = now();
+  const encrypted = await seal(key, environmentAD(env, environment, name, kind, version, bytes), value);
+  await db.prepare(`INSERT INTO pipeline_environment_values(environment_id,name,kind,version,value_bytes,encrypted,key_id,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(environment_id,name) DO UPDATE SET kind=excluded.kind,version=excluded.version,value_bytes=excluded.value_bytes,encrypted=excluded.encrypted,key_id=excluded.key_id,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+    .bind(environment.id, name, kind, version, bytes, encrypted, id, person.id, time).run();
+  valueCache.clear();
+}
+export async function approveEnvironmentJob(db, env, person, jobId, { approve, comment = '' }) {
+  const job = await db.prepare('SELECT * FROM pipeline_jobs WHERE id=?').bind(Number(jobId)).first();
+  if (!job || job.state !== 'APPROVAL') refuse('This job is not waiting for approval.');
+  const run = await db.prepare('SELECT * FROM pipeline_runs WHERE id=?').bind(job.run_id).first(), target = parse(job.environment, null);
+  const row = await environmentRow(db, run.repository_id, target?.name);
+  if (!row) refuse('The environment no longer exists.');
+  if (!parse(row.reviewers, []).map(Number).includes(Number(person.id))) throw new Fault('permission_denied', 403, `Only a required reviewer of ${row.name} can review this deployment.`);
+  if (row.prevent_self_review && Number(run.actor_id) === Number(person.id)) throw new Fault('permission_denied', 403, 'The person who triggered this run cannot approve its deployment.');
+  if (typeof approve !== 'boolean' || typeof comment !== 'string' || comment.length > 1000) invalid('Approve or reject, with an optional comment.');
+  const saved = await db.prepare('INSERT INTO pipeline_approvals(job_id,environment_id,reviewer_id,decision,comment,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(job_id) DO NOTHING')
+    .bind(job.id, row.id, person.id, approve ? 'APPROVED' : 'REJECTED', comment, now()).run();
+  if (saved.meta.changes !== 1) refuse('This deployment was already reviewed.');
+  await db.prepare("UPDATE pipeline_jobs SET state='BLOCKED',updated_at=? WHERE id=? AND state='APPROVAL'").bind(now(), job.id).run();
+  return advancePipelineRun(env, run.id);
+}
+async function recordDeployment(db, job, state, url) {
+  const target = parse(job.environment, null);
+  if (!target || !['start', 'stop'].includes(target.action) || !['SUCCESS', 'FAILURE', 'CANCELLED'].includes(state)) return;
+  const run = await db.prepare('SELECT * FROM pipeline_runs WHERE id=?').bind(job.run_id).first(), row = await environmentRow(db, run.repository_id, target.name);
+  if (!row) return;
+  const chosen = typeof url === 'string' && /^https?:\/\//.test(url) && url.length <= 2048 ? url : target.url || row.url || '';
+  await db.prepare('INSERT INTO pipeline_deployments(environment_id,run_id,job_id,action,commit_id,ref,url,state,actor_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(job_id) DO NOTHING')
+    .bind(row.id, run.id, job.id, target.action, run.commit_id, run.ref, chosen, state, run.actor_id, now()).run();
 }

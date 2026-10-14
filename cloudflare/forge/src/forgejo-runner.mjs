@@ -142,7 +142,7 @@ async function buildTask(db, env, { job, run, repository, token }) {
   const owner = ownerSlug(repository, env), full = owner + '/' + repository.name, origin = env.PUBLIC_ORIGIN;
   const names = stepNames(job.payload);
   if (names.length) await updateJobSteps(db, job, names.map((name, number) => ({ number, name, state: 'PENDING' })));
-  const values = await pipelineValues(db, env, run);
+  const values = await pipelineValues(db, env, run, job);
   const event = parse(run.event_payload, {});
   const ref = run.ref, refName = ref.replace(/^refs\/(heads|tags)\//, '').replace(/^refs\/pull\/(\d+)\/head$/, '$1/merge');
   const actions = defaultActionsURL(env);
