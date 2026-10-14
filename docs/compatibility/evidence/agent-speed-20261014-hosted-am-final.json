@@ -1,0 +1,1644 @@
+{
+  "tool": "agent_speed_bench",
+  "schemaVersion": 1,
+  "runId": "20261014-db8d36",
+  "label": "hosted-am-final",
+  "date": "2026-10-14T22:12:06.537Z",
+  "originHost": "demo.gitgolf.mjtechguy.com",
+  "gitVersion": "git version 2.43.0",
+  "nodeVersion": "v24.15.0",
+  "durationSec": 20,
+  "concurrency": [
+    1,
+    4,
+    16,
+    64
+  ],
+  "scenarios": [
+    "S2",
+    "S3",
+    "S4",
+    "S6"
+  ],
+  "repositories": [
+    "mj/agent-bench-1",
+    "mj/agent-bench-2",
+    "mj/agent-bench-3",
+    "mj/agent-bench-4",
+    "mj/agent-bench-5",
+    "mj/agent-bench-6",
+    "mj/agent-bench-7",
+    "mj/agent-bench-8"
+  ],
+  "branchPrefix": "bench/20261014-db8d36/",
+  "auth": {
+    "access": false,
+    "git": "api-token",
+    "api": true
+  },
+  "latencyNote": "latencyMs covers every attempt of the primary operation (network only); localGitMs is local commit plumbing",
+  "results": [
+    {
+      "scenario": "S2",
+      "concurrency": 1,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 21.04,
+      "attempts": 14,
+      "successes": 14,
+      "successesPerSec": 0.67,
+      "latencyMs": {
+        "p50": 1337.8,
+        "p95": 2343.2,
+        "p99": 2343.2,
+        "max": 2343.2
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 14,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 14,
+          "successes": 14,
+          "successesPerSec": 0.67,
+          "latencyMs": {
+            "p50": 1337.8,
+            "p95": 2343.2,
+            "p99": 2343.2,
+            "max": 2343.2
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 14,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 10.6,
+        "p95": 24.5,
+        "p99": 24.5,
+        "max": 24.5
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S2",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 21.57,
+      "attempts": 32,
+      "successes": 32,
+      "successesPerSec": 1.48,
+      "latencyMs": {
+        "p50": 2467.3,
+        "p95": 3651,
+        "p99": 4391.9,
+        "max": 4391.9
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 32,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 32,
+          "successes": 32,
+          "successesPerSec": 1.48,
+          "latencyMs": {
+            "p50": 2467.3,
+            "p95": 3651,
+            "p99": 4391.9,
+            "max": 4391.9
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 32,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 10.4,
+        "p95": 27.4,
+        "p99": 30.6,
+        "max": 30.6
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S2",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 25.13,
+      "attempts": 48,
+      "successes": 48,
+      "successesPerSec": 1.91,
+      "latencyMs": {
+        "p50": 9861.5,
+        "p95": 11289.2,
+        "p99": 11511.9,
+        "max": 11511.9
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 48,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 48,
+          "successes": 48,
+          "successesPerSec": 1.91,
+          "latencyMs": {
+            "p50": 9861.5,
+            "p95": 11289.2,
+            "p99": 11511.9,
+            "max": 11511.9
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 48,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 19.9,
+        "p95": 218.6,
+        "p99": 222.9,
+        "max": 222.9
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S2",
+      "concurrency": 64,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 77.64,
+      "attempts": 93,
+      "successes": 93,
+      "successesPerSec": 1.2,
+      "latencyMs": {
+        "p50": 40782.7,
+        "p95": 61966,
+        "p99": 62859.6,
+        "max": 62859.6
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 93,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 93,
+          "successes": 93,
+          "successesPerSec": 1.2,
+          "latencyMs": {
+            "p50": 40782.7,
+            "p95": 61966,
+            "p99": 62859.6,
+            "max": 62859.6
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 93,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 390.3,
+        "p95": 566.9,
+        "p99": 643.6,
+        "max": 643.6
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S3",
+      "concurrency": 1,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 21.2,
+      "attempts": 12,
+      "successes": 12,
+      "successesPerSec": 0.57,
+      "latencyMs": {
+        "p50": 1403.8,
+        "p95": 2773.5,
+        "p99": 2773.5,
+        "max": 2773.5
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 12,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 12,
+          "successes": 12,
+          "successesPerSec": 0.57,
+          "latencyMs": {
+            "p50": 1403.8,
+            "p95": 2773.5,
+            "p99": 2773.5,
+            "max": 2773.5
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 12,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 9.9,
+        "p95": 12.4,
+        "p99": 12.4,
+        "max": 12.4
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S3",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "repositories": 4,
+      "durationSec": 21.96,
+      "attempts": 31,
+      "successes": 31,
+      "successesPerSec": 1.41,
+      "latencyMs": {
+        "p50": 2538.5,
+        "p95": 4241.9,
+        "p99": 4464.6,
+        "max": 4464.6
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 31,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 31,
+          "successes": 31,
+          "successesPerSec": 1.41,
+          "latencyMs": {
+            "p50": 2538.5,
+            "p95": 4241.9,
+            "p99": 4464.6,
+            "max": 4464.6
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 31,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 10.5,
+        "p95": 30.1,
+        "p99": 35.5,
+        "max": 35.5
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S3",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [
+        "8 repositories for 16 workers; workers share repositories round-robin with a branch each"
+      ],
+      "repositories": 8,
+      "durationSec": 21.87,
+      "attempts": 48,
+      "successes": 48,
+      "successesPerSec": 2.19,
+      "latencyMs": {
+        "p50": 7623.1,
+        "p95": 11021.4,
+        "p99": 11433.6,
+        "max": 11433.6
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 48,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 48,
+          "successes": 48,
+          "successesPerSec": 2.19,
+          "latencyMs": {
+            "p50": 7623.1,
+            "p95": 11021.4,
+            "p99": 11433.6,
+            "max": 11433.6
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 48,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 11.4,
+        "p95": 110.8,
+        "p99": 130.6,
+        "max": 130.6
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S3",
+      "concurrency": 64,
+      "status": "ok",
+      "notes": [
+        "8 repositories for 64 workers; workers share repositories round-robin with a branch each"
+      ],
+      "repositories": 8,
+      "durationSec": 58.3,
+      "attempts": 93,
+      "successes": 93,
+      "successesPerSec": 1.6,
+      "latencyMs": {
+        "p50": 36810,
+        "p95": 49658,
+        "p99": 49973.4,
+        "max": 49973.4
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 93,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 93,
+          "successes": 93,
+          "successesPerSec": 1.6,
+          "latencyMs": {
+            "p50": 36810,
+            "p95": 49658,
+            "p99": 49973.4,
+            "max": 49973.4
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 93,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 409.2,
+        "p95": 600.7,
+        "p99": 666.8,
+        "max": 666.8
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S4",
+      "concurrency": 1,
+      "status": "ok",
+      "notes": [
+        "clone is `git clone --depth 1 --no-checkout`; ls_remote lists HEAD"
+      ],
+      "durationSec": 20.32,
+      "attempts": 13,
+      "successes": 13,
+      "successesPerSec": 0.64,
+      "latencyMs": {
+        "p50": 1458,
+        "p95": 2257,
+        "p99": 2257,
+        "max": 2257
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 13,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "clone": {
+          "attempts": 7,
+          "successes": 7,
+          "successesPerSec": 0.34,
+          "latencyMs": {
+            "p50": 1576.1,
+            "p95": 2257,
+            "p99": 2257,
+            "max": 2257
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 7,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "ls_remote": {
+          "attempts": 6,
+          "successes": 6,
+          "successesPerSec": 0.3,
+          "latencyMs": {
+            "p50": 1073.6,
+            "p95": 1991.4,
+            "p99": 1991.4,
+            "max": 1991.4
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 6,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "background": {
+        "attempts": 11,
+        "successes": 11,
+        "successesPerSec": 0.54,
+        "latencyMs": {
+          "p50": 1569.8,
+          "p95": 2843.6,
+          "p99": 2843.6,
+          "max": 2843.6
+        },
+        "outcomes": {
+          "413": 0,
+          "429": 0,
+          "503": 0,
+          "ok": 11,
+          "contention_409": 0,
+          "nonff_rejected": 0,
+          "other": {}
+        }
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S4",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [
+        "clone is `git clone --depth 1 --no-checkout`; ls_remote lists HEAD"
+      ],
+      "durationSec": 25.57,
+      "attempts": 28,
+      "successes": 28,
+      "successesPerSec": 1.09,
+      "latencyMs": {
+        "p50": 3531.8,
+        "p95": 6061.2,
+        "p99": 6082.6,
+        "max": 6082.6
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 28,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "clone": {
+          "attempts": 16,
+          "successes": 16,
+          "successesPerSec": 0.63,
+          "latencyMs": {
+            "p50": 3791.4,
+            "p95": 6082.6,
+            "p99": 6082.6,
+            "max": 6082.6
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 16,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "ls_remote": {
+          "attempts": 12,
+          "successes": 12,
+          "successesPerSec": 0.47,
+          "latencyMs": {
+            "p50": 2827.3,
+            "p95": 3956.8,
+            "p99": 3956.8,
+            "max": 3956.8
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 12,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "background": {
+        "attempts": 22,
+        "successes": 22,
+        "successesPerSec": 0.86,
+        "latencyMs": {
+          "p50": 3929.5,
+          "p95": 5404.1,
+          "p99": 5973.6,
+          "max": 5973.6
+        },
+        "outcomes": {
+          "413": 0,
+          "429": 0,
+          "503": 0,
+          "ok": 22,
+          "contention_409": 0,
+          "nonff_rejected": 0,
+          "other": {}
+        }
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S4",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [
+        "clone is `git clone --depth 1 --no-checkout`; ls_remote lists HEAD"
+      ],
+      "durationSec": 30.61,
+      "attempts": 48,
+      "successes": 48,
+      "successesPerSec": 1.57,
+      "latencyMs": {
+        "p50": 10332.6,
+        "p95": 13449.8,
+        "p99": 13784.6,
+        "max": 13784.6
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 48,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "clone": {
+          "attempts": 32,
+          "successes": 32,
+          "successesPerSec": 1.05,
+          "latencyMs": {
+            "p50": 7620.8,
+            "p95": 13564.9,
+            "p99": 13784.6,
+            "max": 13784.6
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 32,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "ls_remote": {
+          "attempts": 16,
+          "successes": 16,
+          "successesPerSec": 0.52,
+          "latencyMs": {
+            "p50": 10332.6,
+            "p95": 11897.4,
+            "p99": 11897.4,
+            "max": 11897.4
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 16,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "background": {
+        "attempts": 39,
+        "successes": 39,
+        "successesPerSec": 1.27,
+        "latencyMs": {
+          "p50": 10072.5,
+          "p95": 13601.3,
+          "p99": 13712,
+          "max": 13712
+        },
+        "outcomes": {
+          "413": 0,
+          "429": 0,
+          "503": 0,
+          "ok": 39,
+          "contention_409": 0,
+          "nonff_rejected": 0,
+          "other": {}
+        }
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S4",
+      "concurrency": 64,
+      "status": "ok",
+      "notes": [
+        "clone is `git clone --depth 1 --no-checkout`; ls_remote lists HEAD"
+      ],
+      "durationSec": 76.48,
+      "attempts": 70,
+      "successes": 70,
+      "successesPerSec": 0.92,
+      "latencyMs": {
+        "p50": 62247.8,
+        "p95": 73648.1,
+        "p99": 74058.3,
+        "max": 74058.3
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 70,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "clone": {
+          "attempts": 64,
+          "successes": 64,
+          "successesPerSec": 0.84,
+          "latencyMs": {
+            "p50": 63306.9,
+            "p95": 73648.1,
+            "p99": 74058.3,
+            "max": 74058.3
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 64,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "ls_remote": {
+          "attempts": 6,
+          "successes": 6,
+          "successesPerSec": 0.08,
+          "latencyMs": {
+            "p50": 59556.3,
+            "p95": 61280.6,
+            "p99": 61280.6,
+            "max": 61280.6
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 6,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "background": {
+        "attempts": 75,
+        "successes": 75,
+        "successesPerSec": 0.98,
+        "latencyMs": {
+          "p50": 39589.1,
+          "p95": 63016.2,
+          "p99": 63882.2,
+          "max": 63882.2
+        },
+        "outcomes": {
+          "413": 0,
+          "429": 0,
+          "503": 0,
+          "ok": 75,
+          "contention_409": 0,
+          "nonff_rejected": 0,
+          "other": {}
+        }
+      },
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 1,
+      "status": "ok",
+      "notes": [],
+      "variant": "branch-per-writer",
+      "durationSec": 20.81,
+      "attempts": 12,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 73.6,
+        "p95": 1703.4,
+        "p99": 1703.4,
+        "max": 1703.4
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "400": 12
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 12,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 73.6,
+            "p95": 1703.4,
+            "p99": 1703.4,
+            "max": 1703.4
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "400": 12
+            }
+          }
+        },
+        "ls_remote": {
+          "attempts": 12,
+          "successes": 12,
+          "successesPerSec": 0.58,
+          "latencyMs": {
+            "p50": 923.1,
+            "p95": 2609,
+            "p99": 2609,
+            "max": 2609
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 12,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": [
+        "source_commit other:400: HTTP 400 {\"code\":\"invalid_argument\",\"message\":\"Use Connect JSON POST.\"}"
+      ]
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 1,
+      "status": "ok",
+      "notes": [],
+      "variant": "shared-branch",
+      "durationSec": 21.28,
+      "attempts": 15,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 76.2,
+        "p95": 226,
+        "p99": 226,
+        "max": 226
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "400": 15
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 15,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 76.2,
+            "p95": 226,
+            "p99": 226,
+            "max": 226
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "400": 15
+            }
+          }
+        },
+        "ls_remote": {
+          "attempts": 15,
+          "successes": 15,
+          "successesPerSec": 0.7,
+          "latencyMs": {
+            "p50": 969.2,
+            "p95": 2047.6,
+            "p99": 2047.6,
+            "max": 2047.6
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 15,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": [
+        "source_commit other:400: HTTP 400 {\"code\":\"invalid_argument\",\"message\":\"Use Connect JSON POST.\"}"
+      ]
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "variant": "branch-per-writer",
+      "durationSec": 22.68,
+      "attempts": 39,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 157.7,
+        "p95": 1883.8,
+        "p99": 1906.9,
+        "max": 1906.9
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "400": 39
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 39,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 157.7,
+            "p95": 1883.8,
+            "p99": 1906.9,
+            "max": 1906.9
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "400": 39
+            }
+          }
+        },
+        "ls_remote": {
+          "attempts": 39,
+          "successes": 39,
+          "successesPerSec": 1.72,
+          "latencyMs": {
+            "p50": 1544.2,
+            "p95": 2675.4,
+            "p99": 3278.6,
+            "max": 3278.6
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 39,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": [
+        "source_commit other:400: HTTP 400 {\"code\":\"invalid_argument\",\"message\":\"Use Connect JSON POST.\"}"
+      ]
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "variant": "shared-branch",
+      "durationSec": 21.72,
+      "attempts": 41,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 269.4,
+        "p95": 640.2,
+        "p99": 702.6,
+        "max": 702.6
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "400": 41
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 41,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 269.4,
+            "p95": 640.2,
+            "p99": 702.6,
+            "max": 702.6
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "400": 41
+            }
+          }
+        },
+        "ls_remote": {
+          "attempts": 41,
+          "successes": 41,
+          "successesPerSec": 1.89,
+          "latencyMs": {
+            "p50": 1519.1,
+            "p95": 2109.5,
+            "p99": 2325,
+            "max": 2325
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 41,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": [
+        "source_commit other:400: HTTP 400 {\"code\":\"invalid_argument\",\"message\":\"Use Connect JSON POST.\"}"
+      ]
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [],
+      "variant": "branch-per-writer",
+      "durationSec": 22.12,
+      "attempts": 54,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 970.3,
+        "p95": 4055.8,
+        "p99": 4067.9,
+        "max": 4067.9
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "400": 54
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 54,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 970.3,
+            "p95": 4055.8,
+            "p99": 4067.9,
+            "max": 4067.9
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "400": 54
+            }
+          }
+        },
+        "ls_remote": {
+          "attempts": 54,
+          "successes": 54,
+          "successesPerSec": 2.44,
+          "latencyMs": {
+            "p50": 4192.5,
+            "p95": 6179.7,
+            "p99": 6561.3,
+            "max": 6561.3
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 54,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": [
+        "source_commit other:400: HTTP 400 {\"code\":\"invalid_argument\",\"message\":\"Use Connect JSON POST.\"}"
+      ]
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [],
+      "variant": "shared-branch",
+      "durationSec": 26.44,
+      "attempts": 67,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 476.1,
+        "p95": 2727.2,
+        "p99": 2996.1,
+        "max": 2996.1
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "400": 67
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 67,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 476.1,
+            "p95": 2727.2,
+            "p99": 2996.1,
+            "max": 2996.1
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "400": 67
+            }
+          }
+        },
+        "ls_remote": {
+          "attempts": 67,
+          "successes": 67,
+          "successesPerSec": 2.53,
+          "latencyMs": {
+            "p50": 4631.7,
+            "p95": 5389.5,
+            "p99": 6147.2,
+            "max": 6147.2
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 67,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": [
+        "source_commit other:400: HTTP 400 {\"code\":\"invalid_argument\",\"message\":\"Use Connect JSON POST.\"}"
+      ]
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 64,
+      "status": "ok",
+      "notes": [],
+      "variant": "branch-per-writer",
+      "durationSec": 31.21,
+      "attempts": 99,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 4224.7,
+        "p95": 6334,
+        "p99": 6582.4,
+        "max": 6582.4
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "400": 99
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 99,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 4224.7,
+            "p95": 6334,
+            "p99": 6582.4,
+            "max": 6582.4
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "400": 99
+            }
+          }
+        },
+        "ls_remote": {
+          "attempts": 99,
+          "successes": 99,
+          "successesPerSec": 3.17,
+          "latencyMs": {
+            "p50": 14694.7,
+            "p95": 16249.5,
+            "p99": 16623.3,
+            "max": 16623.3
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 99,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": [
+        "source_commit other:400: HTTP 400 {\"code\":\"invalid_argument\",\"message\":\"Use Connect JSON POST.\"}"
+      ]
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 64,
+      "status": "ok",
+      "notes": [],
+      "variant": "shared-branch",
+      "durationSec": 36.22,
+      "attempts": 128,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 3412.7,
+        "p95": 5684.5,
+        "p99": 5781.4,
+        "max": 5834.9
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "400": 128
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 128,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 3412.7,
+            "p95": 5684.5,
+            "p99": 5781.4,
+            "max": 5834.9
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "400": 128
+            }
+          }
+        },
+        "ls_remote": {
+          "attempts": 128,
+          "successes": 128,
+          "successesPerSec": 3.53,
+          "latencyMs": {
+            "p50": 13498.8,
+            "p95": 16043.4,
+            "p99": 16299.6,
+            "max": 16444.7
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 128,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ],
+        "workerRelease": [
+          "f3da96a3339f431f33b2f9ec50e28bfa82d7e1fb0cc4794fef35e58504ed7324"
+        ]
+      },
+      "errorSamples": [
+        "source_commit other:400: HTTP 400 {\"code\":\"invalid_argument\",\"message\":\"Use Connect JSON POST.\"}"
+      ]
+    }
+  ],
+  "cleanup": {
+    "attempted": 344,
+    "deleted": 344,
+    "absent": 0,
+    "failed": []
+  }
+}

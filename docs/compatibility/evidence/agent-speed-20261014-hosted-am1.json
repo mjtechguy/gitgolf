@@ -1,0 +1,2638 @@
+{
+  "tool": "agent_speed_bench",
+  "schemaVersion": 1,
+  "runId": "20261014-0f51af",
+  "label": "hosted-am1",
+  "date": "2026-10-14T21:23:36.318Z",
+  "originHost": "demo.gitgolf.mjtechguy.com",
+  "gitVersion": "git version 2.43.0",
+  "nodeVersion": "v24.15.0",
+  "durationSec": 20,
+  "concurrency": [
+    1,
+    4,
+    16,
+    64
+  ],
+  "scenarios": [
+    "S1",
+    "S2",
+    "S3",
+    "S4"
+  ],
+  "repositories": [
+    "mj/agent-bench-1",
+    "mj/agent-bench-2",
+    "mj/agent-bench-3",
+    "mj/agent-bench-4",
+    "mj/agent-bench-5",
+    "mj/agent-bench-6",
+    "mj/agent-bench-7",
+    "mj/agent-bench-8"
+  ],
+  "branchPrefix": "bench/20261014-0f51af/",
+  "auth": {
+    "access": true,
+    "git": "repository-credential",
+    "api": false
+  },
+  "latencyNote": "latencyMs covers every attempt of the primary operation (network only); localGitMs is local commit plumbing",
+  "results": [
+    {
+      "scenario": "S1",
+      "concurrency": 1,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 20.81,
+      "attempts": 8,
+      "successes": 8,
+      "successesPerSec": 0.38,
+      "latencyMs": {
+        "p50": 1366.7,
+        "p95": 1558.9,
+        "p99": 1558.9,
+        "max": 1558.9
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 8,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "fetch": {
+          "attempts": 8,
+          "successes": 8,
+          "successesPerSec": 0.38,
+          "latencyMs": {
+            "p50": 1139.9,
+            "p95": 1517.2,
+            "p99": 1517.2,
+            "max": 1517.2
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 8,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "push": {
+          "attempts": 8,
+          "successes": 8,
+          "successesPerSec": 0.38,
+          "latencyMs": {
+            "p50": 1366.7,
+            "p95": 1558.9,
+            "p99": 1558.9,
+            "max": 1558.9
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 8,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 2.9,
+        "p95": 10,
+        "p99": 10,
+        "max": 10
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S1",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 21.78,
+      "attempts": 24,
+      "successes": 6,
+      "successesPerSec": 0.28,
+      "latencyMs": {
+        "p50": 818.9,
+        "p95": 2381.6,
+        "p99": 2924.5,
+        "max": 2924.5
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 6,
+        "contention_409": 0,
+        "nonff_rejected": 7,
+        "other": {
+          "412": 10,
+          "remote_rejected": 1
+        }
+      },
+      "contention": 7,
+      "ops": {
+        "fetch": {
+          "attempts": 24,
+          "successes": 24,
+          "successesPerSec": 1.1,
+          "latencyMs": {
+            "p50": 2357,
+            "p95": 3800.1,
+            "p99": 4232,
+            "max": 4232
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 24,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "push": {
+          "attempts": 24,
+          "successes": 6,
+          "successesPerSec": 0.28,
+          "latencyMs": {
+            "p50": 818.9,
+            "p95": 2381.6,
+            "p99": 2924.5,
+            "max": 2924.5
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 6,
+            "contention_409": 0,
+            "nonff_rejected": 7,
+            "other": {
+              "412": 10,
+              "remote_rejected": 1
+            }
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 8.4,
+        "p95": 32.6,
+        "p99": 48.4,
+        "max": 48.4
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push nonff_rejected: hint: have locally. This is usually caused by another repository pushing to | hint: the same ref. If you want to integrate the r",
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "push other:remote_rejected: error: failed to push some refs to 'https://demo.gitgolf.mjtechguy.com/git/mj/agent-bench-1.git'"
+      ]
+    },
+    {
+      "scenario": "S1",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 23.25,
+      "attempts": 48,
+      "successes": 3,
+      "successesPerSec": 0.13,
+      "latencyMs": {
+        "p50": 1914.4,
+        "p95": 3999.9,
+        "p99": 4265.4,
+        "max": 4265.4
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 3,
+        "contention_409": 0,
+        "nonff_rejected": 30,
+        "other": {
+          "412": 12,
+          "remote_rejected": 3
+        }
+      },
+      "contention": 30,
+      "ops": {
+        "fetch": {
+          "attempts": 48,
+          "successes": 48,
+          "successesPerSec": 2.06,
+          "latencyMs": {
+            "p50": 5342.6,
+            "p95": 6254.7,
+            "p99": 7556.1,
+            "max": 7556.1
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 48,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "push": {
+          "attempts": 48,
+          "successes": 3,
+          "successesPerSec": 0.13,
+          "latencyMs": {
+            "p50": 1914.4,
+            "p95": 3999.9,
+            "p99": 4265.4,
+            "max": 4265.4
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 3,
+            "contention_409": 0,
+            "nonff_rejected": 30,
+            "other": {
+              "412": 12,
+              "remote_rejected": 3
+            }
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 4.9,
+        "p95": 17.4,
+        "p99": 19.4,
+        "max": 19.4
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "push nonff_rejected: hint: have locally. This is usually caused by another repository pushing to | hint: the same ref. If you want to integrate the r",
+        "push other:remote_rejected: error: failed to push some refs to 'https://demo.gitgolf.mjtechguy.com/git/mj/agent-bench-1.git'"
+      ]
+    },
+    {
+      "scenario": "S1",
+      "concurrency": 64,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 35.62,
+      "attempts": 80,
+      "successes": 2,
+      "successesPerSec": 0.06,
+      "latencyMs": {
+        "p50": 4840.1,
+        "p95": 10763.1,
+        "p99": 13127,
+        "max": 13127
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 2,
+        "contention_409": 0,
+        "nonff_rejected": 38,
+        "other": {
+          "412": 37,
+          "remote_rejected": 3
+        }
+      },
+      "contention": 38,
+      "ops": {
+        "fetch": {
+          "attempts": 80,
+          "successes": 80,
+          "successesPerSec": 2.25,
+          "latencyMs": {
+            "p50": 14372.5,
+            "p95": 16512.3,
+            "p99": 16556.2,
+            "max": 16556.2
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 80,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "push": {
+          "attempts": 80,
+          "successes": 2,
+          "successesPerSec": 0.06,
+          "latencyMs": {
+            "p50": 4840.1,
+            "p95": 10763.1,
+            "p99": 13127,
+            "max": 13127
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 2,
+            "contention_409": 0,
+            "nonff_rejected": 38,
+            "other": {
+              "412": 37,
+              "remote_rejected": 3
+            }
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 9.6,
+        "p95": 35.4,
+        "p99": 42.5,
+        "max": 50
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push nonff_rejected: hint: have locally. This is usually caused by another repository pushing to | hint: the same ref. If you want to integrate the r",
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "push other:remote_rejected: error: failed to push some refs to 'https://demo.gitgolf.mjtechguy.com/git/mj/agent-bench-1.git'"
+      ]
+    },
+    {
+      "scenario": "S2",
+      "concurrency": 1,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 20.07,
+      "attempts": 13,
+      "successes": 13,
+      "successesPerSec": 0.65,
+      "latencyMs": {
+        "p50": 1437.2,
+        "p95": 2519.8,
+        "p99": 2519.8,
+        "max": 2519.8
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 13,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 13,
+          "successes": 13,
+          "successesPerSec": 0.65,
+          "latencyMs": {
+            "p50": 1437.2,
+            "p95": 2519.8,
+            "p99": 2519.8,
+            "max": 2519.8
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 13,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 10.4,
+        "p95": 25.8,
+        "p99": 25.8,
+        "max": 25.8
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S2",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 21.6,
+      "attempts": 32,
+      "successes": 3,
+      "successesPerSec": 0.14,
+      "latencyMs": {
+        "p50": 998.6,
+        "p95": 2022.3,
+        "p99": 2027.3,
+        "max": 2027.3
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 3,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "412": 29
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 32,
+          "successes": 3,
+          "successesPerSec": 0.14,
+          "latencyMs": {
+            "p50": 998.6,
+            "p95": 2022.3,
+            "p99": 2027.3,
+            "max": 2027.3
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 3,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "412": 29
+            }
+          }
+        },
+        "fetch": {
+          "attempts": 25,
+          "successes": 18,
+          "successesPerSec": 0.83,
+          "latencyMs": {
+            "p50": 1539.8,
+            "p95": 2291.9,
+            "p99": 2308.4,
+            "max": 2308.4
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 18,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "missing_ref": 7
+            }
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 11.1,
+        "p95": 20.6,
+        "p99": 31.4,
+        "max": 31.4
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s2-c4-w1"
+      ]
+    },
+    {
+      "scenario": "S2",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 24.99,
+      "attempts": 80,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 1604.4,
+        "p95": 1978.6,
+        "p99": 3101.7,
+        "max": 3101.7
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "412": 80
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 80,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 1604.4,
+            "p95": 1978.6,
+            "p99": 3101.7,
+            "max": 3101.7
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "412": 80
+            }
+          }
+        },
+        "fetch": {
+          "attempts": 64,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 3504.9,
+            "p95": 3837.5,
+            "p99": 4045.9,
+            "max": 4045.9
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "missing_ref": 64
+            }
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 19.5,
+        "p95": 97.5,
+        "p99": 116.5,
+        "max": 116.5
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s2-c16-w6",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s2-c16-w4",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s2-c16-w5",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s2-c16-w9"
+      ]
+    },
+    {
+      "scenario": "S2",
+      "concurrency": 64,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 34.78,
+      "attempts": 128,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 9020.3,
+        "p95": 11574.4,
+        "p99": 11831.7,
+        "max": 11836.5
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "412": 128
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 128,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 9020.3,
+            "p95": 11574.4,
+            "p99": 11831.7,
+            "max": 11836.5
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "412": 128
+            }
+          }
+        },
+        "fetch": {
+          "attempts": 64,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 15236.4,
+            "p95": 16357.6,
+            "p99": 16653.2,
+            "max": 16653.2
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "missing_ref": 64
+            }
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 47.9,
+        "p95": 634.2,
+        "p99": 652.4,
+        "max": 676.8
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s2-c64-w38",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s2-c64-w40",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s2-c64-w58",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s2-c64-w62"
+      ]
+    },
+    {
+      "scenario": "S3",
+      "concurrency": 1,
+      "status": "ok",
+      "notes": [],
+      "repositories": 1,
+      "durationSec": 20.77,
+      "attempts": 13,
+      "successes": 0,
+      "successesPerSec": 0,
+      "latencyMs": {
+        "p50": 509.9,
+        "p95": 935.9,
+        "p99": 935.9,
+        "max": 935.9
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 0,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "412": 13
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 13,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 509.9,
+            "p95": 935.9,
+            "p99": 935.9,
+            "max": 935.9
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "412": 13
+            }
+          }
+        },
+        "fetch": {
+          "attempts": 12,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 865.4,
+            "p95": 1015.1,
+            "p99": 1015.1,
+            "max": 1015.1
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "missing_ref": 12
+            }
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 12.3,
+        "p95": 14.2,
+        "p99": 14.2,
+        "max": 14.2
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s3-c1-w0"
+      ]
+    },
+    {
+      "scenario": "S3",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "repositories": 4,
+      "durationSec": 23.14,
+      "attempts": 33,
+      "successes": 26,
+      "successesPerSec": 1.12,
+      "latencyMs": {
+        "p50": 2448.8,
+        "p95": 3383,
+        "p99": 3424.3,
+        "max": 3424.3
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 26,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "412": 7
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 33,
+          "successes": 26,
+          "successesPerSec": 1.12,
+          "latencyMs": {
+            "p50": 2448.8,
+            "p95": 3383,
+            "p99": 3424.3,
+            "max": 3424.3
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 26,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "412": 7
+            }
+          }
+        },
+        "fetch": {
+          "attempts": 6,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 2475.8,
+            "p95": 3074.5,
+            "p99": 3074.5,
+            "max": 3074.5
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "missing_ref": 6
+            }
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 10.8,
+        "p95": 26.2,
+        "p99": 26.4,
+        "max": 26.4
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s3-c4-w0"
+      ]
+    },
+    {
+      "scenario": "S3",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [
+        "8 repositories for 16 workers; workers share repositories round-robin with a branch each"
+      ],
+      "repositories": 8,
+      "durationSec": 25.86,
+      "attempts": 51,
+      "successes": 45,
+      "successesPerSec": 1.74,
+      "latencyMs": {
+        "p50": 7651.8,
+        "p95": 9106.7,
+        "p99": 9270,
+        "max": 9270
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 45,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "412": 6
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 51,
+          "successes": 45,
+          "successesPerSec": 1.74,
+          "latencyMs": {
+            "p50": 7651.8,
+            "p95": 9106.7,
+            "p99": 9270,
+            "max": 9270
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 45,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "412": 6
+            }
+          }
+        },
+        "fetch": {
+          "attempts": 4,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 7100.9,
+            "p95": 9400.8,
+            "p99": 9400.8,
+            "max": 9400.8
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "missing_ref": 4
+            }
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 16.8,
+        "p95": 107.6,
+        "p99": 128.1,
+        "max": 128.1
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s3-c16-w0",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s3-c16-w8"
+      ]
+    },
+    {
+      "scenario": "S3",
+      "concurrency": 64,
+      "status": "ok",
+      "notes": [
+        "8 repositories for 64 workers; workers share repositories round-robin with a branch each"
+      ],
+      "repositories": 8,
+      "durationSec": 47.58,
+      "attempts": 104,
+      "successes": 44,
+      "successesPerSec": 0.92,
+      "latencyMs": {
+        "p50": 17850.9,
+        "p95": 31784.2,
+        "p99": 32927.5,
+        "max": 32942.5
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 44,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {
+          "412": 60
+        }
+      },
+      "contention": 0,
+      "ops": {
+        "push": {
+          "attempts": 104,
+          "successes": 44,
+          "successesPerSec": 0.92,
+          "latencyMs": {
+            "p50": 17850.9,
+            "p95": 31784.2,
+            "p99": 32927.5,
+            "max": 32942.5
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 44,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "412": 60
+            }
+          }
+        },
+        "fetch": {
+          "attempts": 15,
+          "successes": 0,
+          "successesPerSec": 0,
+          "latencyMs": {
+            "p50": 27576,
+            "p95": 32807.8,
+            "p99": 32807.8,
+            "max": 32807.8
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 0,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {
+              "missing_ref": 15
+            }
+          }
+        }
+      },
+      "localGitMs": {
+        "p50": 393.1,
+        "p95": 578.2,
+        "p99": 590.3,
+        "max": 591.8
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s3-c64-w45",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s3-c64-w37",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s3-c64-w32",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s3-c64-w16"
+      ]
+    },
+    {
+      "scenario": "S4",
+      "concurrency": 1,
+      "status": "ok",
+      "notes": [
+        "clone is `git clone --depth 1 --no-checkout`; ls_remote lists HEAD"
+      ],
+      "durationSec": 20.62,
+      "attempts": 19,
+      "successes": 19,
+      "successesPerSec": 0.92,
+      "latencyMs": {
+        "p50": 930.6,
+        "p95": 3450.2,
+        "p99": 3450.2,
+        "max": 3450.2
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 19,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "clone": {
+          "attempts": 10,
+          "successes": 10,
+          "successesPerSec": 0.49,
+          "latencyMs": {
+            "p50": 932.9,
+            "p95": 1083.3,
+            "p99": 1083.3,
+            "max": 1083.3
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 10,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "ls_remote": {
+          "attempts": 9,
+          "successes": 9,
+          "successesPerSec": 0.44,
+          "latencyMs": {
+            "p50": 920.4,
+            "p95": 3450.2,
+            "p99": 3450.2,
+            "max": 3450.2
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 9,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "background": {
+        "attempts": 11,
+        "successes": 0,
+        "successesPerSec": 0,
+        "latencyMs": {
+          "p50": 552.5,
+          "p95": 999.9,
+          "p99": 999.9,
+          "max": 999.9
+        },
+        "outcomes": {
+          "413": 0,
+          "429": 0,
+          "503": 0,
+          "ok": 0,
+          "contention_409": 0,
+          "nonff_rejected": 0,
+          "other": {
+            "412": 11
+          }
+        }
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c1-bg-w0"
+      ]
+    },
+    {
+      "scenario": "S4",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [
+        "clone is `git clone --depth 1 --no-checkout`; ls_remote lists HEAD"
+      ],
+      "durationSec": 21.71,
+      "attempts": 46,
+      "successes": 46,
+      "successesPerSec": 2.12,
+      "latencyMs": {
+        "p50": 1760.2,
+        "p95": 2576.2,
+        "p99": 3060.3,
+        "max": 3060.3
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 46,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "clone": {
+          "attempts": 24,
+          "successes": 24,
+          "successesPerSec": 1.11,
+          "latencyMs": {
+            "p50": 1740.5,
+            "p95": 2556,
+            "p99": 2637.2,
+            "max": 2637.2
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 24,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "ls_remote": {
+          "attempts": 22,
+          "successes": 22,
+          "successesPerSec": 1.01,
+          "latencyMs": {
+            "p50": 1800.1,
+            "p95": 2576.2,
+            "p99": 3060.3,
+            "max": 3060.3
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 22,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "background": {
+        "attempts": 27,
+        "successes": 0,
+        "successesPerSec": 0,
+        "latencyMs": {
+          "p50": 899.9,
+          "p95": 2100.4,
+          "p99": 2479.8,
+          "max": 2479.8
+        },
+        "outcomes": {
+          "413": 0,
+          "429": 0,
+          "503": 0,
+          "ok": 0,
+          "contention_409": 0,
+          "nonff_rejected": 0,
+          "other": {
+            "412": 27
+          }
+        }
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c4-bg-w0",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c4-bg-w2",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c4-bg-w3",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c4-bg-w1"
+      ]
+    },
+    {
+      "scenario": "S4",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [
+        "clone is `git clone --depth 1 --no-checkout`; ls_remote lists HEAD"
+      ],
+      "durationSec": 24.81,
+      "attempts": 64,
+      "successes": 64,
+      "successesPerSec": 2.58,
+      "latencyMs": {
+        "p50": 6331.3,
+        "p95": 7949.9,
+        "p99": 8365.5,
+        "max": 8365.5
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 64,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "clone": {
+          "attempts": 32,
+          "successes": 32,
+          "successesPerSec": 1.29,
+          "latencyMs": {
+            "p50": 4127,
+            "p95": 7160.6,
+            "p99": 7262.9,
+            "max": 7262.9
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 32,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "ls_remote": {
+          "attempts": 32,
+          "successes": 32,
+          "successesPerSec": 1.29,
+          "latencyMs": {
+            "p50": 7057.1,
+            "p95": 8332.2,
+            "p99": 8365.5,
+            "max": 8365.5
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 32,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "background": {
+        "attempts": 45,
+        "successes": 0,
+        "successesPerSec": 0,
+        "latencyMs": {
+          "p50": 3608,
+          "p95": 6996.8,
+          "p99": 7023.3,
+          "max": 7023.3
+        },
+        "outcomes": {
+          "413": 0,
+          "429": 0,
+          "503": 0,
+          "ok": 0,
+          "contention_409": 0,
+          "nonff_rejected": 0,
+          "other": {
+            "412": 45
+          }
+        }
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c16-bg-w10",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c16-bg-w9",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c16-bg-w0",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c16-bg-w4"
+      ]
+    },
+    {
+      "scenario": "S4",
+      "concurrency": 64,
+      "status": "ok",
+      "notes": [
+        "clone is `git clone --depth 1 --no-checkout`; ls_remote lists HEAD"
+      ],
+      "durationSec": 44.88,
+      "attempts": 128,
+      "successes": 128,
+      "successesPerSec": 2.85,
+      "latencyMs": {
+        "p50": 16355.7,
+        "p95": 28139,
+        "p99": 28564.1,
+        "max": 28821
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 128,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "clone": {
+          "attempts": 64,
+          "successes": 64,
+          "successesPerSec": 1.43,
+          "latencyMs": {
+            "p50": 12926.5,
+            "p95": 16333.2,
+            "p99": 16355.7,
+            "max": 16355.7
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 64,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "ls_remote": {
+          "attempts": 64,
+          "successes": 64,
+          "successesPerSec": 1.43,
+          "latencyMs": {
+            "p50": 26542.4,
+            "p95": 28182,
+            "p99": 28821,
+            "max": 28821
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 64,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "background": {
+        "attempts": 107,
+        "successes": 14,
+        "successesPerSec": 0.31,
+        "latencyMs": {
+          "p50": 16268.2,
+          "p95": 20831.1,
+          "p99": 21026.6,
+          "max": 21123.2
+        },
+        "outcomes": {
+          "413": 0,
+          "429": 0,
+          "503": 0,
+          "ok": 14,
+          "contention_409": 0,
+          "nonff_rejected": 0,
+          "other": {
+            "412": 93
+          }
+        }
+      },
+      "releases": {
+        "release": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ],
+        "workerRelease": [
+          "d53fd6a3409a1786d41950e4fb03ca63789ff8286564b68ddcf0a0c7213b175a"
+        ]
+      },
+      "errorSamples": [
+        "push other:412: send-pack: unexpected disconnect while reading sideband packet | fatal: the remote end hung up unexpectedly",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c64-bg-w61",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c64-bg-w62",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c64-bg-w51",
+        "fetch other:missing_ref: fatal: couldn't find remote ref refs/heads/bench/20261014-0f51af/s4-c64-bg-w57"
+      ]
+    }
+  ],
+  "cleanup": {
+    "attempted": 259,
+    "deleted": 46,
+    "absent": 0,
+    "failed": [
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s1-c1-shared",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s1-c4-shared",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s1-c16-shared",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s1-c64-shared",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c1-w0",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c4-w2",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c4-w3",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c4-w0",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c4-w1",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w14",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w10",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w6",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w13",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w12",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w15",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w4",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w2",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w9",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w5",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w1",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w11",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w7",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w8",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w0",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c16-w3",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w63",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w62",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w60",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w59",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w58",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w57",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w56",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w54",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w52",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w51",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w50",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w49",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w48",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w47",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w46",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w45",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w44",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w43",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w42",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w41",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w40",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w39",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w38",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w37",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w36",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w35",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w34",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w33",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w32",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w31",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w30",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w29",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w28",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w27",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w25",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w24",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w23",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w21",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w20",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w19",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w18",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w17",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w16",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w15",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w14",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w13",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w12",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w11",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w10",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w9",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w8",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w7",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w6",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w5",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w4",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w3",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w2",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w1",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w53",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w55",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w61",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w26",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w0",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s2-c64-w22",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c1-w0",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c4-w0",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c16-w8",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c16-w0",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c64-w32",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c64-w24",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c64-w16",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c64-w8",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c64-w0",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c64-w56",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c64-w48",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s3-c64-w40",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c1-bg-w0",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c4-bg-w0",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c4-bg-w2",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c4-bg-w1",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c4-bg-w3",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w0",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w11",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w10",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w4",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w5",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w15",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w9",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w14",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w8",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w3",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w2",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w1",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w6",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w13",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w7",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c16-bg-w12",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w62",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w61",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w60",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w59",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w58",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w57",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w56",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w55",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w54",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w53",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w52",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w51",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w50",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w49",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w48",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w47",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w46",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w45",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w44",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w43",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w42",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w41",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w40",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w39",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w38",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w37",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w36",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w35",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w34",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w33",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w32",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w31",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w30",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w29",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w28",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w27",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w26",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w25",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w24",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w23",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w22",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w21",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w20",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w19",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w18",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w17",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w16",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w15",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w14",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w13",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w12",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w11",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w10",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w9",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w8",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w7",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w6",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w5",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w4",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w3",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w2",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w1",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w0",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261014-0f51af/s4-c64-bg-w63",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-2",
+        "branch": "bench/20261014-0f51af/s3-c64-w41",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-2",
+        "branch": "bench/20261014-0f51af/s3-c64-w9",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-2",
+        "branch": "bench/20261014-0f51af/s3-c64-w1",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-2",
+        "branch": "bench/20261014-0f51af/s3-c64-w57",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-2",
+        "branch": "bench/20261014-0f51af/s3-c64-w49",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-2",
+        "branch": "bench/20261014-0f51af/s3-c64-w33",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-3",
+        "branch": "bench/20261014-0f51af/s3-c64-w10",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-3",
+        "branch": "bench/20261014-0f51af/s3-c64-w58",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-5",
+        "branch": "bench/20261014-0f51af/s3-c16-w4",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-5",
+        "branch": "bench/20261014-0f51af/s3-c16-w12",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-5",
+        "branch": "bench/20261014-0f51af/s3-c64-w52",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-5",
+        "branch": "bench/20261014-0f51af/s3-c64-w44",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-5",
+        "branch": "bench/20261014-0f51af/s3-c64-w36",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-5",
+        "branch": "bench/20261014-0f51af/s3-c64-w28",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-5",
+        "branch": "bench/20261014-0f51af/s3-c64-w20",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-5",
+        "branch": "bench/20261014-0f51af/s3-c64-w12",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-5",
+        "branch": "bench/20261014-0f51af/s3-c64-w4",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-5",
+        "branch": "bench/20261014-0f51af/s3-c64-w60",
+        "outcome": "other:412"
+      },
+      {
+        "repository": "mj/agent-bench-6",
+        "branch": "bench/20261014-0f51af/s3-c64-w45",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-6",
+        "branch": "bench/20261014-0f51af/s3-c64-w37",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-6",
+        "branch": "bench/20261014-0f51af/s3-c64-w13",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-6",
+        "branch": "bench/20261014-0f51af/s3-c64-w5",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-6",
+        "branch": "bench/20261014-0f51af/s3-c64-w61",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-7",
+        "branch": "bench/20261014-0f51af/s3-c64-w6",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-7",
+        "branch": "bench/20261014-0f51af/s3-c64-w62",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-8",
+        "branch": "bench/20261014-0f51af/s3-c64-w63",
+        "outcome": "other:400"
+      },
+      {
+        "repository": "mj/agent-bench-8",
+        "branch": "bench/20261014-0f51af/s3-c64-w55",
+        "outcome": "other:400"
+      }
+    ]
+  }
+}

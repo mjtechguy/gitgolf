@@ -82,6 +82,8 @@ async function startServer(root) {
     }
     if (req.url === '/native/source/commit') {
       if (auth !== bearer) return json(401, { code: 'unauthenticated' });
+      // Golf's native routes require the Connect protocol header, as on a real deployment.
+      if (req.headers['connect-protocol-version'] !== '1') return json(400, { code: 'invalid_argument', message: 'Use Connect JSON POST.' });
       if (!input.branch) return json(400, { code: 'invalid_argument' });
       calls.source++;
       const current = heads.get(input.branch);

@@ -82,7 +82,7 @@ function gitAuth(cfg, repo) {
   return cfg.apiToken ? 'Bearer ' + cfg.apiToken : '';
 }
 const gitHeaders = (cfg, repo) => ({ ...accessHeaders(cfg), Authorization: gitAuth(cfg, repo) });
-const apiHeaders = cfg => ({ ...accessHeaders(cfg), ...(cfg.apiToken ? { Authorization: 'Bearer ' + cfg.apiToken } : {}), 'Content-Type': 'application/json' });
+const apiHeaders = cfg => ({ ...accessHeaders(cfg), ...(cfg.apiToken ? { Authorization: 'Bearer ' + cfg.apiToken } : {}), 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' });
 const gitUrl = (cfg, repo) => `${cfg.origin}/git/${repo}.git`;
 
 // Git reads its config from env so headers stay out of argv. User/system config and inherited
@@ -380,8 +380,10 @@ async function scenario(ctx, id, n) {
 
   // S6: Source API commits (AM-2 contract), a branch per writer and all writers on one branch.
   if (!ctx.cfg.apiToken) return skip('unavailable', 'GOLF_BENCH_API_TOKEN is not set');
-  const url = `${ctx.cfg.origin}/native/source/commit`, probe = await post(ctx, url, apiHeaders(ctx.cfg), {}, rec);
-  if (probe.status === 404) return skip('unavailable', 'POST /native/source/commit returned 404');
+  // The probe names a real repository and no changes: a deployment with the route answers 400 (no changes); one without it, 404 or 501.
+  const [owner, name] = repo.split('/'), url = `${ctx.cfg.origin}/native/source/commit`;
+  const probe = await post(ctx, url, apiHeaders(ctx.cfg), { repository: { owner, name }, branch: 'bench/probe', expectedHead: '', message: 'probe', changes: [] }, rec);
+  if (probe.status === 404 || probe.status === 501) return skip('unavailable', `POST /native/source/commit returned ${probe.status}`);
   const s = await seed(ctx, repo);
   if (!s.base) return skip('skipped', 'empty repository');
   const out = [];
