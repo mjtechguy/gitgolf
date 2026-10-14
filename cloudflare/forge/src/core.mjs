@@ -25,6 +25,7 @@ import { pipelineAPI, pipelineRunnerAPI } from './pipeline-api.mjs';
 import { agentHostsAPI, agentTasksAPI, agentHostCapability } from './agent-hosts.mjs';
 import { agentHostMachine } from './agent-host-protocol.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
+import { reserveRefWrite, finishRefWrite } from './ref-writes.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
@@ -55,31 +56,42 @@ import { discussionAttachments, attachmentMethods } from './attachments.mjs';
 import { featureColumns, publicAllowed, requireFeature, featureOff, policyCapabilities, featurePolicyService, repositoryFeatureService, effectiveFeatures, discussionFeatures } from './feature-policy.mjs';
 import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user, bodyLimit } from './common.mjs';
 export { digest } from './common.mjs';
-import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, remote, sha, validRef, GitProviderError } from './git.mjs';
+import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, refusedRef, remote, sha, validRef, GitProviderError } from './git.mjs';
 
 const jsonHeaders = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
-export function serialize(handler, isRead = () => false) {
-  const queue = []; let running = 0, writing = false;
+// Admission classes: reads overlap (8 at once); transfers (clone, fetch, push) overlap reads and each other (24); anything else is
+// exclusive: it waits for every running request and fences every later admission. classify returns a class, or true for a read.
+const admissionLimits = { read: 8, transfer: 24 };
+export function serialize(handler, classify = () => 'exclusive') {
+  const queue = [], running = { read: 0, transfer: 0, exclusive: 0 };
   const drain = () => {
-    if (writing) return;
-    while (queue.length && running < 8) {
-      const next = queue[0];
-      if (!next.read && running) return;
-      queue.shift(); running++; writing = !next.read;
+    for (let i = 0; i < queue.length && !running.exclusive;) {
+      const next = queue[i], kind = next.kind;
+      if (kind === 'exclusive' && (i || running.read || running.transfer)) return;
+      if (kind !== 'exclusive' && running[kind] >= admissionLimits[kind]) { i++; continue; }
+      queue.splice(i, 1); running[kind]++;
       const delay = performance.now() - next.enqueued;
-      Promise.resolve().then(() => handler(next.request)).then(value => next.resolve(value instanceof Response ? timedResponse(value, null, 'queue', delay) : value), next.reject).finally(() => { running--; writing = false; drain(); });
-      if (writing) return;
+      Promise.resolve().then(() => handler(next.request)).then(value => next.resolve(value instanceof Response ? timedResponse(value, null, 'queue', delay) : value), next.reject).finally(() => { running[kind]--; drain(); });
     }
   };
   return request => new Promise((resolve, reject) => {
-    if (queue.length >= 128) {
+    if (queue.length >= 512) {
       const error = new Fault('resource_exhausted', 429, 'Workspace is busy. Retry with backoff.');
       if (request instanceof Request) resolve(new Response(JSON.stringify({ code: error.code, message: error.message }), { status: 429, headers: { ...jsonHeaders, 'Content-Type': 'application/json', 'Retry-After': '1' } }));
       else reject(error);
       return;
     }
-    queue.push({ request, read: isRead(request), resolve, reject, enqueued: performance.now() }); drain();
+    const kind = classify(request);
+    queue.push({ request, kind: kind === true || kind === 'read' ? 'read' : kind === 'transfer' ? 'transfer' : 'exclusive', resolve, reject, enqueued: performance.now() }); drain();
   });
+}
+const transferRoute = /^\/(?:git\/[^/]+\/[^/]+\.git|native\/agent-host\/tasks\/[0-9a-f-]{36}\/git)\/(info\/refs|git-upload-pack|git-receive-pack)$/;
+// Smart HTTP Git is a transfer: pushes to one ref are ordered by the D1 ref fence, not by this queue.
+export function admission(request) {
+  if (!(request instanceof Request)) return 'exclusive';
+  const route = transferRoute.exec(new URL(request.url).pathname);
+  if (route) return request.method === (route[1] === 'info/refs' ? 'GET' : 'POST') ? 'transfer' : 'exclusive';
+  return concurrentRead(request) ? 'read' : 'exclusive';
 }
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
@@ -254,35 +266,30 @@ async function git(db, env, person, request, url, providerFetch) {
     rulesVersion = await enforceGitRules(db, row, person, command.ref);
   }
   return withArtifact(env, row, async repo => {
-    let operation;
+    let operation, result, applied = !command, refused = false;
     if (command) {
       operation = crypto.randomUUID();
-      const reserved = await db.batch([
-        db.prepare(`INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at)
-          SELECT ?,?,?,?,?,?,'DISPATCHED',? WHERE EXISTS(SELECT 1 FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id
+      if (!await reserveRefWrite(db, { id: operation, repositoryId: row.id, userId: person.id, command, guard: { sql: `EXISTS(SELECT 1 FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id
             LEFT JOIN repository_access_versions a ON a.repository_id=r.id LEFT JOIN native_identity_versions v ON v.user_id=u.id
-            WHERE r.id=? AND r.artifact_name=? AND r.state='ACTIVE' AND r.write_pending IS NULL AND g.user_id=? AND g.role IN ('write','admin') AND u.active=1
+            WHERE r.id=? AND r.artifact_name=? AND r.state='ACTIVE' AND g.user_id=? AND g.role IN ('write','admin') AND u.active=1
             AND COALESCE(a.version,0)=? AND COALESCE(v.version,0)=? AND COALESCE((SELECT version FROM repository_rules WHERE repository_id=r.id),0)=?
             AND (?='' OR EXISTS(SELECT 1 FROM credentials WHERE digest=? AND user_id=u.id AND revoked=0 AND expires_at>CAST(strftime('%s','now') AS INTEGER)))
-            AND (?='' OR EXISTS(${gitCredentialSQL} AND c.repository_id=? AND c.mode=2)))`)
-          .bind(operation, row.id, person.id, command.ref, command.old, command.next, new Date().toISOString(),row.id,row.artifact_name,person.id,row.access_version||0,person.identity_version||0,rulesVersion,person.credential_digest||'',person.credential_digest||'',person.git_credential_digest||'',person.git_credential_digest||'',row.id),
-        db.prepare('UPDATE repositories SET write_pending=? WHERE id=? AND write_pending IS NULL AND changes()=1 AND EXISTS(SELECT 1 FROM git_operations WHERE id=?)').bind(operation, row.id, operation),
-      ]);
-      if (reserved[1].meta.changes !== 1) conflict();
+            AND (?='' OR EXISTS(${gitCredentialSQL} AND c.repository_id=? AND c.mode=2)))`,
+          values: [row.id,row.artifact_name,person.id,row.access_version||0,person.identity_version||0,rulesVersion,person.credential_digest||'',person.credential_digest||'',person.git_credential_digest||'',person.git_credential_digest||'',row.id] } })) conflict();
     }
-    const result = await gitRequest(env, repo, row.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
-    if (operation) {
-      const observed = (await refs(env, repo, row, providerFetch)).get(command.ref) || '0'.repeat(40);
-      if (observed !== command.next) conflict();
-      await db.batch([
-        db.prepare("UPDATE git_operations SET state='APPLIED',ci_state=? WHERE id=? AND state='DISPATCHED'").bind(env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE', operation),
-        db.prepare('UPDATE repositories SET write_pending=NULL WHERE id=? AND write_pending=?').bind(row.id, operation),
-      ]);
-      // Actions/CI: the confirmed push is recorded before the response; discovery runs after it.
-      if (pipelinePolicy(env) && command.next !== '0'.repeat(40)) {
-        try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'push', { ref: command.ref, before: command.old, after: command.next, actorId: person.id, operationId: operation }, 'push:' + operation), withArtifact); }
-        catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
-      }
+    try {
+      result = await gitRequest(env, repo, row.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
+      if (operation) applied = ((await refs(env, repo, row, providerFetch)).get(command.ref) || '0'.repeat(40)) === command.next;
+      // A refused update (a lost race: "fetch first") goes back to the client as Git's own report.
+      refused = Boolean(operation) && !applied && refusedRef(result.bytes, command.ref);
+    } finally {
+      if (operation) await finishRefWrite(db, { id: operation, repositoryId: row.id, applied, refused, ciState: env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE' });
+    }
+    if (!applied && !refused) conflict();
+    // Actions/CI: the confirmed push is recorded before the response; discovery runs after it.
+    if (operation && applied && pipelinePolicy(env) && command.next !== '0'.repeat(40)) {
+      try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'push', { ref: command.ref, before: command.old, after: command.next, actorId: person.id, operationId: operation }, 'push:' + operation), withArtifact); }
+      catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
     }
     await confirmGitCredential(db,person,row);
     let bytes=result.bytes;

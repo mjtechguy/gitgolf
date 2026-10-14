@@ -68,6 +68,27 @@ export function receiveStatus(bytes, ref) {
   } catch { return 'unreadable status'; }
 }
 
+// True only when the receive-pack result reports this ref refused (`ng <ref> <reason>`), plainly or inside side-band 1. Anything
+// unreadable is not a refusal: the caller then treats the outcome as unknown.
+export function refusedRef(bytes, ref) {
+  const rows = data => {
+    const out = [];
+    for (let offset = 0; offset < data.length;) {
+      const header = decoder.decode(data.subarray(offset, offset + 4));
+      if (!/^[0-9a-f]{4}$/.test(header)) throw Error('invalid Git length');
+      const length = parseInt(header, 16);
+      if (length && (length < 4 || offset + length > data.length)) throw Error('invalid Git length');
+      out.push(length ? data.subarray(offset + 4, offset + length) : null); offset += length || 4;
+    }
+    return out;
+  };
+  try {
+    const top = rows(bytes), band = top.filter(row => row?.[0] === 1).map(row => row.subarray(1));
+    const lines = band.length ? rows(Uint8Array.from(band.flatMap(chunk => [...chunk]))) : top;
+    return lines.some(row => row && decoder.decode(row).replace(/\n$/, '').startsWith(`ng ${ref} `));
+  } catch { return false; }
+}
+
 export function advertisedRefs(bytes) {
   const refs = new Map();
   let offset = 0;
