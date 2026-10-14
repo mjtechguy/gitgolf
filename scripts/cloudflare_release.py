@@ -229,7 +229,7 @@ class Release:
             self.migrate_installation_schema(applied)
         if self.manifest['schema'] >= 31:
             self.migrate_feature_policy_schema(applied)
-        if self.manifest['schema'] >= 32:
+        if self.manifest['schema'] >= 33:
             self.migrate_pipeline_schema(applied)
         return applied or 'already-applied'
 
@@ -310,12 +310,12 @@ class Release:
         for table, fields in self.pipeline_tables.items():
             columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
             if {row['name'] for row in columns} != fields:
-                raise ValueError('Apply reviewed 0032 Actions pipeline migration before releasing')
+                raise ValueError('Apply reviewed 0033 Actions pipeline migration before releasing')
 
     def migrate_pipeline_schema(self, applied):
-        sql = (ROOT/'cloudflare/forge/migrations/0032_actions_pipelines.sql').read_text()
+        sql = (ROOT/'cloudflare/forge/migrations/0033_actions_pipelines.sql').read_text()
         digest = hashlib.sha256(sql.encode()).hexdigest()
-        if self.state.get('migration0032') not in (None, digest):
+        if self.state.get('migration0033') not in (None, digest):
             raise ValueError('Recorded Actions pipeline migration differs from reviewed source')
         statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
         if not statements or any(not (s.startswith('CREATE TABLE IF NOT EXISTS pipeline_') or s.startswith('CREATE INDEX IF NOT EXISTS pipeline_')) for s in statements):
@@ -325,10 +325,10 @@ class Release:
             self.check_pipeline_schema(); ready = True
         except ValueError:
             pass
-        if self.state.get('migration0032') != digest or not ready:
+        if self.state.get('migration0033') != digest or not ready:
             self.command('d1', 'query', self.manifest['database'], '--sql', sql)
             self.check_pipeline_schema()
-            self.state['migration0032'] = digest; self.save(); applied.append('0032')
+            self.state['migration0033'] = digest; self.save(); applied.append('0033')
 
     def check_attachment_schema(self):
         required = {'discussion_attachments': {'id', 'repository_id', 'discussion_id', 'comment_id', 'name', 'size', 'sha256', 'r2_key', 'author_id', 'created_at'},

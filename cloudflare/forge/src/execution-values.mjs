@@ -6,6 +6,7 @@ import { nativeWorkflowContract, nativeWorkflowPath, nativeWorkflowSource } from
 import { sealingKey, seal, open } from './sealed.mjs';
 import { testProfile } from './test-policy.mjs';
 import { featureOff } from './feature-policy.mjs';
+import { pipelinePolicy } from './pipeline-policy.mjs';
 
 export const executionValueMethods = new Set(['ListRepositoryExecutionValues', 'SaveRepositoryExecutionValue', 'DeleteRepositoryExecutionValue', 'GetRepositoryExecutionVariable',
   'SaveRepositoryExecutionBinding', 'DeleteRepositoryExecutionBinding', 'GetRepositoryExecutionValueOperation']);
@@ -34,6 +35,8 @@ function approvedProfile(env) {
 }
 // Values are released only to the Cloudflare-hosted Actions shell lane, so an installation without that profile cannot honestly offer them.
 export function executionValueState(env) {
+  // Actions/CI pipelines release values to same-repository runs on registered runners.
+  if (pipelinePolicy(env)) return env.EXECUTION_VALUE_KEY?.get ? { ready: true, reason: '' } : { ready: false, reason: 'Configure a dedicated Secrets Store encryption key for repository values.' };
   const { workflow, module } = approvedProfile(env);
   if (workflow?.format !== 'actions') return { ready: false, reason: 'Repository values need an operator-approved Actions workflow profile; this installation ' +
     (workflow?.format === 'gitlab' ? 'runs an approved GitLab CI workflow' : workflow?.format === 'actions-act' ? 'runs pinned Actions jobs on customer runners' : module ? 'runs an approved Python test module' : 'has no container test allocation') + '.' };
@@ -267,6 +270,18 @@ export async function releaseExecutionValues(env, id, authorize) {
     if (value.kind === 'secret') secrets.push(environment[value.name]);
   }
   return { state: 'RELEASED', environment, secrets };
+}
+
+// Actions/CI pipelines: every current repository value, for the pipeline core to release (secrets only to same-repository runs).
+export async function openRepositoryValues(db, env, row) {
+  if (!env.EXECUTION_VALUE_KEY?.get) return { secrets: {}, variables: {} };
+  const { results } = await db.prepare('SELECT * FROM execution_values WHERE repository_id=? AND artifact_name=? AND deleted=0 ORDER BY name LIMIT ?').bind(row.id, row.artifact_name, maximumValues).all();
+  const secrets = {}, variables = {};
+  for (const value of results) {
+    if (!executionValueName(value.name)) continue;
+    (value.kind === 'secret' ? secrets : variables)[value.name] = await openVersion(db, env, row, value, value.version);
+  }
+  return { secrets, variables };
 }
 
 // Marks every byte of every exact occurrence across the ordered chunks, so a secret split over a chunk boundary is covered and chunk lengths are kept.

@@ -8,6 +8,7 @@ import { webhookPolicy } from './webhooks.mjs';
 import { emailPolicy } from './email.mjs';
 import { executionValueState } from './execution-values.mjs';
 import { operationsAdmin } from './operations.mjs';
+import { pipelinePolicy } from './pipeline-policy.mjs';
 import { auditStatement, clientHeaders, locked } from './installation.mjs';
 import { settingsAuthority } from './repository-settings.mjs';
 
@@ -17,8 +18,8 @@ import { settingsAuthority } from './repository-settings.mjs';
 const catalogue = [
   { id: 'pull-requests', label: 'Pull requests', plural: true, group: 'Collaboration', requires: [], choice: true, allocated: () => true },
   { id: 'issues', label: 'Issues', plural: true, group: 'Collaboration', requires: [], choice: true, allocated: () => true },
-  // Every native run is a pull-request run, so Actions needs pull requests.
-  { id: 'actions', label: 'Actions', group: 'Automation', requires: ['pull-requests'], choice: true, allocated: env => Boolean(testPolicy(env)) && evidencePolicy(env) || 'The operator has not allocated pull-request test execution (evidence queue, workflow and an approved test profile) on this installation.' },
+  // PR evidence runs are pull-request runs, so that lane needs pull requests; Actions pipelines also run on push and dispatch.
+  { id: 'actions', label: 'Actions', group: 'Automation', requires: env => pipelinePolicy(env) ? [] : ['pull-requests'], choice: true, allocated: env => pipelinePolicy(env) || Boolean(testPolicy(env)) && evidencePolicy(env) || 'The operator has not allocated Actions pipelines (runner protocol and R2 log bucket) or pull-request test execution on this installation.' },
   { id: 'secrets', label: 'Secrets and variables', plural: true, group: 'Automation', requires: ['actions'], choice: true, allocated: env => executionValueState(env).ready || executionValueState(env).reason },
   { id: 'previews', label: 'Previews and environments', plural: true, group: 'Automation', requires: ['actions'], choice: true, allocated: env => previewPolicy(env) || 'The operator has not allocated protected previews (preview Worker, origin and Access application) on this installation.' },
   { id: 'agents', label: 'Agent proposals', plural: true, group: 'Automation', requires: ['actions', 'pull-requests'], choice: true, allocated: env => evidencePolicy(env) && agentPolicy(env) || 'The operator has not allocated native agent proposals on this installation.' },
@@ -33,6 +34,7 @@ const catalogue = [
   { id: 'public-repositories', label: 'Public repositories', plural: true, group: 'Distribution', requires: [], choice: false, allocated: env => env.PUBLIC_REPOSITORIES === 'true' || 'The operator has not enabled public repositories for this deployment.' },
 ];
 const known = new Map(catalogue.map(feature => [feature.id, feature]));
+const needs = (feature, env) => typeof feature.requires === 'function' ? feature.requires(env) : feature.requires;
 const modes = ['UNSPECIFIED', 'DISABLED', 'ALLOWED', 'ENFORCED'], rank = { DISABLED: 0, ALLOWED: 1, ENFORCED: 2 };
 const be = feature => feature.plural ? 'are' : 'is';
 const named = (value, prefix, names) => typeof value === 'string' ? names.indexOf(value.replace(prefix, '')) : value;
@@ -60,7 +62,7 @@ export function effectiveFeatures(env, row, subject = 'this repository') {
     // Actions writes through the repository execution switch: either kind of run on means Actions is on; another artifact's row enables nothing.
     const enabled = !feature.choice || (id === 'actions' ? !execution || Boolean(execution[2] && (execution[0] || execution[1])) : choices.get(id)?.enabled !== 0);
     const version = id === 'actions' ? execution?.[3] || 0 : choices.get(id)?.version || 0;
-    const blocked = feature.requires.map(required => result.get(required)).find(required => !required.effective);
+    const requires = needs(feature, env), blocked = requires.map(required => result.get(required)).find(required => !required.effective);
     let decidedBy, reason, effective = false;
     if (allocated !== true) [decidedBy, reason] = ['OPERATOR', allocated];
     // A dependency the operator never allocated makes this feature unallocated too: no policy decided it.
@@ -74,7 +76,7 @@ export function effectiveFeatures(env, row, subject = 'this repository') {
       decidedBy = enforced ? installation === 'ENFORCED' ? 'INSTALLATION' : 'ORGANIZATION' : feature.choice ? 'REPOSITORY' : 'INSTALLATION';
       reason = enforced ? `${label} ${be(feature)} required for ${subject} by the ${levels[decidedBy]} policy.` : feature.choice ? `${label} ${be(feature)} on; the installation policy lets repository administrators turn ${feature.plural ? 'them' : 'it'} off.` : `${label} ${be(feature)} allowed by the installation policy.`;
     }
-    result.set(id, { id, label, group: feature.group, requires: feature.requires, effective, decidedBy, reason, repositoryEnabled: enabled, version,
+    result.set(id, { id, label, group: feature.group, requires, effective, decidedBy, reason, repositoryEnabled: enabled, version,
       canChange: feature.choice && allocated === true && installation !== 'DISABLED' && owner !== 'DISABLED' && !enforced, installation, organization: owner });
   }
   return result;
@@ -218,7 +220,7 @@ async function installationPolicy(db, env) {
     const row = rows.find(item => item.feature === feature.id), allocated = feature.allocated(env);
     const on = reach.filter(([repository, features]) => features.get(feature.id).effective && (feature.id !== 'public-repositories' || repository.is_public)).length;
     return { feature: feature.id, mode: 'FEATURE_POLICY_MODE_' + (row?.mode || 'ALLOWED'), version: String(row?.version || 0), updatedBy: row?.login || '', updatedAt: row?.updated_at || '',
-      label: feature.label, group: feature.group, allocated: allocated === true, unavailableReason: allocated === true ? '' : allocated, requires: feature.requires,
+      label: feature.label, group: feature.group, allocated: allocated === true, unavailableReason: allocated === true ? '' : allocated, requires: needs(feature, env),
       repositoriesOn: on, repositoriesTotal: repositories.length, repositoryChoice: feature.choice };
   });
   return { scope: 'FEATURE_POLICY_SCOPE_INSTALLATION', scopeId: '', policies, revision: String(revision?.revision || 0), canEdit: !locked(env), lastChangedAt: latest?.updated_at || '', lastChangedBy: latest?.login || '' };

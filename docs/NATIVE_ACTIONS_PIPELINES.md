@@ -28,7 +28,7 @@ Capability ids (honest: READY only when the route exists and the binding is pres
 `actions.pipelines` (runs, triggers, UI), `actions.forgejo-runner` (stock Forgejo Runner protocol),
 `actions.gitlab-runner` (RUN-C), `actions.artifacts` (v4 Twirp artifacts in R2), `settings.pipeline-runners`.
 
-## D1 schema — migration `0032_actions_pipelines.sql` (also appended to `schema.sql`; schema version 32)
+## D1 schema — migration `0033_actions_pipelines.sql` (also appended to `schema.sql`; schema version 33)
 
 ```sql
 CREATE TABLE IF NOT EXISTS pipeline_registration_tokens (
@@ -185,8 +185,10 @@ BLOCKED ──needs/stage satisfied──▶ QUEUED ──claimed by runner─�
   MANUAL, never blocks the run from finishing unless `allow_failure=0`); `conditional` (Forgejo job with an
   `if:`: becomes QUEUED once predecessors are terminal, whatever their result — the runner evaluates the `if:`
   with the `needs` context and reports SKIPPED/SUCCESS).
-- GitLab stages: a job without `needs` is blocked until every job with a lower `stage_index` is terminal
-  (GitLab semantics). A job with explicit `needs` (`needs: []` included) ignores stage order.
+- The core knows only `needs`. GitLab stage order is expanded by `gitlab-pipeline.mjs`: a job without
+  explicit `needs` gets every job of all earlier stages as its `needs`; a job with explicit `needs`
+  (`needs: []` included) keeps exactly those. Jobs whose predecessors were SKIPPED still run for GitLab
+  (`engine='gitlab-ci'`), as GitLab does; for Forgejo a SKIPPED predecessor skips an `on_success` job.
 - Timeouts: a RUNNING job past `started_at + timeout_seconds` becomes FAILURE (`failure_reason='timeout'`);
   a RUNNING job whose runner has not reported for 10 minutes becomes FAILURE (`failure_reason='runner_lost'`).
 
@@ -266,11 +268,14 @@ export async function listRunArtifacts(db, env, runId);
 export async function openArtifact(db, env, artifactId);          // → { row, body: ReadableStream } (blocks concatenated)
 ```
 
-Job tokens: `golf_job_<jobId>_<64 hex>` is not used by Forgejo; Forgejo jobs get a JWT-shaped token
+Job tokens are minted by `claimPipelineJob`. Forgejo jobs get a JWT-shaped token
 `<header>.<payload>.<random>` whose payload carries `scp: "Actions.Results:<runId>:<jobId>"` because
-`@actions/artifact` reads it. Both are opaque to Golf: only `SHA-256(token)` is stored. GitLab jobs use the
-token RUN-C chooses, stored the same way (`claimPipelineJob` returns it). A token is valid only while its job is
-RUNNING and before `token_expires_at` (= start + timeout + 10 minutes); it reads exactly the run's repository
+`@actions/artifact` reads it; GitLab jobs get `golfjob_<64 hex>` (the prefix tells pipeline job tokens apart
+from evidence-path leases). Only `SHA-256(token)` is stored. A token is valid only while its job is
+RUNNING and before `token_expires_at` (= start + timeout + 10 minutes); `jobByToken` throws
+`Fault('cancelled', 409)` for a job that was cancelled while running (its token is kept until expiry so the
+runner can be told), and `Fault('unauthenticated', 401)` otherwise. A running job of a run whose cancellation
+was requested reads `run.cancel_requested = 1`. It reads exactly the run's repository
 and writes only that job's logs, status and artifacts.
 
 Runner credentials: Forgejo runners present `x-runner-uuid` + `x-runner-token`; GitLab runners present

@@ -821,7 +821,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0029_discussion_attachments.sql').read_text()
-            later = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0032_actions_pipelines.sql').read_text()
+            later = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0033_actions_pipelines.sql').read_text()
             schema = schema[:-len('\n'+later)]
             self.assertTrue(schema.endswith(';\n\n'+migration))
             db.executescript(schema[:-len('\n'+migration)])
@@ -853,7 +853,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()
-            schema = schema[:-len('\n'+(ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0032_actions_pipelines.sql').read_text())]
+            schema = schema[:-len('\n'+(ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0033_actions_pipelines.sql').read_text())]
             self.assertTrue(schema.endswith(';\n\n'+migration))
             db.executescript(schema[:-len('\n'+migration)])
             lost = True
@@ -886,7 +886,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()
-            schema = schema[:-len('\n'+(ROOT/'cloudflare/forge/migrations/0032_actions_pipelines.sql').read_text())]
+            schema = schema[:-len('\n'+(ROOT/'cloudflare/forge/migrations/0033_actions_pipelines.sql').read_text())]
             self.assertTrue(schema.endswith(';\n\n'+migration))
             db.executescript(schema[:-len('\n'+migration)])
             db.execute("INSERT INTO users(id,login) VALUES(1,'alice')")
