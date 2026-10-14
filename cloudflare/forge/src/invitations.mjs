@@ -14,7 +14,7 @@ const contextSQL = `SELECT i.*,r.name,r.state AS repository_state,r.artifact_nam
   g.role AS issuer_role,rg.role AS recipient_role,
   COALESCE(gv.generation,0) AS current_issuer_generation,COALESCE(rv.generation,0) AS current_recipient_generation
   FROM repository_invitations i JOIN repositories r ON r.id=i.repository_id
-  JOIN workspaces w ON w.slug=? AND w.artifact_namespace=? LEFT JOIN repository_owners ro ON ro.repository_id=r.id LEFT JOIN native_owners o ON o.id=ro.owner_id JOIN users u ON u.id=i.issuer_id JOIN users t ON t.id=i.recipient_id
+  JOIN workspaces w ON w.artifact_namespace=? LEFT JOIN repository_owners ro ON ro.repository_id=r.id LEFT JOIN native_owners o ON o.id=ro.owner_id JOIN users u ON u.id=i.issuer_id JOIN users t ON t.id=i.recipient_id
   LEFT JOIN native_identity_versions uv ON uv.user_id=u.id LEFT JOIN native_identity_versions tv ON tv.user_id=t.id
   LEFT JOIN grants g ON g.repository_id=r.id AND g.user_id=u.id LEFT JOIN grants rg ON rg.repository_id=r.id AND rg.user_id=t.id
   LEFT JOIN collaborator_versions gv ON gv.repository_id=r.id AND gv.user_id=u.id
@@ -22,7 +22,7 @@ const contextSQL = `SELECT i.*,r.name,r.state AS repository_state,r.artifact_nam
 const currentAuthority = `repository_state='ACTIVE' AND current_artifact=artifact_name AND issuer_active=1 AND recipient_active=1
   AND issuer_role='admin' AND current_issuer_version=issuer_version AND current_recipient_version=recipient_version
   AND current_issuer_generation=issuer_generation`;
-function select(db, env, suffix, ...values) { return db.prepare(`SELECT * FROM (${contextSQL}) c ${suffix}`).bind(env.WORKSPACE_SLUG, env.ARTIFACTS_NAMESPACE, ...values); }
+function select(db, env, suffix, ...values) { return db.prepare(`SELECT * FROM (${contextSQL}) c ${suffix}`).bind(env.ARTIFACTS_NAMESPACE, ...values); }
 function eligible(i) { return i.repository_state === 'ACTIVE' && i.current_artifact === i.artifact_name && i.issuer_active === 1 && i.recipient_active === 1 && i.issuer_role === 'admin' && i.current_issuer_version === i.issuer_version && i.current_recipient_version === i.recipient_version && i.current_issuer_generation === i.issuer_generation; }
 function wire(env, i, admin = false) {
   const detailsAvailable = admin || eligible(i) && (i.state !== 'ACCEPTED' || Boolean(i.recipient_role));
@@ -79,7 +79,7 @@ export async function invitations(db, env, person, row, method, body, request) {
     const qualified = `${currentAuthority} AND c.id=? AND recipient_id=? AND state='PENDING' AND revision=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')${accepted ? ' AND current_recipient_generation=recipient_generation' : ''}`;
     const guardedRecord = db.prepare(`INSERT INTO repository_invitation_operations(actor_id,operation_key,invitation_id,input_hash,receipt)
       SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM (${contextSQL}) c WHERE ${qualified})`)
-      .bind(person.id, body.idempotencyKey, invitation.id, hash, JSON.stringify(operation), env.WORKSPACE_SLUG, env.ARTIFACTS_NAMESPACE, invitation.id, person.id, Number(body.expectedRevision));
+      .bind(person.id, body.idempotencyKey, invitation.id, hash, JSON.stringify(operation), env.ARTIFACTS_NAMESPACE, invitation.id, person.id, Number(body.expectedRevision));
     const guard = 'EXISTS(SELECT 1 FROM repository_invitation_operations WHERE actor_id=? AND operation_key=?)';
     const statements = [guardedRecord];
     if (accepted) statements.push(db.prepare(`INSERT INTO grants(repository_id,user_id,role) SELECT ?,?,? WHERE ${guard} ON CONFLICT(repository_id,user_id) DO UPDATE SET role=excluded.role`).bind(invitation.repository_id, person.id, invitation.permission, person.id, body.idempotencyKey));

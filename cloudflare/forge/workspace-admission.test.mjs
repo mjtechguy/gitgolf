@@ -177,3 +177,12 @@ test('a value release never overlaps a client revocation and asks the job author
   assert.deepEqual(f.events, ['authorize', 'answered', 'revoke', 'revoked']);
   await assert.rejects(f.workspace.testValues('not-a-job'), /Invalid value release/);
 });
+
+test('a workspace object left behind by a rename stops its own maintenance alarm', async () => {
+  let deleted = 0; const statements = [];
+  const db = { prepare: sql => ({ bind() { statements.push(sql); return this; }, run: async () => ({ meta: { changes: 1 } }), first: async () => null, all: async () => ({ results: [] }) }), batch: async () => [] };
+  const storage = { sql: { exec() {} }, kv: { get: () => undefined, put() {} }, getAlarm: async () => 1, setAlarm: async () => {}, deleteAlarm: async () => { deleted++; } };
+  const workspace = new Workspace({ id: { name: 'alice' }, storage, exports: {}, waitUntil() {} }, { WORKSPACE_SLUG: 'mj', DB: { ...db, withSession: () => db } });
+  await workspace.alarm();
+  assert.equal(deleted, 1); assert.equal(statements.length, 0);
+});

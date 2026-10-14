@@ -1,7 +1,7 @@
 import { deny, invalid, unsupported, Fault, digest, page } from './common.mjs';
 
 export async function workspace(db, env) {
-  const row = await db.prepare('SELECT * FROM workspaces WHERE slug=? AND artifact_namespace=?').bind(env.WORKSPACE_SLUG, env.ARTIFACTS_NAMESPACE).first();
+  const row = await db.prepare('SELECT * FROM workspaces WHERE artifact_namespace=?').bind(env.ARTIFACTS_NAMESPACE).first();
   if (!row) throw new Fault('failed_precondition', 412, 'The configured native workspace has not been enrolled.');
   return row;
 }

@@ -333,7 +333,8 @@ export async function previewRequest(env, input, authority) {
 async function purge(db, env, preview) {
   await db.prepare('DELETE FROM preview_credentials WHERE preview_id=?').bind(preview.id).run();
   if (preview.kind === 'WORKER') await purgeApp(db, env, preview);
-  const prefix = `native-previews/${env.WORKSPACE_SLUG}/${preview.id}/`;
+  // Keys written under an earlier workspace name stay this preview's own; only the preview id must match.
+  const prefix = /^native-previews\/[a-z0-9][a-z0-9-]{0,38}\//.exec(preview.bundle_key || '')?.[0] + preview.id + '/';
   if (preview.bundle_key !== prefix + preview.bundle_hash + '.json') throw Error('Preview cleanup ownership differs');
   if (preview.capture_key) {
     if (preview.capture_key !== prefix + 'snapshot.png') throw Error('Snapshot cleanup ownership differs');

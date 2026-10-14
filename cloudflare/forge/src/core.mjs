@@ -114,12 +114,12 @@ async function actor(db, request, anonymous = false) {
 
 async function authorizedRepository(db, person, key, env, id) {
   if (!nameOK(key?.owner) || !nameOK(key?.name)) deny();
-  let row = await db.prepare(`SELECT r.*,g.role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,COALESCE(v.version,0) AS access_version,COALESCE(s.description,r.description) AS description FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN workspaces w ON w.slug=? AND w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id LEFT JOIN repository_access_versions v ON v.repository_id=r.id
-    WHERE r.name=? AND g.user_id=? AND r.state='ACTIVE'`).bind(env.WORKSPACE_SLUG, env.ARTIFACTS_NAMESPACE, key.name, person.id).first();
+  let row = await db.prepare(`SELECT r.*,g.role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,COALESCE(v.version,0) AS access_version,COALESCE(s.description,r.description) AS description FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN workspaces w ON w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id LEFT JOIN repository_access_versions v ON v.repository_id=r.id
+    WHERE r.name=? AND g.user_id=? AND r.state='ACTIVE'`).bind(env.ARTIFACTS_NAMESPACE, key.name, person.id).first();
   if (!row && env.publicRead && !person.git_repository_id) row = await db.prepare(`SELECT r.*,'public' AS role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,p.version AS access_version,COALESCE(s.description,r.description) AS description
     FROM repositories r JOIN repository_visibility p ON p.repository_id=r.id AND p.is_public=1
-    JOIN workspaces w ON w.slug=? AND w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
-    WHERE r.name=? AND r.state='ACTIVE'`).bind(env.WORKSPACE_SLUG, env.ARTIFACTS_NAMESPACE, key.name).first();
+    JOIN workspaces w ON w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
+    WHERE r.name=? AND r.state='ACTIVE'`).bind(env.ARTIFACTS_NAMESPACE, key.name).first();
   if (!row || ownerSlug(row,env) !== key.owner || id && String(row.id) !== id || person.git_repository_id && person.git_repository_id!==row.id) deny();
   if (env.PUBLIC_REPOSITORIES === 'true') row.is_public = (await db.prepare('SELECT is_public FROM repository_visibility WHERE repository_id=?').bind(row.id).first())?.is_public || 0;
   return row;

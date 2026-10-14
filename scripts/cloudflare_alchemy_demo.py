@@ -134,7 +134,7 @@ def build(directory, value):
         if tables: raise ValueError('Existing schema has no bootstrap receipt; inspect before recovery')
         query(schema, [])
         replace_private_json(schema_path, identity)
-    query('INSERT INTO workspaces(slug,artifact_namespace) SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM workspaces)', ['alice', value['name']])
+    query('INSERT INTO workspaces(slug,artifact_namespace) SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM workspaces)', [settings['workspace'], value['name']])
     query("INSERT INTO users(id,login,email,can_create) VALUES(1,'mike',?,1) ON CONFLICT(id) DO NOTHING", [value['email']])
     query('INSERT INTO operations_admins(user_id) VALUES(1) ON CONFLICT(user_id) DO NOTHING', [])
     query('INSERT INTO credentials(digest,user_id,expires_at) VALUES(?,1,?) ON CONFLICT(digest) DO NOTHING',
@@ -232,6 +232,25 @@ def enable_webhooks(directory, value, origins):
     value['settings']['webhooks'] = {'origins': sorted(set(origins)), 'dailyLimit': 500}
     replace_private_json(directory/'alchemy-input.json', value)
     print('Repository webhooks prepared; deploy to store the encryption key and bind the approved origins.')
+
+
+def rename_workspace(directory, value, slug):
+    # The workspace row is found by its namespace, so renaming it and redeploying never strands a request.
+    if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,38}', slug or ''):
+        raise ValueError('Use a lowercase workspace name of up to 39 letters, digits or hyphens')
+    settings = json.loads(private_read(directory/'forge.json'))
+    database = cf(value, 'd1', 'get', settings['database']['uuid'])
+    if database['name'] != value['name']: raise ValueError('Database ownership differs')
+    def query(sql, params):
+        return cf(value, 'd1', 'query', database['uuid'], '--body', json.dumps({'sql': sql, 'params': params}))[0]['results']
+    rows = query('SELECT slug FROM workspaces WHERE artifact_namespace=?', [value['name']])
+    if len(rows) != 1: raise ValueError('The installation workspace row is missing')
+    if rows[0]['slug'] != slug:
+        query('UPDATE workspaces SET slug=? WHERE artifact_namespace=?', [slug, value['name']])
+        if query('SELECT slug FROM workspaces WHERE artifact_namespace=?', [value['name']])[0]['slug'] != slug: raise ValueError('Workspace rename readback differs')
+    value['settings']['workspace'] = slug
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Workspace renamed to '+slug+'; deploy to apply. The old workspace object stops its maintenance alarm by itself.')
 
 
 def enable_rate_limit(directory, value, limit, period):
@@ -405,7 +424,7 @@ def seed(directory, value):
             state.setdefault('checks', {})[label] = data
             replace_private_json(path, state)
             print(json.dumps({'check': label, 'repository': data.get('repository')}), flush=True)
-        populated = seed_playgrounds(directory, ROOT, 'alice',
+        populated = seed_playgrounds(directory, ROOT, value['settings']['workspace'],
             lambda method, body: http('/rpc/golf.v1.RepositoryService/'+method, body), http, git, record)
         state['demo'].update(populated)
         replace_private_json(path, state)
@@ -474,7 +493,8 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email', 'rename-workspace'])
+    parser.add_argument('--slug', help='new workspace name for rename-workspace')
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--days', type=int, default=7, help='lifetime for renew-credentials, 1 to 30 days')
     parser.add_argument('--email-limit', type=int, default=200, help='daily send attempts for enable-email, 1 to 5000')
@@ -501,6 +521,7 @@ def main():
     if args.action == 'enable-dead-letter': return enable_dead_letter(directory, value)
     if args.action == 'enable-operations': return enable_operations(directory, value)
     if args.action == 'enable-rate-limit': return enable_rate_limit(directory, value, args.limit, args.period)
+    if args.action == 'rename-workspace': return rename_workspace(directory, value, args.slug)
     if args.action == 'migrate': return migrate(directory, value)
     if args.action == 'enable-secrets': return enable_secrets(directory, value)
     if args.action == 'enable-public': return enable_public(directory, value)
