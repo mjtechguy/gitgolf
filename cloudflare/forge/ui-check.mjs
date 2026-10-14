@@ -55,7 +55,7 @@ try {
   assert.equal(session.status, 200, await session.clone().text()); assert.equal((await session.json()).user.login, 'local-reviewer');
   const rpc = (path, body = {}) => runtime.dispatchFetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Origin: origin }, body: JSON.stringify(body) });
   assert.equal((await (await rpc('/rpc/golf.v1.SessionService/GetSession')).json()).user.isInstanceAdmin,true);
-  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 34);
+  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 35);
   const inbox = await rpc('/rpc/golf.v1.RepositoryInvitationService/ListOwnRepositoryInvitations');
   assert.equal(inbox.status, 200, await inbox.clone().text()); assert.deepEqual((await inbox.json()).invitations, []);
   const config = await (await rpc('/native/config')).json();

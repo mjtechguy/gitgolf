@@ -28,7 +28,7 @@ Capability ids (honest: READY only when the route exists and the binding is pres
 `actions.pipelines` (runs, triggers, UI), `actions.forgejo-runner` (stock Forgejo Runner protocol),
 `actions.gitlab-runner` (RUN-C), `actions.artifacts` (v4 Twirp artifacts in R2), `settings.pipeline-runners`.
 
-## D1 schema — migration `0034_actions_pipelines.sql` (also appended to `schema.sql`; schema version 34)
+## D1 schema — migration `0035_actions_pipelines.sql` (also appended to `schema.sql`; schema version 35)
 
 ```sql
 CREATE TABLE IF NOT EXISTS pipeline_registration_tokens (
@@ -369,4 +369,4 @@ administrators), `organization` (organization owners) or `repository` (repositor
 | --- | --- | --- | --- |
 | Forgejo Runner | v13.2.0 | `forgejo-runner-13.2.0-linux-amd64` from code.forgejo.org/forgejo/runner releases | `fadaec897f5e6641c363f87ecaf75f866f99c81b7097ec6b433e4c48123fcad1` |
 | actions-proto | v0.8.0 (`runner.v1`, `ping.v1`, as vendored by runner v13.2.0) | — | — |
-| GitLab Runner | 18.5.0 (RUN-C may bump and record) | — | — |
+| GitLab Runner | 18.5.0 | `gitlab-runner-linux-amd64` | `4f84c2995cff1aaff89ce8639426bf1219cb3770d9360ce8783e9b5fde628762` |
