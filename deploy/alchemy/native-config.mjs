@@ -29,6 +29,7 @@ export function bindings(config) {
       case 'browser': return { name, type: 'browser' };
       case 'ai': return { name, type: 'ai' };
       case 'analytics-engine-dataset': return { name, type: 'analytics_engine', dataset: value.name };
+      case 'rate-limit': return { name, type: 'ratelimit', namespaceId: value.namespace, simple: value.simple };
       case 'secrets-store-secret': return { name, type: 'secrets_store_secret', storeId: value.storeId, secretName: value.secretName };
       case 'worker': return { name, type: 'service', service: value.worker, entrypoint: value.exportName };
       case 'dispatch-namespace': return { name, type: 'dispatch_namespace', namespace: value.namespace,

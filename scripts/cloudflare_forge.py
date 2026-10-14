@@ -15,7 +15,7 @@ from cloudflare_setup import ROOT, hostname, private_write
 ACTIONS_WORKFLOW_PATH = r'\.github/workflows/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml'
 
 
-def initialize(directory, account, host, worker, workspace, namespace, database_id, database_name, login, evidence=None, tests=None, analytics=None, agent_path=None, access_aud=None, owner_email=None, web_assets=None, previews=None, apps=None, automatic_ci=False, operations=None, webhooks=None):
+def initialize(directory, account, host, worker, workspace, namespace, database_id, database_name, login, evidence=None, tests=None, analytics=None, agent_path=None, access_aud=None, owner_email=None, web_assets=None, previews=None, apps=None, automatic_ci=False, operations=None, webhooks=None, anonymous_rate_limit=None):
     if operations is not None:
         if not isinstance(operations, dict) or set(operations) - {'analytics_secret', 'observability', 'service_health'}:
             raise ValueError('Invalid operations configuration')
@@ -120,6 +120,10 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
             domain = parsed.hostname or ''
             if origin != 'https://' + domain or origin == 'https://' + host or len(domain) > 253 or not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z][a-z0-9-]*', domain) or any(len(part) > 63 or part.startswith('-') or part.endswith('-') for part in domain.split('.')) or re.search(r'(?:^|\.)(?:localhost|local|internal|invalid|test)$', domain) or domain.endswith('.home.arpa'):
                 raise ValueError('Approve exact public HTTPS origins without paths, ports or credentials')
+    if anonymous_rate_limit is not None:
+        limit = anonymous_rate_limit
+        if not isinstance(limit, dict) or set(limit) != {'namespace', 'limit', 'period'} or not isinstance(limit['namespace'], str) or not re.fullmatch('[1-9][0-9]{0,9}', limit['namespace']) or int(limit['namespace']) > 2147483647 or type(limit['limit']) is not int or not 10 <= limit['limit'] <= 10000 or limit['period'] not in (10, 60) or type(limit['period']) is not int:
+            raise ValueError('Anonymous rate limit needs a positive integer namespace, a limit of 10 to 10000 and a period of 10 or 60 seconds')
     directory.parent.mkdir(parents=True, exist_ok=True)
     directory.mkdir(mode=0o700)  # Refuse existing installs instead of rotating authority.
     settings = {'account': account, 'worker': worker, 'namespace': namespace, 'workspace': workspace,
@@ -148,6 +152,8 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
         settings['webhooks'] = webhooks
     if automatic_ci:
         settings['automatic_ci'] = True
+    if anonymous_rate_limit is not None:
+        settings['anonymous_rate_limit'] = anonymous_rate_limit
     token = 'golf_native_' + secrets.token_urlsafe(32)
     expires = int(time.time()) + 3600
     batch = [
@@ -211,6 +217,9 @@ def main():
     parser.add_argument('--app-secret-store', help='Optional separate application secret store ID')
     parser.add_argument('--app-secret-name', help='Optional approved application secret name')
     parser.add_argument('--app-manual', action='store_true', help='Disable automatic Worker application publication')
+    parser.add_argument('--anonymous-rate-limit', type=int, help='Approximate anonymous public read/clone requests per period for each client network and Cloudflare location; needs a namespace')
+    parser.add_argument('--anonymous-rate-period', type=int, default=60, help='Counting period in seconds, 10 or 60')
+    parser.add_argument('--anonymous-rate-namespace', help='Positive integer naming this limiter, unique within the Cloudflare account')
     parser.add_argument('--operations-analytics-store', help='Existing Secrets Store ID containing an account-scoped Analytics Read token')
     parser.add_argument('--operations-analytics-name', help='Existing read-only analytics secret name; never its value')
     parser.add_argument('--operations-service-health', action='store_true', help='Enable bounded read-only R2/Artifacts health probes')
@@ -244,9 +253,12 @@ def main():
             if args.app_secret_store or args.app_secret_name:
                 policy['secret'] = {'store': args.app_secret_store, 'name': args.app_secret_name}
             apps = {'policy': policy, 'provisioner': {'store': args.app_provisioner_store, 'name': args.app_provisioner_name}, 'automatic': not args.app_manual}
+        rate_limit = None
+        if args.anonymous_rate_limit is not None or args.anonymous_rate_namespace:
+            rate_limit = {'namespace': args.anonymous_rate_namespace, 'limit': args.anonymous_rate_limit, 'period': args.anonymous_rate_period}
         initialize(args.directory, args.account_id, args.hostname, args.worker, args.workspace,
                    args.namespace, args.database_id, args.database_name, args.owner, evidence, tests, args.analytics_dataset, args.agent_path,
-                   args.access_aud, args.owner_email, args.web_assets, previews, apps, args.automatic_ci, operations or None, json.loads(args.webhooks_config.read_text()) if args.webhooks_config else None)
+                   args.access_aud, args.owner_email, args.web_assets, previews, apps, args.automatic_ci, operations or None, json.loads(args.webhooks_config.read_text()) if args.webhooks_config else None, rate_limit)
     except (ValueError, OSError) as error:
         parser.exit(1, str(error) + '\n')
     print('Private native configuration prepared; no resources provisioned. Bootstrap credential expires in one hour.')

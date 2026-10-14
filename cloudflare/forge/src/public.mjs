@@ -2,6 +2,7 @@ import { release, configuration, timings } from './telemetry.mjs';
 import { performanceSample } from './performance.mjs';
 import { bounded } from './git.mjs';
 import { accessContext } from './access.mjs';
+import { anonymousLimit } from './rate-limit.mjs';
 
 // "appearance" or "appearance/layout", matching web/public/theme.js.
 export const defaultAppearance = /^(classic(\/(primer|workbench|reader))?|golf(\/(refined|strokes|tiles))?|flare(\/(kumo|overview|console))?)$/;
@@ -28,7 +29,7 @@ export async function publicFetch(request, env, ctx) {
     headers.append('Server-Timing', `worker;dur=${(performance.now() - start).toFixed(1)}`);
     const result = new Response(response.body, { status: response.status, statusText: response.statusText, headers });
     const sample = performanceSample(request, result, performance.now() - start);
-    if (sample && env.OPERATIONS_OBSERVABILITY === 'true' && ctx.waitUntil && ctx.exports?.Workspace) {
+    if (sample && env.OPERATIONS_OBSERVABILITY === 'true' && ctx.waitUntil && ctx.exports?.Workspace && !response.headers.has('X-Golf-Rate-Limited')) {
       const owner = ctx.exports.Workspace.get(ctx.exports.Workspace.idFromName(env.WORKSPACE_SLUG));
       ctx.waitUntil(owner.recordPerformance(sample).catch(() => console.log(JSON.stringify({ event: 'golf.performance_record_failed' }))));
     }
@@ -42,6 +43,9 @@ async function dispatch(request, env, ctx, clock) {
     const access = env.ACCESS_AUD && !machineRoute ? await clock.measure('access_auth', () => accessContext(request, env, ctx)) : null;
     const publicSite = env.PUBLIC_REPOSITORIES === 'true';
     if (env.ACCESS_AUD && !access && !machineRoute && !publicSite) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });
+    // Optional throttle for credential-less public reads and clones, before they reach the workspace queue.
+    const limited = await anonymousLimit(request, env, access);
+    if (limited) return limited;
     if (publicSite && url.pathname === '/auth/login') {
       if (request.method !== 'GET' || !access || !(await access.getIdentity())?.email) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });
       const target = url.searchParams.get('returnTo') || '/';

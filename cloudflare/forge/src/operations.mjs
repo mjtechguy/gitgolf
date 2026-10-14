@@ -1,6 +1,7 @@
 import { webhookPolicy } from './webhooks.mjs';
 import { Fault, reply } from './common.mjs';
 import { release } from './telemetry.mjs';
+import { rateLimitService } from './rate-limit.mjs';
 
 export async function operationsAdmin(db, person, request) {
   // Ordinary Git bearer credentials never acquire workspace administration.
@@ -91,6 +92,7 @@ export async function operationsDashboard(db, env, person, request) {
     if (service?.state==='configured') Object.assign(service,{state:'observed',source,checkedAt:observed,detail:detail+' Historical successful activity; not a current provider health probe.'});
   }
   if (env.ACCESS_AUD) Object.assign(services.find(row=>row.id==='access'),{state:'available',source:'Current authenticated Access request',checkedAt:stamp,detail:'The configured Access gate admitted this mapped human administrator request. Not account-wide Access health.'});
+  services.push(rateLimitService(env));
   for (const service of ['artifacts','r2']) {
     const health=await db.prepare('SELECT state,attempted_at,observed_at FROM operations_provider WHERE service=?').bind(service).first();
     const row=services.find(value=>value.id===service);

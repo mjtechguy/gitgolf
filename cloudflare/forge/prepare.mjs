@@ -1,6 +1,7 @@
 import { nativeBuildIdentity } from './build-identity.mjs';
 import { webhookBindings } from './src/webhooks.mjs';
 import { accessBindings } from './src/access.mjs';
+import { rateLimitBindings } from './src/rate-limit.mjs';
 import { defaultAppearance } from './src/public.mjs';
 import { operationsPolicy } from './src/operations-provider.mjs';
 import { readFile, mkdir, rm, lstat } from 'node:fs/promises';
@@ -46,6 +47,7 @@ if (mode === 'retire') {
   config.exports.PackagesAuthority = { type: 'worker' };
   Object.assign(config.env, registryBindings(settings));
   Object.assign(config.env, accessBindings(settings));
+  Object.assign(config.env, rateLimitBindings(settings));
   config.env.OPERATIONS_SERVICE_HEALTH = { type: 'text', value: String(operations.serviceHealth === true) };
   config.env.OPERATIONS_WORKER = { type: 'text', value: settings.worker };
   config.env.OPERATIONS_OBSERVABILITY = { type: 'text', value: String(operations.observability.enabled) };

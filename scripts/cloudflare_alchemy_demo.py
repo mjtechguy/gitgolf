@@ -231,6 +231,17 @@ def enable_webhooks(directory, value, origins):
     print('Repository webhooks prepared; deploy to store the encryption key and bind the approved origins.')
 
 
+def enable_rate_limit(directory, value, limit, period):
+    # The binding has no provider resource. Its namespace is a stable integer derived from the installation name.
+    if type(limit) is not int or not 10 <= limit <= 10000 or type(period) is not int or period not in (10, 60):
+        raise ValueError('Limit anonymous reads to 10-10000 requests per 10 or 60 seconds')
+    namespace = str(int(hashlib.sha256(value['name'].encode()).hexdigest()[:8], 16) % 2147483647 + 1)
+    value['settings']['anonymous_rate_limit'] = {'namespace': namespace, 'limit': limit, 'period': period}
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Anonymous read throttling prepared: about '+str(limit)+' public read or clone requests per '+str(period)+' seconds for each client network; deploy to bind it. '
+        'Counts are approximate and kept per Cloudflare location. It applies only to public repositories and never to signed-in or credentialed requests.')
+
+
 def enable_public(directory, value):
     if not re.fullmatch(r'https://[a-z0-9-]+\.cloudflareaccess\.com', value['settings'].get('access_team_domain', '')):
         raise ValueError('Public sites require the configured Access issuer for signed login cookies')
@@ -432,9 +443,11 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'migrate'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate'])
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--days', type=int, default=7, help='lifetime for renew-credentials, 1 to 30 days')
+    parser.add_argument('--limit', type=int, default=300, help='approximate anonymous requests per period for enable-rate-limit, 10 to 10000')
+    parser.add_argument('--period', type=int, default=60, choices=[10, 60], help='counting period in seconds for enable-rate-limit')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
     parser.add_argument('--workflow-path', help='the one approved Actions workflow path for enable-workflow, .github/workflows/NAME.yml')
     parser.add_argument('directory', nargs='?')
@@ -454,6 +467,7 @@ def main():
     if args.action == 'enable-workflow': return enable_workflow(directory, value, args.workflow_path)
     if args.action == 'enable-dead-letter': return enable_dead_letter(directory, value)
     if args.action == 'enable-operations': return enable_operations(directory, value)
+    if args.action == 'enable-rate-limit': return enable_rate_limit(directory, value, args.limit, args.period)
     if args.action == 'migrate': return migrate(directory, value)
     if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)

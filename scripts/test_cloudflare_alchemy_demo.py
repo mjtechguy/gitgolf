@@ -89,6 +89,25 @@ class Observability(unittest.TestCase):
             saved=json.loads((directory/'alchemy-input.json').read_text())
             self.assertEqual(saved,{'settings':{'operations':{'observability':{'enabled':True,'sampling':0.01},'service_health':True}},'operationsAnalytics':True})
 
+    def test_enabling_the_rate_limit_is_bounded_repeatable_and_keeps_other_settings(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            value={'name':'golf-alchemy-20261013-0f2087f8','settings':{'evidence':{'daily_limit':40},'public_repositories':True}}
+            for limit,period in [(9,60),(10001,60),(300,30),(300.0,60),(True,60),(300,60.0)]:
+                with self.assertRaises(ValueError): demo.enable_rate_limit(directory,value,limit,period)
+            self.assertFalse((directory/'alchemy-input.json').exists())
+            demo.enable_rate_limit(directory,value,300,60)
+            first=json.loads((directory/'alchemy-input.json').read_text())['settings']['anonymous_rate_limit']
+            self.assertEqual({key:first[key] for key in ['limit','period']},{'limit':300,'period':60})
+            self.assertRegex(first['namespace'],'^[1-9][0-9]{0,9}$'); self.assertLessEqual(int(first['namespace']),2147483647)
+            demo.enable_rate_limit(directory,value,120,10)
+            saved=json.loads((directory/'alchemy-input.json').read_text())['settings']
+            # A repeated run changes the limit and keeps the installation's namespace.
+            self.assertEqual(saved,{'evidence':{'daily_limit':40},'public_repositories':True,'anonymous_rate_limit':{'namespace':first['namespace'],'limit':120,'period':10}})
+            other=dict(value,name='golf-alchemy-20261014-00000000',settings={})
+            demo.enable_rate_limit(directory,other,300,60)
+            self.assertNotEqual(other['settings']['anonymous_rate_limit']['namespace'],first['namespace'])
+
     def test_enabling_analytics_names_a_valid_dataset_and_keeps_other_settings(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory=Path(temporary)

@@ -54,6 +54,22 @@ class NativeSetup(unittest.TestCase):
             initialize(*args, webhooks=policy)
             self.assertEqual(json.loads((root/'forge.json').read_text())['webhooks'], policy)
 
+    def test_anonymous_rate_limit_is_bounded_before_installation_writes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)/'native'
+            args = (root, 'a'*32, 'golf.example.com', 'golf-native', 'team', 'golf-native',
+                    '12345678-1234-4234-8234-123456789012', 'golf-native', 'owner')
+            limit = {'namespace': '1001', 'limit': 300, 'period': 60}
+            for change in [{'namespace': 1001}, {'namespace': '0'}, {'namespace': '2147483648'}, {'namespace': None}, {'limit': 9}, {'limit': 10001},
+                           {'limit': True}, {'limit': 300.0}, {'period': 30}, {'period': 60.0}, {'key': 'user'}]:
+                with self.assertRaises(ValueError):
+                    initialize(*args, anonymous_rate_limit={**limit, **change})
+                self.assertFalse(root.exists())
+            with self.assertRaises(ValueError):
+                initialize(*args, anonymous_rate_limit={'limit': 300})
+            initialize(*args, anonymous_rate_limit=limit)
+            self.assertEqual(json.loads((root/'forge.json').read_text())['anonymous_rate_limit'], limit)
+
     def test_operations_setup_validates_before_writing_and_enrolls_only_the_owner(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)/'native'
