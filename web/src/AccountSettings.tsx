@@ -34,6 +34,7 @@ export function AccountLayout({ children }: { children: ReactNode }) {
     {!portable && settingAvailable(runtime.isError ? undefined : runtime.data, 'agents.hosts') && <Link to="/account/agents" activeOptions={{ exact:true }}><Bot size={18} />Agent hosts</Link>}
     {localAuth && <Link to="/account/sessions" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sessions</Link>}
     {localAuth && <Link to="/account/ssh-keys" activeOptions={{ exact:true }}><KeyRound size={18} />SSH keys</Link>}
+    {!portable && settingAvailable(runtime.isError ? undefined : runtime.data, 'agents.mcp') && <><span className="eyebrow">DEVELOPER</span><Link to="/account/api-tokens" activeOptions={{ exact:true }}><KeyRound size={18} />API tokens</Link></>}
     {portable && <Link to="/account/api-credentials" activeOptions={{ exact:true }}><KeyRound size={18} />API credentials</Link>}
     {portable && <Link to="/audit" activeOptions={{ exact:true }}><History size={18} />Account activity</Link>}
   </nav><div className="account-content">{children}</div></div>;

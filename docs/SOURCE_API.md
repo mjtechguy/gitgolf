@@ -16,7 +16,7 @@ the repository: `"repository": {"owner": "alice", "name": "project"}`, optionall
 Callers:
 - a signed-in browser session (Cloudflare Access);
 - `Authorization: Bearer golf_native_…`;
-- `Authorization: Bearer golf_pat_…` once API tokens land (AM-3). A token carries a
+- `Authorization: Bearer golf_pat_…`, an API token ([AGENT_ACCESS.md](AGENT_ACCESS.md)). A token carries a
   scope (`repositories`: all or a list, `permission`: `read`/`write`, optional write
   `branchPattern`, exact or trailing `*`). The scope only narrows the account's grant.
 

@@ -24,6 +24,8 @@ import { pipelinePolicy, pipelineCapabilities } from './pipeline-policy.mjs';
 import { pipelineAPI, pipelineRunnerAPI } from './pipeline-api.mjs';
 import { agentHostsAPI, agentTasksAPI, agentHostCapability } from './agent-hosts.mjs';
 import { agentHostMachine } from './agent-host-protocol.mjs';
+import { apiTokenSecret, apiTokenActor, apiTokenCapability, apiTokensAPI, scopeRepository, scopePush } from './api-tokens.mjs';
+import { mcpEndpoint, mcpClass, mcpBodyLimit } from './mcp.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { reserveRefWrite, finishRefWrite, sendRefUpdate } from './ref-writes.mjs';
 import { sourceAPI, sourceCapability } from './source-api.mjs';
@@ -94,7 +96,20 @@ export function admission(request) {
   const path = new URL(request.url).pathname, route = transferRoute.exec(path), source = sourceRoute.exec(path);
   if (route) return request.method === (route[1] === 'info/refs' ? 'GET' : 'POST') ? 'transfer' : 'exclusive';
   if (source) return request.method !== 'POST' ? 'exclusive' : ['files', 'tree'].includes(source[1]) ? 'read' : 'transfer';
+  // MCP: admitMCP read the JSON-RPC body first; a read tool overlaps reads, anything else waits like any mutation.
+  if (new URL(request.url).pathname === '/mcp') return mcpClasses.get(request) || 'exclusive';
   return concurrentRead(request) ? 'read' : 'exclusive';
+}
+const mcpClasses = new WeakMap();
+// The Workspace calls this before admission. Tool calls then run inside that one admission: their internal requests call handle(), never a queue.
+export async function admitMCP(request) {
+  if (request.method !== 'POST') return request;
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(await bounded(request.body, mcpBodyLimit)); }
+  catch { return reply({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'The MCP request exceeds 12 MiB or is not UTF-8.' } }, 413); }
+  const admitted = new Request(request.url, { method: 'POST', headers: request.headers, body: text });
+  mcpClasses.set(admitted, mcpClass(text));
+  return admitted;
 }
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
@@ -123,8 +138,11 @@ async function input(request) {
   return body;
 }
 
-async function actor(db, request, anonymous = false) {
+async function actor(db, request, anonymous = false, env = {}) {
   const authorization = request.headers.get('Authorization') || '';
+  // API tokens (golf_pat_): /mcp, /native/source/*, /git/* and the MCP tools' internal requests only; refused everywhere else.
+  const token = apiTokenSecret(authorization);
+  if (token) return apiTokenActor(db, request, token, env);
   if (authorization.startsWith('Basic ') || authorization.startsWith('Bearer golf_git_')) return gitCredentialActor(db,request);
   const match = /^Bearer (golf_native_[A-Za-z0-9_-]{43})$/.exec(authorization);
   // Access identity is populated only by the public Worker from runtime context.
@@ -151,6 +169,7 @@ async function authorizedRepository(db, person, key, env, id, feature) {
     JOIN workspaces w ON w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
     WHERE r.name=? AND r.state='ACTIVE' AND ${publicAllowed}`).bind(env.ARTIFACTS_NAMESPACE, key.name).first();
   if (!row || ownerSlug(row,env) !== key.owner || id && String(row.id) !== id || person.git_repository_id && person.git_repository_id!==row.id) deny();
+  if (person.token_scope) { await scopeRepository(db, env, person, row); await requireFeature(db, env, row, 'agent-access'); }
   if (env.PUBLIC_REPOSITORIES === 'true') row.is_public = (await db.prepare(`SELECT v.is_public AND ${publicAllowed} AS is_public FROM repository_visibility v JOIN repositories r ON r.id=v.repository_id WHERE v.repository_id=?`).bind(row.id).first())?.is_public || 0;
   await requireFeature(db, env, row, feature);
   return row;
@@ -249,6 +268,7 @@ async function git(db, env, person, request, url, providerFetch) {
   const service = advertisement ? url.searchParams.get('service') : route[3];
   if (!['git-upload-pack', 'git-receive-pack'].includes(service) ||
       (advertisement ? request.method !== 'GET' || url.search !== '?service=' + service : request.method !== 'POST' || url.search)) invalid('Invalid Git request.');
+  if (service === 'git-receive-pack' && person.token_scope) await scopePush(db, env, person, row);
   if (service === 'git-receive-pack' && !['write', 'admin'].includes(row.role)) deny();
   if (request.headers.has('Git-Protocol') && request.headers.get('Git-Protocol') !== 'version=1' && request.headers.get('Git-Protocol') !== 'version=2') invalid('Invalid Git protocol.');
   // Preserve v2 shallow negotiation; receive-pack keeps its existing v0 contract.
@@ -266,6 +286,7 @@ async function git(db, env, person, request, url, providerFetch) {
   if (!advertisement && service === 'git-receive-pack') {
     try { command = receiveCommand(body); } catch { invalid('Only one ordinary SHA-1 branch/tag update per bounded push is supported.'); }
     if (row.write_pending) conflict();
+    if (person.token_scope) await scopePush(db, env, person, row, command.ref);
     rulesVersion = await enforceGitRules(db, row, person, command.ref);
   }
   return withArtifact(env, row, async repo => {
@@ -277,8 +298,8 @@ async function git(db, env, person, request, url, providerFetch) {
             WHERE r.id=? AND r.artifact_name=? AND r.state='ACTIVE' AND g.user_id=? AND g.role IN ('write','admin') AND u.active=1
             AND COALESCE(a.version,0)=? AND COALESCE(v.version,0)=? AND COALESCE((SELECT version FROM repository_rules WHERE repository_id=r.id),0)=?
             AND (?='' OR EXISTS(SELECT 1 FROM credentials WHERE digest=? AND user_id=u.id AND revoked=0 AND expires_at>CAST(strftime('%s','now') AS INTEGER)))
-            AND (?='' OR EXISTS(${gitCredentialSQL} AND c.repository_id=? AND c.mode=2)))`,
-          values: [row.id,row.artifact_name,person.id,row.access_version||0,person.identity_version||0,rulesVersion,person.credential_digest||'',person.credential_digest||'',person.git_credential_digest||'',person.git_credential_digest||'',row.id] } })) conflict();
+            AND (?='' OR EXISTS(${gitCredentialSQL} AND c.repository_id=? AND c.mode=2)))${person.token_guard ? ' AND ' + person.token_guard.sql : ''}`,
+          values: [row.id,row.artifact_name,person.id,row.access_version||0,person.identity_version||0,rulesVersion,person.credential_digest||'',person.credential_digest||'',person.git_credential_digest||'',person.git_credential_digest||'',row.id,...(person.token_guard?.values || [])] } })) conflict();
     }
     const send = () => gitRequest(env, repo, row.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
     try {
@@ -358,7 +379,7 @@ export async function handle(request, env, providerFetch = fetch, imageFetch = f
   const start = performance.now(), clock = timings();
   const configured = { ...env, timings: clock, DB: timedDatabase(env.DB, clock) };
   // The one audit recording point: privileged and state-changing routes named in audit.mjs, including their refusals.
-  const response = await audited(request, configured, () => handleRequest(request, configured, providerFetch, imageFetch), () => actor(configured.DB.withSession('first-primary'), request));
+  const response = await audited(request, configured, () => handleRequest(request, configured, providerFetch, imageFetch), () => actor(configured.DB.withSession('first-primary'), request, false, configured));
   if (response.ok && configured.readAuthority && env.confirmRead) {
     try { await clock.measure('authority', () => env.confirmRead(configured.readAuthority, clock)); }
     catch (error) { return timedResponse(reply(error instanceof Fault ? { code: error.code, message: error.message } : { code: 'unavailable', message: 'Repository access could not be confirmed.' }, error instanceof Fault ? error.status : 503), clock, 'native', performance.now() - start); }
@@ -385,9 +406,12 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     }
     // Agent hosts: host credential and task token routes, outside Access (docs/AGENT_HOSTS.md).
     if (url.pathname.startsWith('/native/agent-host/')) return await agentHostMachine(db, env, request, url, withArtifact, providerFetch);
+    // Remote MCP (docs/AGENT_ACCESS.md): each tool calls the UI's own route as an internal request under the caller's credential.
+    if (url.pathname === '/mcp') return await mcpEndpoint(request, env, () => actor(db, request, false, env),
+      internal => handle(internal, { ...env, mcpInternal: true }, providerFetch, imageFetch));
     env.publicRead = env.PUBLIC_REPOSITORIES === 'true' && publicReadRequest(request);
     const publicSession = env.PUBLIC_REPOSITORIES === 'true' && ['/rpc/golf.v1.SessionService/GetSession', '/rpc/golf.v1.SessionService/GetAuthenticationOptions', '/rpc/golf.v1.CapabilityService/ListCapabilities'].includes(url.pathname);
-    const person = await env.timings.measure('actor', () => actor(db, request, env.publicRead || publicSession));
+    const person = await env.timings.measure('actor', () => actor(db, request, env.publicRead || publicSession, env));
     if (person.anonymous && publicSession) {
       if (request.method !== 'POST' || url.search || request.headers.get('Connect-Protocol-Version') !== '1') invalid('Use Connect JSON POST.');
       await input(request);
@@ -458,6 +482,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
         ciState: env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE' });
       return result instanceof Response ? result : reply(result);
     }
+    if (url.pathname === '/native/api-tokens') return reply(await apiTokensAPI(db, env, person, request, body));
     if (url.pathname === '/native/agent-tasks') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
@@ -609,6 +634,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       await searchCapability(db, env),
       await agentHostCapability(db),
       await sourceCapability(db),
+      await apiTokenCapability(db),
       ...[
         ['settings.repository-teams', 'Repository team access', 'Team membership and inherited repository permissions are not implemented on Cloudflare native. Direct collaborators and invitations are available in Access.'],
         ['settings.repository-deploy-keys', 'SSH deploy keys', 'Cloudflare native serves Git over HTTPS. SSH transport and SSH deploy keys are not available.'],
@@ -845,6 +871,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (error instanceof Fault) {
       const response = reply({ code: error.code, message: error.message }, error.status);
       if (error.status===401 && new URL(request.url).pathname.startsWith('/git/')) response.headers.set('WWW-Authenticate','Basic realm="Golf Git"');
+      if (error.status===401 && new URL(request.url).pathname === '/mcp') response.headers.set('WWW-Authenticate','Bearer realm="Golf MCP"');
       if (/^\/rpc\/golf\.v1\.RepositoryAccessService\/(SetRepositoryCollaborator|RemoveRepositoryCollaborator)$/.test(new URL(request.url).pathname)) response.headers.set('Golf-Access-Effect', 'none');
       // Every refusal here precedes the one batch that writes; an unconfirmed batch is not a Fault.
       if (/^\/rpc\/golf\.v1\.RepositoryExecutionValueService\/(Save|Delete)/.test(new URL(request.url).pathname)) response.headers.set('Golf-Execution-Effect', 'none');

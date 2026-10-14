@@ -105,6 +105,13 @@ const native = {
   'agent-tasks': body => body.action === 'create' ? { action: 'agent_task.create', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => whole(body.target?.number) && `#${whole(body.target.number)}`,
     after: () => clean({ kind: clip(body.target?.kind, 20), number: whole(body.target?.number), hostId: whole(body.hostId), tool: clip(body.tool, 20), model: clip(body.model, 100) }) }
     : body.action === 'cancel' && { action: 'agent_task.cancel', scope: 'repository', subject: () => token(body.id), after: () => clean({ taskId: token(body.id) }) },
+  // Personal API tokens (docs/AGENT_ACCESS.md), at installation scope like personal agent hosts. Never the secret; denied uses are
+  // written by api-tokens.mjs at repository scope.
+  'api-tokens': body => body.action === 'create' ? { action: 'api_token.create', scope: 'installation', subject: () => clip(body.label, 64),
+    after: () => clean({ label: clip(body.label, 64), permission: clip(body.permission, 10), repositories: Array.isArray(body.repositories) ? body.repositories.length : body.repositories === null || body.repositories === undefined ? 'all' : undefined,
+      branchPattern: clip(body.branchPattern, 200) || undefined, lifetimeHours: whole(body.lifetimeHours) }) }
+    : body.action === 'revoke' && { action: 'api_token.revoke', scope: 'installation', subject: async c => (token(body.id) && (await one(c.db, 'SELECT label FROM api_tokens WHERE id=?', whole(body.id) ?? 0))?.label) || token(body.id),
+      after: () => clean({ id: token(body.id) }) },
   ai: body => body.action === 'create' && { action: 'ai.run_request', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => clip(body.kind, 40),
     after: () => clean({ kind: clip(body.kind, 40), number: whole(body.target?.number), tag: clip(body.target?.tagName, 100) }) },
   installation: body => ({ action: 'installation_policy.update', scope: 'installation', batch: true, subject: () => clip(body.key, 40) }),
@@ -219,7 +226,7 @@ async function repositoryById(db, env, id) {
 // Who and from where. Every value is bounded and validated; none of them is a credential.
 function caller(request, person) {
   const header = name => request.headers.get(name) || '', authorization = header('Authorization');
-  const via = header('CF-Access-Client-Id') ? 'service' : authorization.startsWith('Bearer golf_native_') ? 'token' : authorization.startsWith('Basic ') || authorization.startsWith('Bearer golf_git_') ? 'git'
+  const via = header('CF-Access-Client-Id') ? 'service' : authorization.startsWith('Bearer golf_native_') ? 'token' : authorization.startsWith('Bearer golf_pat_') ? 'api_token' : authorization.startsWith('Basic ') || authorization.startsWith('Bearer golf_git_') ? 'git'
     : header('X-Golf-Native-Access-Email') ? 'person' : 'anonymous';
   const country = [header('X-Golf-Native-Access-Country'), header('CF-IPCountry')].find(value => /^[A-Z]{2}$/.test(value));
   const ray = /^[0-9a-f]{16}(?:-[A-Z]{3})?$/.test(header('CF-Ray')) ? header('CF-Ray') : '';
@@ -300,7 +307,7 @@ export async function audited(request, env, run, identify) {
 
 /* Reading. Categories are the action prefix; the first installation policy rows used the bare action 'update'. */
 const categories = [['installation_policy', 'Installation policy', ['update', 'installation_policy.']], ['feature_policy', 'Feature policy'], ['ai_model', 'AI models', ['ai_model.', 'repository_ai_model.']],
-  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.']], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
+  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.']], ['api_token', 'API tokens'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
   ['repository_invitation', 'Invitations'], ['protected_branch', 'Rules', ['protected_branch.', 'protected_tag.']], ['hook', 'Webhooks'], ['repository_secret', 'Secrets and variables', ['repository_secret.', 'repository_variable.']],
   ['environment', 'Environments'], ['git_credential', 'Git credentials'], ['git_write', 'Git writes'], ['preview', 'Previews'], ['release', 'Releases', ['release.', 'release_asset.']], ['pull_request', 'Pull requests', ['pull_request.', 'pull_request_review.']],
   ['label', 'Labels and milestones', ['label.', 'milestone.']], ['ai', 'AI runs', ['ai.']], ['actions', 'Actions runs']].map(([id, label, prefixes]) => ({ id, label, prefixes: prefixes || [id + '.'] }));
@@ -355,6 +362,8 @@ const phrases = {
   'agent_host.token_revoke': ['revoked', 'revoke', () => 'an agent host registration token'], 'agent_host.update': ['updated', 'update', e => named('agent host', e.subject)], 'agent_host.delete': ['deleted', 'delete', e => named('agent host', e.subject)],
   'agent_task.create': ['assigned', 'assign', e => `${e.after?.kind === 'pull_request' ? 'pull request' : e.after?.kind === 'issue' ? 'issue' : ''} ${e.subject} to a coding agent${e.after?.tool ? ' (' + e.after.tool + ')' : ''}`.replace(/^ /, '')],
   'agent_task.cancel': ['cancelled', 'cancel', () => 'a coding agent task'],
+  'api_token.create': ['created', 'create', e => `${e.after?.permission ? e.after.permission + ' ' : ''}API token ${e.subject}`], 'api_token.revoke': ['revoked', 'revoke', e => named('API token', e.subject)],
+  'api_token.use_denied': ['was refused with', 'use', e => `an API token (${e.after?.reason === 'branch' ? 'branch outside its pattern' : e.after?.reason === 'permission' ? 'read-only token' : 'repository outside its scope'})`],
   'environment.save': ['saved', 'save', e => named('environment', e.subject)], 'environment.save_value': ['saved', 'save', e => `${e.after?.kind || 'a value'} ${e.subject} of an environment`],
   'ai.run_request': ['requested', 'request', e => `an AI ${e.subject.replaceAll('-', ' ')} run`], 'actions.run_request': ['requested', 'request', e => `a run for pull request ${e.subject}`], 'actions.run_cancel': ['cancelled', 'cancel', () => 'a run'],
 };

@@ -23,7 +23,7 @@ const forbidden = message => { throw new Fault('permission_denied', 403, message
 const fields = (body, allowed) => Object.keys(body).every(key => allowed.includes(key));
 const plain = (value, max) => typeof value === 'string' && value.trim() && value.length <= max && !/[\x00-\x1f\x7f]/.test(value);
 // Golf credentials are never stored in a log line or failure text, even when a tool prints one.
-export const scrub = value => String(value).replace(/\x00/g, '').replace(/golf(?:agentreg|_agent_host|_agent_task|_native|_git)_[A-Za-z0-9_-]{8,}/g, '***');
+export const scrub = value => String(value).replace(/\x00/g, '').replace(/golf(?:agentreg|_agent_host|_agent_task|_native|_git|_pat)_[A-Za-z0-9_-]{8,}/g, '***');
 export const onlineWindow = 60_000, lostAfter = 3 * 60_000, defaultDuration = 30 * 60_000, maxDuration = 2 * 3600_000;
 const repositoryJoin = 'LEFT JOIN repository_owners ro ON ro.repository_id=r.id LEFT JOIN native_owners o ON o.id=ro.owner_id';
 

@@ -41,6 +41,8 @@ const catalogue = [
   { id: 'ai-release-notes', label: 'AI release notes drafts', plural: true, group: 'Automation', requires: ['releases'], choice: true, allocated: env => aiAllocation(env) || 'The operator has not allocated Workers AI runs (approved Workers AI, its private gateway and the AI workflow) on this installation.' },
   // Coding CLIs on machines users connect (docs/AGENT_HOSTS.md): no operator binding, so always allocated; assigned from issues.
   { id: 'agent-hosts', label: 'Coding agents on your machines', plural: true, group: 'Automation', requires: ['issues'], choice: true, allocated: () => true },
+  // API tokens and remote MCP (docs/AGENT_ACCESS.md): no operator binding; off here refuses every golf_pat_ call on the repository.
+  { id: 'agent-access', label: 'API tokens and MCP', plural: true, group: 'Integrations', requires: [], choice: true, allocated: () => true },
 ];
 const known = new Map(catalogue.map(feature => [feature.id, feature]));
 const needs = (feature, env) => typeof feature.requires === 'function' ? feature.requires(env) : feature.requires;
@@ -153,7 +155,7 @@ export async function discussionFeatures(db, person, row, service, method, body)
 const capabilityFeatures = { 'native-pr-tests': 'actions', 'actions.pipelines': 'actions', 'actions.forgejo-runner': 'actions', 'actions.artifacts': 'actions', 'actions.environments': 'actions', 'settings.pipeline-runners': 'actions', 'native-ci-automatic': 'actions', 'settings.repository-execution-policy': 'actions', 'settings.repository-secrets': 'secrets',
   'native-pr-previews': 'previews', 'native-preview-browser': 'previews', 'native-pr-apps': 'previews', 'settings.repository-environments': 'previews', 'native-pr-agents': 'agents',
   'discussion.attachments': 'attachments', 'settings.repository-webhooks': 'webhooks', 'repository.email-notifications': 'email', 'repository.releases': 'releases',
-  'repository.packages': 'packages', 'pull.ai-review-drafts': 'ai-review-drafts', 'repository.semantic-search': 'semantic-search', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues', 'discussion.ai-triage': 'ai-triage', 'repository.ai-release-notes': 'ai-release-notes', 'agents.hosts': 'agent-hosts',
+  'repository.packages': 'packages', 'pull.ai-review-drafts': 'ai-review-drafts', 'repository.semantic-search': 'semantic-search', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues', 'discussion.ai-triage': 'ai-triage', 'repository.ai-release-notes': 'ai-release-notes', 'agents.hosts': 'agent-hosts', 'agents.mcp': 'agent-access',
   ...Object.fromEntries(['pull.merge-observation', 'pull.review-requests', 'pull.review-lifecycle', 'pull.pending-reviews', 'pull.codeowners'].map(id => [id, 'pull-requests'])) };
 export async function policyCapabilities(db, env, capabilities) {
   const { results } = await db.prepare("SELECT scope,feature,mode FROM feature_policies WHERE scope='installation' AND scope_id=''").all();

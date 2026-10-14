@@ -1,6 +1,7 @@
 import { BinaryReader, BinaryWriter } from '../../../web/node_modules/@bufbuild/protobuf/dist/esm/wire/index.js';
 import { bounded } from './git.mjs';
 import { Fault, invalid, bodyLimit } from './common.mjs';
+import { mcpActivity, mcpBodyLimit } from './mcp.mjs';
 
 export const activityPath = '/rpc/golf.v1.RepositoryActivityService/WatchRepository';
 export const activityTopics = ['source', 'issues', 'pulls', 'actions', 'agents'];
@@ -142,6 +143,7 @@ export async function activitySelection(event) {
   const path = new URL(event.url).pathname;
   const git = /^\/git\/[^/]+\/([^/]+)\.git\/git-receive-pack$/.exec(path);
   if (event.method !== 'POST') return;
+  if (path === '/mcp') { try { return mcpActivity(new TextDecoder().decode(await bounded(event.clone().body, mcpBodyLimit))); } catch { return; } }
   if (git) return { name: git[1], topics: ['source', 'pulls', 'actions'] };
   const source = path === '/native/source/commit' || path === '/native/source/branch';
   if (!/\/(?:CreateRepository|SetRepositoryStar|SetRepositoryCollaborator|RemoveRepositoryCollaborator|CreateRepositoryInvitation|RevokeRepositoryInvitation|RespondRepositoryInvitation|UpdateRepositorySettings|UpdateRepositoryTopics|SubmitDiscussionResourceOperation|CreateIssue|UpdateIssue|CreateIssueComment|CreatePullRequest|UpdatePullRequest|CreatePullRequestReview|SubmitPullReviewRequest|SubmitPullReviewLifecycle|SubmitPullReviewAuthoringOperation|SubmitStandardPullMerge|ReportCheck|(?:Save|Delete)RepositoryExecution(?:Value|Binding))$/.test(path) &&

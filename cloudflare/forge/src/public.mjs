@@ -7,6 +7,7 @@ import { releaseAssetDownload } from './asset-download.mjs';
 import { pipelinePolicy } from './pipeline-policy.mjs';
 import { forgejoRunner, forgejoRunnerRoute, actionsGit, actionsGitRoute } from './forgejo-runner.mjs';
 import { actionsArtifacts, artifactRoute } from './actions-artifacts.mjs';
+import { machineTokenRoute } from './api-tokens.mjs';
 
 // "appearance" or "appearance/layout", matching web/public/theme.js.
 export const defaultAppearance = /^(classic(\/(primer|workbench|reader))?|golf(\/(refined|strokes|tiles))?|flare(\/(kumo|overview|console))?)$/;
@@ -52,7 +53,9 @@ async function dispatch(request, env, ctx, clock) {
       if (actionsGitRoute(url.pathname) && (request.method === 'POST' || url.search === '?service=git-upload-pack')) return actionsGit(request, pipelineEnv(), (await import('./core.mjs')).withArtifact);
     }
     // Configured Access is the outer gate for people; machine routes (runners, agent hosts) check their own credentials against D1.
-    const machineRoute = url.pathname.startsWith('/native/runner-machine/') || url.pathname.startsWith('/native/agent-host/') || url.pathname.startsWith('/api/v4/');
+    // An API token (golf_pat_) on /mcp, /native/source/* or /git/* is one too; the same paths without one still need Access.
+    const apiToken = machineTokenRoute(url.pathname, request.headers.get('Authorization'));
+    const machineRoute = url.pathname.startsWith('/native/runner-machine/') || url.pathname.startsWith('/native/agent-host/') || url.pathname.startsWith('/api/v4/') || apiToken;
     const access = env.ACCESS_AUD && !machineRoute ? await clock.measure('access_auth', () => accessContext(request, env, ctx)) : null;
     const publicSite = env.PUBLIC_REPOSITORIES === 'true';
     if (env.ACCESS_AUD && !access && !machineRoute && !publicSite) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });
@@ -82,6 +85,8 @@ async function dispatch(request, env, ctx, clock) {
     for (const name of ['X-Golf-Native-Access-Email', 'X-Golf-Native-Access-Issued-At', 'X-Golf-Native-Access-Colo', 'X-Golf-Native-Access-Country']) headers.delete(name);
     // Always this edge's own build, never a caller's value: the workspace retires an instance older than the edge serving it.
     headers.set('X-Golf-Edge-Built-At', String(builtAt));
+    // A token request is the token alone: no browser cookie travels with it, and no Access identity is added below.
+    if (apiToken) headers.delete('Cookie');
     if (!headers.has('Authorization') && access) {
       const identity = await clock.measure('access', () => access.getIdentity());
       if (typeof identity?.email === 'string' && identity.email.length <= 254) headers.set('X-Golf-Native-Access-Email', identity.email);
@@ -97,7 +102,7 @@ async function dispatch(request, env, ctx, clock) {
     const workspace = ctx.exports.Workspace;
     const owner = workspace.get(workspace.idFromName(env.WORKSPACE_SLUG));
     if (url.pathname.startsWith('/api/repositories/')) return releaseAssetDownload(request, env, owner, headers);
-    if ((builtAssets || env.ASSETS) && !url.pathname.startsWith('/native/') && !url.pathname.startsWith('/rpc/') && !url.pathname.startsWith('/git/') && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/auth/')) {
+    if ((builtAssets || env.ASSETS) && url.pathname !== '/mcp' && !url.pathname.startsWith('/native/') && !url.pathname.startsWith('/rpc/') && !url.pathname.startsWith('/git/') && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/auth/')) {
       if (!['GET', 'HEAD'].includes(request.method) || url.href.length > 8192 || /[\\]/.test(url.pathname) || request.headers.has('Upgrade')) return new Response('Unavailable', { status: 404 });
       const auth = await owner.fetch(new Request(env.PUBLIC_ORIGIN + '/rpc/golf.v1.SessionService/GetSession', {
         method: 'POST', headers: { ...Object.fromEntries(headers), 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: '{}' }));
