@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { nativeWorkflow, nativeWorkflowPath, nativeWorkflowPlanOK, nativeWorkflowSource } from './src/native-workflow.mjs';
+import { testPolicy, testProfile } from './src/test-policy.mjs';
 
 const actions = `name: Verify
 on: pull_request
@@ -89,4 +90,23 @@ test('native Actions and GitLab host fixtures are admitted with exact shell plan
   assert.match(portable.image, /^alpine:3\.23@sha256:/);
   assert.equal(portable.steps[0].run.includes('printf "gitlab proof\\n"'), true);
   assert.equal(nativeWorkflowPlanOK(portable), true);
+});
+
+test('a module may sit beside the hosted Actions shell workflow only; every other pairing is refused', () => {
+  const actionsPath = { format: 'actions', path: '.github/workflows/ci.yml' };
+  assert.deepEqual(testProfile({ module: 'test_calc' }), { workflow: undefined, module: 'test_calc' });
+  assert.deepEqual(testProfile({ workflow: actionsPath }), { workflow: actionsPath, module: undefined });
+  assert.deepEqual(testProfile({ module: 'tests.test_calc', workflow: actionsPath }), { workflow: actionsPath, module: 'tests.test_calc' });
+  for (const tests of [undefined, {}, { module: '-option' }, { module: 'test_calc', workflow: null }, { module: 'test;curl', workflow: actionsPath },
+    { module: 'test_calc', workflow: { format: 'gitlab', path: '.gitlab-ci.yml' } }, { module: 'test_calc', workflow: { ...actionsPath, format: 'actions-act' } },
+    { workflow: { ...actionsPath, extra: true } }, { workflow: { format: 'actions', path: '.github/workflows/../ci.yml' } }]) assert.throws(() => testProfile(tests), /Invalid approved native test source/);
+  const env = { TEST_EXECUTION_ENABLED: 'true', TEST_POLICY_SHA256: 'e'.repeat(64), testTasks: {} };
+  const workflow = { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/ci.yml' };
+  assert.equal(testPolicy({ ...env, TEST_MODULE: 'test_calc' }), true);
+  assert.equal(testPolicy({ ...env, ...workflow }), true);
+  assert.equal(testPolicy({ ...env, ...workflow, TEST_MODULE: 'test_calc' }), true);
+  assert.equal(testPolicy({ ...env, ...workflow, TEST_MODULE: '-option' }), false);
+  assert.equal(testPolicy({ ...env, TEST_WORKFLOW_FORMAT: 'gitlab', TEST_WORKFLOW_PATH: '.gitlab-ci.yml', TEST_MODULE: 'test_calc' }), false);
+  assert.equal(testPolicy({ ...env, ...workflow, TEST_WORKFLOW_FORMAT: 'actions-act', TEST_MODULE: 'test_calc' }), false);
+  assert.equal(testPolicy({ ...env }), false);
 });

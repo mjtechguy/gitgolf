@@ -13,7 +13,7 @@ const { Miniflare, convertV4MiniflareOptions } = await import(pathToFileURL(reso
 const modules = [];
 const activity = await esbuild.build({ entryPoints: ['cloudflare/forge/src/activity.mjs'], outfile: 'cloudflare/forge/src/activity.runtime.mjs', bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./common.mjs', './git.mjs'] });
 const assets = await readUIAssets(resolve('web/dist-native'));
-for (const file of ['worker.mjs', 'operations.mjs', 'operations-provider.mjs', 'core.mjs', 'file-index.mjs', 'telemetry.mjs', 'repository-indexes.mjs', 'repository-metadata.mjs', 'metadata-jobs.mjs', 'repository-images.mjs', 'repository-reads.mjs', 'repository-cache.mjs', 'repository-settings.mjs', 'managed-registry.mjs', 'native-runners.mjs', 'gitlab-runner.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'repository-diff.mjs', 'owners.mjs', 'public-profiles.mjs', 'public-repositories.mjs', 'workspace-ui.mjs', 'git.mjs', 'common.mjs', 'collaboration.mjs', 'evidence.mjs', 'delivery.mjs', 'environments.mjs', 'apps.mjs', 'app-policy.mjs', 'public.mjs', 'test-policy.mjs', 'agent-policy.mjs', 'agents.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: (file === 'public.mjs' ? 'const GOLF_NATIVE_ASSETS=' + JSON.stringify(assets) + ';\n' : '') + (await readFile(new URL('./src/' + file, import.meta.url), 'utf8')).replace("'../data/languages.json' with { type: 'json' }", "'../data/languages.mjs'") });
+for (const file of ['worker.mjs', 'operations.mjs', 'operations-provider.mjs', 'core.mjs', 'file-index.mjs', 'telemetry.mjs', 'repository-indexes.mjs', 'repository-metadata.mjs', 'metadata-jobs.mjs', 'repository-images.mjs', 'repository-reads.mjs', 'repository-cache.mjs', 'repository-settings.mjs', 'managed-registry.mjs', 'native-runners.mjs', 'gitlab-runner.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'repository-diff.mjs', 'owners.mjs', 'public-profiles.mjs', 'public-repositories.mjs', 'workspace-ui.mjs', 'git.mjs', 'common.mjs', 'collaboration.mjs', 'evidence.mjs', 'delivery.mjs', 'environments.mjs', 'apps.mjs', 'app-policy.mjs', 'public.mjs', 'test-policy.mjs', 'agent-policy.mjs', 'agents.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: (file === 'public.mjs' ? 'const GOLF_NATIVE_ASSETS=' + JSON.stringify(assets) + ';\n' : '') + (await readFile(new URL('./src/' + file, import.meta.url), 'utf8')).replace("'../data/languages.json' with { type: 'json' }", "'../data/languages.mjs'") });
 modules.push({ type: 'ESModule', path: 'forge/src/activity.mjs', contents: activity.outputFiles[0].text });
 const accessModule = await esbuild.build({ entryPoints: ['cloudflare/forge/src/access.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral' });
 modules.push({ type: 'ESModule', path: 'forge/src/access.mjs', contents: accessModule.outputFiles[0].text });
@@ -46,7 +46,7 @@ try {
   assert.equal(session.status, 200, await session.clone().text()); assert.equal((await session.json()).user.login, 'local-reviewer');
   const rpc = (path, body = {}) => runtime.dispatchFetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Origin: origin }, body: JSON.stringify(body) });
   assert.equal((await (await rpc('/rpc/golf.v1.SessionService/GetSession')).json()).user.isInstanceAdmin,true);
-  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 24);
+  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 25);
   const inbox = await rpc('/rpc/golf.v1.RepositoryInvitationService/ListOwnRepositoryInvitations');
   assert.equal(inbox.status, 200, await inbox.clone().text()); assert.deepEqual((await inbox.json()).invitations, []);
   const config = await (await rpc('/native/config')).json();
@@ -94,6 +94,18 @@ try {
   assert.deepEqual((await read('RepositoryRulesService','GetRepositoryRuleMutation',{...target,operationId:input.operationId})).operation,saved.operation);
   assert.deepEqual((await read('RepositoryRulesService','GetRepositoryRules',{...target,expectedRevision:access.revision})).branchProtections,[]);
   console.log('Real Access/workerd/D1 rules: atomic policy/receipt, admin push denial and original replay passed');
+  const execution={scope:'EXECUTION_SCOPE_REPOSITORY',repository:target.repository},policy=(await read('ExecutionPolicyService','GetExecutionPolicy',execution)).policy;
+  assert.deepEqual([policy.revision,policy.manualDispatchEnabled,policy.pushAllowed,policy.canEdit],['0',true,true,true]);
+  const change={...execution,scopeId:policy.scopeId,expectedRevision:policy.revision,expectedAuthorityRevision:policy.authorityRevision,mode:'EXECUTION_MODE_DISABLED',allowAllWorkflows:true};
+  const stored=(await read('ExecutionPolicyService','UpdateExecutionPolicy',change)).policy;
+  assert.deepEqual([stored.revision,stored.manualDispatchEnabled,stored.pushAllowed,stored.mode],['1',false,false,'EXECUTION_MODE_DISABLED']);
+  assert.equal((await rpc('/rpc/golf.v1.ExecutionPolicyService/UpdateExecutionPolicy',change)).status,412);
+  assert.equal((await db.prepare('SELECT version FROM repository_execution_policy WHERE repository_id=1').first()).version,1);
+  console.log('Real Access/workerd/D1 repository execution switch: enabled default, version-fenced save and stale refusal passed');
+  await db.prepare("INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,advice_state,test_state,agent_state,created_at,updated_at,expires_at) VALUES('11111111-1111-4111-8111-111111111111',1,1,'original','hash',?,'NONE','PASSED','NONE','2026-10-14T00:00:00.000Z','2026-10-14T00:00:00.000Z','2026-10-14T00:10:00.000Z')").bind(JSON.stringify({selection:{number:7,headCommitId:'b'.repeat(40)}})).run();
+  const recent=await (await rpc('/native/pr-evidence/read',{action:'list',repository:target.repository,repositoryId:'1'})).json();
+  assert.deepEqual([recent.truncated,recent.jobs.map(job=>[job.selection.number,job.testState])],[false,[[7,'PASSED']]]);
+  console.log('Real Access/workerd/D1 recent repository runs read stored selections without a provider binding');
   console.log('Built native UI, real local Access identity mapping, spoof rejection and D1 session passed');
   if (serve) {
     console.log('Temporary UI browser check at ' + origin + '; automatically disposed in 120 seconds');

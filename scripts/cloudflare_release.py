@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -125,6 +125,8 @@ class Release:
             self.check_environment_schema()
         if self.manifest['schema'] >= 24:
             self.check_pull_merge_schema()
+        if self.manifest['schema'] >= 25:
+            self.check_execution_policy_schema()
         deployments =self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -203,7 +205,32 @@ class Release:
             self.migrate_environment_schema(applied)
         if self.manifest['schema'] >= 24:
             self.migrate_pull_merge_schema(applied)
+        if self.manifest['schema'] >= 25:
+            self.migrate_execution_policy_schema(applied)
         return applied or 'already-applied'
+
+    def check_execution_policy_schema(self):
+        columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info(repository_execution_policy)')[0]['results']
+        if {row['name'] for row in columns} != {'repository_id', 'artifact_name', 'version', 'manual', 'push', 'updated_by', 'updated_at'}:
+            raise ValueError('Apply reviewed 0025 repository execution policy migration before releasing')
+
+    def migrate_execution_policy_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0025_repository_execution_policy.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0025') not in (None, digest):
+            raise ValueError('Recorded repository execution policy migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        if len(statements) != 1 or not statements[0].startswith('CREATE TABLE IF NOT EXISTS repository_execution_policy ('):
+            raise ValueError('Execution policy migration must only add its reviewed table')
+        ready = False
+        try:
+            self.check_execution_policy_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0025') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_execution_policy_schema()
+            self.state['migration0025'] = digest; self.save(); applied.append('0025')
 
     def check_pull_merge_schema(self):
         fields = {'actor_id', 'operation_id', 'repository_id', 'pull_request_id', 'input_hash', 'original', 'phase', 'detail',

@@ -2930,7 +2930,7 @@ test('native merge writes one verified merge commit through the push journal and
   const again=(await value(await f.submit(f.input({selection:compared,expectedPullRevision:merged.revision})))).operation;
   assert.equal(again.phase,mergePhase('REJECTED'));assert.equal(again.failureCode,'preflight_refused');assert.equal(f.journal()[1].detail,'pull_request_not_open');
   assert.equal(f.counts().effects,1);
-  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,24);
+  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,25);
   const capability=(await value(await f.call('',{},ownerToken,'/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c=>c.id==='pull.merge');
   assert.equal(capability.length,1);assert.equal(capability[0].state,'CAPABILITY_STATE_READY');
 });
@@ -3486,4 +3486,324 @@ test('the stored preview environment governs publication: head branch, lifetime 
   // Without an environment only the operator allocation applies.
   await value(await f.human('DeleteRepositoryEnvironment', { target: await f.target(), environmentId: relaxed.environment.id, expectedVersion: relaxed.environment.version, operationId: nonce() }));
   const ungoverned = (await value(await publish())).preview; assert.ok(remaining(ungoverned) <= 900 && remaining(ungoverned) > 890, String(remaining(ungoverned)));
+});
+
+// Workflow files layered over the fixture tree: '.github/workflows/<name>' and root entries, each a source string or { type, source }.
+const shellWorkflow = 'name: Verify\non: pull_request\njobs:\n  check:\n    runs-on: golf-native-linux\n    steps:\n      - run: python3 -m unittest -v test_calc\n';
+function workflowFiles(f, files) {
+  const get = f.env.ARTIFACTS.get, github = '4'.repeat(40), folder = '5'.repeat(40), blobs = new Map(), root = [], nested = [];
+  let reads = 0;
+  Object.entries(files).forEach(([path, value], index) => {
+    const hash = (index + 1).toString(16).padStart(4, '0').repeat(10), name = path.replace('.github/workflows/', '');
+    blobs.set(hash, typeof value === 'string' ? value : value.source);
+    (name === path ? root : nested).push({ name, hash, type: value.type || 'blob', mode: '100644' });
+  });
+  f.env.ARTIFACTS.get = async name => {
+    const repo = await get(name), readTree = repo.readTree, readBlob = repo.readBlob;
+    return { ...repo,
+      async readTree(hash) { return hash === 'f'.repeat(40) ? [...await readTree(hash), ...root, ...(nested.length ? [{ name: '.github', hash: github, type: 'tree', mode: '040000' }] : [])] :
+        hash === github ? [{ name: 'workflows', hash: folder, type: 'tree', mode: '040000' }] : hash === folder ? nested : readTree(hash); },
+      async readBlob(hash) { if (!blobs.has(hash)) return readBlob(hash); reads++; return new Blob([blobs.get(hash)]); },
+    };
+  };
+  return { reads: () => reads };
+}
+
+test('an approved Actions workflow beside the approved module leaves agent admission unchanged', async t => {
+  for (const combined of [false, true]) await t.test(combined ? 'module and workflow' : 'module only', async t => {
+    const f = await evidenceFixture(t), input = { ...f.input, advice: false, agent: { prompt: 'Improve the approved source file.' } };
+    assert.equal((await f.evidence(input)).status, 412);
+    const execution = allocateAgents(f);
+    if (combined) { Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/ci.yml' }); workflowFiles(f, { '.github/workflows/ci.yml': shellWorkflow }); }
+    const config = await value(await f.call('', {}, ownerToken, '/native/config'));
+    assert.equal(config.agents, true); assert.equal(config.testModule, 'test_calc'); assert.equal(config.testWorkflowPath, combined ? '.github/workflows/ci.yml' : '');
+    assert.equal((await f.evidence(input, readerToken)).status, 404);
+    for (const agent of [null, {}, { prompt: '' }, { prompt: 'a'.repeat(16385) }, { prompt: 'Fix', remote: 'external' }]) assert.equal((await f.evidence({ ...input, agent })).status, 400);
+    assert.equal((await f.evidence({ ...input, runTests: true })).status, 400);
+    const job = (await value(await f.evidence(input))).job;
+    assert.equal(job.agentState, 'REQUESTED'); assert.equal((await value(await f.evidence(input))).job.id, job.id);
+    assert.equal((await f.evidence({ ...input, agent: { prompt: 'Different' } })).status, 409);
+    const snapshot = JSON.parse(f.sql.prepare('SELECT snapshot FROM evidence_jobs WHERE id=?').get(job.id).snapshot);
+    assert.equal(snapshot.agent.module, 'test_calc'); assert.equal(snapshot.execution, undefined);
+    await f.advance(job.id, 'agents'); await f.advance(job.id, 'agents');
+    assert.equal(execution.admissions(), 1); assert.equal(f.forks(), 1);
+    const task = execution.tasks.get(job.id);
+    assert.equal(task.commitId, f.selection.headCommitId); assert.equal(task.module, 'test_calc'); assert.equal(task.workflow, undefined);
+    assert.equal((await f.advance(job.id, 'authorize-agent')).state, 'AUTHORIZED');
+    // Pull-request runs take the workflow when one is approved; the agent job keeps its module.
+    const run = (await value(await f.evidence({ ...f.input, advice: false, runTests: true, idempotencyKey: nonce() }))).job;
+    const execute = JSON.parse(f.sql.prepare('SELECT snapshot FROM evidence_jobs WHERE id=?').get(run.id).snapshot).execution;
+    assert.equal(execute.contract, combined ? 'golf.native.workflow-shell.v1' : 'golf.native.pr-test.v1');
+    assert.equal(execute.module, combined ? undefined : 'test_calc'); assert.equal(execute.workflow?.path, combined ? '.github/workflows/ci.yml' : undefined);
+    assert.equal((await f.advance(run.id, 'authorize-test')).state, 'AUTHORIZED');
+    f.env.TEST_MODULE = 'other_module';
+    assert.equal((await f.advance(job.id, 'agents')).state, 'REFUSED');
+  });
+});
+
+async function inventoryFixture(t) { const f = await fixture(t); await f.create(); await f.sendPush(); return f; }
+const inspect = (f, body = {}, token = ownerToken) => f.call('', { repository: key, ...body }, token, '/rpc/golf.v1.WorkflowService/InspectWorkflows');
+const workflowReason = async f => (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.find(c => c.id === 'settings.repository-workflows');
+function allocateEvidence(f) {
+  Object.assign(f.env, { EVIDENCE_DAILY_LIMIT: '2', EVIDENCE_WORKFLOW_NAME: 'test-evidence', EVIDENCE_QUEUE_NAME: 'test-evidence', EVIDENCE_QUEUE: { async send() {} }, EVIDENCE_BUCKET: {} });
+}
+
+test('native workflow inventory reads the default branch for current repository accounts only', async t => {
+  const empty = await fixture(t); await empty.create();
+  assert.equal((await inspect(empty)).status, 412);
+  const f = await inventoryFixture(t), origin = f.env.PUBLIC_ORIGIN, path = '/rpc/golf.v1.WorkflowService/InspectWorkflows';
+  const listed = await value(await inspect(f, { repositoryId: '1' }));
+  assert.deepEqual({ ...listed, policyRevision: '' }, { repositoryId: '1', commitId: commit, catalogVersion: 'golf.native.workflow-inventory.v1', executionAvailable: false, configurations: [],
+    diagnostics: [{ code: 'module_profile', message: 'None of these files can run: this installation executes one operator-approved Python test module on pull requests.' }], policyRevision: '', executionCatalog: '', executionEngineCommit: '' });
+  assert.match(listed.policyRevision, /^[a-f0-9]{64}$/);
+  assert.equal((await inspect(f, { ref: 'main' })).status, 400);
+  assert.equal((await inspect(f, { repositoryId: '2' })).status, 404);
+  assert.equal((await inspect(f, { repository: { owner: 'alice', name: 'other' } })).status, 404);
+  assert.equal((await inspect(f, {}, readerToken)).status, 404);
+  await value(await f.call('', { repository: key, repositoryId: '1', userId: '2', role: 'read' }, ownerToken, '/native/repository-grant'));
+  assert.equal((await value(await inspect(f, {}, readerToken))).commitId, commit);
+  // Publishing source does not publish the settings inventory: no grant, no answer.
+  const anonymous = () => f.dispatch(new Request(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify({ repository: key }) }));
+  assert.equal((await anonymous()).status, 401);
+  f.env.PUBLIC_REPOSITORIES = 'true'; f.sql.exec('INSERT INTO repository_visibility(repository_id,is_public) VALUES(1,1)');
+  assert.equal((await f.call('GetRepository', { repository: key }, readerToken)).status, 200);
+  assert.equal((await anonymous()).status, 401);
+  f.sql.prepare('DELETE FROM grants WHERE repository_id=1 AND user_id=2').run();
+  assert.equal((await f.call('GetRepository', { repository: key }, readerToken)).status, 200);
+  assert.equal((await inspect(f, {}, readerToken)).status, 404);
+  assert.equal(concurrentRead(new Request(origin + path, { method: 'POST' })), true);
+  const capability = await workflowReason(f);
+  assert.equal(capability.state, 'CAPABILITY_STATE_READY');
+  assert.equal(capability.reason, 'Lists workflow files at the default-branch commit. None can run: pull-request test execution is not allocated on this installation.');
+});
+
+test('the module profile marks no workflow runnable and a workflow profile marks only its approved path', async t => {
+  const f = await inventoryFixture(t); allocateEvidence(f); allocateTests(f);
+  workflowFiles(f, { '.github/workflows/ci.yml': shellWorkflow, '.github/workflows/release.yml': 'on: push\njobs:\n  ship:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n', '.gitlab-ci.yml': 'check:\n  script: echo ok\n' });
+  const byPath = result => Object.fromEntries(result.configurations.map(item => [item.path, item]));
+  const module = await value(await inspect(f)), listed = byPath(module);
+  assert.deepEqual(module.configurations.map(item => item.path), ['.gitlab-ci.yml', '.github/workflows/ci.yml', '.github/workflows/release.yml']);
+  assert.equal(module.executionAvailable, true); assert.deepEqual(module.diagnostics.map(d => d.code), ['module_profile']);
+  assert.equal(module.configurations.some(item => item.manualPolicyAllowed || item.pushPolicyAllowed || item.diagnostics.some(d => d.code === 'not_approved_path')), false);
+  assert.deepEqual({ ...listed['.github/workflows/ci.yml'], blobId: '' }, { path: '.github/workflows/ci.yml', blobId: '', byteSize: String(shellWorkflow.length), format: 'WORKFLOW_FORMAT_GITHUB_ACTIONS',
+    state: 'WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET', name: 'Verify', jobs: [{ id: 'check', name: '', stage: '', stepCount: 1 }], events: ['pull_request'], diagnostics: [], manualPolicyAllowed: false, pushPolicyAllowed: false });
+  assert.match(listed['.github/workflows/ci.yml'].blobId, /^[a-f0-9]{40}$/);
+  assert.equal(listed['.github/workflows/release.yml'].state, 'WORKFLOW_INSPECTION_STATE_UNSUPPORTED');
+  assert.deepEqual(listed['.github/workflows/release.yml'].diagnostics.map(d => d.code), ['outside_native_subset']); assert.deepEqual(listed['.github/workflows/release.yml'].jobs, []);
+  assert.equal(listed['.gitlab-ci.yml'].format, 'WORKFLOW_FORMAT_GITLAB_CI'); assert.equal(listed['.gitlab-ci.yml'].state, 'WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET');
+  assert.equal((await workflowReason(f)).reason, 'Lists workflow files at the default-branch commit. None can run: this installation executes one operator-approved Python test module on pull requests.');
+  // The agent module may stay beside the approved Actions shell workflow.
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/ci.yml' });
+  const workflow = await value(await inspect(f)), approved = byPath(workflow);
+  assert.deepEqual(workflow.diagnostics, []); assert.notEqual(workflow.policyRevision, module.policyRevision);
+  assert.deepEqual(workflow.configurations.map(item => [item.manualPolicyAllowed, item.pushPolicyAllowed]), [[false, false], [true, false], [false, false]]);
+  assert.deepEqual(approved['.github/workflows/ci.yml'].diagnostics, []);
+  assert.deepEqual(approved['.gitlab-ci.yml'].diagnostics.map(d => d.code), ['not_approved_path']);
+  assert.deepEqual(approved['.github/workflows/release.yml'].diagnostics.map(d => d.code), ['outside_native_subset', 'not_approved_path']);
+  f.env.CI_AUTO = 'true';
+  const automatic = await value(await inspect(f));
+  assert.equal(byPath(automatic)['.github/workflows/ci.yml'].pushPolicyAllowed, true); assert.notEqual(automatic.policyRevision, workflow.policyRevision);
+  assert.equal((await workflowReason(f)).reason, 'Lists workflow files at the default-branch commit and marks the one operator-approved path that can run. Pull-request jobs only: one job of shell steps, no actions, expressions, services or matrices. No manual dispatch, branch-push or tag triggers.');
+  f.env.TEST_WORKFLOW_PATH = '.github/workflows/absent.yml';
+  const absent = await value(await inspect(f));
+  assert.deepEqual(absent.diagnostics.map(d => d.code), ['approved_path_missing']); assert.equal(absent.configurations.some(item => item.manualPolicyAllowed), false);
+  // The pinned catalog runs on customer runners; this page does not claim to have inspected its files.
+  delete f.env.TEST_MODULE; Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions-act', TEST_WORKFLOW_PATH: '.github/workflows/release.yml' });
+  const pinned = byPath(await value(await inspect(f)));
+  assert.equal(pinned['.github/workflows/release.yml'].state, 'WORKFLOW_INSPECTION_STATE_UNSPECIFIED'); assert.deepEqual(pinned['.github/workflows/release.yml'].diagnostics.map(d => d.code), ['not_inspected']);
+  assert.equal(pinned['.github/workflows/release.yml'].manualPolicyAllowed, true); assert.deepEqual(pinned['.github/workflows/ci.yml'].diagnostics.map(d => d.code), ['not_inspected', 'not_approved_path']);
+  assert.match((await workflowReason(f)).reason, /selected customer runner pool with the pinned Actions catalog/);
+  // An unallocated evidence queue removes every ceiling without hiding the inventory.
+  delete f.env.EVIDENCE_BUCKET;
+  const unallocated = await value(await inspect(f));
+  assert.equal(unallocated.executionAvailable, false); assert.equal(unallocated.configurations.some(item => item.manualPolicyAllowed || item.pushPolicyAllowed), false);
+});
+
+test('workflow inventory bounds files, bytes and entry kinds and keeps the approved path listed', async t => {
+  const f = await inventoryFixture(t); allocateEvidence(f); allocateTests(f);
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/zz.yml' });
+  const many = workflowFiles(f, { ...Object.fromEntries(Array.from({ length: 25 }, (_, index) => ['.github/workflows/w' + String(index).padStart(2, '0') + '.yml', shellWorkflow])), '.github/workflows/zz.yml': shellWorkflow });
+  const overfull = await value(await inspect(f));
+  assert.equal(overfull.configurations.length, 20); assert.equal(many.reads(), 20);
+  assert.deepEqual(overfull.configurations.map(item => item.path).slice(-2), ['.github/workflows/w18.yml', '.github/workflows/zz.yml']);
+  assert.equal(overfull.configurations.at(-1).manualPolicyAllowed, true);
+  assert.deepEqual(overfull.diagnostics, [{ code: 'inventory_truncated', message: '26 workflow files exist; 20 are listed.' }]);
+  const g = await inventoryFixture(t);
+  const kinds = workflowFiles(g, { '.github/workflows/big.yml': 'a'.repeat(64 * 1024 + 1), '.github/workflows/edge.yml': '#'.repeat(64 * 1024), '.github/workflows/binary.yaml': { source: new Uint8Array([0xff, 0xfe, 0x00]) },
+    '.github/workflows/empty.yml': '', '.github/workflows/link.yml': { type: 'symlink', source: 'ci.yml' }, '.github/workflows/run.yml': { type: 'exec', source: shellWorkflow },
+    '.github/workflows/bad\u0007name.yml': shellWorkflow, '.github/workflows/notes.txt': 'ignored', '.gitlab-ci.yml': { type: 'tree', source: '' } });
+  const result = await value(await inspect(g)), listed = Object.fromEntries(result.configurations.map(item => [item.path.replace('.github/workflows/', ''), item]));
+  assert.deepEqual(Object.keys(listed).sort(), ['.gitlab-ci.yml', 'big.yml', 'binary.yaml', 'edge.yml', 'empty.yml', 'link.yml', 'run.yml']);
+  assert.equal(kinds.reads(), 4);
+  assert.deepEqual([listed['big.yml'].state, listed['big.yml'].byteSize, listed['big.yml'].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_UNSPECIFIED', '65537', 'file_too_large']);
+  assert.deepEqual([listed['edge.yml'].state, listed['edge.yml'].byteSize, listed['edge.yml'].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_UNSUPPORTED', '65536', 'outside_executable_size']);
+  assert.deepEqual([listed['empty.yml'].state, listed['empty.yml'].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_UNSUPPORTED', 'outside_executable_size']);
+  assert.deepEqual([listed['binary.yaml'].state, listed['binary.yaml'].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_INVALID', 'not_utf8']);
+  for (const name of ['link.yml', 'run.yml', '.gitlab-ci.yml']) assert.deepEqual([listed[name].state, listed[name].blobId, listed[name].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_UNSUPPORTED', '', 'not_regular_file']);
+  assert.deepEqual(result.diagnostics.map(d => d.code), ['unlisted_names', 'module_profile']);
+  // A syntactically valid GitLab job whose image admission would refuse is reported before anyone tries to run it.
+  const h = await inventoryFixture(t); h.env.TEST_IMAGE_REF = 'alpine:3.23@sha256:' + 'b'.repeat(64);
+  workflowFiles(h, { '.gitlab-ci.yml': `check:\n  image: alpine:3.23@sha256:${'a'.repeat(64)}\n  script: echo pinned\n` });
+  const image = (await value(await inspect(h))).configurations[0];
+  assert.deepEqual([image.state, image.diagnostics.map(d => d.code)], ['WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET', ['image_not_approved']]);
+  h.env.TEST_IMAGE_REF = 'alpine:3.23@sha256:' + 'a'.repeat(64);
+  assert.deepEqual((await value(await inspect(h))).configurations[0].diagnostics, []);
+});
+
+const policyCall = (f, method, body = {}, token = ownerToken) => f.call('', { scope: 'EXECUTION_SCOPE_REPOSITORY', repository: key, ...body }, token, '/rpc/golf.v1.ExecutionPolicyService/' + method);
+// Changes need a verified human Access sign-in; this header stands in for the identity the public Worker forwards.
+const humanPolicy = (f, method, body = {}, email = 'alice@example.com', headers = {}) => f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/rpc/golf.v1.ExecutionPolicyService/' + method, { method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...(email ? { 'X-Golf-Native-Access-Email': email } : {}), ...headers }, body: JSON.stringify({ scope: 'EXECUTION_SCOPE_REPOSITORY', repository: key, ...body }) }));
+async function setExecution(f, manual, push) {
+  f.sql.exec("UPDATE users SET email=login||'@example.com' WHERE email IS NULL");
+  const { policy } = await value(await humanPolicy(f, 'GetExecutionPolicy'));
+  return value(await humanPolicy(f, 'UpdateExecutionPolicy', { scopeId: policy.scopeId, expectedRevision: policy.revision, expectedAuthorityRevision: policy.authorityRevision,
+    mode: manual || push ? 'EXECUTION_MODE_ALL' : 'EXECUTION_MODE_DISABLED', ...(manual ? { manualDispatchEnabled: true } : {}), ...(push ? { pushAllowed: true } : {}), allowAllWorkflows: true }));
+}
+
+test('the repository execution switch defaults to enabled and saves only under a current admin Access sign-in and the observed revision', async t => {
+  const f = await inventoryFixture(t), origin = f.env.PUBLIC_ORIGIN, path = '/rpc/golf.v1.ExecutionPolicyService/';
+  await value(await f.call('', { repository: key, repositoryId: '1', userId: '2', role: 'read' }, ownerToken, '/native/repository-grant'));
+  f.sql.exec("UPDATE users SET email=login||'@example.com'");
+  const initial = (await value(await humanPolicy(f, 'GetExecutionPolicy'))).policy;
+  assert.deepEqual(initial, { scope: 'EXECUTION_SCOPE_REPOSITORY', scopeId: '1', ownerId: initial.ownerId, mode: 'EXECUTION_MODE_ALL', selectedRepositoryIds: [], manualDispatchEnabled: true, allowAllWorkflows: true,
+    workflowPaths: [], revision: '0', revocationEpoch: '0', canEdit: true, authorityRevision: initial.authorityRevision, pushAllowed: true });
+  assert.match(initial.ownerId, /^[1-9][0-9]*$/); assert.match(initial.authorityRevision, /^[a-f0-9]{64}$/);
+  // A bearer credential reads the same switch and authority revision but is never offered the edit.
+  assert.deepEqual((await value(await policyCall(f, 'GetExecutionPolicy'))).policy, { ...initial, canEdit: false });
+  const reader = (await value(await humanPolicy(f, 'GetExecutionPolicy', {}, 'bob@example.com'))).policy;
+  assert.deepEqual((await value(await policyCall(f, 'GetExecutionPolicy', {}, readerToken))).policy, reader);
+  assert.equal(reader.canEdit, false); assert.equal(reader.manualDispatchEnabled, true); assert.notEqual(reader.authorityRevision, initial.authorityRevision);
+  assert.equal((await f.dispatch(new Request(origin + path + 'GetExecutionPolicy', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify({ scope: 3, repository: key }) }))).status, 401);
+  assert.equal((await policyCall(f, 'GetExecutionPolicy', { repository: { owner: 'alice', name: 'other' } })).status, 404);
+  for (const body of [{ scope: 'EXECUTION_SCOPE_INSTANCE' }, { scope: 'EXECUTION_SCOPE_ORGANIZATION', organization: 'alice' }, { organization: 'alice' }, { repository: undefined }, { scope: undefined }]) assert.equal((await policyCall(f, 'GetExecutionPolicy', body)).status, 501);
+  assert.equal((await policyCall(f, 'DeleteExecutionPolicy')).status, 501);
+  const intent = (changes = {}) => ({ scopeId: '1', expectedRevision: '0', expectedAuthorityRevision: initial.authorityRevision, mode: 'EXECUTION_MODE_DISABLED', allowAllWorkflows: true, ...changes });
+  const update = (changes = {}, email, headers) => humanPolicy(f, 'UpdateExecutionPolicy', intent(changes), email, headers);
+  // The switch can stop a repository's CI: an admin bearer credential, a service token and a signed-in reader are all refused.
+  assert.equal((await policyCall(f, 'UpdateExecutionPolicy', intent())).status, 404);
+  for (const headers of [{ Authorization: 'Bearer ' + ownerToken }, { 'CF-Access-Client-Id': 'machine' }, { 'CF-Access-Client-Secret': 'secret' }]) assert.ok([401, 404].includes((await update({}, 'alice@example.com', headers)).status), JSON.stringify(headers));
+  assert.equal((await update({}, '')).status, 401);
+  assert.equal((await update({ expectedAuthorityRevision: reader.authorityRevision }, 'bob@example.com')).status, 404);
+  assert.equal((await policyCall(f, 'UpdateExecutionPolicy', intent({ expectedAuthorityRevision: reader.authorityRevision }), readerToken)).status, 404);
+  assert.equal((await update({ scopeId: '2' })).status, 404);
+  for (const changes of [{ mode: 'EXECUTION_MODE_SELECTED', selectedRepositoryIds: ['1'] }, { mode: 'EXECUTION_MODE_SELECTED' }, { workflowPaths: ['.github/workflows/ci.yml'] }, { allowAllWorkflows: false }, { mode: 'EXECUTION_MODE_ALL' },
+    { manualDispatchEnabled: true }, { pushAllowed: 'true' }, { revocationEpoch: '1' }, { expectedRevision: 'latest' }, { expectedAuthorityRevision: 'current' }]) assert.equal((await update(changes)).status, 400, JSON.stringify(changes));
+  assert.equal((await update({ expectedRevision: '1' })).status, 412);
+  assert.equal((await update({ expectedAuthorityRevision: 'f'.repeat(64) })).status, 412);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM repository_execution_policy').get().n, 0);
+  const disabled = (await value(await update())).policy;
+  assert.deepEqual([disabled.mode, disabled.manualDispatchEnabled, disabled.pushAllowed, disabled.revision, disabled.revocationEpoch, disabled.authorityRevision], ['EXECUTION_MODE_DISABLED', false, false, '1', '0', initial.authorityRevision]);
+  assert.deepEqual({ ...f.sql.prepare('SELECT repository_id,version,manual,push,updated_by FROM repository_execution_policy').get() }, { repository_id: 1, version: 1, manual: 0, push: 0, updated_by: 1 });
+  // The first observation cannot be replayed over a later one.
+  assert.equal((await update({ mode: 'EXECUTION_MODE_ALL', manualDispatchEnabled: true })).status, 412);
+  const pushOnly = (await value(await update({ expectedRevision: '1', mode: 'EXECUTION_MODE_ALL', pushAllowed: true }))).policy;
+  assert.deepEqual([pushOnly.mode, pushOnly.manualDispatchEnabled, pushOnly.pushAllowed, pushOnly.revision], ['EXECUTION_MODE_ALL', false, true, '2']);
+  // Losing admin between the read and the write leaves the stored switch untouched.
+  const prepare = f.env.DB.prepare;
+  f.env.DB.prepare = function (query) { if (query.startsWith('INSERT INTO repository_execution_policy')) f.sql.exec("UPDATE grants SET role='write' WHERE repository_id=1 AND user_id=1"); return prepare.call(this, query); };
+  assert.equal((await update({ expectedRevision: '2', mode: 'EXECUTION_MODE_ALL', manualDispatchEnabled: true, pushAllowed: true })).status, 412);
+  f.env.DB.prepare = prepare;
+  assert.deepEqual({ ...f.sql.prepare('SELECT version,manual,push FROM repository_execution_policy').get() }, { version: 2, manual: 0, push: 1 });
+  assert.equal((await value(await humanPolicy(f, 'GetExecutionPolicy'))).policy.canEdit, false);
+  // A row recorded for another artifact enables nothing.
+  f.sql.exec("UPDATE repository_execution_policy SET artifact_name='repo-other',manual=1");
+  const foreign = (await value(await policyCall(f, 'GetExecutionPolicy'))).policy;
+  assert.deepEqual([foreign.mode, foreign.manualDispatchEnabled, foreign.pushAllowed], ['EXECUTION_MODE_DISABLED', false, false]);
+  assert.equal(concurrentRead(new Request(origin + path + 'GetExecutionPolicy', { method: 'POST' })), true);
+  assert.equal(concurrentRead(new Request(origin + path + 'UpdateExecutionPolicy', { method: 'POST' })), false);
+});
+
+test('a repository that turns runs off refuses new admission, marks automatic intake refused and leaves admitted work and agents alone', async t => {
+  const f = await evidenceFixture(t), input = { ...f.input, advice: false, runTests: true };
+  allocateAgents(f); Object.assign(f.env, { CI_AUTO: 'true', EVIDENCE_DAILY_LIMIT: '20' });
+  const capability = async () => (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.find(c => c.id === 'settings.repository-execution-policy');
+  assert.deepEqual([(await capability()).state, (await capability()).reason], ['CAPABILITY_STATE_DISABLED', 'The repository execution switch is changed only under a verified Access sign-in, which this installation does not configure.']);
+  f.env.ACCESS_AUD = 'access-aud';
+  assert.equal((await capability()).state, 'CAPABILITY_STATE_READY'); assert.match((await capability()).reason, /Changes need a verified Access sign-in\./);
+  const jobs = () => f.sql.prepare('SELECT count(*) AS n FROM evidence_jobs').get().n;
+  const pushed = () => f.sql.prepare('INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,ci_state,created_at) VALUES(?,1,1,?,?,?,?,?,?) RETURNING id')
+    .get(nonce(), 'refs/heads/feature', commit, 'b'.repeat(40), 'APPLIED', 'PENDING', new Date().toISOString()).id;
+  const admitted = (await value(await f.evidence(input))).job;
+  assert.equal((await setExecution(f, false, true)).policy.manualDispatchEnabled, false);
+  const refused = await f.evidence({ ...input, idempotencyKey: nonce() });
+  assert.equal(refused.status, 412); assert.deepEqual(await refused.json(), { code: 'failed_precondition', message: 'Pull-request runs are turned off for this repository.' });
+  assert.equal(jobs(), 1); assert.equal(f.messages.length, 1);
+  // The switch is an admission rule: the original run is still readable, replayable and running.
+  assert.equal((await value(await f.evidence(input))).job.id, admitted.id);
+  assert.equal((await f.advance(admitted.id, 'tests')).state, 'RUNNING'); assert.equal(f.sql.prepare('SELECT test_state FROM evidence_jobs WHERE id=?').get(admitted.id).test_state, 'RUNNING');
+  assert.equal((await f.advance(admitted.id, 'authorize-test')).state, 'AUTHORIZED');
+  // Evidence without tests and agent proposals are not governed by it.
+  assert.equal((await f.evidence({ ...f.input, advice: false, idempotencyKey: nonce() })).status, 200);
+  assert.equal((await value(await f.evidence({ ...f.input, advice: false, agent: { prompt: 'Improve the approved source file.' }, idempotencyKey: nonce() }))).job.agentState, 'REQUESTED');
+  // Automatic push tests have their own switch and still admit.
+  const first = pushed();
+  assert.deepEqual(await runCI(f.env), { admitted: 1 });
+  assert.deepEqual({ ...f.sql.prepare('SELECT state,reason FROM ci_intake WHERE operation_id=?').get(first) }, { state: 'ADMITTED', reason: null });
+  assert.equal((await setExecution(f, true, false)).policy.pushAllowed, false);
+  const second = pushed(), admissions = jobs();
+  assert.deepEqual(await runCI(f.env), { admitted: 0 });
+  assert.equal(f.sql.prepare('SELECT ci_state FROM git_operations WHERE id=?').get(second).ci_state, 'REFUSED');
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ci_intake WHERE operation_id=?').get(second).n, 0);
+  // Intake recorded while enabled is refused, not silently dropped, once the switch is off.
+  const third = pushed(), intake = nonce();
+  f.sql.prepare("UPDATE git_operations SET ci_state='RECORDED' WHERE id=?").run(third);
+  f.sql.prepare('INSERT INTO ci_intake(id,operation_id,repository_id,user_id,number,selection,created_at) VALUES(?,?,1,1,?,?,?)').run(intake, third, f.selection.number, JSON.stringify(f.selection), new Date().toISOString());
+  assert.deepEqual(await runCI(f.env), { admitted: 0 });
+  assert.deepEqual({ ...f.sql.prepare('SELECT state,reason,job_id FROM ci_intake WHERE id=?').get(intake) }, { state: 'REFUSED', reason: 'failed_precondition', job_id: null });
+  assert.equal(jobs(), admissions);
+  // A writer's own run is allowed again, and the inventory reports the same switch.
+  assert.equal((await f.evidence({ ...input, idempotencyKey: nonce() })).status, 200);
+  await setExecution(f, false, false);
+  assert.equal((await f.evidence({ ...input, idempotencyKey: nonce() })).status, 412);
+  delete f.env.EVIDENCE_BUCKET;
+  assert.deepEqual([(await capability()).state, (await capability()).reason], ['CAPABILITY_STATE_DISABLED', 'Pull-request test execution is not allocated on this installation; a repository switch has nothing to govern.']);
+});
+
+test('the workflow inventory reports the repository switch beside the operator allocation', async t => {
+  const f = await inventoryFixture(t); allocateEvidence(f); allocateTests(f);
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/ci.yml', CI_AUTO: 'true' });
+  workflowFiles(f, { '.github/workflows/ci.yml': shellWorkflow });
+  const flags = async () => { const result = await value(await inspect(f)); return [result.configurations[0].manualPolicyAllowed, result.configurations[0].pushPolicyAllowed, result.policyRevision]; };
+  const enabled = await flags(); assert.deepEqual(enabled.slice(0, 2), [true, true]);
+  await setExecution(f, false, true);
+  const pushOnly = await flags(); assert.deepEqual(pushOnly.slice(0, 2), [false, true]); assert.notEqual(pushOnly[2], enabled[2]);
+  await setExecution(f, false, false);
+  assert.deepEqual((await flags()).slice(0, 2), [false, false]);
+  await setExecution(f, true, true);
+  const restored = await flags(); assert.deepEqual(restored.slice(0, 2), [true, true]); assert.notEqual(restored[2], enabled[2]);
+});
+
+test('recent repository runs come from stored rows for current repository accounts, bounded and without a Git read', async t => {
+  const f = await evidenceFixture(t); allocateAgents(f); f.env.EVIDENCE_DAILY_LIMIT = '20';
+  const list = (body = {}, token = ownerToken, path = '/native/pr-evidence/read') => f.call('', { action: 'list', repository: key, repositoryId: '1', ...body }, token, path);
+  assert.deepEqual(await value(await list()), { jobs: [], truncated: false });
+  const tests = (await value(await f.evidence({ ...f.input, advice: false, runTests: true }))).job;
+  const agent = (await value(await f.evidence({ ...f.input, advice: false, agent: { prompt: 'A private agent prompt.' }, idempotencyKey: nonce() }))).job;
+  const open = f.env.ARTIFACTS.get, fetches = globalThis.fetch.mock.callCount(); let opens = 0;
+  f.env.ARTIFACTS.get = name => { opens++; return open(name); };
+  const recent = await value(await list({}, readerToken));
+  assert.equal(opens, 0); assert.equal(globalThis.fetch.mock.callCount(), fetches);
+  assert.deepEqual(recent.jobs.map(job => job.id).sort(), [tests.id, agent.id].sort()); assert.equal(recent.truncated, false);
+  const { updatedAt, ...row } = recent.jobs.find(job => job.id === tests.id);
+  assert.deepEqual(row, { id: tests.id, state: 'QUEUED', selection: f.selection, createdAt: tests.createdAt, expiresAt: tests.expiresAt, advisoryOnly: true, adviceState: 'NONE', testState: 'REQUESTED', agentState: 'NONE' });
+  assert.equal(recent.jobs.find(job => job.id === agent.id).agentState, 'REQUESTED');
+  // The repository-wide rows make no staleness claim and carry no snapshot content.
+  assert.equal(recent.jobs.some(job => 'stale' in job || 'idempotencyKey' in job), false); assert.equal(JSON.stringify(recent).includes('private agent prompt'), false);
+  assert.deepEqual(await value(await list({}, ownerToken, '/native/pr-evidence')), recent);
+  // A pull request's own list still observes current source once.
+  const perPull = await value(await list({ number: f.selection.number }, readerToken));
+  assert.equal(perPull.jobs.length, 2); assert.equal(perPull.jobs.every(job => job.stale === false), true); assert.ok(opens > 0);
+  for (const number of [0, -1, 1.5, '1', null]) assert.equal((await list({ number })).status, 400);
+  // Newest first, at most 50, and an honest truncation flag.
+  const insert = f.sql.prepare("INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,advice_state,test_state,agent_state,created_at,updated_at,expires_at) VALUES(?,1,1,?,'hash',?,'NONE','PASSED','NONE',?,?,?)");
+  for (let index = 0; index < 55; index++) { const time = new Date(Date.UTC(2031, 0, 1, 0, index)).toISOString(); insert.run(nonce(), nonce(), JSON.stringify({ selection: { ...f.selection, number: index + 10 } }), time, time, time); }
+  const bounded = await value(await list());
+  assert.equal(bounded.jobs.length, 50); assert.equal(bounded.truncated, true);
+  assert.deepEqual(bounded.jobs.slice(0, 2).map(job => job.selection.number), [64, 63]); assert.equal(bounded.jobs.at(-1).selection.number, 15);
+  // No grant, no inventory: neither a former reader nor an anonymous caller, even on a published repository.
+  f.env.PUBLIC_REPOSITORIES = 'true'; f.sql.exec('INSERT INTO repository_visibility(repository_id,is_public) VALUES(1,1)');
+  f.sql.prepare('DELETE FROM grants WHERE repository_id=1 AND user_id=2').run();
+  assert.equal((await list({}, readerToken)).status, 404);
+  assert.equal((await f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/native/pr-evidence/read', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify({ action: 'list', repository: key, repositoryId: '1' }) }))).status, 401);
 });

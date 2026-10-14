@@ -249,6 +249,20 @@ class NativeSetup(unittest.TestCase):
             with self.assertRaises(ValueError):
                 initialize(*args, {**evidence, 'allow_ai': True}, {**base, 'workflow': {'format': 'gitlab', 'path': '.gitlab-ci.yml'}}, agent_path='calc.py')
             self.assertFalse(root.exists())
+            # A module beside the hosted Actions shell workflow keeps agent proposals; no other pairing is approved.
+            ai = {**evidence, 'allow_ai': True, 'gateway': 'golf-evidence'}
+            combined = {**base, 'module': 'test_calc', 'workflow': {'format': 'actions', 'path': '.github/workflows/pr.yml'}}
+            for invalid in [{**combined, 'workflow': {'format': 'gitlab', 'path': '.gitlab-ci.yml'}}, {**combined, 'module': '-option'},
+                            {**combined, 'image': pinned['image'], 'workflow': {'format': 'actions-act', 'path': '.github/workflows/pr.yml'}}]:
+                with self.assertRaises(ValueError):
+                    initialize(*args, ai, invalid, agent_path='calc.py')
+                self.assertFalse(root.exists())
+            with self.assertRaises(ValueError):
+                initialize(*args, ai, {**base, 'workflow': combined['workflow']}, agent_path='calc.py')
+            self.assertFalse(root.exists())
+            initialize(root.with_name('combined'), *args[1:], ai, combined, agent_path='calc.py')
+            saved = json.loads((root.with_name('combined')/'forge.json').read_text())
+            self.assertEqual((saved['tests'], saved['agent_path']), (combined, 'calc.py'))
 
     def test_existing_native_evidence_migration_preserves_job_identity(self):
         schema = (ROOT/'cloudflare/forge/schema.sql').read_text()

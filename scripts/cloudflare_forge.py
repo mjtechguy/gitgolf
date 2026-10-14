@@ -11,6 +11,9 @@ from urllib.parse import urlsplit
 
 from cloudflare_setup import ROOT, hostname, private_write
 
+# The same pattern as nativeWorkflowPath in cloudflare/forge/src/native-workflow.mjs, which the build applies.
+ACTIONS_WORKFLOW_PATH = r'\.github/workflows/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml'
+
 
 def initialize(directory, account, host, worker, workspace, namespace, database_id, database_name, login, evidence=None, tests=None, analytics=None, agent_path=None, access_aud=None, owner_email=None, web_assets=None, previews=None, apps=None, automatic_ci=False, operations=None, webhooks=None):
     if operations is not None:
@@ -47,12 +50,14 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
             raise ValueError('Container tests require an evidence allocation')
         workflow = tests.get('workflow')
         if workflow is not None:
-            if 'module' in tests or not isinstance(workflow, dict) or set(workflow) != {'format', 'path'} or not (
+            if not isinstance(workflow, dict) or set(workflow) != {'format', 'path'} or not (
                     workflow['format'] in ('actions', 'actions-act') and isinstance(workflow['path'], str) and
-                    re.fullmatch(r'\.github/workflows/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml', workflow['path']) or
+                    re.fullmatch(ACTIONS_WORKFLOW_PATH, workflow['path']) or
                     workflow['format'] == 'gitlab' and workflow['path'] == '.gitlab-ci.yml'):
                 raise ValueError('Choose one approved native Actions or GitLab workflow path')
-        elif not isinstance(tests.get('module'), str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,8}', tests['module']) or len(tests['module']) > 128:
+            if 'module' in tests and workflow['format'] != 'actions':
+                raise ValueError('An approved module beside a workflow requires the hosted Actions shell profile')
+        if (workflow is None or 'module' in tests) and (not isinstance(tests.get('module'), str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,8}', tests['module']) or len(tests['module']) > 128):
             raise ValueError('Container tests require an approved Python unittest module')
         if not isinstance(tests.get('image'), str) or not re.fullmatch(r'[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}(?:@sha256:[a-f0-9]{64})?', tests['image']):
             raise ValueError('Explicit built container image tag or pinned digest required')
@@ -64,7 +69,7 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
             raise ValueError('Socketless build requires the pinned Actions profile')
     if analytics is not None and (evidence is None or not isinstance(analytics, str) or not re.fullmatch('[A-Za-z_][A-Za-z0-9_]{0,63}', analytics)):
         raise ValueError('Evidence allocation and canonical Analytics Engine dataset required')
-    if agent_path is not None and (tests is None or tests.get('workflow') or evidence is None or not evidence['allow_ai'] or not isinstance(agent_path, str) or
+    if agent_path is not None and (tests is None or 'module' not in tests or evidence is None or not evidence['allow_ai'] or not isinstance(agent_path, str) or
             len(agent_path) > 200 or len(worker) > 56 or any(not re.fullmatch('[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', p) or '..' in p for p in agent_path.split('/')) or
             agent_path == tests['module'].replace('.', '/') + '.py'):
         raise ValueError('Agent execution requires approved source path, container tests and private AI allocation')

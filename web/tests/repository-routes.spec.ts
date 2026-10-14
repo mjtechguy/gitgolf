@@ -356,3 +356,38 @@ test('each unavailable native settings route keeps its selected sidebar without 
   }
   expect(state.methods.filter(method=>!['GetSession','GetAuthenticationOptions','ListCapabilities','GetRepository'].includes(method))).toEqual([]);
 });
+
+test('native Actions lists recent repository runs and opens one pull request’s runs on request', async ({page}) => {
+  await fixture(page, 'cloudflare-native');
+  const pull = (number: number) => ({ id: String(100 + number), number, title: `Proposal ${number}`, body: '', state: 'ISSUE_STATE_OPEN', merged: false, draft: false, revision: 'r' + number, head: { commitId: other, ref: 'feature-' + number }, base: { commitId: snapshot, ref: 'main' } });
+  const run = (id: string, number: number, minutes: number, states: object = {}) => ({ id, state: 'SUCCEEDED', agentState: 'NONE', testState: 'PASSED', adviceState: 'NONE', createdAt: new Date(Date.now() - minutes * 60000).toISOString(), updatedAt: new Date().toISOString(), expiresAt: new Date().toISOString(), advisoryOnly: true,
+    selection: { repository: { owner: 'alex', name: 'demo' }, repositoryId: repository.id, pullRequestId: String(100 + number), number, baseCommitId: snapshot, headCommitId: other }, ...states });
+  const recent = [run('11111111-1111-4111-8111-111111111111', 7, 3), run('22222222-2222-4222-8222-222222222222', 4, 50, { state: 'QUEUED', testState: 'NONE', agentState: 'RUNNING' })];
+  const requests: { path: string; action?: string; number?: number; repositoryId?: string }[] = [];
+  await page.route('**/rpc/golf.v1.RepositoryService/ListPullRequests', route => route.fulfill({ json: { pullRequests: [pull(7), pull(4)], page: { nextPage: 0 } } }));
+  await page.route('**/rpc/golf.v1.RepositoryService/GetPullRequest', route => route.fulfill({ json: { pullRequest: pull(route.request().postDataJSON().number) } }));
+  await page.route('**/native/**', async route => {
+    const path = new URL(route.request().url()).pathname, body = route.request().postDataJSON(); requests.push({ path, action: body.action, number: body.number, repositoryId: body.repositoryId });
+    if (path === '/native/config') return route.fulfill({ json: { runtimeProfile: 'cloudflare-native', workspace: 'alex', evidence: true, tests: true, agents: false, advice: false, previews: false, apps: false, automaticCI: true, testModule: 'test_calc', testWorkflowFormat: '', testWorkflowPath: '', dailyLimit: 8 } });
+    if (path === '/native/repository-access') return route.fulfill({ json: { role: 'read' } });
+    if (path === '/native/pr-evidence/read' && body.action === 'list') return route.fulfill({ json: body.number === undefined ? { jobs: recent, truncated: true } : { jobs: recent.filter(job => job.selection.number === body.number).map(job => ({ ...job, idempotencyKey: job.id, stale: false })), truncated: false } });
+    return route.fulfill({ status: 501, json: { code: 'unimplemented', message: 'This capability is not implemented on the native forge.' } });
+  });
+  await page.goto('/alex/demo/actions');
+  const table = page.getByRole('table', { name: 'recent repository runs', exact: true });
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(2);
+  const first = table.locator('tbody tr[data-row-id="11111111-1111-4111-8111-111111111111"]'), second = table.locator('tbody tr[data-row-id="22222222-2222-4222-8222-222222222222"]');
+  await expect(first).toContainText('Tests'); await expect(first).toContainText('PASSED'); await expect(first).toContainText(other.slice(0, 12));
+  await expect(second).toContainText('Agent proposal'); await expect(second).toContainText('QUEUED');
+  expect(new URL((await first.getByRole('link', { name: '#7', exact: true }).getAttribute('href'))!, page.url()).pathname).toContain('/pull/7');
+  await expect(page.getByText('Only the latest 50 runs are loaded; search and sorting apply to those.', { exact: false })).toBeVisible();
+  // The repository-wide rows make no staleness claim; that needs the pull request's own list.
+  await expect(table.getByText('Current', { exact: true })).toHaveCount(0); await expect(table.getByText('Stale', { exact: true })).toHaveCount(0);
+  const lists = requests.filter(request => request.path === '/native/pr-evidence/read');
+  expect(lists.length).toBeGreaterThan(0); expect(lists.every(request => request.action === 'list' && request.number === undefined && request.repositoryId === repository.id)).toBe(true);
+  await expect(page.getByRole('table', { name: 'PR runs', exact: true })).toHaveCount(0);
+  await first.getByRole('button', { name: 'Inspect runs for pull request 7', exact: true }).click();
+  const selected = page.getByRole('table', { name: 'PR runs', exact: true });
+  await expect(selected.locator('tbody tr[data-row-id]')).toHaveCount(1); await expect(selected).toContainText('Current');
+  expect(requests.some(request => request.path === '/native/pr-evidence/read' && request.number === 7)).toBe(true);
+});

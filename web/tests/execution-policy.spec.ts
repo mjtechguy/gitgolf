@@ -76,3 +76,79 @@ test('a mismatched push receipt requires inspection and never silently accepts o
   const state = await backend(page); state.invalidPushReceipt = true; await open(page); const form = await edit(page); await form.getByLabel('Automatic push execution', { exact: true }).selectOption('true'); await form.getByRole('button', { name: 'Save execution policy', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Execution policy', exact: true }).getByRole('alert')).toContainText('The saved policy could not be verified.'); expect(state.writes).toHaveLength(1); await expect(page.getByRole('button', { name: 'Edit execution policy', exact: true })).toBeDisabled(); await page.getByRole('button', { name: 'Refresh execution policy', exact: true }).click(); await expect(page.getByRole('button', { name: 'Edit execution policy', exact: true })).toBeEnabled(); expect(state.writes).toHaveLength(1);
 });
+
+// Cloudflare native: one stored switch per run kind. The fixture keeps the revocation epoch at zero, as that runtime does.
+async function nativeBackend(page: Page) {
+  const state = { methods: [] as string[], writes: [] as ReturnType<typeof request<typeof UpdateExecutionPolicyRequestSchema>>[], advanceEpoch: false, policy: create(ExecutionPolicySchema, { scope: ExecutionScope.REPOSITORY, scopeId: '9007199254740997', ownerId: '9007199254740993', mode: ExecutionMode.ALL, manualDispatchEnabled: true, pushAllowed: true, allowAllWorkflows: true, revision: '0', revocationEpoch: '0', authorityRevision: 'a'.repeat(64), canEdit: true }) };
+  await page.route('**/rpc/**', async route => {
+    const method = new URL(route.request().url()).pathname.split('/').at(-1)!; state.methods.push(method);
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
+    if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex' } });
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { runtimeProfile: 'cloudflare-native', capabilities: ['settings.repository-workflows', 'settings.repository-execution-policy'].map(id => ({ id, label: id, state: 3, reason: 'Native test capability.' })) });
+    if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: { repositoryId: '9007199254740997', ownerId: '9007199254740993', currentPermission: state.policy.canEdit ? 'admin' : 'read' } });
+    if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { id: '9007199254740997', name: 'private', fullName: 'alex/private', defaultBranch: 'main' } });
+    if (method === 'InspectWorkflows') return respond(route, InspectWorkflowsResponseSchema, { repositoryId: state.policy.scopeId, commitId: 'b'.repeat(40), catalogVersion: 'golf.native.workflow-inventory.v1', executionAvailable: true, policyRevision: 'e'.repeat(64) });
+    if (method === 'GetExecutionPolicy') return respond(route, GetExecutionPolicyResponseSchema, { policy: state.policy });
+    if (method === 'UpdateExecutionPolicy') {
+      const input = request(route, UpdateExecutionPolicyRequestSchema); state.writes.push(input);
+      state.policy = create(ExecutionPolicySchema, { ...state.policy, mode: input.mode, manualDispatchEnabled: input.manualDispatchEnabled, pushAllowed: input.pushAllowed, revision: (BigInt(state.policy.revision) + 1n).toString(), revocationEpoch: state.advanceEpoch ? '1' : '0' });
+      return respond(route, UpdateExecutionPolicyResponseSchema, { policy: state.policy });
+    }
+    return reject(route, 'unimplemented', 'This capability is not implemented on the native forge.');
+  });
+  return state;
+}
+
+test('the native repository switch leads with current values and saves only its two run kinds', async ({ page }) => {
+  const state = await nativeBackend(page); await page.goto(path);
+  const panel = page.getByRole('region', { name: 'Pull-request execution', exact: true });
+  await expect(panel.getByRole('button', { name: 'Edit pull-request execution', exact: true })).toBeVisible();
+  await expect(panel.getByRole('form')).toHaveCount(0);
+  await expect(panel.getByText('Pull-request runs', { exact: true }).locator('..')).toContainText('Allowed within the operator allocation');
+  await expect(panel.getByText('Automatic push tests', { exact: true }).locator('..')).toContainText('Allowed within the operator allocation');
+  await expect(panel.getByText('Revision', { exact: true }).locator('..')).toContainText('Never changed');
+  await expect(panel.getByText('a run already admitted finishes within its ten-minute limit', { exact: false })).toBeVisible();
+  for (const portable of ['Repository eligibility', 'Selected IDs', 'Manual dispatch', 'Workflows', 'Revision / revocation epoch']) await expect(panel.getByText(portable, { exact: true })).toHaveCount(0);
+  await expect(panel.getByText('Unset scopes deny execution', { exact: false })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Edit pull-request execution', exact: true }).click();
+  const form = panel.getByRole('form', { name: 'Edit pull-request execution', exact: true });
+  await expect(form.locator('select, textarea, input')).toHaveCount(2);
+  await form.getByLabel('Pull-request runs', { exact: true }).selectOption('false');
+  await form.getByRole('button', { name: 'Cancel', exact: true }).click(); expect(state.writes).toHaveLength(0);
+  await panel.getByRole('button', { name: 'Edit pull-request execution', exact: true }).click();
+  await expect(form.getByLabel('Pull-request runs', { exact: true })).toHaveValue('true');
+  await form.getByLabel('Pull-request runs', { exact: true }).selectOption('false');
+  await form.getByRole('button', { name: 'Save pull-request execution', exact: true }).click();
+  await expect(panel.getByRole('status')).toHaveText('Execution policy saved.');
+  expect(state.writes).toEqual([expect.objectContaining({ scope: ExecutionScope.REPOSITORY, scopeId: '9007199254740997', expectedRevision: '0', expectedAuthorityRevision: 'a'.repeat(64), mode: ExecutionMode.ALL, manualDispatchEnabled: false, pushAllowed: true, allowAllWorkflows: true, workflowPaths: [], selectedRepositoryIds: [] })]);
+  await expect(panel.getByText('Pull-request runs', { exact: true }).locator('..')).toContainText('Turned off');
+  await expect(panel.getByText('Revision', { exact: true }).locator('..')).toContainText('1');
+  // Turning the second kind off as well stores the disabled mode; no other field is offered.
+  await panel.getByRole('button', { name: 'Edit pull-request execution', exact: true }).click();
+  await form.getByLabel('Automatic push tests', { exact: true }).selectOption('false');
+  await form.getByRole('button', { name: 'Save pull-request execution', exact: true }).click();
+  await expect(panel.getByText('Automatic push tests', { exact: true }).locator('..')).toContainText('Turned off');
+  expect(state.writes[1]).toMatchObject({ expectedRevision: '1', mode: ExecutionMode.DISABLED, manualDispatchEnabled: false, pushAllowed: false, allowAllWorkflows: true });
+  await page.waitForLoadState('networkidle');
+  for (const method of ['GetReviewer', 'GetAgentUsage', 'ListAutomationGrants', 'ListActionRuns']) expect(state.methods).not.toContain(method);
+  await page.setViewportSize({ width: 320, height: 844 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('a native reader sees the switch without an edit action', async ({ page }) => {
+  const state = await nativeBackend(page); state.policy.canEdit = false; state.policy.manualDispatchEnabled = false; state.policy.revision = '4'; await page.goto(path);
+  const panel = page.getByRole('region', { name: 'Pull-request execution', exact: true });
+  await expect(panel.getByText('Pull-request runs', { exact: true }).locator('..')).toContainText('Turned off');
+  await expect(panel.getByText('Revision', { exact: true }).locator('..')).toContainText('4');
+  await expect(panel.getByRole('button', { name: 'Edit pull-request execution', exact: true })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Refresh execution policy', exact: true })).toBeVisible();
+});
+
+test('a native receipt that claims to revoke admitted runs is not accepted as saved', async ({ page }) => {
+  const state = await nativeBackend(page); state.advanceEpoch = true; await page.goto(path);
+  const panel = page.getByRole('region', { name: 'Pull-request execution', exact: true });
+  await panel.getByRole('button', { name: 'Edit pull-request execution', exact: true }).click();
+  await panel.getByRole('form').getByLabel('Automatic push tests', { exact: true }).selectOption('false');
+  await panel.getByRole('form').getByRole('button', { name: 'Save pull-request execution', exact: true }).click();
+  await expect(panel.getByRole('alert')).toContainText('The saved policy could not be verified.'); expect(state.writes).toHaveLength(1);
+  await expect(panel.getByRole('button', { name: 'Edit pull-request execution', exact: true })).toBeDisabled();
+});

@@ -16,12 +16,30 @@ profile or `workflow` for this profile:
 
 Use `"format": "gitlab", "path": ".gitlab-ci.yml"` for GitLab syntax.
 The operator still supplies the existing `evidence` allocation. The image is
-pinned at preparation by exact Docker image ID. Native agents require the Python
-module profile and cannot share a workflow allocation.
+pinned at preparation by exact Docker image ID. Native agents test their
+proposals with the approved Python module, so an installation that offers them
+keeps `module` beside an `actions` workflow: pull-request runs then use the
+workflow and only agent proposals use the module. A module beside the GitLab or
+pinned `actions-act` profile is refused at setup, build and runtime.
 The installation command accepts `--test-workflow-format actions|gitlab` and
-`--test-workflow-path` with `--test-image` and `--test-image-id`; these replace
-`--test-module`. A profile change pins a new policy digest, so queued jobs from
-the previous profile are refused at dispatch.
+`--test-workflow-path` with `--test-image` and `--test-image-id`; add
+`--test-module` only with the `actions` format. A profile change pins a new
+policy digest, so queued jobs from the previous profile are refused at dispatch.
+Local Worker tests cover the combined profile; it has not run on a hosted
+installation.
+
+The repository settings page lists `.github/workflows/*.yml`/`*.yaml` and
+`.gitlab-ci.yml` at the default-branch commit (at most 20 files of 64 KiB) and
+marks the approved path. It starts nothing: a run always reads the approved path
+from the pull request's head commit.
+
+A repository administrator signed in through Access (not a bearer or service
+token) can turn pull-request runs and automatic push tests
+off for one repository on the same page (schema 25, migration
+`0025_repository_execution_policy.sql`). A repository with no saved switch
+allows both within the operator allocation. The switch is checked when a run is
+admitted and when a push is recorded for automatic tests; it does not stop a run
+that was already admitted, and it does not govern agent proposals.
 
 The Actions profile accepts `on: pull_request`, one job with
 `runs-on: golf-native-linux`, and up to ten `run` steps. Optional `name` and

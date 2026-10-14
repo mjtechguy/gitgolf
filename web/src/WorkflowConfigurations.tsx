@@ -1,4 +1,6 @@
 import { forgetPrivateQueries } from './queryClient';
+import { RuntimeFeature } from './RuntimeFeature';
+import { useRuntimeCapabilities } from './useRuntimeCapabilities';
 import { WorkflowDispatchInputs, workflowInputsCatalog, workflowInputsContract, inputDigest, validInputDefinitions, verifyInputPreparation } from './WorkflowDispatchInputs';
 import { clearOtherWorkflowDispatchIntents, workflowDispatchIntentKey } from './workflowDispatchIntents';
 import { ReviewerPanel } from './ReviewerPanel';
@@ -58,6 +60,9 @@ function Diagnostics({ diagnostics }: { diagnostics: WorkflowDiagnostic[] }) {
 export function WorkflowConfigurations({ userId, owner, name, signingOut, repositoryId = '', workView = false, location: suppliedLocation }: { repositoryId?:string; workView?:boolean;location?:RepositoryLocation; userId: string; owner: string; name: string; signingOut: boolean }) {
   const navigate = useNavigate();
   const queryClient=useQueryClient();
+  // The native runtime only inventories files: its one approved path runs on pull requests and is never dispatched from here.
+  const runtime = useRuntimeCapabilities(), native = runtime.data?.runtimeProfile === 'cloudflare-native';
+  const nativeScope = runtime.data?.capabilities.find(item => item.id === 'settings.repository-workflows')?.reason;
   const [inputEditor,setInputEditor]=useState<{context:string;item:WorkflowConfiguration}|null>(null);
   const [dispatching, setDispatching] = useState(false);
   const busy = useRef(false);
@@ -117,7 +122,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
   },[storageScope,guardScope,userId,effectiveRepositoryId,signingOut]);
   useEffect(()=>{if(!result){controller.current?.abort();setInputEditor(null);}if(inspectionError){setNotice('');setOriginal(prior=>({...prior,run:undefined}));}},[Boolean(result),Boolean(inspectionError)]);
   const policyObserved = (item:WorkflowConfiguration) => Boolean(result && /^[a-f0-9]{64}$/.test(result.policyRevision) && typeof item.manualPolicyAllowed==='boolean' && typeof item.pushPolicyAllowed==='boolean');
-  const policyLabel = (item:WorkflowConfiguration, kind:'manual'|'push') => !policyObserved(item)?'Unknown':(kind==='manual'?item.manualPolicyAllowed:item.pushPolicyAllowed)?'Ceilings allow':'Ceilings deny';
+  const policyLabel = (item:WorkflowConfiguration, kind:'manual'|'push') => !policyObserved(item)?'Unknown':(kind==='manual'?item.manualPolicyAllowed:item.pushPolicyAllowed)?native?'Allowed':'Ceilings allow':native?'Denied':'Ceilings deny';
   const selectedPath = location.actionKind==='workflow' ? location.workflowPath : undefined;
   const manualEligible = (item:WorkflowConfiguration) => item.state===WorkflowInspectionState.VALIDATED_SUBSET && (item.format===WorkflowFormat.GITLAB_CI || item.events.includes('workflow_dispatch'));
   const typedMode=(item:WorkflowConfiguration)=>item.format===WorkflowFormat.GITHUB_ACTIONS&&result?.executionCatalog===workflowInputsCatalog&&item.manualInputs.length>0&&inputDigest(item.manualInputsSchemaSha256)&&validInputDefinitions(item.manualInputs);
@@ -127,7 +132,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
   useEffect(()=>{setInputEditor(null);controller.current?.abort();},[editorContext]);
   const canDispatch = (item:WorkflowConfiguration) => Boolean(isCommitID(commit) && inputModeValid(item) && manualEligible(item) && policyObserved(item) && item.manualPolicyAllowed===true && result?.executionAvailable && available.current && stored && !stored.blocked && originalMatches && !unresolved && !dispatching && !signingOut);
   const selectedConfiguration = selectedPath ? result?.configurations.find(item=>item.path===selectedPath) : undefined;
-  const dispatchNotice = result && available.current && stored && (stored.blocked||intent||notice) && !signingOut ? <div className="panel-footnote page-stack">
+  const dispatchNotice = result && !native && available.current && stored && (stored.blocked||intent||notice) && !signingOut ? <div className="panel-footnote page-stack">
    {stored.blocked?<p role="alert">Original dispatch metadata is unavailable. New dispatches are blocked; no request was retried.</p>:null}
    {intent?<div className="page-stack"><p>Original workflow <code>{intent.workflowPath}</code> · Snapshot <code title={intent.commitId}>{intent.commitId.slice(0,12)}</code></p>
     {stored.run?<p role="status">Run {stored.run.id} recorded. <Link {...repositoryOptions({owner:intent.owner,name:intent.name,view:'actions',run:stored.run.id,runKind:'workflow'})}>View recorded run</Link>. This is a historical receipt; current eligibility is checked for each new dispatch.</p>:<p role="status">{notice||'Original dispatch outcome has not been inspected.'} This request remains inspection-only. No automatic retry or replacement dispatch is available.</p>}
@@ -182,25 +187,25 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
     </> },
     { id: 'format', accessorFn: item => format(item.format), header: 'Format' },
     { id: 'state', accessorFn: item => state(item.state), header: 'Inspection' },
-    { id: 'policy', header: 'Policy ceilings', accessorFn:item=>`Manual ${policyLabel(item,'manual')} Automatic push ${policyLabel(item,'push')}`, cell:({row})=><><span>Manual: {policyLabel(row.original,'manual')}</span><small>Automatic push: {policyLabel(row.original,'push')}</small></> },
+    { id: 'policy', header: 'Policy ceilings', accessorFn:item=>`${native?'Pull-request runs':'Manual'} ${policyLabel(item,'manual')} Automatic push ${policyLabel(item,'push')}`, cell:({row})=><><span>{native?'Pull-request runs':'Manual'}: {policyLabel(row.original,'manual')}</span><small>{native?'Automatic on push':'Automatic push'}: {policyLabel(row.original,'push')}</small></> },
     { id: 'size', accessorFn: item => item.byteSize.toString(), header: 'Bytes', cell: ({ row }) => row.original.byteSize.toString(), enableSorting: false },
-    { id: 'run', header: 'Run', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => manualEligible(row.original) ? <button className="button secondary" disabled={!canDispatch(row.original)} onClick={() => requestDispatch(row.original)}>Run workflow</button> : <span className="muted">{row.original.state === WorkflowInspectionState.VALIDATED_SUBSET ? 'Push trigger only' : 'Unsupported'}</span> },
+    { id: 'run', header: 'Run', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => native ? <span className="muted">{row.original.manualPolicyAllowed || row.original.pushPolicyAllowed ? 'Pull requests only' : 'Does not run'}</span> : manualEligible(row.original) ? <button className="button secondary" disabled={!canDispatch(row.original)} onClick={() => requestDispatch(row.original)}>Run workflow</button> : <span className="muted">{row.original.state === WorkflowInspectionState.VALIDATED_SUBSET ? 'Push trigger only' : 'Unsupported'}</span> },
     { id: 'findings', header: 'Details', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <details>
       <summary>Inspect {row.original.path}</summary>
       <p>Blob <code>{row.original.blobId}</code></p>
-      {row.original.events.length ? <p>Declared events: {row.original.events.join(', ')}. Effective policies and automation grants determine activation.</p> : null}
+      {row.original.events.length ? <p>Declared events: {row.original.events.join(', ')}. {native ? 'Only the operator-approved path runs, on pull requests.' : 'Effective policies and automation grants determine activation.'}</p> : null}
       {row.original.jobs.length ? <ul>{row.original.jobs.map(job => <li key={job.id}>
         <strong>{job.name || job.id}</strong>{job.name && job.name !== job.id ? ` (${job.id})` : ''}
         {job.stage ? ` · Stage ${job.stage}` : ''} · {job.stepCount} declared step{job.stepCount === 1 ? '' : 's'}
       </li>)}</ul> : <p>No job summary is available for this configuration.</p>}
       {row.original.diagnostics.length ? <Diagnostics diagnostics={row.original.diagnostics} /> : <p>The bounded static inspection found no unsupported fields. Static inspection does not execute jobs.</p>}
     </details> },
-  ], [owner, name, commit, dispatching, stored, unresolved, originalMatches, signingOut, result]);
+  ], [owner, name, commit, dispatching, stored, unresolved, originalMatches, signingOut, result, native]);
 
   const inputsPanel=inputEditor&&result&&available.current&&!signingOut&&inputEditor.context===editorContext?<WorkflowDispatchInputs key={`${editorContext}-${inputEditor.item.path}`} path={inputEditor.item.path} definitions={inputEditor.item.manualInputs} pending={dispatching} onCancel={()=>setInputEditor(null)} onRun={values=>dispatch(inputEditor.item.path,values,inputEditor.context)}/>:null;
   const configurationPanel = <section className="browser-panel credential-list-panel" aria-labelledby="workflow-inventory-title">
         <div className="browser-panel-heading"><h2 id="workflow-inventory-title">Configuration files</h2><button className="button secondary" disabled={query.isFetching || metadata.isFetching || signingOut} onClick={refreshInspection}><RefreshCw size={15} />Refresh workflow inspection</button></div>
-        <p className="panel-footnote">Manual execution requires policy approval, an enrolled worker and an approved image.{result ? result.executionAvailable ? ' A workflow worker is configured.' : ' Workflow execution is unavailable.' : null}</p>
+        {native ? <p className="panel-footnote">This inventory starts nothing. Where an operator-approved path is marked, pull-request runs read it from the pull request’s head commit.{result ? result.executionAvailable ? ' Pull-request execution is allocated.' : ' Pull-request execution is not allocated on this installation.' : null}</p> : <p className="panel-footnote">Manual execution requires policy approval, an enrolled worker and an approved image.{result ? result.executionAvailable ? ' A workflow worker is configured.' : ' Workflow execution is unavailable.' : null}</p>}
         {!workView?dispatchNotice:null}{!workView?inputsPanel:null}
         {inspectionError ? <PanelError error={inspectionError} retry={refreshInspection} /> : !result ? <Loading label="Inspecting workflow configuration…" /> : <>
           <p className="panel-footnote">Pinned commit <Link {...repositoryOptions({ owner, name, ref: commit })}><code>{commit}</code></Link>. Refresh resolves the current default branch again.</p>
@@ -209,10 +214,17 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
           <p className="panel-footnote">{result.configurations.length} configuration{result.configurations.length === 1 ? '' : 's'} inspected or reported as unsupported.</p>
         </>}
         <details className="metadata-details panel-disclosure"><summary>Inspection scope and execution requirements</summary>
+          {native ? <>
+          {result ? <p className="panel-footnote">Catalog <code>{result.catalogVersion}</code>. Direct <code>.github/workflows/*.yml</code>/<code>*.yaml</code> and root <code>.gitlab-ci.yml</code> at the default-branch commit only; nested and custom locations are not listed.</p> : null}
+          <p className="panel-footnote">Limits: 20 files by name and 64 KiB per inspected file. Larger files stay metadata-only; an overfull inventory keeps the approved path and reports how many files exist.</p>
+          <p className="panel-footnote">Static inspection does not grant execution, and this commit is not what runs: a pull-request run reads the approved path from that pull request’s head commit.</p>
+          {nativeScope ? <p className="panel-footnote">{nativeScope}</p> : null}
+          </> : <>
           {result ? <p className="panel-footnote">Catalog <code>{result.catalogVersion}</code>. The first existing directory in the operator’s configured workflow order is selected, even when empty. Direct <code>*.yml</code>/<code>*.yaml</code> and root <code>.gitlab-ci.yml</code> only; nested and custom locations are unsupported.</p> : null}
           <p className="panel-footnote">Limits: 20 files, 64 KiB per inspected file and 512 KiB in total. Oversized files stay metadata-only; an overfull inventory fails visibly.</p>
           <p className="panel-footnote">Static inspection does not grant execution. Scripts and provider-specific semantics remain untrusted. Every applicable execution policy must allow the repository and workflow. Automatic pushes also require an active automation grant; deployments remain unavailable.</p>
           <p className="panel-footnote">GitLab-format execution supports one job with a pinned image. Job-level <code>before_script</code> and <code>script</code> share one shell, with at most 50 entries combined. Includes, rules, multiple jobs and <code>after_script</code> are not supported. This is Golf’s shell executor; GitLab Runner compatibility is not available.</p>
+          </>}
         </details>
       </section>;
 
@@ -234,9 +246,10 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
         <details className="workflow-inspection-disclosure"><summary>Execution details and configuration</summary>{result?<div className="panel-content"><p className="field-help">{result.executionAvailable?'A workflow worker is configured.':'Workflow worker execution is unavailable.'} Execution requires policy approval; automatic pushes also need an active automation grant.</p><p className="field-help">Current default-branch configurations at <code title={commit}>{commit.slice(0,12)}</code>. A source-tab ref does not change run history.</p></div>:null}{configurationPanel}</details>
 
       </> : configurationPanel}
-      {result && !workView ? <><ExecutionPolicyPanel key={`${userId}/${owner}/${name}`} userId={userId} signingOut={signingOut} scope={ExecutionScope.REPOSITORY} repository={{ owner, name }} />
-      <ReviewerPanel userId={userId} owner={owner} name={name} signingOut={signingOut} showRuns={false}/><AgentUsagePanel userId={userId} signingOut={signingOut} scope={AgentUsageScope.REPOSITORY} repository={{ owner, name }} /><AutomationGrantPanel userId={userId} owner={owner} name={name} signingOut={signingOut} />
-      <p className="panel-footnote"><Link {...repositoryOptions({owner,name,view:'actions'})}>Open Actions run history</Link> for workflows, coding tasks and PR reviews.</p></> : null}
+      {/* Panels without a native service are not mounted there, so they make no requests; that runtime never reports the last three ids. */}
+      {result && !workView ? <><RuntimeFeature id="settings.repository-execution-policy"><ExecutionPolicyPanel key={`${userId}/${owner}/${name}`} userId={userId} signingOut={signingOut} scope={ExecutionScope.REPOSITORY} repository={{ owner, name }} /></RuntimeFeature>
+      <RuntimeFeature id="settings.repository-reviewer"><ReviewerPanel userId={userId} owner={owner} name={name} signingOut={signingOut} showRuns={false}/></RuntimeFeature><RuntimeFeature id="settings.repository-agent-usage"><AgentUsagePanel userId={userId} signingOut={signingOut} scope={AgentUsageScope.REPOSITORY} repository={{ owner, name }} /></RuntimeFeature><RuntimeFeature id="settings.repository-automation-grants"><AutomationGrantPanel userId={userId} owner={owner} name={name} signingOut={signingOut} /></RuntimeFeature>
+      <p className="panel-footnote"><Link {...repositoryOptions({owner,name,view:'actions'})}>Open Actions run history</Link>{native ? ' for pull-request runs, test reports and previews.' : ' for workflows, coding tasks and PR reviews.'}</p></> : null}
     </section>
   </>;
   return workView ? content : <>{content}</>;
