@@ -1,0 +1,3 @@
+# Language classification data
+
+The programming/markup extension and filename map is derived from [GitHub Linguist](https://github.com/github-linguist/linguist/blob/5fbdfcb8133be2bed88bf3ce62b2335f50474525/lib/linguist/languages.yml), revision `5fbdfcb8133be2bed88bf3ce62b2335f50474525`. Source SHA-256: `183243e30496ba53f5f8743b0e39c9f0e0bccc5a32639f7b541cc2285db0e043`. Its MIT license is retained in LINGUIST_LICENSE. Golf reports classified source bytes for the named immutable commit; it does not claim identical results to GitHub’s full heuristic classifier. Vendored/generated paths and root .gitattributes overrides are applied separately.
