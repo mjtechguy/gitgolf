@@ -16,6 +16,8 @@ export function emailNotificationsMounted(manifest: RuntimeManifest | undefined)
 export function settingForRoute(kind: string, view?: string, native = false) {
   // One audit log service serves installation, organization and repository scope; every runtime must report it.
   if (kind === 'repository-audit' || kind === 'organization-audit') return 'settings.installation-audit';
+  // Agent hosts (docs/AGENT_HOSTS.md) exist only where the native Worker reports them; the portable runtime keeps its own coding agent pages.
+  if (kind === 'organization-agents' || native && (kind === 'account-agents' || kind === 'instance-settings' && view === 'agents')) return 'agents.hosts';
   if (native) {
     const repositoryRoutes: Record<string, string> = { 'repository-settings': 'general', 'repository-access-settings': 'access', 'repository-git': 'git', 'repository-rules': 'rules', 'repository-secrets': 'secrets', 'repository-environments': 'environments', 'repository-webhooks': 'webhooks', 'repository-workflows': 'workflows', 'repository-deletion': 'lifecycle' };
     if (repositoryRoutes[kind]) return 'settings.repository-' + repositoryRoutes[kind];

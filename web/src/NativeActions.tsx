@@ -22,8 +22,8 @@ const message = (error: unknown) => error instanceof Error ? error.message : 'Th
 const eventLabels: Record<string, string> = { push: 'push', pull_request: 'pull request', workflow_dispatch: 'manually run', merge_request_event: 'merge request', web: 'manually run', schedule: 'schedule' };
 const stateLabels: Record<string, string> = { QUEUED: 'Queued', RUNNING: 'In progress', WAITING: 'Waiting', SUCCESS: 'Success', FAILURE: 'Failure', CANCELLED: 'Cancelled', SKIPPED: 'Skipped', REFUSED: 'Refused', BLOCKED: 'Waiting for needs', MANUAL: 'Manual', APPROVAL: 'Waiting for approval', PENDING: 'Pending' };
 
-export function StateIcon({ state, size = 16 }: { state: string; size?: number }) {
-  const label = stateLabels[state] || state;
+export function StateIcon({ state, size = 16, label: named }: { state: string; size?: number; label?: string }) {
+  const label = named || stateLabels[state] || state;
   const icon = state === 'SUCCESS' ? <CheckCircle2 size={size} /> : state === 'FAILURE' || state === 'REFUSED' ? <XCircle size={size} /> : state === 'RUNNING' ? <LoaderCircle size={size} className="spin" />
     : state === 'CANCELLED' ? <Ban size={size} /> : state === 'SKIPPED' ? <MinusCircle size={size} /> : state === 'APPROVAL' ? <ShieldCheck size={size} /> : state === 'MANUAL' ? <Hand size={size} /> : state === 'QUEUED' ? <CircleDot size={size} /> : <CircleDashed size={size} />;
   return <span className={`pipeline-state pipeline-state-${state.toLowerCase()}`} title={label} role="img" aria-label={label}>{icon}</span>;

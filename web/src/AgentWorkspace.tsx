@@ -9,6 +9,7 @@ import { useLiveStatus } from './RepositoryLive';
 import { currentPullPreviews } from './nativePreviews';
 import { jobMatchesPull, pullStage } from './agentWorkspace';
 import { repositoryOptions, type RepositoryLocation } from './navigation';
+import { NativeAgentTasks } from './NativeAgentTasks';
 
 type Props = { location: RepositoryLocation; repositoryId: string; userId: string };
 export function AgentWorkspace({ location, repositoryId, userId }: Props) {
@@ -29,6 +30,7 @@ export function AgentWorkspace({ location, repositoryId, userId }: Props) {
   ];
   const error=config.error||pulls.error||detailError;
   return <div className="page-stack agent-workspace"><PageHeader title="Agent workspace" description="Proposals, review, tests and previews in one place." actions={<button className="button secondary" disabled={pulls.isFetching||config.isFetching} onClick={refresh}><RefreshCw size={15}/>Refresh</button>}/>
+    <NativeAgentTasks context={context} userId={userId} title="Agent tasks in this repository"/>
     {error?<PanelError error={error} retry={refresh}/>:!config.data||!pulls.data?<Loading label="Reading repository work…"/>:<>
       {!config.data.agents?<p className="field-help">Agent execution is not enabled on this installation. Existing CI and review evidence is available below.</p>:null}
       <section className="browser-panel"><div className="browser-panel-heading"><h2>Work by pull request</h2><Link {...repositoryOptions(location,{view:'pulls',pull:undefined})}>All pull requests</Link></div><DataTable data={pulls.data.pullRequests} columns={columns} getRowId={p=>p.id} label="workspace pull requests" emptyMessage="No pull requests yet. Open a pull request to track its work here."/>{pulls.data.page.nextPage?<p className="panel-footnote">Latest 100 pull requests loaded. Use All pull requests for older work.</p>:null}</section>

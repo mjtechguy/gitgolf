@@ -2138,6 +2138,40 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .pipeline-run-subtitle>strong { color:var(--text); font-weight:600; }
 .pipeline-log-group { font-weight:700; }
 .pipeline-log-command { color:color-mix(in srgb,var(--terminal-fg) 55%,transparent); }
+/* Agent hosts and their tasks (docs/AGENT_HOSTS.md): host inventory, the assign dialog and a task's live log and proposal. */
+.agent-host-tools { list-style:none; margin:0; padding:0; display:grid; gap:2px; font-size:.8125rem; }
+.agent-host-tools li { white-space:nowrap; }
+.agent-host-signin-no { color:var(--error); }
+.agent-host-name { min-width:9rem; }
+.agent-tasks .browser-panel-heading h3 { display:inline-flex; align-items:center; gap:8px; }
+.agent-task-row { display:flex; align-items:flex-start; gap:8px; min-width:11rem; }
+.agent-task-row .text-button { padding:0; font-size:.875rem; font-weight:600; text-align:left; }
+.agent-task-row .text-button[aria-pressed=true] { text-decoration:underline; }
+.agent-task { display:flex; flex-direction:column; gap:12px; padding:var(--panel-padding); border-top:1px solid var(--line); }
+.agent-task > :is(p,.error) { margin:0; }
+.agent-task-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; }
+.agent-task-heading h4 { display:inline-flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0; font-size:1rem; }
+.agent-task-heading h4 .muted { font-weight:400; font-size:.875rem; }
+.agent-task-facts dd .pipeline-ref { vertical-align:middle; }
+.agent-task-result { display:flex; flex-direction:column; gap:10px; padding:12px; border:1px solid var(--line); border-radius:var(--radius); background:var(--raised); }
+.agent-task-result > * { margin:0; }
+.agent-task-commit,.agent-task-opened { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.agent-task-files { list-style:none; margin:8px 0 0; padding:0; display:grid; gap:2px; font-size:.8125rem; }
+.agent-task-summary h5,.agent-task-log-heading h5 { margin:0; font-size:.8125rem; color:var(--muted); font-weight:600; }
+.agent-task-summary .markdown-body { padding:6px 0 0; }
+.agent-task-result .credential-actions { margin:0; align-items:center; }
+.agent-task-result .credential-actions .field-help { margin:0; }
+.agent-open-pull { padding:0; }
+.agent-task-log-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+.agent-task-log { max-height:28rem; overflow:auto; border-radius:var(--radius); }
+.agent-task-log-truncated { color:var(--warning); }
+.agent-task-log-panel .panel-footnote { padding:6px 0 0; }
+.agent-assign { padding:0; display:flex; flex-direction:column; gap:12px; }
+.agent-assign > * { margin:0; }
+.agent-assign .policy-choices legend { color:var(--text); }
+.agent-choice-reason { color:var(--warning); }
+.agent-assign .policy-choice input[type=radio] { width:auto; flex:0 0 auto; }
+@media(max-width:480px) { .agent-task-heading { align-items:flex-start; } }
 /* Workers AI advisory card: the result, then where it came from. Probability rows use one hue: accent for the chosen option, neutral ink for the rest. */
 .ai-advisory .browser-panel-heading h3 svg { color:var(--accent); }
 .ai-advisory-flags { display:inline-flex; flex-wrap:wrap; gap:6px; }
