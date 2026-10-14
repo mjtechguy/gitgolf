@@ -1,6 +1,6 @@
 import { ownerSlug } from './owners.mjs';
 import { digest, uuidOK, Fault, deny, invalid, conflict } from './common.mjs';
-import { gitRequest, packetLine, receiveCommand, receiveStatus, sha, validRef, GitProviderError } from './git.mjs';
+import { gitRequest, packetLine, receiveCommand, receiveStatus, refusedRef, sha, validRef, GitProviderError } from './git.mjs';
 import { inventory, pullReviewContext } from './collaboration.mjs';
 import { comparison } from './repository-diff.mjs';
 import { discussionEvent } from './discussion-engagement.mjs';
@@ -183,10 +183,26 @@ export async function standardPullMerge(db, env, person, row, method, body, arti
       ]);
       if (reserved[2].meta.changes !== 1) conflict();
       // From here every failure is an unknown outcome: journaled, fenced like an unconfirmed push and never resent.
-      let detail = 'provider_unavailable';
-      try { detail = receiveStatus((await gitRequest(env, repo, row.artifact_name, 'git-receive-pack', 'git-receive-pack', request, providerFetch)).bytes, command.ref); if (detail) detail = 'provider_status: ' + detail; }
+      let detail = 'provider_unavailable', reply;
+      try { reply = (await gitRequest(env, repo, row.artifact_name, 'git-receive-pack', 'git-receive-pack', request, providerFetch)).bytes; detail = receiveStatus(reply, command.ref); if (detail) detail = 'provider_status: ' + detail; }
       catch (error) { if (error instanceof GitProviderError) detail = 'provider_error: ' + error.message; }
       try { await settle(db, env, person, row, await find(), repo, providerFetch); } catch { detail ||= 'readback_unavailable'; }
+      // The provider refused this update (ng, typically because another merge moved the base first) and the branch does not hold the merge: nothing was
+      // applied, so the receipt is a refusal like any other moved base and the repository is released at once, not left for maintenance.
+      if (reply && refusedRef(reply, command.ref) && (await find())?.phase === 'DISPATCH_UNKNOWN') {
+        let observed = null;
+        try { observed = (await inventory(env, row, repo, providerFetch)).get(command.ref) || null; } catch { /* unknown stays unknown */ }
+        if (observed && observed !== command.next) {
+          const at = new Date().toISOString();
+          await db.batch([
+            // A moved base is an ordinary changed pull request; a refusal that left the base where it was is the provider's own.
+            db.prepare("UPDATE pull_merge_operations SET phase='REJECTED',detail=?,updated_at=? WHERE actor_id=? AND operation_id=? AND phase='DISPATCH_UNKNOWN'").bind(observed === command.old ? 'provider_refused' : 'pull_request_changed', at, person.id, body.operationId),
+            db.prepare("INSERT OR IGNORE INTO git_ref_writes(operation_id,repository_id,ref,outcome,settled_at) SELECT ?,?,?,'NOT_APPLIED',? WHERE changes()=1").bind(operation, row.id, command.ref, at),
+            db.prepare('UPDATE repositories SET write_pending=NULL WHERE id=? AND write_pending=?').bind(row.id, operation),
+          ]);
+          return;
+        }
+      }
       // The provider's own answer stays on the row as evidence, also when the readback then confirms the merge.
       await db.prepare("UPDATE pull_merge_operations SET detail=CASE WHEN ?='' AND phase='DISPATCH_UNKNOWN' THEN 'readback_unconfirmed' ELSE ? END WHERE actor_id=? AND operation_id=?").bind(detail, detail, person.id, body.operationId).run();
     });

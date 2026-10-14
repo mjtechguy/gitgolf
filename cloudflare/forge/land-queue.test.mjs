@@ -121,7 +121,7 @@ test('backoff is jittered between 200 ms and 2 s, and the policy helper names ap
     const ms = backoff(attempt, random);
     assert.ok(ms >= 200 && ms <= 2000, `${attempt}: ${ms}`);
   }
-  assert.equal(backoff(1, () => 0), 200); assert.equal(backoff(6, () => 0.9999), 2000); assert.equal(landLimits.attempts, 5);
+  assert.equal(backoff(1, () => 0), 200); assert.equal(backoff(6, () => 0.9999), 2000); assert.equal(landLimits.attempts, 60); assert.equal(landLimits.budgetMs, 45_000);
   assert.equal(onlyApprovalNeeded({ decision: 'needs_person', reasons: ['landing without a person is off for this repository'] }), true);
   assert.equal(onlyApprovalNeeded({ decision: 'needs_person', reasons: ['changes outside the low-risk paths need approval from a writer who is not the author and not an agent', 'required check CI is still running'] }), false);
   assert.equal(onlyApprovalNeeded({ decision: 'needs_person', reasons: ['the pull request is a draft'] }), false);
@@ -214,6 +214,17 @@ test('two pull requests on different files land concurrently; the second re-plan
   assert.equal(f.g.text(['rev-parse', 'main^{tree}']), f.g.text(['merge-tree', '--write-tree', first.operation.landedCommitId, b.head]));
   f.g.run(['fsck', '--strict', '--full', '--no-dangling']);
   assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending, null);
+});
+
+test('six lands requested at once all land, each waiting its turn, without journaling a refusal for the busy repository', { skip }, async t => {
+  const f = await fixture(t);
+  f.settings();
+  const pulls = Array.from({ length: 6 }, (_, i) => f.pull('feature-' + i, { [`src/f${i}.js`]: `${i}\n` }));
+  const done = await Promise.all(pulls.map(pull => f.land(pull.number, 'bob', pull.head)));
+  assert.deepEqual(done.map(value => value.operation.state), Array(6).fill('LANDED'), JSON.stringify(done.map(value => value.operation.detail)));
+  for (let i = 0; i < 6; i++) assert.equal(f.g.text(['show', `main:src/f${i}.js`]), String(i));
+  assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM pull_merge_operations WHERE phase='REJECTED' AND detail='write_unresolved'").get().n, 0);
+  f.g.run(['fsck', '--strict', '--full', '--no-dangling']);
 });
 
 test('a base that moves between the read and the merge is re-planned; a moved head stops the land', { skip }, async t => {

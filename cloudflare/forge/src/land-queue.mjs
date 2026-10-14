@@ -2,7 +2,7 @@
 // (pull-merge.mjs standardPullMerge: the same journal, plan, reservation and readback) onto the base tip current at that moment.
 // There is no global merge lock: each land is its own journaled operation (land_operations), different pull requests land side by
 // side, and only the base update is ordered. A merge still reserves its repository briefly (repositories.write_pending); a land that
-// meets a moved base or a busy repository re-plans and retries up to five times with jittered backoff. Conflicting paths end in
+// meets a moved base or a busy repository waits its turn and re-plans, within 45 s, with jittered backoff. Conflicting paths end in
 // NEEDS_REBASE. After landing, the base push starts pipelines; when a required check fails on the landed commit, a policy landing is
 // reverted with a server-side commit (source-api.mjs commitTree), the pull request gets a comment and an issue is opened for the
 // original requester. People land through POST /native/land; the policy lands from pipeline completions and the maintenance sweep.
@@ -23,7 +23,8 @@ import { pipelinePolicy } from './pipeline-policy.mjs';
 
 // Commits Golf writes on its own (policy merges and reverts) carry this identity, never a person's.
 export const agenticIdentity = Object.freeze({ name: 'Golf (agentic mode)', email: 'agentic@golf.invalid' });
-export const landLimits = Object.freeze({ attempts: 5, list: 100, sweep: 20, revertAttempts: 3 });
+// Merges into one repository take turns (each holds it briefly), so a land waits for its turn within a time budget, not a few tries.
+export const landLimits = Object.freeze({ attempts: 60, budgetMs: 45_000, list: 100, sweep: 20, revertAttempts: 3 });
 const refuse = message => { throw new Fault('failed_precondition', 412, message); };
 const forbidden = message => { throw new Fault('permission_denied', 403, message); };
 const now = () => new Date().toISOString();
@@ -37,7 +38,7 @@ export const backoff = (attempt, random = Math.random) => { const cap = Math.min
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const refusals = { target_locked: 'the base branch is locked by a branch rule', pull_request_draft: 'the pull request is a draft', pull_request_not_open: 'the pull request is not open',
   nothing_to_merge: 'the base branch already contains the head', ancestry_unproven: 'the history of the two branches could not be read', branch_unavailable: 'the base or head branch no longer exists',
-  fork_source_unsupported: 'pull requests from forks cannot land natively' };
+  fork_source_unsupported: 'pull requests from forks cannot land natively', provider_refused: 'Git storage refused the merge with the base unchanged' };
 
 // Schema 42: the land_operations table. Only a positive answer is remembered.
 let migrated = false;
@@ -171,16 +172,22 @@ async function rebaseNeeded(db, env, principal, row, op, baseBranch, conflicts, 
 const onlyConflict = value => value.mergeable.reason === 'merge_conflict' && value.evaluation.decision === 'blocked' && value.evaluation.reasons.length === 1;
 
 // Lands op (QUEUED) now: re-reads the pull request, submits the native merge onto the current base tip and retries a moved base or a
+// Whether the landing account still holds write or admin on the repository (a 404 from the merge path can also mean contention).
+const stillWriter = async (db, principal, row) => Boolean(await db.prepare("SELECT 1 FROM grants g JOIN users u ON u.id=g.user_id WHERE g.repository_id=? AND g.user_id=? AND g.role IN ('write','admin') AND u.active=1")
+  .bind(row.id, principal.id).first());
 // busy repository. principal is the account the merge journal names; options ({guard, author}) is the policy's authority for policy lands.
 async function land(db, env, principal, row, op, ctx, options = {}) {
   const key = { owner: ownerSlug(row, env), name: row.name }, pause = ctx.pause || (attempt => sleep(backoff(attempt)));
-  let last = '';
-  for (let attempt = 1; attempt <= landLimits.attempts; attempt++) {
-    if (attempt > 1) await pause(attempt - 1);
+  let last = '', attempt = 0;
+  const started = Date.now();
+  while (++attempt <= landLimits.attempts) {
+    if (attempt > 1) { if (Date.now() - started >= landLimits.budgetMs) break; await pause(attempt - 1); }
     await db.prepare("UPDATE land_operations SET state='LANDING',attempts=?,updated_at=? WHERE id=? AND state IN ('QUEUED','LANDING')").bind(attempt, now(), op.id).run();
     // The repository fence as it is now: an earlier attempt may have met another land's reservation.
     const fence = await db.prepare('SELECT write_pending,(SELECT k.operation_id FROM git_ref_unknown k WHERE k.repository_id=r.id LIMIT 1) AS unknown_write FROM repositories r WHERE id=?').bind(row.id).first();
     const live = { ...row, write_pending: fence?.write_pending || fence?.unknown_write || null };
+    // Another write holds the repository: wait for its turn instead of submitting a merge that could only record a refusal.
+    if (live.write_pending) { last = 'the repository stayed busy with another write'; continue; }
     let d, current;
     try { ({ d, current } = await pullReviewContext(db, env, principal, live, { repositoryId: String(row.id), repository: key, number: op.number, pullRequestId: String(op.pull_request_id) }, ctx.artifact)); }
     catch (error) { if (error instanceof Fault) return transition(db, op, 'FAILED', { reasons: ['the pull request could not be read'] }); throw error; }
@@ -197,6 +204,8 @@ async function land(db, env, principal, row, op, ctx, options = {}) {
         expectedPullRevision: current.revision, sourceRef: d.head_branch, targetRef: d.base_branch, method: op.method }, ctx.artifact, ctx.providerFetch, options)).operation;
     } catch (error) {
       if (error instanceof Fault && error.status === 412 && error.message === busyMessage) { last = 'the repository stayed busy with another write'; continue; }
+      // A refusal journaled while another merge took the repository also answers 404; only a lost grant is a lost grant.
+      if (error instanceof Fault && error.status === 404 && await stillWriter(db, principal, row)) { last = 'the repository stayed busy with another write'; continue; }
       if (error instanceof Fault) return transition(db, op, 'FAILED', { reasons: [error.status === 404 ? 'the landing account no longer has write access or the setting changed' : error.message] });
       throw error;
     }
@@ -207,7 +216,7 @@ async function land(db, env, principal, row, op, ctx, options = {}) {
     if (code === 'pull_request_changed' || code === 'write_unresolved') { last = code === 'write_unresolved' ? 'the repository stayed busy with another write' : 'the base branch kept moving'; continue; }
     return transition(db, op, 'BLOCKED', { reasons: [refusals[code] || code || 'the merge was refused'] });
   }
-  return transition(db, op, 'FAILED', { reasons: [`${last || 'the base branch kept moving'}; gave up after ${landLimits.attempts} attempts`] });
+  return transition(db, op, 'FAILED', { reasons: [`${last || 'the base branch kept moving'}; gave up after ${attempt - 1} attempts in ${Math.round((Date.now() - started) / 1000)} s`] });
 }
 
 // ---------- POST /native/land and /native/land/read ----------

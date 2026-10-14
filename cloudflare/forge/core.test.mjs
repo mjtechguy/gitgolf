@@ -3205,15 +3205,17 @@ test('a lost provider reply after an applied native merge is confirmed by the im
   assert.equal(f.journal()[0].detail,'provider_unavailable');
 });
 
-test('a provider that stores the object but refuses the ref leaves the native merge unknown with its answer recorded', async t => {
+test('a provider that stores the object but refuses the ref is a refused merge: nothing applied, the repository released', async t => {
   const f=await mergeFixture(t), body=f.input(); f.refuseRef();
-  const unknown=(await value(await f.submit(body))).operation;
-  assert.equal(unknown.phase,mergePhase('DISPATCH_UNKNOWN'));assert.equal(f.journal()[0].detail,'provider_status: ng refs/heads/main failed to update ref');
+  // The provider answered ng for the branch and the branch does not name the merge: a definite refusal, not an unknown outcome.
+  const refused=(await value(await f.submit(body))).operation;
+  assert.equal(refused.phase,mergePhase('REJECTED'));assert.equal(refused.refusalCode,'provider_refused');
   // The dispatched commit exists at the provider, but the branch does not name it: inspection never adopts it.
   const git=f.sql.prepare('SELECT * FROM git_operations').get(), artifact=f.sql.prepare('SELECT artifact_name FROM repositories WHERE id=1').get().artifact_name;
   assert.equal((await (await f.env.ARTIFACTS.get(artifact)).readCommit(git.new_sha)).hash,git.new_sha);
-  assert.equal((await value(await f.inspect(body))).operation.phase,mergePhase('DISPATCH_UNKNOWN'));
-  assert.equal(git.state,'DISPATCHED');assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,git.id);
+  assert.equal((await value(await f.inspect(body))).operation.phase,mergePhase('REJECTED'));
+  assert.equal(git.state,'DISPATCHED');assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);
+  assert.equal(f.sql.prepare('SELECT outcome FROM git_ref_writes WHERE operation_id=?').get(git.id).outcome,'NOT_APPLIED');
   assert.equal((await f.pull()).merged,false);assert.equal(f.counts().effects,1);
 });
 
