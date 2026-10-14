@@ -1,5 +1,10 @@
 # Agent workspace mode — proposal
 
+> Superseded in part on 2026-10-14: stages 2–5 below are replaced by
+> [`AGENTIC_MODE_PLAN.md`](AGENTIC_MODE_PLAN.md) (Source API, concurrent Git traffic,
+> API tokens and remote MCP, landing without a global lock, the agentic inbox). The
+> first increment and the constraints in this document still apply.
+
 Status: first read-only native view implemented, 2026-10-13. Selective checkouts,
 new agent execution and storage changes remain proposals. Existing portable Forgejo transition and native
 Artifacts/D1/Workers decisions remain in force.
