@@ -19,6 +19,7 @@ import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
 import { rootMetadata } from './repository-metadata.mjs';
+import { workflowInventory, workflowCapability } from './workflow-inventory.mjs';
 import { timings, timedDatabase, timedResponse, release, configuration } from './telemetry.mjs';
 import { repositoryImage } from './repository-images.mjs';
 import { repositorySettings, repositoryCollaborators, repositoryPackages } from './repository-settings.mjs';
@@ -64,6 +65,7 @@ export function serialize(handler, isRead = () => false) {
 export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
   if (['/native/pr-evidence/read', '/native/pr-preview/read'].includes(new URL(request.url).pathname)) return true;
+  if (new URL(request.url).pathname === '/rpc/golf.v1.WorkflowService/InspectWorkflows') return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
@@ -409,6 +411,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (id !== String(row.id)) deny();
       return await evidenceAPI(db, env, person, row, action => withArtifact(env, row, action), body);
     }
+    if (url.pathname === '/rpc/golf.v1.WorkflowService/InspectWorkflows') {
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      return reply(await workflowInventory(db, env, person, row, request, 'InspectWorkflows', body, action => withArtifact(env, row, action, true), Boolean(testPolicy(env)) && evidencePolicy(env)));
+    }
     if (url.pathname === '/native/repository-check') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       return reply(await collaboration(db, env, person, 'ReportCheck', body, row, action => withArtifact(env, row, action)));
@@ -460,13 +466,13 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
         ['settings.repository-teams', 'Repository team access', 'Team membership and inherited repository permissions are not implemented on Cloudflare native. Direct collaborators and invitations are available in Access.'],
         ['settings.repository-deploy-keys', 'SSH deploy keys', 'Cloudflare native serves Git over HTTPS. SSH transport and SSH deploy keys are not available.'],
         ['settings.repository-secrets', 'Secrets and variables', 'Repository secret and variable management for general workflows is not implemented on Cloudflare native. Operator-managed execution bindings do not provide this editor.'],
-        ['settings.repository-workflows', 'Workflows', 'Cloudflare native supports operator-approved bounded PR test or single-job shell workflow profiles. The general workflow editor and full Actions/GitLab execution are not implemented on this runtime.'],
         ['settings.repository-lifecycle', 'Archive, transfer and deletion'],
         ['settings.repository-agents', 'Agent policy editor'],
         ['repository.source-write', 'Browser file editing'], ['pull.advanced-reviews', 'Inline and pending reviews'],
         ['discussion.attachments', 'Discussion attachments'], ['discussion.templates', 'Issue templates'],
         ['repository.releases', 'Releases'], ['repository.wiki', 'Wiki workspace'],
       ].map(([id, label, reason]) => ({ id, label, state: 'CAPABILITY_STATE_DISABLED', reason: reason || 'This feature is not available in the Cloudflare-native installation yet.' })),
+      { id: 'settings.repository-workflows', label: 'Workflows', state: 'CAPABILITY_STATE_READY', reason: workflowCapability(env, Boolean(testPolicy(env)) && evidencePolicy(env)) },
       { id: 'settings.native', label: 'Cloudflare allocation settings', state: 'CAPABILITY_STATE_READY', reason: 'Current allocations are readable. Operators change the separate native installation configuration; provider credentials are never exposed in the UI.' },
       { id: 'settings.native-runners', label: 'Customer-hosted native runners', state: 'CAPABILITY_STATE_READY', reason: 'Workspace administrators can enroll outbound machines and manage native pools. Repository administrators select an untrusted pool for approved PR jobs.' },
       ...[['settings.infrastructure', 'Portable database and storage profiles'], ['settings.runners', 'Portable runner pools'], ['settings.local-auth', 'Golf passwords, MFA and SSH keys'], ['settings.notifications', 'Portable SMTP settings'], ['settings.cloudflare-resources', 'Origin bridge resource allocation']].map(([id, label]) => ({ id, label, state: 'CAPABILITY_STATE_DISABLED', reason: 'This editor belongs to the portable/origin installation. Cloudflare native uses its separate identity, binding and allocation setup.' })),

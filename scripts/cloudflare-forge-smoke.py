@@ -711,22 +711,35 @@ def main():
         if args.container_tests:
             capabilities = http('/rpc/golf.v1.CapabilityService/ListCapabilities', {})
             workflow_capability = next(c for c in capabilities['capabilities'] if c['id'] == 'settings.repository-workflows')
-            if workflow_capability['state'] != 'CAPABILITY_STATE_DISABLED':
-                raise RuntimeError('Requalify native pipeline execution before enabling its capability')
+            if workflow_capability['state'] != 'CAPABILITY_STATE_READY':
+                raise RuntimeError('Native workflow inventory capability is not ready')
+            # The inventory is read-only: it lists the default-branch files and marks the approved path; dispatch stays unimplemented.
+            inspect = '/rpc/golf.v1.WorkflowService/InspectWorkflows'
+            inventory = http(inspect, {'repository': key, 'repositoryId': repository['id']})
+            http(inspect, {'repository': key, 'ref': commit}, expected=400)
+            http(inspect, {'repository': key}, token=reader, expected=404)
+            approved_path = {'actions': '.github/workflows/lint.yml', 'gitlab': '.gitlab-ci.yml'}.get(args.workflow_shell)
+            listed = {item['path']: item for item in inventory.get('configurations', [])}
+            if (inventory.get('commitId') != commit or inventory.get('repositoryId') != repository['id'] or inventory.get('executionAvailable') is not True or
+                    set(listed) != {'.github/workflows/lint.yml', '.gitlab-ci.yml'}):
+                raise RuntimeError('Native workflow inventory differs from the default-branch commit')
             pipeline_receipts = []
             for path in ['.github/workflows/lint.yml', '.gitlab-ci.yml']:
                 canonical = rpc('GetContents', {**exact, 'path': path})
                 data = (source/path).read_bytes()
                 if canonical.get('file', {}).get('content', '').encode() != data:
                     raise RuntimeError('Canonical pipeline fixture bytes differ')
+                item, blob = listed[path], git('workflow blob identity', '-C', source, 'rev-parse', 'HEAD:' + path).stdout.decode().strip()
+                if item.get('blobId') != blob or item.get('byteSize') != str(len(data)) or item.get('manualPolicyAllowed', False) is not (path == approved_path):
+                    raise RuntimeError('Native workflow inventory entry differs')
+                if path == approved_path and item.get('state') != 'WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET':
+                    raise RuntimeError('Approved native workflow was not classified as runnable')
                 request = {'repository': key, 'workflowPath': path, 'ref': commit, 'idempotencyKey': str(uuid.uuid4())}
-                for method in ['InspectWorkflows', 'DispatchWorkflow']:
-                    service = 'WorkflowService' if method == 'InspectWorkflows' else 'WorkflowRunService'
-                    result = http('/rpc/golf.v1.' + service + '/' + method, request, expected=501)
-                    if result.get('code') != 'unimplemented':
-                        raise RuntimeError('Unsupported native pipeline did not return a typed refusal')
-                pipeline_receipts.append({'path': path, 'sha256': hashlib.sha256(data).hexdigest(), 'sourceCommit': commit,
-                                          'storedInArtifacts': True, 'execution': 'unsupported', 'admissionStatus': 501})
+                result = http('/rpc/golf.v1.WorkflowRunService/DispatchWorkflow', request, expected=501)
+                if result.get('code') != 'unimplemented':
+                    raise RuntimeError('Unsupported native dispatch did not return a typed refusal')
+                pipeline_receipts.append({'path': path, 'sha256': hashlib.sha256(data).hexdigest(), 'sourceCommit': commit, 'storedInArtifacts': True,
+                                          'inspection': item.get('state'), 'approved': path == approved_path, 'dispatchStatus': 501})
             state['checks']['pipeline_execution_boundary'] = pipeline_receipts
             save()
         link = rpc('GetContents', {**exact, 'path': 'link'})

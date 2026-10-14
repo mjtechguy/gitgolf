@@ -396,3 +396,63 @@ test('Forgejo path stays visible and exact through dispatch', async ({ page }) =
   expect(state.writes[0]!.workflowPath).toBe('.forgejo/workflows/manual.yml');
   expect(state.writes[0]!.ref).toBe(commit);
 });
+
+// Cloudflare native: a read-only inventory. Anything it does not answer is refused as unimplemented, as that runtime does.
+const nativeScope = 'Lists workflow files at the default-branch commit and marks the one operator-approved path that can run. Pull-request jobs only: one job of shell steps, no actions, expressions, services or matrices. No manual dispatch, branch-push or tag triggers.';
+async function nativeBackend(page: Page, capabilities = ['settings.repository-workflows']) {
+  const state = { methods: [] as string[], available: true };
+  await page.route('**/rpc/**', async route => {
+    const method = new URL(route.request().url()).pathname.split('/').at(-1)!; state.methods.push(method);
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
+    if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex' } });
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { runtimeProfile: 'cloudflare-native', capabilities: capabilities.map(id => ({ id, label: id, state: 3, reason: id === 'settings.repository-workflows' ? nativeScope : 'Native test capability.' })) });
+    if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
+    if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { id: '9007199254740997', name: 'private', fullName: 'alex/private', defaultBranch: 'main', private: true } });
+    if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: { repositoryId: '9007199254740997', ownerId: '9007199254740993', currentPermission: 'admin' } });
+    if (method === 'InspectWorkflows') return respond(route, InspectWorkflowsResponseSchema, { repositoryId: '9007199254740997', commitId: commit, catalogVersion: 'golf.native.workflow-inventory.v1', executionAvailable: state.available, policyRevision: 'e'.repeat(64), configurations: [
+      { path: '.github/workflows/ci.yml', blobId: 'b'.repeat(40), byteSize: 123n, format: WorkflowFormat.GITHUB_ACTIONS, state: WorkflowInspectionState.VALIDATED_SUBSET, name: 'Verify', events: ['pull_request'], jobs: [{ id: 'check', stepCount: 2 }], manualPolicyAllowed: state.available, pushPolicyAllowed: false },
+      { path: '.gitlab-ci.yml', blobId: 'c'.repeat(40), byteSize: 321n, format: WorkflowFormat.GITLAB_CI, state: WorkflowInspectionState.VALIDATED_SUBSET, jobs: [{ id: 'check', stepCount: 1 }], manualPolicyAllowed: false, pushPolicyAllowed: false, diagnostics: [{ code: 'not_approved_path', message: 'Not the operator-approved path; it cannot run on this installation.' }] },
+    ] });
+    return reject(route, 'unimplemented', 'This capability is not implemented on the native forge.');
+  });
+  return state;
+}
+const portableOnly = ['GetExecutionPolicy', 'UpdateExecutionPolicy', 'GetReviewer', 'ListReviewerRuns', 'GetAgentUsage', 'ListAgentModels', 'ListCodexConnections', 'ListAutomationGrants', 'ListActionRuns', 'PrepareWorkflowDispatch', 'DispatchWorkflow', 'GetWorkflowDispatch'];
+
+test('native workflow settings list files, mark the approved path and mount no dispatch control or unsupported panel', async ({ page }) => {
+  const state = await nativeBackend(page); await page.goto(path);
+  const table = page.getByRole('table', { name: 'Workflow configurations', exact: true });
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(2);
+  await expect(page.getByText('Pull-request runs use the one operator-approved path, read from the pull request’s head commit. Pull-request execution is allocated.', { exact: true })).toBeVisible();
+  const approved = table.getByRole('row').filter({ hasText: '.github/workflows/ci.yml' }), other = table.getByRole('row').filter({ hasText: '.gitlab-ci.yml' });
+  await expect(approved.getByText('Pull-request runs: Allowed', { exact: true })).toBeVisible();
+  await expect(approved.getByText('Automatic on push: Denied', { exact: true })).toBeVisible();
+  await expect(approved.getByText('Pull requests only', { exact: true })).toBeVisible();
+  await expect(other.getByText('Pull-request runs: Denied', { exact: true })).toBeVisible();
+  await expect(other.getByText('Does not run', { exact: true })).toBeVisible();
+  // A GitLab file is dispatchable on the portable runtime; here nothing is.
+  await expect(page.getByRole('button', { name: 'Run workflow', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Push trigger only', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Manual execution requires policy approval', { exact: false })).toHaveCount(0);
+  await page.locator('summary').filter({ hasText: 'Inspect .github/workflows/ci.yml' }).click();
+  await expect(page.getByText('Declared events: pull_request. Only the operator-approved path runs, on pull requests.', { exact: true })).toBeVisible();
+  await page.locator('summary').filter({ hasText: 'Inspection scope and execution requirements' }).click();
+  await expect(page.getByText(nativeScope, { exact: true })).toBeVisible();
+  await expect(page.getByText('golf.native.workflow-inventory.v1', { exact: true })).toBeVisible();
+  await expect(page.getByText('GitLab-format execution supports one job', { exact: false })).toHaveCount(0);
+  await expect(page.getByText('automation grant', { exact: false })).toHaveCount(0);
+  for (const name of ['Execution policy', 'Pull-request execution', 'Automation grants', 'Agent usage']) await expect(page.getByRole('region', { name, exact: false })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Open Actions run history', exact: true })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  for (const method of portableOnly) expect(state.methods).not.toContain(method);
+  expect(state.methods.filter(method => method === 'InspectWorkflows')).toHaveLength(1);
+});
+
+test('native workflow settings say when pull-request execution is not allocated', async ({ page }) => {
+  const state = await nativeBackend(page); state.available = false; await page.goto(path);
+  const table = page.getByRole('table', { name: 'Workflow configurations', exact: true });
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(2);
+  await expect(page.getByText('Pull-request execution is not allocated on this installation.', { exact: false })).toBeVisible();
+  await expect(table.getByText('Does not run', { exact: true })).toHaveCount(2);
+  await expect(table.getByText('Pull requests only', { exact: true })).toHaveCount(0);
+});

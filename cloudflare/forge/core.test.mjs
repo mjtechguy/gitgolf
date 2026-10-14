@@ -3540,3 +3540,105 @@ test('an approved Actions workflow beside the approved module leaves agent admis
     assert.equal((await f.advance(job.id, 'agents')).state, 'REFUSED');
   });
 });
+
+async function inventoryFixture(t) { const f = await fixture(t); await f.create(); await f.sendPush(); return f; }
+const inspect = (f, body = {}, token = ownerToken) => f.call('', { repository: key, ...body }, token, '/rpc/golf.v1.WorkflowService/InspectWorkflows');
+const workflowReason = async f => (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.find(c => c.id === 'settings.repository-workflows');
+function allocateEvidence(f) {
+  Object.assign(f.env, { EVIDENCE_DAILY_LIMIT: '2', EVIDENCE_WORKFLOW_NAME: 'test-evidence', EVIDENCE_QUEUE_NAME: 'test-evidence', EVIDENCE_QUEUE: { async send() {} }, EVIDENCE_BUCKET: {} });
+}
+
+test('native workflow inventory reads the default branch for current repository accounts only', async t => {
+  const empty = await fixture(t); await empty.create();
+  assert.equal((await inspect(empty)).status, 412);
+  const f = await inventoryFixture(t), origin = f.env.PUBLIC_ORIGIN, path = '/rpc/golf.v1.WorkflowService/InspectWorkflows';
+  const listed = await value(await inspect(f, { repositoryId: '1' }));
+  assert.deepEqual({ ...listed, policyRevision: '' }, { repositoryId: '1', commitId: commit, catalogVersion: 'golf.native.workflow-inventory.v1', executionAvailable: false, configurations: [],
+    diagnostics: [{ code: 'module_profile', message: 'None of these files can run: this installation executes one operator-approved Python test module on pull requests.' }], policyRevision: '', executionCatalog: '', executionEngineCommit: '' });
+  assert.match(listed.policyRevision, /^[a-f0-9]{64}$/);
+  assert.equal((await inspect(f, { ref: 'main' })).status, 400);
+  assert.equal((await inspect(f, { repositoryId: '2' })).status, 404);
+  assert.equal((await inspect(f, { repository: { owner: 'alice', name: 'other' } })).status, 404);
+  assert.equal((await inspect(f, {}, readerToken)).status, 404);
+  await value(await f.call('', { repository: key, repositoryId: '1', userId: '2', role: 'read' }, ownerToken, '/native/repository-grant'));
+  assert.equal((await value(await inspect(f, {}, readerToken))).commitId, commit);
+  // Publishing source does not publish the settings inventory: no grant, no answer.
+  const anonymous = () => f.dispatch(new Request(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify({ repository: key }) }));
+  assert.equal((await anonymous()).status, 401);
+  f.env.PUBLIC_REPOSITORIES = 'true'; f.sql.exec('INSERT INTO repository_visibility(repository_id,is_public) VALUES(1,1)');
+  assert.equal((await f.call('GetRepository', { repository: key }, readerToken)).status, 200);
+  assert.equal((await anonymous()).status, 401);
+  f.sql.prepare('DELETE FROM grants WHERE repository_id=1 AND user_id=2').run();
+  assert.equal((await f.call('GetRepository', { repository: key }, readerToken)).status, 200);
+  assert.equal((await inspect(f, {}, readerToken)).status, 404);
+  assert.equal(concurrentRead(new Request(origin + path, { method: 'POST' })), true);
+  const capability = await workflowReason(f);
+  assert.equal(capability.state, 'CAPABILITY_STATE_READY');
+  assert.equal(capability.reason, 'Lists workflow files at the default-branch commit. None can run: pull-request test execution is not allocated on this installation.');
+});
+
+test('the module profile marks no workflow runnable and a workflow profile marks only its approved path', async t => {
+  const f = await inventoryFixture(t); allocateEvidence(f); allocateTests(f);
+  workflowFiles(f, { '.github/workflows/ci.yml': shellWorkflow, '.github/workflows/release.yml': 'on: push\njobs:\n  ship:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n', '.gitlab-ci.yml': 'check:\n  script: echo ok\n' });
+  const byPath = result => Object.fromEntries(result.configurations.map(item => [item.path, item]));
+  const module = await value(await inspect(f)), listed = byPath(module);
+  assert.deepEqual(module.configurations.map(item => item.path), ['.gitlab-ci.yml', '.github/workflows/ci.yml', '.github/workflows/release.yml']);
+  assert.equal(module.executionAvailable, true); assert.deepEqual(module.diagnostics.map(d => d.code), ['module_profile']);
+  assert.equal(module.configurations.some(item => item.manualPolicyAllowed || item.pushPolicyAllowed || item.diagnostics.some(d => d.code === 'not_approved_path')), false);
+  assert.deepEqual({ ...listed['.github/workflows/ci.yml'], blobId: '' }, { path: '.github/workflows/ci.yml', blobId: '', byteSize: String(shellWorkflow.length), format: 'WORKFLOW_FORMAT_GITHUB_ACTIONS',
+    state: 'WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET', name: 'Verify', jobs: [{ id: 'check', name: '', stage: '', stepCount: 1 }], events: ['pull_request'], diagnostics: [], manualPolicyAllowed: false, pushPolicyAllowed: false });
+  assert.match(listed['.github/workflows/ci.yml'].blobId, /^[a-f0-9]{40}$/);
+  assert.equal(listed['.github/workflows/release.yml'].state, 'WORKFLOW_INSPECTION_STATE_UNSUPPORTED');
+  assert.deepEqual(listed['.github/workflows/release.yml'].diagnostics.map(d => d.code), ['outside_native_subset']); assert.deepEqual(listed['.github/workflows/release.yml'].jobs, []);
+  assert.equal(listed['.gitlab-ci.yml'].format, 'WORKFLOW_FORMAT_GITLAB_CI'); assert.equal(listed['.gitlab-ci.yml'].state, 'WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET');
+  assert.equal((await workflowReason(f)).reason, 'Lists workflow files at the default-branch commit. None can run: this installation executes one operator-approved Python test module on pull requests.');
+  // The agent module may stay beside the approved Actions shell workflow.
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/ci.yml' });
+  const workflow = await value(await inspect(f)), approved = byPath(workflow);
+  assert.deepEqual(workflow.diagnostics, []); assert.notEqual(workflow.policyRevision, module.policyRevision);
+  assert.deepEqual(workflow.configurations.map(item => [item.manualPolicyAllowed, item.pushPolicyAllowed]), [[false, false], [true, false], [false, false]]);
+  assert.deepEqual(approved['.github/workflows/ci.yml'].diagnostics, []);
+  assert.deepEqual(approved['.gitlab-ci.yml'].diagnostics.map(d => d.code), ['not_approved_path']);
+  assert.deepEqual(approved['.github/workflows/release.yml'].diagnostics.map(d => d.code), ['outside_native_subset', 'not_approved_path']);
+  f.env.CI_AUTO = 'true';
+  const automatic = await value(await inspect(f));
+  assert.equal(byPath(automatic)['.github/workflows/ci.yml'].pushPolicyAllowed, true); assert.notEqual(automatic.policyRevision, workflow.policyRevision);
+  assert.equal((await workflowReason(f)).reason, 'Lists workflow files at the default-branch commit and marks the one operator-approved path that can run. Pull-request jobs only: one job of shell steps, no actions, expressions, services or matrices. No manual dispatch, branch-push or tag triggers.');
+  f.env.TEST_WORKFLOW_PATH = '.github/workflows/absent.yml';
+  const absent = await value(await inspect(f));
+  assert.deepEqual(absent.diagnostics.map(d => d.code), ['approved_path_missing']); assert.equal(absent.configurations.some(item => item.manualPolicyAllowed), false);
+  // The pinned catalog runs on customer runners; this page does not claim to have inspected its files.
+  delete f.env.TEST_MODULE; Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions-act', TEST_WORKFLOW_PATH: '.github/workflows/release.yml' });
+  const pinned = byPath(await value(await inspect(f)));
+  assert.equal(pinned['.github/workflows/release.yml'].state, 'WORKFLOW_INSPECTION_STATE_UNSPECIFIED'); assert.deepEqual(pinned['.github/workflows/release.yml'].diagnostics.map(d => d.code), ['not_inspected']);
+  assert.equal(pinned['.github/workflows/release.yml'].manualPolicyAllowed, true); assert.deepEqual(pinned['.github/workflows/ci.yml'].diagnostics.map(d => d.code), ['not_inspected', 'not_approved_path']);
+  assert.match((await workflowReason(f)).reason, /selected customer runner pool with the pinned Actions catalog/);
+  // An unallocated evidence queue removes every ceiling without hiding the inventory.
+  delete f.env.EVIDENCE_BUCKET;
+  const unallocated = await value(await inspect(f));
+  assert.equal(unallocated.executionAvailable, false); assert.equal(unallocated.configurations.some(item => item.manualPolicyAllowed || item.pushPolicyAllowed), false);
+});
+
+test('workflow inventory bounds files, bytes and entry kinds and keeps the approved path listed', async t => {
+  const f = await inventoryFixture(t); allocateEvidence(f); allocateTests(f);
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/zz.yml' });
+  const many = workflowFiles(f, { ...Object.fromEntries(Array.from({ length: 25 }, (_, index) => ['.github/workflows/w' + String(index).padStart(2, '0') + '.yml', shellWorkflow])), '.github/workflows/zz.yml': shellWorkflow });
+  const overfull = await value(await inspect(f));
+  assert.equal(overfull.configurations.length, 20); assert.equal(many.reads(), 20);
+  assert.deepEqual(overfull.configurations.map(item => item.path).slice(-2), ['.github/workflows/w18.yml', '.github/workflows/zz.yml']);
+  assert.equal(overfull.configurations.at(-1).manualPolicyAllowed, true);
+  assert.deepEqual(overfull.diagnostics, [{ code: 'inventory_truncated', message: '26 workflow files exist; 20 are listed.' }]);
+  const g = await inventoryFixture(t);
+  const kinds = workflowFiles(g, { '.github/workflows/big.yml': 'a'.repeat(64 * 1024 + 1), '.github/workflows/edge.yml': '#'.repeat(64 * 1024), '.github/workflows/binary.yaml': { source: new Uint8Array([0xff, 0xfe, 0x00]) },
+    '.github/workflows/empty.yml': '', '.github/workflows/link.yml': { type: 'symlink', source: 'ci.yml' }, '.github/workflows/run.yml': { type: 'exec', source: shellWorkflow },
+    '.github/workflows/bad\u0007name.yml': shellWorkflow, '.github/workflows/notes.txt': 'ignored', '.gitlab-ci.yml': { type: 'tree', source: '' } });
+  const result = await value(await inspect(g)), listed = Object.fromEntries(result.configurations.map(item => [item.path.replace('.github/workflows/', ''), item]));
+  assert.deepEqual(Object.keys(listed).sort(), ['.gitlab-ci.yml', 'big.yml', 'binary.yaml', 'edge.yml', 'empty.yml', 'link.yml', 'run.yml']);
+  assert.equal(kinds.reads(), 4);
+  assert.deepEqual([listed['big.yml'].state, listed['big.yml'].byteSize, listed['big.yml'].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_UNSPECIFIED', '65537', 'file_too_large']);
+  assert.deepEqual([listed['edge.yml'].state, listed['edge.yml'].byteSize, listed['edge.yml'].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_UNSUPPORTED', '65536', 'outside_executable_size']);
+  assert.deepEqual([listed['empty.yml'].state, listed['empty.yml'].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_UNSUPPORTED', 'outside_executable_size']);
+  assert.deepEqual([listed['binary.yaml'].state, listed['binary.yaml'].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_INVALID', 'not_utf8']);
+  for (const name of ['link.yml', 'run.yml', '.gitlab-ci.yml']) assert.deepEqual([listed[name].state, listed[name].blobId, listed[name].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_UNSUPPORTED', '', 'not_regular_file']);
+  assert.deepEqual(result.diagnostics.map(d => d.code), ['unlisted_names', 'module_profile']);
+});
