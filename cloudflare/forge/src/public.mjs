@@ -1,7 +1,7 @@
 import { release, configuration, timings } from './telemetry.mjs';
 import { performanceSample } from './performance.mjs';
 import { bounded } from './git.mjs';
-import { accessContext } from './access.mjs';
+import { accessContext, accessIssuedAt } from './access.mjs';
 import { anonymousLimit } from './rate-limit.mjs';
 import { releaseAssetDownload } from './asset-download.mjs';
 
@@ -67,10 +67,17 @@ async function dispatch(request, env, ctx, clock) {
       if (!env.ASSETS) return new Response('Unavailable', { status: 404, headers: { 'Cache-Control': 'no-store' } });
     }
     const headers = new Headers(request.headers);
-    headers.delete('X-Golf-Native-Access-Email');
+    for (const name of ['X-Golf-Native-Access-Email', 'X-Golf-Native-Access-Issued-At', 'X-Golf-Native-Access-Colo', 'X-Golf-Native-Access-Country']) headers.delete(name);
     if (!headers.has('Authorization') && access) {
       const identity = await clock.measure('access', () => access.getIdentity());
       if (typeof identity?.email === 'string' && identity.email.length <= 254) headers.set('X-Golf-Native-Access-Email', identity.email);
+      // Installation policy changes record when and from where the person signed in; only that route pays for the extra verification.
+      if (url.pathname === '/native/installation' && headers.has('X-Golf-Native-Access-Email')) {
+        const issued = await accessIssuedAt(request, env, access);
+        if (issued) headers.set('X-Golf-Native-Access-Issued-At', String(issued));
+        if (/^[A-Z]{3}$/.test(request.cf?.colo || '')) headers.set('X-Golf-Native-Access-Colo', request.cf.colo);
+        if (/^[A-Z]{2}$/.test(request.cf?.country || '')) headers.set('X-Golf-Native-Access-Country', request.cf.country);
+      }
     }
     const workspace = ctx.exports.Workspace;
     const owner = workspace.get(workspace.idFromName(env.WORKSPACE_SLUG));

@@ -176,6 +176,11 @@ if (mode === 'retire') {
     if (typeof settings.default_appearance !== 'string' || !defaultAppearance.test(settings.default_appearance)) throw Error('Default appearance must be an appearance or appearance/layout');
     config.env.DEFAULT_APPEARANCE = { type: 'text', value: settings.default_appearance };
   }
+  // false returns installation policy to deploy only: stored edits are ignored and the admin pages cannot change them.
+  if (settings.policy_editing !== undefined) {
+    if (typeof settings.policy_editing !== 'boolean') throw Error('policy_editing must be true or false');
+    config.env.INSTALLATION_POLICY_EDITING = { type: 'text', value: String(settings.policy_editing) };
+  }
   if (settings.automatic_ci !== undefined) {
     if (typeof settings.automatic_ci !== 'boolean' || settings.automatic_ci && !settings.tests) throw Error('Automatic CI requires an approved test allocation');
     config.env.CI_AUTO = { type: 'text', value: String(settings.automatic_ci) };

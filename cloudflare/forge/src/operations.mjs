@@ -76,7 +76,8 @@ export async function operationsDashboard(db, env, person, request) {
     ['containers','Containers / Sandbox',Boolean(env.testTasks || env.agentTasks)], ['workers-ai','Workers AI',env.EVIDENCE_ALLOW_AI === 'true'],
     ['ai-gateway','AI Gateway',Boolean(env.EVIDENCE_GATEWAY)], ['access','Access / Zero Trust',Boolean(env.ACCESS_AUD)],
     ['browser','Browser Run',Boolean(env.BROWSER)], ['analytics','Analytics Engine',Boolean(env.USAGE_ANALYTICS)],
-    ['platforms','Workers for Platforms',Boolean(env.APP_POLICY)], ['dns','Preview DNS / custom domains',Boolean(env.PREVIEW_ORIGIN)], ['secrets','Secrets Store',Boolean(env.APP_PROVISIONER || env.OPERATIONS_ANALYTICS_TOKEN || env.WEBHOOK_KEY)],
+    ['platforms','Workers for Platforms',Boolean(env.APP_POLICY)], ['dns','Preview DNS / custom domains',Boolean(env.PREVIEW_ORIGIN)], ['secrets','Secrets Store',Boolean(env.APP_PROVISIONER || env.OPERATIONS_ANALYTICS_TOKEN || env.WEBHOOK_KEY || env.EXECUTION_VALUE_KEY)],
+    ['email','Email Service',Boolean(env.EMAIL?.send)],
     ['observability','Workers managed observability',env.OPERATIONS_OBSERVABILITY === 'true'],
   ]) services.push({id,label,state:enabled?'configured':'disabled',source:'Installed binding / policy',detail:'Configuration only; provider health and consumption are not probed by this snapshot.'});
   const activity = await db.prepare(`SELECT
@@ -88,12 +89,14 @@ export async function operationsDashboard(db, env, person, request) {
     MAX(CASE WHEN state='READY' AND kind='WORKER' AND purged=0 AND expires_at>? THEN created_at END) AS app,
     MAX(CASE WHEN capture_state='READY' AND capture_hash IS NOT NULL AND purged=0 THEN created_at END) AS browser
     FROM previews`).bind(stamp).first();
+  const mail = env.EMAIL?.send ? await db.prepare('SELECT MAX(accepted_at) AS at FROM email_acceptance').first().catch(() => null) : null;
   for (const [ids, observed, source, detail] of [
     [['queues','workflows'],activity?.evidence,'Successful queued evidence journal','Queued evidence completed and its private report was published.'],
     [['containers'],activity?.containers,'Completed execution journal','A canonical test or isolated agent execution completed.'],
     [['workers-ai','ai-gateway'],activity?.ai,'Successful advice journal','Approved AI advice completed through the configured gateway.'],
     [['platforms','dns','secrets'],previews?.app,'Ready managed preview journal','Managed Worker allocation completed using the provisioner secret, dispatch namespace and preview domain.'],
     [['browser'],previews?.browser,'Verified private capture journal','A private Browser Run capture was stored and verified.'],
+    [['email'],mail?.at,'Recorded provider acceptance','Cloudflare Email Service accepted a notification with a provider message id.'],
   ]) if (observed && Number.isFinite(Date.parse(observed))) for (const id of ids) {
     const service=services.find(row=>row.id===id);
     if (service?.state==='configured') Object.assign(service,{state:'observed',source,checkedAt:observed,detail:detail+' Historical successful activity; not a current provider health probe.'});

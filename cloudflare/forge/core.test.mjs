@@ -2288,6 +2288,16 @@ test('native signed webhook tests retain original operations and never leak rece
  assert.equal((await drainWebhooks(f.env,{fetch:async()=>{throw Error('must not send');}})).processed,0);
 });
 
+test('removing a webhook origin in installation policy fails queued deliveries at their next attempt and refuses new saves',async t=>{
+ const f=await webhookFixture(t);await f.save();const {drainWebhooks}=await import('./src/webhooks.mjs');const {withInstallationPolicy}=await import('./src/installation.mjs');
+ const queued=await f.value(await f.invoke('TestRepositoryWebhook',{subscriptionId:f.draft.id,expectedVersion:'1',operationId:crypto.randomUUID()}));assert.equal(queued.delivery.state,'queued');
+ f.sql.prepare("INSERT INTO installation_settings(key,value,version,updated_by,updated_at) VALUES('webhooks',?,1,1,'2026-10-14T00:00:00Z')").run(JSON.stringify({origins:['https://other.example.com'],dailyLimit:100}));
+ // The deploy env alone would still send; the drain reads the policy in force at its start.
+ assert.equal((await drainWebhooks(await withInstallationPolicy(f.env),{fetch:async()=>{throw Error('must not send');}})).processed,0);
+ const row=f.sql.prepare('SELECT state,failure_code FROM webhook_deliveries').get();assert.equal(row.state,'failed');assert.equal(row.failure_code,'destination_or_credential_unavailable');
+ assert.equal((await f.invoke('SaveRepositoryWebhook',{...f.draft,id:crypto.randomUUID()})).status,400);
+});
+
 test('webhook outbox captures committed source, discussion and test transitions with notification filters',async t=>{
  const f=await webhookFixture(t);await f.save();
  await f.sendPush();
@@ -2930,7 +2940,7 @@ test('native merge writes one verified merge commit through the push journal and
   const again=(await value(await f.submit(f.input({selection:compared,expectedPullRevision:merged.revision})))).operation;
   assert.equal(again.phase,mergePhase('REJECTED'));assert.equal(again.failureCode,'preflight_refused');assert.equal(f.journal()[1].detail,'pull_request_not_open');
   assert.equal(f.counts().effects,1);
-  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,29);
+  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,30);
   const capability=(await value(await f.call('',{},ownerToken,'/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c=>c.id==='pull.merge');
   assert.equal(capability.length,1);assert.equal(capability[0].state,'CAPABILITY_STATE_READY');
 });

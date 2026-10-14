@@ -20,7 +20,13 @@ function installed(env) {
   return typeof env.ANONYMOUS_READS?.limit === 'function' && value && limitOK(value) ? value : null;
 }
 // Without public repositories nothing is admitted anonymously, so nothing is limited.
-export const rateLimitPolicy = env => env.PUBLIC_REPOSITORIES === 'true' ? installed(env) : null;
+export const rateLimitPolicy = env => env.PUBLIC_REPOSITORIES === 'true' && env.ANONYMOUS_LIMIT_OFF !== 'true' ? installed(env) : null;
+// The public Worker reads installation policy only for a request the limiter refused, so admitted traffic costs no D1 read. Unreadable means on.
+async function turnedOff(env) {
+  if (env.INSTALLATION_POLICY_EDITING === 'false' || !env.DB) return false;
+  try { return JSON.parse((await env.DB.withSession('first-primary').prepare("SELECT value FROM installation_settings WHERE key='rate-limit'").first())?.value || '{}').enabled === false; }
+  catch { return false; }
+}
 // One counter per IPv4 address or IPv6 /64, which a single client can otherwise rotate through.
 export function clientKey(address) {
   if (!address) return 'unknown';
@@ -36,6 +42,7 @@ export async function anonymousLimit(request, env, access) {
   try { if ((await env.ANONYMOUS_READS.limit({ key: clientKey(request.headers.get('CF-Connecting-IP')) })).success !== false) return null; }
   // An unavailable limiter must not take public reading down with it.
   catch { console.log(JSON.stringify({ event: 'golf.rate_limit_unavailable' })); return null; }
+  if (await turnedOff(env)) return null;
   const message = `Too many anonymous requests from this network. Retry after ${policy.period} seconds; signed-in and credentialed requests are not limited.`;
   const git = new URL(request.url).pathname.startsWith('/git/');
   return new Response(git ? message + '\n' : JSON.stringify({ code: 'resource_exhausted', message }), { status: 429, headers: {
@@ -47,6 +54,7 @@ export function rateLimitService(env) {
   const policy = rateLimitPolicy(env);
   return { id: 'rate-limit', label: 'Rate limiting · anonymous public reads', state: policy ? 'configured' : 'disabled', source: 'Installed binding / policy',
     detail: policy ? `About ${policy.limit} anonymous public read or clone requests per ${policy.period} seconds for each client network at each Cloudflare location. Counts are approximate and are not shared between locations. Signed-in, credentialed and runner requests are never counted. Refusals are not recorded here.`
+      : env.ANONYMOUS_LIMIT_OFF === 'true' && installed(env) ? 'An operations administrator turned the installed anonymous request limit off. Public reads and clones are not throttled per client.'
       : env.PUBLIC_REPOSITORIES === 'true' ? 'No anonymous request limit is installed. Public reads and clones are not throttled per client.'
       : (installed(env) ? 'A limit is installed, but public' : 'Public') + ' repositories are not enabled, so there are no anonymous reads to limit.' };
 }

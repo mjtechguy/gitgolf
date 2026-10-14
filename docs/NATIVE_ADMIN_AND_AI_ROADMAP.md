@@ -61,8 +61,8 @@ enforce public repositories, read secrets or erase the audit log.
 
 | # | Slice | State on 2026-10-14 |
 | --- | --- | --- |
-| 1 | Installation overview for administrators: every allocated service and setting with current values (never secrets), operations fixes, dead admin links removed | in progress |
-| 2 | Editable installation approvals and the installation audit log | in progress |
+| 1 | Installation overview for administrators: every allocated service and setting with current values (never secrets), operations fixes, dead admin links removed | shipped |
+| 2 | Editable installation approvals and the installation audit log | shipped |
 | 3 | Feature policy model at installation scope, enforcement at every gate, `/admin/features` | in progress |
 | 4 | Repository Features section; issues, pull requests and merge gates | in progress |
 | 5 | Organization policies (narrow only) | planned |
