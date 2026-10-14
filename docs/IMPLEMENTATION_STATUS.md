@@ -1,5 +1,21 @@
 # Golf implementation status
 
+## 2026-10-14 — Agent proposals on GLM 5.3 Flash
+
+Agent proposals now run on `@cf/zai-org/glm-5.3-flash` (briefly `@cf/zai-org/glm-5.3`;
+both are listed in this account's Workers AI catalog with function calling and a
+1M-token context). Live runs on `mj/review-playground` pull request 1, each asked
+to add one small function to `calc.py` with a docstring and keep `add` unchanged:
+
+| Model | Result | Inference calls | Tokens | Time | Denied requests |
+| --- | --- | --- | --- | --- | --- |
+| `glm-5.3` | succeeded, `subtract` added, tests passed | 6 | 5,760 | 78 s | 1 |
+| `glm-5.3-flash` | succeeded, `multiply` added, tests passed | 5 | 3,706 | 31 s | 0 |
+
+The first Flash deploy did not rebuild the Worker: the Alchemy build watched only
+`cloudflare/forge`, while the agent harness lives in `cloudflare/agents/src`. The
+watch list now includes it.
+
 ## 2026-10-14 — Native releases and discussion attachments on R2
 
 Cloudflare native serves repository releases for existing tags by current
