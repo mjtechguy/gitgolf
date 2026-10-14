@@ -51,3 +51,13 @@ test('credential, body, egress and native outcome boundaries', async () => {
   await assert.rejects(new Response(openAIStream(new Response('data: {"response":"","usage":{}}\n').body)).text());
   await assert.rejects(new Response(openAIStream(new Response('data: ' + 'x'.repeat(65536)).body)).text());
 });
+
+test('the agent model is part of the policy identity, and the deploy policy carries none', async () => {
+  const { filePolicy, policyIdentity, model } = await import('./src/policy.mjs');
+  assert.equal(filePolicy('calc.py').provider.golf.models.coder.name, model);
+  assert.equal(filePolicy('calc.py', '@cf/zai-org/glm-5.3').provider.golf.models.coder.name, '@cf/zai-org/glm-5.3');
+  assert.equal(JSON.stringify(filePolicy('calc.py', null)).includes(model), false);
+  const deploy = 'a'.repeat(64);
+  assert.match(await policyIdentity(deploy, model), /^[a-f0-9]{64}$/);
+  assert.notEqual(await policyIdentity(deploy, model), await policyIdentity(deploy, '@cf/zai-org/glm-5.3'));
+});
