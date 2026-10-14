@@ -1,5 +1,47 @@
 # Golf implementation status
 
+## 2026-10-14 — Source API routes (agentic mode AM-2, schema 38)
+
+`POST /native/source/commit`, `branch`, `files` and `tree` (`source-api.mjs`, contract in
+`docs/SOURCE_API.md`). A commit takes up to 500 changes (content, base64, mode,
+delete, move; 8 MiB in total, 4 MiB a file) against an `expectedHead`, builds exact
+Git objects with `git-objects.mjs`, and sends one receive-pack update through the AM-1
+branch fence under the push authority guard (grant, access and identity versions,
+rules version, credential). It is confirmed by reading the branch back, then recorded
+for pipeline intake. A moved head returns 409 with `currentHead`, or with
+`onStale: merge` is merged by path (`tree-merge.mjs`) onto the current head, with
+conflicts listed. A head that moves again, a refused update or a busy fence is retried,
+3 attempts in all. Migration `0038_source_commits.sql` journals idempotency keys: a
+replay returns the original response, other inputs are refused, and an unknown outcome
+waits for the maintenance sweep. `branch` creates (empty pack) or deletes (no pack)
+with an expected head. `files` reads up to 100 paths (1 MiB inline, 4 MiB total,
+binary as base64). `tree` lists up to 10,000 entries with `truncated`.
+`token-scope.mjs` (`scopeAllows`, `requireScope`) applies the AM-3 token scope
+(repositories, read/write, branch pattern) on every route once `actor()` attaches it.
+Writes are Workspace transfers and reads are reads. Live activity and `CI_AUTO` follow
+writes as they follow pushes. Capability `repository.source-api` is READY on schema 38.
+
+Verified locally:
+- the forge suite: 552 tests, 551 pass, 1 skipped (before: 540, 539, 1);
+  `source-api.test.mjs` runs node:sqlite against a real bare repository and
+  `git receive-pack`;
+- `source-api-runtime-check.mjs` on real workerd and D1 with `git receive-pack`:
+  - root, edit, delete, move, executable, symlink and binary commits;
+  - trees equal to Git's own index for the same edits, and `fsck --strict` clean;
+  - stale fail, disjoint merge and conflicting merge;
+  - idempotent replay, branch create and delete, files and tree reads;
+  - token scope refusals, through a test-only route;
+- `merge-runtime-check.mjs`, `agent-hosts-runtime-check.mjs`,
+  `search-runtime-check.mjs`, `ai-runtime-check.mjs` and `environments-check.mjs`
+  pass.
+
+Not verified:
+- The hosted Artifacts provider accepting an empty pack for a branch create (real Git
+  does) and the S6 numbers.
+- API tokens, MCP and agent task tokens as callers (AM-3).
+- Source writes are not in the audit log, as pushes are not.
+- `ui-check.mjs` not run (unbuilt `web/dist-native`).
+
 ## 2026-10-14 — Concurrent Git traffic (agentic mode AM-1, schema 37)
 
 The Workspace admission queue (`core.mjs` `serialize`) now has three classes. Reads
