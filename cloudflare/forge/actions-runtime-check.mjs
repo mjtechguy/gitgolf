@@ -175,7 +175,8 @@ try {
   const registration = await api('/native/pipeline-runners', { scope: 'installation', action: 'createToken', engine: 'forgejo-actions', labels: [`ubuntu-latest:docker://${image}`], ttlHours: 1, uses: 1 });
   assert.match(registration.token, /^golfreg_[a-f0-9]{64}$/);
   assert.ok(registration.commands.some(command => command.startsWith('forgejo-runner register --no-interactive --instance ' + origin)));
-  const runnerEnv = { ...process.env, HOME: runnerDir, DOCKER_HOST: process.env.DOCKER_HOST || `unix:///run/user/${process.getuid()}/docker.sock` };
+  // --docker-host points the runner at another engine, e.g. a DinD sidecar (as in a Kubernetes Deployment) with its own port namespace.
+  const runnerEnv = { ...process.env, HOME: runnerDir, DOCKER_HOST: args['docker-host'] ? String(args['docker-host']) : process.env.DOCKER_HOST || `unix:///run/user/${process.getuid()}/docker.sock` };
   execFileSync(binary, ['register', '--no-interactive', '--instance', origin, '--token', registration.token, '--name', 'golf-proof', '--labels', `ubuntu-latest:docker://${image}`], { cwd: runnerDir, env: runnerEnv, stdio: 'inherit' });
   const config = execFileSync(binary, ['generate-config'], { env: runnerEnv }).toString()
     .replace(/capacity: \d+/, 'capacity: 1').replace(/fetch_interval: \S+/, 'fetch_interval: 2s').replace(/timeout: 3h/, 'timeout: 1h');
