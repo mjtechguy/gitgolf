@@ -114,7 +114,7 @@ def build(directory, value):
     schema_path = directory/'schema-receipt.json'
     if schema_path.exists():
         if json.loads(private_read(schema_path)) != identity:
-            raise ValueError('Schema changed; use the guarded native migration procedure before deployment')
+            raise ValueError('Schema changed; run the migrate action before deployment')
     else:
         tables = query("SELECT name FROM sqlite_master WHERE type='table' AND name='users'", [])[0]['results']
         if tables: raise ValueError('Existing schema has no bootstrap receipt; inspect before recovery')
@@ -220,6 +220,56 @@ def enable_public(directory, value):
     value['settings']['public_repositories'] = True
     replace_private_json(directory/'alchemy-input.json', value)
     print('Public access prepared; deploy to update the login path. Repositories remain private until explicitly published.')
+
+
+def migration_objects(migration):
+    """Name what a migration creates, refusing any statement that is unsafe to repeat."""
+    names, trigger = [], False
+    for statement in re.sub(r'--[^\n]*', '', migration).split(';'):
+        statement = statement.strip()
+        if trigger:
+            trigger = statement.upper() != 'END'
+            continue
+        if not statement: continue
+        match = re.match(r'CREATE\s+(TABLE|UNIQUE\s+INDEX|INDEX|TRIGGER)\s+IF\s+NOT\s+EXISTS\s+([A-Za-z_][A-Za-z0-9_]*)\b', statement, re.I)
+        if not match: raise ValueError('Only repeatable CREATE ... IF NOT EXISTS migrations are applied here')
+        names.append(match.group(2))
+        trigger = match.group(1).upper() == 'TRIGGER'
+    if trigger or not names: raise ValueError('Migration is incomplete')
+    return names
+
+
+def pending_migrations(schema, applied, migrations):
+    """Peel reviewed migrations off the schema's tail until it matches the applied schema."""
+    pending = []
+    for name, migration in sorted(migrations, reverse=True):
+        if hashlib.sha256(schema.encode()).hexdigest() == applied: break
+        if not schema.endswith('\n'+migration): raise ValueError('The schema does not end with '+name+'; inspect before migrating')
+        pending.insert(0, (name, migration, schema))
+        schema = schema[:-len('\n'+migration)]
+    if hashlib.sha256(schema.encode()).hexdigest() != applied:
+        raise ValueError('The applied schema is not a reviewed predecessor of this checkout')
+    return pending
+
+
+def migrate(directory, value):
+    settings = json.loads(private_read(directory/'forge.json'))
+    database = cf(value, 'd1', 'get', settings['database']['uuid'])
+    receipt = json.loads(private_read(directory/'schema-receipt.json'))
+    if database['name'] != value['name'] or receipt['database'] != database['uuid']: raise ValueError('Database ownership differs')
+    migrations = [(path.name, path.read_text()) for path in (ROOT/'cloudflare/forge/migrations').glob('*.sql')]
+    pending = pending_migrations((ROOT/'cloudflare/forge/schema.sql').read_text(), receipt['sha256'], migrations)
+    objects = [migration_objects(migration) for _, migration, _ in pending]
+    def query(sql, params=()):
+        return cf(value, 'd1', 'query', database['uuid'], '--body', json.dumps({'sql': sql, 'params': list(params)}))[0]['results']
+    # Each migration is additive and repeatable; the receipt advances only after its objects read back.
+    for (name, migration, schema), names in zip(pending, objects):
+        query(migration)
+        found = {row['name'] for row in query('SELECT name FROM sqlite_master WHERE name IN ('+','.join('?'*len(names))+')', names)}
+        if found != set(names): raise ValueError(name+' readback differs')
+        replace_private_json(directory/'schema-receipt.json', {'database': database['uuid'], 'sha256': hashlib.sha256(schema.encode()).hexdigest()})
+        print('Applied '+name)
+    if not pending: print('Schema is current.')
 
 
 def receipt(directory, value):
@@ -353,7 +403,7 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-dead-letter'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-dead-letter', 'migrate'])
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
     parser.add_argument('directory', nargs='?')
@@ -370,6 +420,7 @@ def main():
     if args.action == 'enable-webhooks': return enable_webhooks(directory, value, args.origin)
     if args.action == 'enable-ai': return enable_ai(directory, value, args.agent_path)
     if args.action == 'enable-dead-letter': return enable_dead_letter(directory, value)
+    if args.action == 'migrate': return migrate(directory, value)
     if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)
     if args.action == 'receipt': return receipt(directory, value)
