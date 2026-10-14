@@ -370,3 +370,143 @@ administrators), `organization` (organization owners) or `repository` (repositor
 | Forgejo Runner | v13.2.0 | `forgejo-runner-13.2.0-linux-amd64` from code.forgejo.org/forgejo/runner releases | `fadaec897f5e6641c363f87ecaf75f866f99c81b7097ec6b433e4c48123fcad1` |
 | actions-proto | v0.8.0 (`runner.v1`, `ping.v1`, as vendored by runner v13.2.0) | — | — |
 | GitLab Runner | 18.5.0 (RUN-C may bump and record) | — | — |
+
+
+<!-- RUN-C section: owned by gitlab-runner.mjs / gitlab-pipeline.mjs; append-only. -->
+## GitLab CI pipelines on the stock GitLab Runner (RUN-C)
+
+Modules: `cloudflare/forge/src/gitlab-pipeline.mjs` (`.gitlab-ci.yml` → jobs, and the runner job payload) and
+`cloudflare/forge/src/gitlab-runner.mjs` (`/api/v4` for stock runners). The evidence one-job coordinator in the same file
+keeps its `glrt-<uuid>_…` machine credentials and `gitlab_runner_jobs`; requests are routed to the pipeline protocol only
+for `glrt-golf_` runner tokens, `golfreg_` registration tokens on `POST /api/v4/runners` and `golfjob_` job tokens.
+
+Runner: GitLab Runner **18.5.0**, `gitlab-runner-linux-amd64` from
+`https://gitlab-runner-downloads.s3.amazonaws.com/v18.5.0/binaries/gitlab-runner-linux-amd64`, SHA-256
+`4f84c2995cff1aaff89ce8639426bf1219cb3770d9360ce8783e9b5fde628762` (matches the release's `release.sha256`). Any
+executor works (the runner owner chooses Docker, Kubernetes, shell …); Golf records the reported version, executor,
+platform and architecture.
+
+### Registration
+
+- `gitlab-runner register --url <origin> --registration-token golfreg_… [--tag-list a,b] --executor …` calls
+  `POST /api/v4/runners` → `registerPipelineRunner` → `glrt-golf_<uuid hex>_<64 hex>` (tags become labels; a token's
+  labels apply when no tags are given). `gitlab-runner register --token glrt-golf_…` (`POST /api/v4/runners/verify`)
+  works for credentials created in the runner settings. `DELETE /api/v4/runners` is refused: delete runners in Golf.
+- `POST /api/v4/jobs/request` claims the oldest QUEUED job whose tags ⊆ runner labels (untagged jobs run anywhere),
+  within the runner's scope and with `actions` effective. The job token is `golfjob_<64 hex>` (digest only in D1).
+
+### Job payload
+
+`id`, `token`, `job_info` (`project_full_path` = `<owner>/<repo>`), `git_info` (`repo_url` =
+`<origin>/<owner>/<repo>.git` with `gitlab-ci-token:<job token>`, read-only via the shared Smart HTTP route, exact
+repository and commit; `refspecs` fetch the run's SHA; the runner's `CI_PROJECT_DIR` is `/builds/<owner>/<repo>`),
+`runner_info.timeout`, `steps` (`script` = `before_script` + `script`; `after_script` with `when: always`), `image`,
+`services` (name, alias, command, entrypoint, variables, pull_policy, docker platform/user), `artifacts` (archive +
+one entry per report type), `cache` (key, paths, policy, when, untracked, fallback_keys — stored by the runner),
+`dependencies` (job id, name, size of each dependency's archive; downloaded with the current job's token) and
+`variables`, de-duplicated in GitLab precedence: predefined `CI_*` < YAML global < YAML job/matrix/rules <
+dotenv from dependencies < repository variables < repository secrets (masked) < pipeline variables; `CI_JOB_TOKEN`,
+`CI_BUILD_TOKEN` (masked) and `CI_REPOSITORY_URL` cannot be overridden. Environment-scoped values come from
+`pipelineValues(db, env, run, job)` only after the environment's approval holds.
+
+Predefined variables: `CI`, `GITLAB_CI`, `CI_SERVER*`, `CI_API_V4_URL`, `CI_PROJECT_{ID,NAME,PATH,PATH_SLUG,NAMESPACE,
+ROOT_NAMESPACE,TITLE,URL,VISIBILITY}`, `CI_DEFAULT_BRANCH`, `CI_PIPELINE_{ID,IID,SOURCE,URL,CREATED_AT,NAME}`,
+`CI_COMMIT_{SHA,SHORT_SHA,BEFORE_SHA,REF_NAME,REF_SLUG,REF_PROTECTED,BRANCH,TAG,MESSAGE,TITLE,DESCRIPTION}`,
+`CI_MERGE_REQUEST_*` (merge request pipelines), `CI_JOB_{ID,NAME,NAME_SLUG,STAGE,URL,STARTED_AT,TIMEOUT,MANUAL,TOKEN}`,
+`CI_NODE_{INDEX,TOTAL}` (parallel), `CI_ENVIRONMENT_{NAME,SLUG,URL,ACTION,TIER}`, `CI_RUNNER_ID`. `CI_SERVER_NAME` is
+`Golf`. `CI_REGISTRY*`, `CI_DEPENDENCY_PROXY*` and `CI_PAGES*` are not provided.
+
+### Runner routes
+
+| Route | Behaviour |
+| --- | --- |
+| `PATCH /api/v4/jobs/:id/trace` (`Content-Range: start-end`, ≤ 4 MiB) | `appendJobLogBytes` into R2 chunks; `202` + `Range: 0-<next byte>`; a wrong offset is `416` + `Range: 0-<next byte>` so the runner resends |
+| `PUT /api/v4/jobs/:id` | `running` keeps the job; `success`/`failed`/`canceled` → `finishPipelineJob` (exit code, `failure_reason`; GitLab `retry` re-queues); `coverage` is the last match of the job's regex in the last MiB of the log, stored in `outputs.coverage` |
+| `POST /api/v4/jobs/:id/artifacts?artifact_type=&artifact_format=&expire_in=` | multipart `file`; archive (zip) → `gitlab-archive`, reports (gzip/raw) → `gitlab-report` named by type; at most `GITLAB_ARTIFACT_MAX_BYTES` (default 64 MiB, at most 96 MiB; buffered in the Worker) else `413`; `expire_in` honoured up to 90 days (`never` = 90 days) |
+| `GET /api/v4/jobs/:id/artifacts` | the archive of a job named in the caller's `dependencies`, same run, streamed from R2 |
+| Cancellation | when the run is cancelled, trace and `PUT running` answer `Job-Status: canceled`; the runner aborts and its terminal update records `CANCELLED` (`job_canceled`). A runner that never calls back is timed out by the coordinator |
+
+Any other token, a finished job's token or a token of another job is `403` with `Job-Status: failed` (the runner aborts).
+
+### `.gitlab-ci.yml` subset
+
+Executed: `stages` (`types`), `.pre`/`.post`, `variables` (global/job; `value`/`description`/`expand`/`options`),
+`default` (image, services, before/after_script, cache, artifacts, retry, timeout, interruptible, tags) and the
+deprecated top-level image/services/before_script/after_script/cache, `workflow:rules` (if/changes/exists/when/
+variables) and `workflow:name`, `include:local` (same repository and commit; wildcards; `include:rules`; at most 32
+files, 8 levels, 1 MiB), hidden `.jobs`, `extends` (multiple, 11 levels), `!reference`, YAML anchors and merge keys,
+`stage`, `script`/`before_script`/`after_script` (nested lists flattened), `image`, `services`, `needs` (names,
+`job`/`artifacts`/`optional`/`parallel:matrix`, `needs: []`, same-stage needs), `dependencies`, `rules`
+(`if`/`changes`/`exists`/`when`/`allow_failure`/`variables`/`needs`), `only`/`except` (refs keywords, regexes,
+`ref@project/path`, `variables`, `changes`), `when` (on_success/on_failure/always/manual/never), `allow_failure`
+(manual jobs default to allowed without rules, as in GitLab), `artifacts` (paths, exclude, name, untracked, when,
+expire_in, reports), `cache` (key, `key:files` + prefix, paths, policy, when, untracked, fallback_keys, up to 4),
+`retry` (0–2, `when: always`), `timeout` (1 minute–6 hours), `parallel: N`, `parallel:matrix`, `tags`, `coverage`,
+`inherit`, `interruptible` (accepted; no effect because Golf does not auto-cancel redundant pipelines — noted on
+the run) and `environment` (name/url/action/deployment_tier on Golf deployment environments: protected
+environments hold the job in APPROVAL, also after a manual play; deployments are recorded).
+
+Stage order becomes `needs`: a job without `needs` needs every job of all earlier stages; explicit `needs` stay as
+written. Rules see predefined, pipeline, global and job variables; expressions support `$VAR`, `${VAR}`, quoted
+strings, `null`, `/regex/flags` (and a variable holding `/regex/`), `==`, `!=`, `=~`, `!~`, `&&` (binds tighter),
+`||` and parentheses. `changes` with no before-SHA diff (new branch, tag, web, schedule) is true, as in GitLab.
+Without `rules` or `only`, jobs default to `only: [branches, tags]`, so merge request pipelines only contain jobs
+that opt in. A job excluded by its rules never refuses the pipeline.
+
+Refused at pipeline creation with the reason shown on the run (never silently ignored): `include:remote/project/
+template/component/inputs`, `spec:inputs`, `trigger` (child/multi-project pipelines), GitLab Pages (`pages:` keyword
+or a job named `pages`), `release`, `secrets`, `id_tokens`, `resource_group`, `hooks`, `identity`, `run` steps,
+`manual_confirmation`, `when: delayed`/`start_in`, `retry:when` other than `always`, `retry:exit_codes`,
+`allow_failure:exit_codes`, cross-project `needs`, `environment:on_stop/auto_stop_in/kubernetes`,
+`image/services:kubernetes`, `artifacts:expose_as/public/access`, `workflow:auto_cancel`, `rules:changes:compare_to`,
+`exists:project`, unknown keywords, YAML errors and custom tags. Bounds: 256 KiB per file, 256 jobs after
+`parallel` expansion, 50 needs, 200 parallel instances, 128 KiB job definition.
+
+Deviations recorded as run notes: `cache:key:files` hashes the files' content at the commit (GitLab uses the last
+commit that changed them); report artifacts are stored and downloadable but not rendered as widgets;
+`artifacts:reports:dotenv` variables reach jobs that depend on the producing job.
+
+### Evidence (2026-10-14, local)
+
+`node cloudflare/forge/gitlab-pipeline-runtime-check.mjs "$(command -v cf)" <gitlab-runner-18.5.0> --phases …` runs the
+production modules in the qualified CLI's workerd with real D1, R2 and Secrets Store bindings (Artifacts is the only
+stand-in: bare repositories behind `git http-backend` at the provider URL) and drives the unmodified runner:
+
+- `demo` (`fixtures/gitlab/demo.gitlab-ci.yml`, Docker executor, 4 concurrent jobs): build → test → deploy. `build`
+  uploads `dist/` (zip, 421 B) and a dotenv report; `package` (`needs: [build]`) starts before the test stage ends
+  and downloads the build archive; `unit` downloads it, inherits `BUILD_VERSION=1.0.1` from dotenv, restores the
+  cache saved by `build` (host `/cache` directory: the runner's default per-slot cache volume is not shared between
+  concurrent jobs) and records coverage `87.5`; `postgres-service` (`services: postgres:16-alpine`, alias `db`)
+  creates a table and reads 42 back; `flaky-check` fails with exit 3 and `allow_failure` (run stays green);
+  `report 1/2`, `report 2/2` (`parallel: 2`) run with `after_script`; the manual `deploy` into protected
+  `production` (reviewer: user 2) waits in MANUAL (run SUCCESS), enters APPROVAL when played, refuses the run's own
+  actor as approver, runs after user 2 approves, receives the environment secret masked (`[MASKED]`, length 29) and
+  records a `start` deployment. Run: SUCCESS.
+- `cancel`: a `sleep 300` job; cancelling the run makes the runner abort on its next trace; job CANCELLED
+  (`job_canceled`), run CANCELLED.
+- `pages/hugo` (gitlab.com, unchanged): on `main` the pipeline is REFUSED — `job "create-pages": pages — GitLab Pages
+  deployment is not supported on Golf.`; on a feature branch `test` runs in `hugomods/hugo:exts`
+  (`default:before_script`, `rules: if: $CI_COMMIT_REF_NAME != $CI_DEFAULT_BRANCH`), `hugo mod get -u` upgrades the
+  PaperMod theme from GitHub and `hugo --minify` then FAILS upstream-caused (`mapping key "aliases" already defined`
+  in the theme's example content with Hugo v0.154.5), exit 1.
+- `inkscape/extensions` (gitlab.com, unchanged, `master`): `image: ${IMAGE}` expanded by the runner, `workflow:rules`,
+  `GIT_DEPTH: "1"` (clone and submodules at depth 1), `GIT_SUBMODULE_STRATEGY: recursive` (5 submodules fetched from
+  gitlab.com), hidden `.artifacts` + `extends`, `parallel:matrix` → `test:linux: [3.10]` … `[3.14]` each SUCCESS
+  (1448 passed, 10 skipped) with `coverage.zip` (~2.0 MB) uploaded `when: always`; `codestyle:ci`, `mypy`,
+  `sphinx` (6.5 MB HTML artifact), `archive` (5.4 MB `extensions.zip`, built with `cd ..; zip $CI_PROJECT_NAME`)
+  SUCCESS; `pages` excluded by `only: master@inkscape/extensions` (the project here is `mj/extensions`);
+  `test:windows: [3.11]`/`[3.12]` stay QUEUED (tag `saas-windows-medium-amd64`, no matching runner) and
+  `test:coverage` stays BLOCKED behind them, as on GitLab; the run was then cancelled (remaining jobs CANCELLED).
+- `kubernetes` (`fixtures/gitlab/kubernetes.gitlab-ci.yml`): the same runner binary with the Kubernetes executor in
+  the local kind cluster (`kind-golf-ci`, namespace `golf-gitlab-test`, created and deleted by the check): job pods
+  with build, helper and `svc-0` containers (3/3); `build` uploads `dist/`, `service-sidecar` downloads it and reaches
+  the postgres sidecar as `db` (answer 42). Run SUCCESS. The Worker listened on the host's LAN address because the
+  kind cluster runs on rootless Docker.
+
+Unit tests: `node --test cloudflare/forge/gitlab-pipeline.test.mjs cloudflare/forge/gitlab-runner.test.mjs`
+(parser, refusals, expressions, the `/api/v4` protocol against the pipeline core, cancellation, size bounds and
+evidence-path separation). The evidence coordinator's own real-runner test
+(`GOLF_TEST_GITLAB_RUNNER=<binary> node --test cloudflare/forge/gitlab-runner.test.mjs`) still passes.
+
+Not yet verified: hosted installation, the Actions UI against GitLab runs, a runner inside the cluster (Helm chart),
+distributed (S3) runner cache, Windows/macOS runners, schedule triggers.
