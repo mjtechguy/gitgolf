@@ -39,9 +39,9 @@ Golf removes those limits one measured milestone at a time, and stays Git: no cu
 
 | Milestone | What it delivers | Status |
 | --- | --- | --- |
-| **AM-0** Measure | Speed bench: racing pushes, parallel branches, clones and reads at 1–64 concurrent agents | Built |
+| **AM-0** Measure | Speed bench: racing pushes, parallel branches, clones and reads at 1–64 concurrent agents | Built; hosted baseline next |
 | **AM-1** Concurrent Git | Clones, fetches and pushes overlap; a branch-level push fence replaces the repository-wide one | Built, verified locally |
-| **AM-2** Source API | Read many files and commit on the server, without a clone | In progress |
+| **AM-2** Source API | Read many files and commit on the server, without a clone | Built, verified locally |
 | **AM-3** Agent access | Scoped, revocable API tokens and remote MCP for Claude Code, Codex and OpenCode | Planned |
 | **AM-4** Land at agent speed | Three-way merges, compare-and-swap landing, checks after landing, automatic revert | Planned |
 | **AM-5** Agentic inbox | Intent and risk summaries for every agent change; approve in batches | Planned |
