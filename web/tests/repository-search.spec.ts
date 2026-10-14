@@ -144,17 +144,15 @@ test('unavailable: the installation reason, or the repository policy that turned
   await expect(page$(page).getByRole('searchbox', { name: 'Search by meaning' })).toBeDisabled();
 });
 
-test('the repository header offers the search field only when the installation offers search', async ({ page }) => {
+test('the repository header offers a search link only when the installation offers search', async ({ page }) => {
   await featureBackend(page);
   await page.goto('/alex/demo');
   await expect(page.getByRole('link', { name: /^Pull requests/ }).first()).toBeVisible();
-  await expect(page.getByRole('search', { name: 'Search this repository by meaning' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Search this repository by meaning' })).toHaveCount(0);
   await page.route('**/rpc/golf.v1.CapabilityService/ListCapabilities', route => respond(route, ListCapabilitiesResponseSchema, { runtimeProfile: 'cloudflare-native', capabilities: [{ id: 'repository.semantic-search', label: 'Semantic search', state: 3, reason }, { id: 'settings.repository-general', label: 'General', state: 3, reason: 'Available.' }] }));
   await page.reload();
-  const field = page.getByRole('search', { name: 'Search this repository by meaning' });
-  await field.getByRole('searchbox').fill('where is the deploy command');
-  await field.getByRole('searchbox').press('Enter');
-  await expect(page).toHaveURL(/\/alex\/demo\/search\?q=where/);
+  await page.getByRole('link', { name: 'Search this repository by meaning' }).first().click();
+  await expect(page).toHaveURL(/\/alex\/demo\/search$/);
 });
 
 for (const [appearance, layout, theme] of [['flare', 'console', 'dark'], ['classic', 'primer', 'light'], ['golf', 'tiles', 'dark']] as const) for (const width of [1440, 390]) {
@@ -182,8 +180,8 @@ for (const [appearance, layout, theme] of [['flare', 'console', 'dark'], ['class
       await featureBackend(page);
       await page.route('**/rpc/golf.v1.CapabilityService/ListCapabilities', route => respond(route, ListCapabilitiesResponseSchema, { runtimeProfile: 'cloudflare-native', capabilities: [{ id: 'repository.semantic-search', label: 'Semantic search', state: 3, reason }, { id: 'settings.repository-general', label: 'General', state: 3, reason: 'Available.' }] }));
       await page.goto('/alex/demo');
-      await expect(page.getByRole('search', { name: 'Search this repository by meaning' })).toBeVisible();
-      await shot(page, `${name}-header-field`);
+      await expect(page.getByRole('link', { name: 'Search this repository by meaning' }).first()).toBeVisible();
+      await shot(page, `${name}-header-link`);
     }
   });
 }

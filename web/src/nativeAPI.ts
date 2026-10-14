@@ -1,6 +1,6 @@
 import { Code, ConnectError } from '@connectrpc/connect';
 
-class NativeError extends ConnectError { constructor(message: string, status: number) { super(message, status === 401 ? Code.Unauthenticated : status === 403 ? Code.PermissionDenied : status === 404 ? Code.NotFound : status === 412 ? Code.FailedPrecondition : status === 501 ? Code.Unimplemented : Code.Unavailable); } }
+class NativeError extends ConnectError { readonly httpStatus: number; constructor(message: string, status: number) { super(message, status === 401 ? Code.Unauthenticated : status === 403 ? Code.PermissionDenied : status === 404 ? Code.NotFound : status === 412 ? Code.FailedPrecondition : status === 501 ? Code.Unimplemented : Code.Unavailable); this.httpStatus = status; } }
 export async function nativeAPI<T>(path: string, body: object = {}, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, { method: 'POST', credentials: 'same-origin', redirect: 'error', signal,
     headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify(body) });
@@ -15,3 +15,8 @@ export async function nativeAPI<T>(path: string, body: object = {}, signal?: Abo
   if (!response.ok) throw new NativeError(typeof value.message === 'string' ? value.message : 'Request failed.', response.status);
   return value as T;
 }
+
+// A busy or restarting Worker (429, 5xx, a dropped connection) is retried briefly; anything that is an answer is not.
+export const transientError = (error: unknown) => error instanceof ConnectError && [Code.Unavailable, Code.ResourceExhausted, Code.DeadlineExceeded].includes(error.code) &&
+  (!(error instanceof NativeError) || error.httpStatus === 0 || error.httpStatus === 408 || error.httpStatus === 429 || error.httpStatus >= 500 && error.httpStatus !== 501);
+export const transientRetry = { retry: (failures: number, error: Error) => failures < 2 && transientError(error), retryDelay: (attempt: number) => 600 * 2 ** attempt };
