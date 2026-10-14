@@ -94,3 +94,21 @@ for (const isInstanceAdmin of [false, true]) test(`status setup respects adminis
     await expect(page).toHaveURL('/status');
   }
 });
+
+test('administrators read system capabilities inside the admin portal', async ({ page }) => {
+  await page.route('**/rpc/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    const reply = (body: string) => route.fulfill({ contentType: 'application/json', headers: { 'Cache-Control': 'no-store' }, body });
+    if (path.endsWith('/GetSession')) return reply(toJsonString(GetSessionResponseSchema, create(GetSessionResponseSchema, { user: { id: '42', login: 'alex', isInstanceAdmin: true } })));
+    if (path.endsWith('/GetAuthenticationOptions')) return reply(toJsonString(GetAuthenticationOptionsResponseSchema, create(GetAuthenticationOptionsResponseSchema, {})));
+    if (path.endsWith('/ListCapabilities')) return reply(toJsonString(ListCapabilitiesResponseSchema, create(ListCapabilitiesResponseSchema, { capabilities: [{ id: 'repositories', label: 'Repositories', state: CapabilityState.READY, reason: 'Repository access is available.' }] })));
+    return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'not_found', message: 'Unavailable.' }) });
+  });
+  await page.goto('/admin');
+  const navigation = page.getByRole('navigation', { name: 'Instance administration' });
+  await navigation.getByRole('link', { name: 'System capabilities', exact: true }).click();
+  await expect(page).toHaveURL('/admin/capabilities');
+  await expect(navigation.getByRole('link', { name: 'System capabilities', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('heading', { level: 1, name: 'System capabilities', exact: true })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Golf platform', exact: true }).getByText('Repositories', { exact: true })).toBeVisible();
+});
