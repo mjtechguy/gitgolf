@@ -40,7 +40,7 @@ async function inventory(row,access,d) {
 function adminGuard(person,row,version=false) {
   return {sql:`EXISTS(SELECT 1 FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id
     LEFT JOIN native_identity_versions v ON v.user_id=u.id LEFT JOIN repository_access_versions a ON a.repository_id=r.id
-    WHERE r.id=? AND r.artifact_name=? AND r.state='ACTIVE' AND g.user_id=? AND g.role='admin' AND u.active=1 AND COALESCE(v.version,0)=? ${version?'AND COALESCE(a.version,0)=? AND r.write_pending IS NULL':''})`,
+    WHERE r.id=? AND r.artifact_name=? AND r.state='ACTIVE' AND g.user_id=? AND g.role='admin' AND u.active=1 AND COALESCE(v.version,0)=? ${version?'AND COALESCE(a.version,0)=? AND r.write_pending IS NULL AND NOT EXISTS(SELECT 1 FROM git_ref_unknown k WHERE k.repository_id=r.id)':''})`,
     values:[row.id,row.artifact_name,person.id,person.identity_version||0,...(version?[row.access_version||0]:[])]};
 }
 async function requireAdmin(db,person,row) {

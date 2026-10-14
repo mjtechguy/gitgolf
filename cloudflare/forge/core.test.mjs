@@ -289,12 +289,16 @@ test('membership never implies repository access; grants and revocation are curr
   assert.equal((await f.call('GetRepository', { repository: key })).status, 401);
 });
 
+const refusal = async response => /ng \S+ ([^\n]*)/.exec(new TextDecoder().decode(await response.arrayBuffer()))?.[1] || '';
 test('ambiguous Git effects are resent only as the same compare-and-swap, a bounded number of times, then durably fenced', async t => {
   const f = await fixture(t); await f.create(); f.losePush();
   // While the ref still holds the old commit, the identical update is resent (at most one copy can land); then the outcome is unknown.
-  const first = await f.sendPush(); assert.equal(first.status, 503);
-  assert.ok(!(await first.text()).includes('sensitive'));
-  assert.equal((await f.sendPush()).status, 412); assert.equal(f.counts().effects, 3);
+  // The client receives Git's own refusal; only this branch waits for maintenance.
+  const first = await f.sendPush(); assert.equal(first.status, 200);
+  const reason = await refusal(first); assert.match(reason, /outcome of this update is unknown/); assert.ok(!reason.includes('sensitive'));
+  assert.match(await refusal(await f.sendPush()), /another push to this branch is in progress/); assert.equal(f.counts().effects, 5);
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending, null);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_ref_unknown').get().n, 1);
   assert.equal(f.sql.prepare('SELECT state FROM git_operations').get().state, 'DISPATCHED');
   assert.equal(f.tokens.size, 0);
 });
@@ -313,7 +317,7 @@ test('the ref fence: a push to another branch proceeds, one to the same branch c
   // In flight, the push holds its ref only.
   assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending, null);
   assert.deepEqual({ ...f.sql.prepare('SELECT ref,outcome FROM git_ref_writes').get() }, { ref: 'refs/heads/main', outcome: null });
-  assert.equal((await send('refs/heads/main')).status, 412);
+  assert.match(await refusal(await send('refs/heads/main')), /another push to this branch is in progress/);
   assert.equal((await send('refs/heads/topic')).status, 200);
   // A merge journals through its own statement; onto a fenced ref it is not journaled at all.
   const journal = ref => f.sql.prepare("INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) VALUES(?,1,1,?,?,?,'DISPATCHED','t')").run(crypto.randomUUID(), ref, zero, commit).changes;
@@ -323,7 +327,7 @@ test('the ref fence: a push to another branch proceeds, one to the same branch c
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_ref_writes').get().n, 0);
   assert.equal(journal('refs/heads/main'), 1);
   f.sql.exec("DELETE FROM git_operations WHERE state='DISPATCHED'; UPDATE repositories SET write_pending='unresolved'");
-  assert.equal((await send('refs/heads/other')).status, 412); assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_operations').get().n, 2);
+  assert.match(await refusal(await send('refs/heads/other')), /finishing a merge/); assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_operations').get().n, 2);
 });
 
 test('a push the provider refuses (a lost race) returns Git\'s own report and releases the ref and the repository', async t => {
@@ -377,20 +381,20 @@ test('maintenance settles unknown push outcomes by reading the ref back, once, w
   const settle = () => settleRefWrites(env, withArtifact), age = () => f.sql.exec("UPDATE git_operations SET created_at='2026-01-01T00:00:00.000Z' WHERE state='DISPATCHED'");
   const pending = () => f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending;
   // The provider loses the reply; the push lands later.
-  f.losePush(); assert.equal((await f.sendPush()).status, 503);
-  const first = f.sql.prepare('SELECT * FROM git_operations').get();
-  assert.equal(first.state, 'DISPATCHED'); assert.equal(pending(), first.id);
+  f.losePush(); assert.match(await refusal(await f.sendPush()), /outcome of this update is unknown/);
+  const first = f.sql.prepare('SELECT * FROM git_operations').get(), unknown = () => f.sql.prepare('SELECT COUNT(*) n FROM git_ref_unknown').get().n;
+  assert.equal(first.state, 'DISPATCHED'); assert.equal(pending(), null); assert.equal(unknown(), 1);
   assert.deepEqual(await settle(), { processed: 0 });
   age(); f.land();
   assert.deepEqual(await settle(), { processed: 1 });
-  assert.equal(f.sql.prepare('SELECT state FROM git_operations WHERE id=?').get(first.id).state, 'APPLIED'); assert.equal(pending(), null);
+  assert.equal(f.sql.prepare('SELECT state FROM git_operations WHERE id=?').get(first.id).state, 'APPLIED'); assert.equal(pending(), null); assert.equal(unknown(), 0);
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_ref_writes').get().n, 0);
   assert.deepEqual(f.sql.prepare('SELECT id,kind FROM pipeline_intake').all().map(row => ({ ...row })), [{ id: 'push:' + first.id, kind: 'push' }]); assert.deepEqual(sent, [{ intake: 'push:' + first.id }]);
   assert.deepEqual(await settle(), { processed: 0 });
   // The next lost push never lands: NOT_APPLIED, and the ref and the repository are released.
   const lost = await f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', { method: 'POST',
     headers: { Authorization: 'Bearer ' + ownerToken, 'Content-Type': 'application/x-git-receive-pack-request' }, body: push('refs/heads/main', commit, 'b'.repeat(40)) }));
-  assert.equal(lost.status, 503);
+  assert.match(await refusal(lost), /outcome of this update is unknown/);
   const second = f.sql.prepare("SELECT * FROM git_operations WHERE state='DISPATCHED'").get();
   age(); assert.deepEqual(await settle(), { processed: 1 });
   assert.equal(f.sql.prepare('SELECT state FROM git_operations WHERE id=?').get(second.id).state, 'DISPATCHED');
@@ -465,10 +469,10 @@ test('an unresolved push does not prevent repository access revocation', async t
   const f = await fixture(t); await f.create();
   const grant = { repository: { owner: 'alice', name: 'project' }, repositoryId: '1', userId: '2', role: 'read' };
   assert.equal((await f.call('', grant, ownerToken, '/native/repository-grant')).status, 200);
-  f.losePush(); assert.equal((await f.sendPush()).status, 503);
+  f.losePush(); assert.match(await refusal(await f.sendPush()), /outcome of this update is unknown/);
   assert.equal((await f.call('', { ...grant, role: 'none' }, ownerToken, '/native/repository-grant')).status, 200);
   assert.equal((await f.call('GetRepository', { repository: grant.repository }, readerToken)).status, 404);
-  assert.equal((await f.sendPush()).status, 412);
+  assert.match(await refusal(await f.sendPush()), /another push to this branch is in progress/);
 });
 
 test('provider credentials stay opaque, reject header injection and are always revoked', async () => {
@@ -2575,7 +2579,7 @@ test('native rules detect access ABA at the effect transaction and block edits d
  f.env.DB.withSession=()=>({...db,batch:async statements=>{f.sql.exec("DELETE FROM grants WHERE repository_id=1 AND user_id=1; INSERT INTO grants VALUES(1,1,'admin')");return db.batch(statements);}});
  const rejected=await value(await f.human('MutateRepositoryRules',input));assert.equal(rejected.operation.phase,'REJECTED');
  f.env.DB.withSession=()=>db;assert.equal((await f.current()).branchProtections.length,0);
- f.losePush();assert.equal((await f.write()).status,503);
+ f.losePush();assert.match(await refusal(await f.write()),/outcome of this update is unknown/);
  assert.equal((await f.mutate({action:1,desiredBranch:f.branch})).operation.phase,'REJECTED');
  assert.equal((await f.current()).branchProtections.length,0);
 });
@@ -3068,7 +3072,7 @@ test('native merge writes one verified merge commit through the push journal and
   const again=(await value(await f.submit(f.input({selection:compared,expectedPullRevision:merged.revision})))).operation;
   assert.equal(again.phase,mergePhase('REJECTED'));assert.equal(again.failureCode,'preflight_refused');assert.equal(f.journal()[1].detail,'pull_request_not_open');
   assert.equal(f.counts().effects,1);
-  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,39);
+  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,40);
   const capability=(await value(await f.call('',{},ownerToken,'/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c=>c.id==='pull.merge');
   assert.equal(capability.length,1);assert.equal(capability[0].state,'CAPABILITY_STATE_READY');
 });
@@ -3150,7 +3154,7 @@ test('an unconfirmed native merge stays unknown, fences writes and settles only 
   // Replay, inspection and a second operation never send the pack again.
   assert.deepEqual((await value(await f.submit(body))).operation,unknown);
   assert.deepEqual((await value(await f.inspect(body))).operation,unknown);
-  assert.equal((await f.submit(f.input())).status,412);assert.equal((await f.sendPush()).status,412);
+  assert.equal((await f.submit(f.input())).status,412);assert.match(await refusal(await f.sendPush()),/finishing a merge/);
   assert.equal(f.journal().length,1);assert.equal(f.counts().effects,1);
   // Clearing the repository fence by hand does not make the pull request mergeable again.
   f.sql.exec('UPDATE repositories SET write_pending=NULL');

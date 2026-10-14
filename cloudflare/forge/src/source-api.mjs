@@ -175,7 +175,7 @@ async function write(db, env, person, row, repo, command, pack, rulesVersion, ct
     await finishRefWrite(db, { id, repositoryId: row.id, applied, refused, ciState: ctx.ciState || 'NONE' });
   }
   if (refused) return { outcome: 'refused', status };
-  if (!applied) throw new Fault('unavailable', 503, 'The update was sent but the branch did not read back as expected. Its outcome is unknown until maintenance reads it back (within minutes); writes to this repository wait until then.');
+  if (!applied) throw new Fault('unavailable', 503, 'The update was sent but the branch did not read back as expected. Its outcome is unknown until maintenance reads it back (within minutes); writes to this branch wait until then.');
   // Actions/CI: the confirmed write is recorded before the response, as for a push.
   if (pipelinePolicy(env) && command.next !== zero) {
     try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'push', { ref: command.ref, before: command.old, after: command.next, actorId: person.id, operationId: id }, 'push:' + id), ctx.withArtifact); }
@@ -289,7 +289,7 @@ async function commit(db, env, person, row, body, ctx) {
   const input = await commitInput(body, ctx.literalPath);
   requireScope(person, row.id, { write: true, ref: input.ref });
   writer(row);
-  if (row.write_pending) conflict();
+  if (row.repository_write_pending ?? row.write_pending) conflict();
   const rulesVersion = await enforceGitRules(db, row, person, input.ref);
   const saved = input.key ? await claim(db, person, row, input) : null;
   if (saved?.result) return saved.result;
@@ -353,7 +353,7 @@ async function branch(db, env, person, row, body, ctx) {
   requireScope(person, row.id, { write: true, ref });
   writer(row);
   if (!create && name === row.default_branch) throw new Fault('failed_precondition', 412, 'The default branch cannot be deleted; choose another default branch first.');
-  if (row.write_pending) conflict();
+  if (row.repository_write_pending ?? row.write_pending) conflict();
   const rulesVersion = await enforceGitRules(db, row, person, ref);
   return ctx.withArtifact(env, row, async repo => {
     const refs = await refsOf(env, repo, row, ctx.providerFetch), current = refs.get(ref);

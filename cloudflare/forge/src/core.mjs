@@ -27,7 +27,7 @@ import { agentHostMachine } from './agent-host-protocol.mjs';
 import { apiTokenSecret, apiTokenActor, apiTokenCapability, apiTokensAPI, scopeRepository, scopePush } from './api-tokens.mjs';
 import { mcpEndpoint, mcpClass, mcpBodyLimit } from './mcp.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
-import { reserveRefWrite, finishRefWrite, sendRefUpdate } from './ref-writes.mjs';
+import { reserveRefWrite, finishRefWrite, sendRefUpdate, refWriteBlocker } from './ref-writes.mjs';
 import { sourceAPI, sourceCapability } from './source-api.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
@@ -59,7 +59,7 @@ import { discussionAttachments, attachmentMethods } from './attachments.mjs';
 import { featureColumns, publicAllowed, requireFeature, featureOff, policyCapabilities, featurePolicyService, repositoryFeatureService, effectiveFeatures, discussionFeatures } from './feature-policy.mjs';
 import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user, bodyLimit } from './common.mjs';
 export { digest } from './common.mjs';
-import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, acceptedReport, refusedRef, remote, sha, validRef, GitProviderError } from './git.mjs';
+import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, acceptedReport, refusalReport, refusedRef, remote, sha, validRef, GitProviderError } from './git.mjs';
 
 const jsonHeaders = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 // Admission classes: reads overlap (8 at once); transfers (clone, fetch, push) overlap reads and each other (24); anything else is
@@ -162,13 +162,16 @@ async function actor(db, request, anonymous = false, env = {}) {
 // feature names the policy-governed feature the caller is about to use; the policy columns arrive with the grant in one read.
 async function authorizedRepository(db, person, key, env, id, feature) {
   if (!nameOK(key?.owner) || !nameOK(key?.name)) deny();
-  let row = await db.prepare(`SELECT r.*,g.role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,COALESCE(v.version,0) AS access_version,COALESCE(s.description,r.description) AS description,${featureColumns} FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN workspaces w ON w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id LEFT JOIN repository_access_versions v ON v.repository_id=r.id
+  let row = await db.prepare(`SELECT r.*,g.role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,(SELECT k.operation_id FROM git_ref_unknown k WHERE k.repository_id=r.id LIMIT 1) AS unknown_write,COALESCE(v.version,0) AS access_version,COALESCE(s.description,r.description) AS description,${featureColumns} FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN workspaces w ON w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id LEFT JOIN repository_access_versions v ON v.repository_id=r.id
     WHERE r.name=? AND g.user_id=? AND r.state='ACTIVE'`).bind(env.ARTIFACTS_NAMESPACE, key.name, person.id).first();
-  if (!row && env.publicRead && !person.git_repository_id) row = await db.prepare(`SELECT r.*,'public' AS role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,p.version AS access_version,COALESCE(s.description,r.description) AS description,${featureColumns}
+  if (!row && env.publicRead && !person.git_repository_id) row = await db.prepare(`SELECT r.*,'public' AS role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,(SELECT k.operation_id FROM git_ref_unknown k WHERE k.repository_id=r.id LIMIT 1) AS unknown_write,p.version AS access_version,COALESCE(s.description,r.description) AS description,${featureColumns}
     FROM repositories r JOIN repository_visibility p ON p.repository_id=r.id AND p.is_public=1
     JOIN workspaces w ON w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
     WHERE r.name=? AND r.state='ACTIVE' AND ${publicAllowed}`).bind(env.ARTIFACTS_NAMESPACE, key.name).first();
   if (!row || ownerSlug(row,env) !== key.owner || id && String(row.id) !== id || person.git_repository_id && person.git_repository_id!==row.id) deny();
+  // A write whose outcome is unknown holds the repository for everything but pushes to other branches (git_ref_unknown, schema 40).
+  row.repository_write_pending = row.write_pending;
+  row.write_pending ||= row.unknown_write || null;
   if (person.token_scope) { await scopeRepository(db, env, person, row); await requireFeature(db, env, row, 'agent-access'); }
   if (env.PUBLIC_REPOSITORIES === 'true') row.is_public = (await db.prepare(`SELECT v.is_public AND ${publicAllowed} AS is_public FROM repository_visibility v JOIN repositories r ON r.id=v.repository_id WHERE v.repository_id=?`).bind(row.id).first())?.is_public || 0;
   await requireFeature(db, env, row, feature);
@@ -285,10 +288,12 @@ async function git(db, env, person, request, url, providerFetch) {
   let command, rulesVersion;
   if (!advertisement && service === 'git-receive-pack') {
     try { command = receiveCommand(body); } catch { invalid('Only one ordinary SHA-1 branch/tag update per bounded push is supported.'); }
-    if (row.write_pending) conflict();
     if (person.token_scope) await scopePush(db, env, person, row, command.ref);
     rulesVersion = await enforceGitRules(db, row, person, command.ref);
   }
+  // A push Golf cannot take now is refused in Git's own report ("! [remote rejected] <ref> (<reason>)"), which agents and people can act on.
+  const refuse = reason => new Response(refusalReport(command, reason), { headers: { ...jsonHeaders, 'Content-Type': 'application/x-git-receive-pack-result' } });
+  if (command && row.repository_write_pending) return refuse('the repository is finishing a merge; retry shortly');
   return withArtifact(env, row, async repo => {
     let operation, result, applied = !command, refused = false;
     if (command) {
@@ -299,21 +304,28 @@ async function git(db, env, person, request, url, providerFetch) {
             AND COALESCE(a.version,0)=? AND COALESCE(v.version,0)=? AND COALESCE((SELECT version FROM repository_rules WHERE repository_id=r.id),0)=?
             AND (?='' OR EXISTS(SELECT 1 FROM credentials WHERE digest=? AND user_id=u.id AND revoked=0 AND expires_at>CAST(strftime('%s','now') AS INTEGER)))
             AND (?='' OR EXISTS(${gitCredentialSQL} AND c.repository_id=? AND c.mode=2)))${person.token_guard ? ' AND ' + person.token_guard.sql : ''}`,
-          values: [row.id,row.artifact_name,person.id,row.access_version||0,person.identity_version||0,rulesVersion,person.credential_digest||'',person.credential_digest||'',person.git_credential_digest||'',person.git_credential_digest||'',row.id,...(person.token_guard?.values || [])] } })) conflict();
+          values: [row.id,row.artifact_name,person.id,row.access_version||0,person.identity_version||0,rulesVersion,person.credential_digest||'',person.credential_digest||'',person.git_credential_digest||'',person.git_credential_digest||'',row.id,...(person.token_guard?.values || [])] } })) {
+        const blocker = await refWriteBlocker(db, row.id, command.ref);
+        if (blocker === 'branch') return refuse('another push to this branch is in progress; fetch and retry');
+        if (blocker === 'repository') return refuse('the repository is finishing a merge; retry shortly');
+        conflict();
+      }
     }
     const send = () => gitRequest(env, repo, row.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
     try {
       if (!operation) result = await send();
       else {
         // A refused update (a lost race: "fetch first") goes back to the client as Git's own report.
-        ({ result, applied, refused } = await sendRefUpdate({ send, command, read: async () => (await refs(env, repo, row, providerFetch)).get(command.ref) || '0'.repeat(40) }));
+        try { ({ result, applied, refused } = await sendRefUpdate({ send, command, read: async () => (await refs(env, repo, row, providerFetch)).get(command.ref) || '0'.repeat(40) })); }
+        catch { console.log(JSON.stringify({ event: 'golf.ref_update_unknown', ref: command.ref.slice(0, 120) })); }
         if (applied && !result) result = { bytes: acceptedReport(command), contentType: 'application/x-git-receive-pack-result' };
         else if (applied && refusedRef(result.bytes, command.ref)) result = { ...result, bytes: acceptedReport(command) };
       }
     } finally {
       if (operation) await finishRefWrite(db, { id: operation, repositoryId: row.id, applied, refused, ciState: env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE' });
     }
-    if (!applied && !refused) conflict();
+    // Only this branch waits for maintenance to read it back; the client is told so instead of seeing a dropped connection.
+    if (!applied && !refused) return refuse('the outcome of this update is unknown; fetch to check, Golf settles it within minutes');
     // Actions/CI: the confirmed push is recorded before the response; discovery runs after it.
     if (operation && applied && pipelinePolicy(env) && command.next !== '0'.repeat(40)) {
       try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'push', { ref: command.ref, before: command.old, after: command.next, actorId: person.id, operationId: operation }, 'push:' + operation), withArtifact); }

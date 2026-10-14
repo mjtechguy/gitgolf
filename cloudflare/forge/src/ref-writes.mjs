@@ -26,11 +26,18 @@ export async function reserveRefWrite(db, { id, repositoryId, userId, command, g
   }
 }
 
+// Why a reservation was not admitted: a merge or legacy write holding the repository, an unsettled write to the same ref, or neither
+// (the caller's authority changed).
+export async function refWriteBlocker(db, repositoryId, ref) {
+  const state = await db.prepare('SELECT write_pending,EXISTS(SELECT 1 FROM git_ref_writes WHERE repository_id=r.id AND ref=? AND outcome IS NULL) AS busy FROM repositories r WHERE id=?').bind(ref, repositoryId).first();
+  return state?.write_pending ? 'repository' : state?.busy ? 'branch' : '';
+}
+
 // Sends one fenced ref update and reads the ref back. The provider can fail an update that runs alongside others in the same repository
 // without reporting it refused; while the ref still holds the old commit the same compare-and-swap is sent again (a copy that did land
 // is refused by its stale old value and then reads back as applied). Returns {result, applied, refused, retried}; rethrows the last
 // provider error when the outcome stays unknown.
-export async function sendRefUpdate({ send, read, command, attempts = 3, pause = attempt => new Promise(resolve => setTimeout(resolve, 150 * 2 ** attempt)) }) {
+export async function sendRefUpdate({ send, read, command, attempts = 5, pause = attempt => new Promise(resolve => setTimeout(resolve, 200 * 2 ** attempt)) }) {
   let result, failure;
   for (let attempt = 0; ; attempt++) {
     result = undefined; failure = undefined;
@@ -49,15 +56,16 @@ export async function sendRefUpdate({ send, read, command, attempts = 3, pause =
 
 // Confirmed by reading the ref back: APPLIED (the state transition the webhook and email triggers observe) and the fence released, with
 // the caller's own statements. Refused (the provider reported `ng` and the ref does not hold the new commit): NOT_APPLIED at once, so a
-// lost race costs the client a retry, not the repository. Unknown: the ref stays fenced, and the repository too as before (best
-// effort), until settleRefWrites.
+// lost race costs the client a retry, not the repository. Unknown: the ref alone stays fenced until settleRefWrites.
 export async function finishRefWrite(db, { id, repositoryId, applied, refused = false, ciState = 'NONE', statements = [] }) {
   if (!applied && refused) {
     await db.prepare("UPDATE git_ref_writes SET outcome='NOT_APPLIED',settled_at=? WHERE operation_id=? AND outcome IS NULL").bind(new Date().toISOString(), id).run();
     return;
   }
+  // Unknown: only this ref stays fenced (its row keeps outcome NULL) until settleRefWrites; other branches are independent in Git, and a
+  // merge onto this one is kept out by the git_ref_writes_fence trigger. git_ref_unknown keeps rule, settings and merge changes waiting.
   if (!applied) {
-    try { await db.prepare('UPDATE repositories SET write_pending=? WHERE id=? AND write_pending IS NULL').bind(id, repositoryId).run(); } catch { /* the ref fence holds */ }
+    try { await db.prepare('INSERT OR IGNORE INTO git_ref_unknown(operation_id,repository_id,created_at) VALUES(?,?,?)').bind(id, repositoryId, new Date().toISOString()).run(); } catch { /* the ref fence holds */ }
     return;
   }
   await db.batch([
@@ -94,6 +102,7 @@ export async function settleRefWrites(env, withArtifact, limit = 20) {
         JSON.stringify({ operationId: op.id, outcome, commitId: op.new_sha.slice(0, 12) }), 'audit:git_write.settle:0:' + op.id, JSON.stringify({ via: 'maintenance', outcome: 'success' })),
       ...(applied ? [db.prepare('DELETE FROM git_ref_writes WHERE operation_id=?').bind(op.id)] : []),
       db.prepare('UPDATE repositories SET write_pending=NULL WHERE id=? AND write_pending=?').bind(op.repository_id, op.id),
+      db.prepare('DELETE FROM git_ref_unknown WHERE operation_id=?').bind(op.id),
       ...(applied && op.task_id ? [db.prepare("UPDATE agent_tasks SET commit_id=?,updated_at=? WHERE id=? AND state='RUNNING'").bind(op.new_sha, time, op.task_id)] : []),
     ]);
     if (settled.meta.changes !== 1) continue;

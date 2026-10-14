@@ -145,7 +145,14 @@ node scripts/agent_speed_bench.mjs --scenarios S1,S2,S3,S4,S5 --concurrency 1,4,
      It still refuses to start while `write_pending` is set, because a merge or an
      unknown outcome holds the whole repository.
    - If a push's outcome is unknown (the provider failed, or the ref reads back
-     wrong), the push sets `write_pending`, as today.
+     wrong), only its branch stays fenced. A `git_ref_unknown` row (schema 40)
+     keeps rule, settings and merge changes waiting until maintenance settles it;
+     pushes to other branches proceed. *(Changed 2026-10-14 after hosted
+     measurements; it first set `write_pending`.)*
+   - Before giving up, Golf resends the same compare-and-swap while the ref still
+     reads back as the old commit: 5 attempts over about 3 seconds.
+   - A push Golf refuses (a busy branch, a merge in progress, an unknown outcome)
+     is answered in Git's own report: `! [remote rejected] <ref> (<reason>)`.
    - Pull request merges keep reserving the whole repository.
    - One helper, `reserveRefWrite` / `finishRefWrite`, is shared by:
      - plain pushes,

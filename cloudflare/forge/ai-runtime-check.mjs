@@ -57,7 +57,7 @@ try {
       body: JSON.stringify({ repository: { owner: 'alice', name: 'project' }, repositoryId: '1', ...body }) });
     return { status: response.status, value: await response.json() };
   };
-  assert.equal((await call('/native/diagnostics', {})).value.schema, 39);
+  assert.equal((await call('/native/diagnostics', {})).value.schema, 40);
   const settled = async id => {
     for (let i = 0; i < 200; i++) {
       const { value } = await call('/native/ai/read', { action: 'status', runId: id });
