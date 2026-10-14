@@ -1,5 +1,31 @@
 # Golf implementation status
 
+## 2026-10-14 — Centered Console, full-width Workbench header, quiet unavailable row changes
+
+At 1920 and 2560 pixels every layout was measured on the repository list, a
+repository, its issues and account settings. Console was the only one with a
+one-sided gap: its column sat against the rail with the remainder on the right.
+It is now one centered column; the top bar shares the column's edges and the
+tab rule runs the full width. Workbench's content runs edge to edge while its
+header was centered, so its header now runs edge to edge too. The other seven
+were already symmetric; Primer keeps a full-width header over a centered page.
+
+Showing row changes by default exposed a backend limit: the retained native
+installation answers per-path history for its imported snapshots with
+`unavailable` ("Native repository operation could not be confirmed"), so every
+row read "Latest change unavailable". When no row can supply a change and the
+reader has not asked for row changes, the list now keeps plain rows and its
+footnote says once that latest changes are unavailable for the snapshot. A
+reader who asks ("Show latest changes") still sees each row's own state. The
+native per-path history itself is unchanged and still fails for those
+repositories.
+
+Validation: typecheck passes and `layout-presets.spec.ts` has 24 passing tests,
+including equal side gaps in all nine layouts at 1920 pixels and the unavailable
+row-change case. The 1,000-row tests in `source-entry-commit.spec.ts` that
+exercise row refusals pass in isolation; they are timing-bound and fail when the
+machine is loaded. The full browser suite was not rerun.
+
 ## 2026-10-14 — Primer, Tiles and Console follow the layout study
 
 The first layout change (below) placed navigation and panes but did not look

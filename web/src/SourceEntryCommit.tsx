@@ -26,8 +26,8 @@ function entryReadSlot(signal: AbortSignal) {
   });
 }
 
-export function SourceEntryCommit({ userId, repositoryId, commitId, path, location, latestChange }: {
-  userId: string; repositoryId: string; commitId: string; path: string; location: RepositoryLocation; latestChange?: Commit;
+export function SourceEntryCommit({ userId, repositoryId, commitId, path, location, latestChange, onOutcome }: {
+  userId: string; repositoryId: string; commitId: string; path: string; location: RepositoryLocation; latestChange?: Commit; onOutcome?: (available: boolean) => void;
 }) {
   const target = useRef<HTMLSpanElement>(null);
   const client = useQueryClient();
@@ -75,6 +75,9 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
   useEffect(() => {
     if (!query.isFetching && (query.isSuccess || query.isError)) setFinishedIdentity(identity);
   }, [identity, query.isFetching, query.isSuccess, query.isError]);
+  // The list learns once per row whether it has a change to show.
+  const outcome = projected ? true : !validTarget ? false : query.isFetching ? undefined : query.isSuccess ? true : query.isError ? false : undefined;
+  useEffect(() => { if (outcome !== undefined) onOutcome?.(outcome); }, [identity, outcome]);
   const commit = projected || (eligible && query.isSuccess ? query.data : undefined);
   return <span ref={target} className="source-entry-commit" aria-label={`Latest change for ${path}`}>
     {commit ? <><Link className="source-entry-commit-title" {...repositoryOptions(location, { view: 'commits', ref:commitId, refKind:undefined,refName:undefined, commit: commit.sha, historyPath: undefined })} title={commit.message.split('\n')[0] || 'Commit message unavailable'}>{commit.message.split('\n')[0] || 'Commit message unavailable'}</Link><span className="source-entry-commit-date"><DateLabel relative value={commit.authoredAt}/></span></> : <span className="muted source-entry-commit-unavailable">{query.isError || !eligible ? 'Latest change unavailable' : visible ? 'Reading latest change…' : 'Latest change not loaded'}</span>}

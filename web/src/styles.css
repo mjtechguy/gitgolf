@@ -1787,7 +1787,11 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
   :root:is([data-layout=console],[data-layout=primer]) .repository-sidebar-heading { min-height:24px; }
 
   /* Console: Cloudflare's dashboard. Icon rail, switchers in the top bar, plain tabs, a titled page. */
-  :root[data-layout=console] .app-shell .topbar { height:52px; padding-inline:16px 24px; border-bottom:0; background:var(--bg); }
+  /* One centered column: the top bar shares its edges and the tab rule runs the full width, so a wide window has no one-sided gap. */
+  :root[data-layout=console] .app-shell .topbar { height:52px; padding-inline:max(20px, calc((100% - 1376px)/2 + 20px)) max(28px, calc((100% - 1376px)/2 + 28px)); border-bottom:0; background:var(--bg); }
+  :root[data-layout=console] .workspace-content { overflow-x:clip; }
+  :root[data-layout=console] .repository-navigation { position:relative; border-bottom-color:transparent; }
+  :root[data-layout=console] .repository-navigation::after { content:""; position:absolute; inset:auto -100vw -1px; border-bottom:1px solid var(--line); pointer-events:none; }
   :root[data-layout=console] .appearance-sidebar { background:var(--bg); }
   :root[data-layout=console] .context-crumb { gap:2px; }
   :root[data-layout=console] .context-crumb > :is(a,span:not([aria-hidden],.visibility)) { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 8px; border-radius:var(--radius); color:var(--text); font-size:.8125rem; font-weight:500; }
@@ -1800,7 +1804,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
   :root[data-layout=console] .repository-tabs a { min-height:40px; padding-block:0; font-size:.8125rem; font-weight:500; }
   :root[data-layout=console] .repository-tabs a > svg { display:none; }
   :root[data-layout=console] .repository-tabs a[aria-current=page] { border-color:var(--text); color:var(--text); font-weight:600; }
-  :root[data-layout=console] .workspace-content main { max-width:1376px; margin-inline:0; padding-inline:28px; }
+  :root[data-layout=console] .workspace-content main { max-width:1376px; margin-inline:auto; padding-inline:28px; }
   :root[data-layout=console] .repository-navigation { margin-inline:-28px; }
   :root[data-layout=console] .repository-identity { min-height:0; margin-bottom:4px; }
   :root[data-layout=console] .repository-context { font-size:1.5rem; font-weight:600; letter-spacing:-.02em; }
@@ -1815,6 +1819,9 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
   :root:is([data-layout=console],[data-layout=tiles]) .topbar-controls > .account-menu > summary { width:32px; height:32px; }
   :root[data-layout=console] .appearance-sidebar > nav:last-of-type { display:grid; margin-top:auto; }
   :root[data-layout=console] .appearance-sidebar > nav:last-of-type > a:not(:first-child) { display:none; }
+
+  /* Workbench's panes run edge to edge, so its header does too. */
+  :root[data-layout=workbench] .app-shell .topbar { padding-inline:24px; }
 
   /* Primer: GitHub's header. Mark, breadcrumb and jump field above the tabs, inside one light band. */
   :root[data-layout=primer] { --topbar-h:auto; --brand-mark-bg:#1f2328; --brand-mark-fg:#fff; }
@@ -1932,6 +1939,9 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .repository-filters button[aria-pressed=true] { background:var(--hover); box-shadow:inset 2px 0 var(--text); font-weight:600; }
 .repository-filters p { margin:12px 8px 0; color:var(--muted); font-size:.75rem; }
 @media(max-width:1050.98px) { .repository-filters { display:none; } }
+
+/* A snapshot with no row changes to give keeps plain rows; the panel's footnote says so once. */
+:root .source-tree.source-tree-changes-unavailable .source-entry-commit { display:none; }
 
 /* Open-item counts on repository tabs. */
 .tab-count { position:relative; display:inline-grid; place-items:center; min-width:20px; height:20px; padding:0 6px; border-radius:var(--radius-badge); background:color-mix(in srgb,currentColor 12%,transparent); color:inherit; font-size:.75rem; font-weight:500; line-height:1; }

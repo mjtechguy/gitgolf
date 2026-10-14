@@ -219,6 +219,41 @@ for (const [appearance, layout] of [['classic', 'primer'], ['golf', 'tiles'], ['
   }
 });
 
+test('wide windows leave equal space on both sides in every layout', async ({ page }) => {
+  test.setTimeout(90_000);
+  await fixture(page, true);
+  await page.setViewportSize({ width: 1920, height: 1000 });
+  for (const [appearance, layouts] of Object.entries(presets)) for (const layout of layouts) {
+    await page.goto('/alex/demo');
+    await page.evaluate(([a, l]) => { localStorage.setItem('golf.appearance', a!); localStorage.setItem(`golf.layout.${a}`, l!); }, [appearance, layout]);
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Repository README' })).toBeVisible();
+    const frame = await page.evaluate(() => {
+      const side = document.querySelector('.appearance-sidebar')!.getBoundingClientRect(), main = document.querySelector('#main-content')!, box = main.getBoundingClientRect(), style = getComputedStyle(main);
+      const account = document.querySelector('.topbar-controls .account-menu')!.getBoundingClientRect(), right = box.right - parseFloat(style.paddingRight);
+      return { left: box.left + parseFloat(style.paddingLeft) - (side.width ? side.right : 0), right: innerWidth - right, account: right - account.right };
+    });
+    expect(Math.abs(frame.left - frame.right), `${layout} content`).toBeLessThan(2);
+    // Primer keeps GitHub's full-width header over a centered page; every other header ends where its content does.
+    if (layout !== 'primer') expect(Math.abs(frame.account), `${layout} header`).toBeLessThan(16);
+    await page.screenshot({ path: `test-results/wide-${layout}.png` });
+  }
+});
+
+test('a snapshot with no row changes shows plain rows and says so once', async ({ page }) => {
+  await fixture(page, true, false);
+  await page.goto('/alex/demo');
+  await expect(page.getByText('Latest changes are unavailable for this snapshot')).toBeVisible();
+  await expect(page.getByText('Latest change unavailable', { exact: true }).filter({ visible: true })).toHaveCount(0);
+  await expect(page.locator('.source-tree')).not.toHaveClass(/source-tree-with-commits/);
+  await expect(page.getByRole('region', { name: 'Repository README' })).toContainText('FastAPI framework');
+  // A reader who asks for row changes sees each row's own state.
+  await page.evaluate(() => localStorage.setItem('golf.source.latestChanges', 'show'));
+  await page.reload();
+  await expect(page.getByLabel('Latest change for docs', { exact: true })).toHaveText('Latest change unavailable');
+  await expect(page.getByText('Latest changes are unavailable for this snapshot')).toHaveCount(0);
+});
+
 test('the jump field finds a loaded repository from the keyboard', async ({ page }) => {
   await fixture(page, true);
   await page.goto('/alex/demo');
