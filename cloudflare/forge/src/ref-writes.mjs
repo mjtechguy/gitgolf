@@ -1,5 +1,6 @@
 import { repositoryRefs, recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { pipelinePolicy } from './pipeline-policy.mjs';
+import { refusedRef } from './git.mjs';
 
 // The branch-level push fence (schema 37), shared by /git/ pushes, agent task pushes and the Source API. Pull request merges keep
 // reserving the whole repository through repositories.write_pending; an unsettled write still refuses to start while it is held.
@@ -23,6 +24,27 @@ export async function reserveRefWrite(db, { id, repositoryId, userId, command, g
     if (/UNIQUE constraint failed/.test(String(error?.message))) return false;
     throw error;
   }
+}
+
+// Sends one fenced ref update and reads the ref back. The provider can fail an update that runs alongside others in the same repository
+// without reporting it refused; while the ref still holds the old commit the same compare-and-swap is sent again (a copy that did land
+// is refused by its stale old value and then reads back as applied). Returns {result, applied, refused, retried}; rethrows the last
+// provider error when the outcome stays unknown.
+export async function sendRefUpdate({ send, read, command, attempts = 3, pause = attempt => new Promise(resolve => setTimeout(resolve, 150 * 2 ** attempt)) }) {
+  let result, failure;
+  for (let attempt = 0; ; attempt++) {
+    result = undefined; failure = undefined;
+    try { result = await send(); } catch (error) { failure = error; }
+    let observed;
+    try { observed = await read(); } catch (error) { failure ??= error; break; }
+    if (observed === command.next) return { result, applied: true, refused: false, retried: attempt };
+    if (result && refusedRef(result.bytes, command.ref)) return { result, applied: false, refused: true, retried: attempt };
+    console.log(JSON.stringify({ event: 'golf.ref_update_unconfirmed', attempt: attempt + 1, moved: observed !== command.old, reason: failure ? String(failure.message).slice(0, 160) : 'no ref status' }));
+    if (observed !== command.old || attempt + 1 >= attempts) break;
+    await pause(attempt);
+  }
+  if (failure) throw failure;
+  return { result, applied: false, refused: false, retried: attempts - 1 };
 }
 
 // Confirmed by reading the ref back: APPLIED (the state transition the webhook and email triggers observe) and the fence released, with

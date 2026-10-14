@@ -55,7 +55,13 @@ export function receiveCommand(bytes) {
   if (!end.flush) throw Error('only one ref per push');
   if (fields[1] !== zero && decoder.decode(bytes.subarray(end.end, end.end + 4)) !== 'PACK') throw Error('missing Git pack');
   if (fields[1] === zero && end.end !== bytes.length) throw Error('unexpected deletion body');
-  return { old: fields[0], next: fields[1], ref: fields[2] };
+  return { old: fields[0], next: fields[1], ref: fields[2], sideband: caps.includes('side-band-64k') };
+}
+
+// The report a client receives for its own accepted update, for when the provider's final reply is not it (an earlier attempt landed).
+export function acceptedReport(command) {
+  const status = new Uint8Array([...packetLine('unpack ok\n'), ...packetLine(`ok ${command.ref}\n`), ...encoder.encode('0000')]);
+  return command.sideband ? new Uint8Array([...packetLine('\x01' + decoder.decode(status)), ...encoder.encode('0000')]) : status;
 }
 
 // report-status without side-band: '' only for "unpack ok" plus "ok <ref>"; otherwise the provider's own line.
