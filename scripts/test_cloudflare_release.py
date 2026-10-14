@@ -722,8 +722,10 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0026_execution_values.sql').read_text()
-            self.assertTrue(schema.endswith(';\n\n'+migration))
-            db.executescript(schema[:-len('\n'+migration)])
+            # 0026 is followed only by the 0027 email migration, each after one blank line.
+            tail = '\n'+migration+'\n'+(ROOT/'cloudflare/forge/migrations/0027_email_notifications.sql').read_text()
+            self.assertTrue(schema.endswith(';\n'+tail))
+            db.executescript(schema[:-len(tail)])
             lost = True
             def command(*args, **kwargs):
                 nonlocal lost

@@ -13,7 +13,7 @@ const { Miniflare, convertV4MiniflareOptions } = await import(pathToFileURL(reso
 const modules = [];
 const activity = await esbuild.build({ entryPoints: ['cloudflare/forge/src/activity.mjs'], outfile: 'cloudflare/forge/src/activity.runtime.mjs', bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./common.mjs', './git.mjs'] });
 const assets = await readUIAssets(resolve('web/dist-native'));
-for (const file of ['worker.mjs', 'operations.mjs', 'operations-provider.mjs', 'core.mjs', 'file-index.mjs', 'telemetry.mjs', 'repository-indexes.mjs', 'repository-metadata.mjs', 'metadata-jobs.mjs', 'repository-images.mjs', 'repository-reads.mjs', 'repository-cache.mjs', 'repository-settings.mjs', 'managed-registry.mjs', 'native-runners.mjs', 'gitlab-runner.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'repository-diff.mjs', 'owners.mjs', 'public-profiles.mjs', 'public-repositories.mjs', 'workspace-ui.mjs', 'git.mjs', 'common.mjs', 'collaboration.mjs', 'evidence.mjs', 'delivery.mjs', 'environments.mjs', 'apps.mjs', 'app-policy.mjs', 'public.mjs', 'test-policy.mjs', 'agent-policy.mjs', 'agents.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: (file === 'public.mjs' ? 'const GOLF_NATIVE_ASSETS=' + JSON.stringify(assets) + ';\n' : '') + (await readFile(new URL('./src/' + file, import.meta.url), 'utf8')).replace("'../data/languages.json' with { type: 'json' }", "'../data/languages.mjs'") });
+for (const file of ['worker.mjs', 'operations.mjs', 'operations-provider.mjs', 'core.mjs', 'file-index.mjs', 'telemetry.mjs', 'repository-indexes.mjs', 'repository-metadata.mjs', 'metadata-jobs.mjs', 'repository-images.mjs', 'repository-reads.mjs', 'repository-cache.mjs', 'repository-settings.mjs', 'managed-registry.mjs', 'native-runners.mjs', 'gitlab-runner.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'repository-diff.mjs', 'owners.mjs', 'public-profiles.mjs', 'public-repositories.mjs', 'workspace-ui.mjs', 'git.mjs', 'common.mjs', 'collaboration.mjs', 'evidence.mjs', 'delivery.mjs', 'environments.mjs', 'email.mjs', 'apps.mjs', 'app-policy.mjs', 'public.mjs', 'test-policy.mjs', 'agent-policy.mjs', 'agents.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: (file === 'public.mjs' ? 'const GOLF_NATIVE_ASSETS=' + JSON.stringify(assets) + ';\n' : '') + (await readFile(new URL('./src/' + file, import.meta.url), 'utf8')).replace("'../data/languages.json' with { type: 'json' }", "'../data/languages.mjs'") });
 modules.push({ type: 'ESModule', path: 'forge/src/activity.mjs', contents: activity.outputFiles[0].text });
 for (const file of ['execution-values.mjs', 'sealed.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: await readFile(new URL('./src/' + file, import.meta.url), 'utf8') });
 const accessModule = await esbuild.build({ entryPoints: ['cloudflare/forge/src/access.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral' });
@@ -26,10 +26,12 @@ modules.push({ type: 'ESModule', path: 'forge/src/performance.mjs', contents: aw
 modules.push({ type: 'ESModule', path: 'forge/src/rate-limit.mjs', contents: await readFile(new URL('./src/rate-limit.mjs', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'forge/data/languages.mjs', contents: 'export default ' + await readFile(new URL('./data/languages.json', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'agents/src/policy.mjs', contents: await readFile(new URL('../agents/src/policy.mjs', import.meta.url), 'utf8') });
-const origin = 'http://127.0.0.1:18789';
+const origin = 'http://127.0.0.1:18789', mailSender = 'golf@mail.example.invalid';
 const runtime = new Miniflare(convertV4MiniflareOptions({
   host: '127.0.0.1', port: serve ? 18789 : 0, modules, compatibilityDate: '2026-10-08',
-  bindings: { PUBLIC_ORIGIN: origin, WORKSPACE_SLUG: 'local-access-proof', ARTIFACTS_NAMESPACE: 'local-access-proof', ACCESS_AUD: 'local-access-proof' },
+  bindings: { PUBLIC_ORIGIN: origin, WORKSPACE_SLUG: 'local-access-proof', ARTIFACTS_NAMESPACE: 'local-access-proof', ACCESS_AUD: 'local-access-proof', EMAIL_POLICY: JSON.stringify({ sender: mailSender, dailyLimit: 5 }) },
+  // The local Email Service simulator: it enforces the sender restriction and stores messages on this machine; nothing is delivered.
+  email: { send_email: [{ name: 'EMAIL', allowed_sender_addresses: [mailSender] }] },
   access: { aud: 'local-access-proof', identity: { email: 'owner@example.invalid' } },
   d1Databases: { DB: 'local-ui-proof' }, durableObjects: { WORKSPACE: { className: 'Workspace', useSQLite: true } },
 }));
@@ -50,7 +52,7 @@ try {
   assert.equal(session.status, 200, await session.clone().text()); assert.equal((await session.json()).user.login, 'local-reviewer');
   const rpc = (path, body = {}) => runtime.dispatchFetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Origin: origin }, body: JSON.stringify(body) });
   assert.equal((await (await rpc('/rpc/golf.v1.SessionService/GetSession')).json()).user.isInstanceAdmin,true);
-  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 26);
+  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 27);
   const inbox = await rpc('/rpc/golf.v1.RepositoryInvitationService/ListOwnRepositoryInvitations');
   assert.equal(inbox.status, 200, await inbox.clone().text()); assert.deepEqual((await inbox.json()).invitations, []);
   const config = await (await rpc('/native/config')).json();
@@ -111,6 +113,44 @@ try {
   assert.deepEqual([recent.truncated,recent.jobs.map(job=>[job.selection.number,job.testState])],[false,[[7,'PASSED']]]);
   console.log('Real Access/workerd/D1 recent repository runs read stored selections without a provider binding');
   console.log('Built native UI, real local Access identity mapping, spoof rejection and D1 session passed');
+  // Email as the Access-signed-in owner: consent, a subscription, real activity, and the send that follows that mutation without the schedule.
+  const mailState = () => read('CapabilityService','ListCapabilities',{}).then(value=>value.capabilities.find(c=>c.id==='repository.email-notifications').state);
+  assert.equal(await mailState(),'CAPABILITY_STATE_DEGRADED');
+  assert.equal((await rpc('/rpc/golf.v1.EmailNotificationService/ListEmailTransports')).status,501);
+  const own=(await read('EmailNotificationService','GetOwnEmailNotifications',{})).state;
+  assert.deepEqual([own.loginEmail,own.verified,own.enabled,own.localAccountId,own.credentialVersion],['owner@example.invalid',true,false,undefined,undefined]);
+  const consent={expectedContactVersion:own.contactVersion,expectedPreferenceVersion:own.preferenceVersion,enabled:true,authorizeBackground:true};
+  assert.equal((await read('EmailNotificationService','SaveOwnEmailPreference',consent)).state.enabled,true);
+  assert.equal((await rpc('/rpc/golf.v1.EmailNotificationService/SaveOwnEmailPreference',consent)).status,412);
+  const subscription=(await read('EmailNotificationService','SaveRepositoryEmailSubscription',{target,id:crypto.randomUUID(),expectedVersion:'0',expectedContactVersion:own.contactVersion,eventTopics:['issues'],enabled:true,authorizeBackground:true})).subscription;
+  assert.deepEqual([subscription.version,subscription.enabled,subscription.authorizationState],['1',true,'authorized']);
+  await read('RepositoryService','CreateIssue',{repository:target.repository,repositoryId:'1',title:'Private title',body:'Private body',idempotencyKey:crypto.randomUUID()});
+  let mail;
+  for(let i=0;i<100&&mail?.state!=='accepted';i++){await new Promise(resolve=>setTimeout(resolve,100));mail=await db.prepare('SELECT * FROM email_deliveries').first();}
+  assert.deepEqual([mail.state,mail.attempts,mail.sender,mail.event_topic,mail.possible_duplicate],['accepted',1,mailSender,'issues',0]);assert.match(mail.provider_message_id,/^<[^@>]+@[^@>]+>$/);
+  const mailHistory=(await read('EmailNotificationService','ListOwnEmailDeliveries',{target})).deliveries;
+  assert.deepEqual([mailHistory.length,mailHistory[0].id,mailHistory[0].state,mailHistory[0].smtpStatus,mailHistory[0].transportId],[1,mail.id,'accepted',undefined,undefined]);
+  assert.equal(await mailState(),'CAPABILITY_STATE_READY');
+  // Explicit redelivery is drained after its own request and disclosed as a possible duplicate.
+  const again=(await read('EmailNotificationService','RedeliverOwnEmail',{deliveryId:mail.id,operationId:crypto.randomUUID(),expectedContactVersion:own.contactVersion})).delivery;
+  assert.deepEqual([again.possibleDuplicate,again.eventId],[true,mail.event_id]);
+  const delivered=id=>db.prepare('SELECT state,attempts,possible_duplicate FROM email_deliveries WHERE id=?').bind(id).first();
+  for(let i=0;i<100&&(await delivered(again.id)).state!=='accepted';i++)await new Promise(resolve=>setTimeout(resolve,100));
+  assert.deepEqual(await delivered(again.id),{state:'accepted',attempts:1,possible_duplicate:1});
+  // A due retry waits for a later drain. The schedule runs one as its own stage, journalled in the email table rather than the fixed-stage journal;
+  // its other stages drain too, and the overlapping drains still send the retry exactly once.
+  await db.prepare("UPDATE email_deliveries SET state='retrying',completed_at=NULL,next_attempt_at='2000' WHERE id=?").bind(again.id).run();
+  await (await runtime.getWorker()).scheduled({cron:'*/5 * * * *',scheduledTime:Date.now()});
+  for(let i=0;i<100&&(await delivered(again.id)).state!=='accepted';i++)await new Promise(resolve=>setTimeout(resolve,100));
+  assert.deepEqual(await delivered(again.id),{state:'accepted',attempts:2,possible_duplicate:1});
+  const journal=await db.prepare('SELECT stage,outcome,completed_at FROM email_maintenance').first();
+  assert.equal(journal.stage,'email');assert.ok(['succeeded','degraded'].includes(journal.outcome)&&journal.completed_at);
+  assert.equal((await db.prepare("SELECT COUNT(*) n FROM operations_maintenance WHERE stage='email'").first()).n,0);
+  assert.equal((await db.prepare('SELECT attempts FROM email_daily').first()).attempts,3);
+  // READY follows the recorded acceptance for the configured sender, not the configuration.
+  await db.prepare("UPDATE email_acceptance SET sender='previous@mail.example.invalid'").run();
+  assert.equal(await mailState(),'CAPABILITY_STATE_DEGRADED');
+  console.log('Real Access/workerd/D1 email: consent, subscription, post-mutation send, redelivery and one scheduled retry through the local Email Service simulator, and recorded acceptance passed');
   if (serve) {
     console.log('Temporary UI browser check at ' + origin + '; automatically disposed in 120 seconds');
     await new Promise(resolve => { const timer = setTimeout(resolve, 120000); for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { clearTimeout(timer); resolve(); }); });

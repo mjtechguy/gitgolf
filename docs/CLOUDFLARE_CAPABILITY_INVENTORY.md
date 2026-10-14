@@ -38,7 +38,7 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | RepositoryWebhookService | 5 | 0 | Encrypted subscriptions and signed durable deliveries to operator-approved HTTPS origins; current sponsor authority, bounded retries/daily attempts, tests and explicit redelivery. Native test-job events; repository email remains separate. |
 | RepositoryTeamAccessService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryLifecycleService | 0 | 5 | Native migration required; portable service remains available on its own setup path. |
-| EmailNotificationService | 0 | 12 | Native migration required; portable service remains available on its own setup path. |
+| EmailNotificationService | 6 | 6 | Own Access sign-in address only, through the Cloudflare Email Service binding: explicit account consent, per-repository subscriptions, provider acceptance history and explicit redelivery under current grant, identity and consent. Category-and-link messages, six attempts and a daily attempt budget. No SMTP transports, verification codes, unsubscribe links, bounce or reply handling; bearer and service-token callers are refused. |
 | RepositoryExecutionValueService | 7 | 0 | Encrypted repository secrets and plain variables with exact-commit approvals of the one operator-approved Actions workflow; Access-verified administrators, version-fenced writes and original receipts. Released as environment variables only to approved Cloudflare-hosted pull-request jobs, with exact-match masking of stored output. No typed inputs, manual dispatch, organization values, environment scopes, secrets expressions, customer-runner or agent release. |
 | RepositoryInvitationService | 7 | 0 | Enrolled Access users only; current issuer administration, expiring consent, atomic grant/decision and original receipt lookup. No email delivery or automatic enrollment. |
 | RepositoryRulesService | 3 | 0 | Branch locks and tag account restrictions enforced on Golf Git; exact/prefix patterns, current admin, atomic receipts. No protected merge, review/check gates, teams or provider-side enforcement. |
@@ -254,14 +254,14 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | EmailNotificationService/SaveEmailTransport | golf.proto | Missing native adapter |
 | EmailNotificationService/ActivateEmailTransport | golf.proto | Missing native adapter |
 | EmailNotificationService/DeactivateEmailTransport | golf.proto | Missing native adapter |
-| EmailNotificationService/GetOwnEmailNotifications | golf.proto | Missing native adapter |
+| EmailNotificationService/GetOwnEmailNotifications | golf.proto | Bounded adapter |
 | EmailNotificationService/RequestEmailVerification | golf.proto | Missing native adapter |
 | EmailNotificationService/ConfirmEmailVerification | golf.proto | Missing native adapter |
-| EmailNotificationService/SaveOwnEmailPreference | golf.proto | Missing native adapter |
-| EmailNotificationService/GetRepositoryEmailSubscription | golf.proto | Missing native adapter |
-| EmailNotificationService/SaveRepositoryEmailSubscription | golf.proto | Missing native adapter |
-| EmailNotificationService/ListOwnEmailDeliveries | golf.proto | Missing native adapter |
-| EmailNotificationService/RedeliverOwnEmail | golf.proto | Missing native adapter |
+| EmailNotificationService/SaveOwnEmailPreference | golf.proto | Bounded adapter |
+| EmailNotificationService/GetRepositoryEmailSubscription | golf.proto | Bounded adapter |
+| EmailNotificationService/SaveRepositoryEmailSubscription | golf.proto | Bounded adapter |
+| EmailNotificationService/ListOwnEmailDeliveries | golf.proto | Bounded adapter |
+| EmailNotificationService/RedeliverOwnEmail | golf.proto | Bounded adapter |
 | RepositoryExecutionValueService/ListRepositoryExecutionValues | golf.proto | Bounded adapter |
 | RepositoryExecutionValueService/SaveRepositoryExecutionValue | golf.proto | Bounded adapter |
 | RepositoryExecutionValueService/DeleteRepositoryExecutionValue | golf.proto | Bounded adapter |
