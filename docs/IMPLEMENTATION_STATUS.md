@@ -1,5 +1,15 @@
 # Golf implementation status
 
+## 2026-10-14 — Analytics reads failed because Workers reject `redirect: 'error'`
+
+The Operations analytics feed (failing inside the Worker since 2026-10-13 although
+the same token and query worked outside it) and the new AI Gateway usage panel
+both called the GraphQL API with `fetch(..., { redirect: 'error' })`. Workers
+accept only `follow` or `manual`, so every read threw before any request was sent;
+the AI usage panel surfaced the message. Both now use `redirect: 'manual'`, and a
+redirect response still fails the read because it is not a 2xx JSON answer.
+Verified by Worker tests; hosted confirmation follows the deploy.
+
 ## 2026-10-14 — Clef label suggestions and Workers AI release notes drafts (AI-C, AI-D)
 
 Repository administrators can ask Clef (`@cf/cloudflare/clef`, fixed) which of up
