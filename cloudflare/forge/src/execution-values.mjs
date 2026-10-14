@@ -4,6 +4,7 @@ import { sha, validRef } from './git.mjs';
 import { repositoryAccess } from './repository-settings.mjs';
 import { nativeWorkflowContract, nativeWorkflowPath, nativeWorkflowSource } from './native-workflow.mjs';
 import { sealingKey, seal, open } from './sealed.mjs';
+import { testProfile } from './test-policy.mjs';
 
 export const executionValueMethods = new Set(['ListRepositoryExecutionValues', 'SaveRepositoryExecutionValue', 'DeleteRepositoryExecutionValue', 'GetRepositoryExecutionVariable',
   'SaveRepositoryExecutionBinding', 'DeleteRepositoryExecutionBinding', 'GetRepositoryExecutionValueOperation']);
@@ -25,10 +26,16 @@ export function executionValueBody(value, secret) {
   return bytes >= (secret ? 8 : 1) && bytes <= maximumBytes;
 }
 
+// The installation's approved test source, read through the same rules setup applies: one module, one workflow, or the Actions workflow beside the agent module.
+function approvedProfile(env) {
+  try { return testProfile({ ...(env.TEST_WORKFLOW_FORMAT ? { workflow: { format: env.TEST_WORKFLOW_FORMAT, path: env.TEST_WORKFLOW_PATH } } : {}), ...(env.TEST_MODULE !== undefined ? { module: env.TEST_MODULE } : {}) }); }
+  catch { return {}; }
+}
 // Values are released only to the Cloudflare-hosted Actions shell lane, so an installation without that profile cannot honestly offer them.
 export function executionValueState(env) {
-  if (env.TEST_WORKFLOW_FORMAT !== 'actions' || !nativeWorkflowPath('actions', env.TEST_WORKFLOW_PATH)) return { ready: false, reason: 'Repository values need an operator-approved Actions workflow profile; this installation ' +
-    (env.TEST_WORKFLOW_FORMAT === 'gitlab' ? 'runs an approved GitLab CI workflow' : env.TEST_WORKFLOW_FORMAT === 'actions-act' ? 'runs pinned Actions jobs on customer runners' : env.TEST_MODULE ? 'runs an approved Python test module' : 'has no container test allocation') + '.' };
+  const { workflow, module } = approvedProfile(env);
+  if (workflow?.format !== 'actions') return { ready: false, reason: 'Repository values need an operator-approved Actions workflow profile; this installation ' +
+    (workflow?.format === 'gitlab' ? 'runs an approved GitLab CI workflow' : workflow?.format === 'actions-act' ? 'runs pinned Actions jobs on customer runners' : module ? 'runs an approved Python test module' : 'has no container test allocation') + '.' };
   if (!env.EXECUTION_VALUE_KEY?.get) return { ready: false, reason: 'Configure a dedicated Secrets Store encryption key for repository values.' };
   return { ready: true, reason: '' };
 }
@@ -238,10 +245,12 @@ export async function releaseExecutionValues(env, id, authorize) {
   // The same authorization the job's Git and registry brokers need: current policy, actor, pull request head and job state.
   if ((await authorize(id)).state !== 'AUTHORIZED') return { state: 'REFUSED' };
   const db = env.DB.withSession('first-primary'), job = await db.prepare('SELECT * FROM evidence_jobs WHERE id=?').bind(id).first();
-  const snapshot = JSON.parse(job.snapshot), execution = snapshot.execution, approved = execution.values;
+  const snapshot = JSON.parse(job.snapshot), execution = snapshot.execution, approved = execution?.values;
+  // An agent job never receives values, whatever its snapshot carries.
+  if (snapshot.agent || job.agent_state !== 'NONE') return { state: 'REFUSED' };
   if (!approved) return { state: 'NONE' };
   const row = await db.prepare("SELECT id,artifact_name FROM repositories WHERE id=? AND state='ACTIVE'").bind(job.repository_id).first();
-  if (!row || !executionValueState(env).ready || !hostedActions(execution) || snapshot.agent || job.agent_state !== 'NONE') return { state: 'REFUSED' };
+  if (!row || !executionValueState(env).ready || !hostedActions(execution)) return { state: 'REFUSED' };
   const time = now();
   // The approval version, its expiry, its approver's authority, every value version and the running job are re-read by the statement that records the release.
   const released = await db.prepare(`INSERT INTO execution_value_releases(job_id,binding_id,binding_version,released_at) SELECT ?,b.id,b.version,? FROM execution_bindings b

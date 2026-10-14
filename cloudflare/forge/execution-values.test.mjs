@@ -54,6 +54,10 @@ test('availability follows the existing test profile and the dedicated key', () 
   assert.equal(executionValueState({ EXECUTION_VALUE_KEY: key }).reason, 'Repository values need an operator-approved Actions workflow profile; this installation has no container test allocation.');
   assert.equal(executionValueState({ TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.gitlab-ci.yml', EXECUTION_VALUE_KEY: key }).ready, false);
   for (const format of ['gitlab', 'actions-act']) assert.equal(executionValueState({ ...actions, TEST_WORKFLOW_FORMAT: format, EXECUTION_VALUE_KEY: key }).ready, false);
+  // The agent module beside the Actions workflow is the combined profile; beside any other workflow setup refuses it, and so does this.
+  assert.deepEqual(executionValueState({ ...actions, TEST_MODULE: 'test_calc', EXECUTION_VALUE_KEY: key }), { ready: true, reason: '' });
+  for (const format of ['gitlab', 'actions-act']) assert.equal(executionValueState({ ...actions, TEST_WORKFLOW_FORMAT: format, TEST_WORKFLOW_PATH: format === 'gitlab' ? '.gitlab-ci.yml' : actions.TEST_WORKFLOW_PATH, TEST_MODULE: 'test_calc', EXECUTION_VALUE_KEY: key }).ready, false);
+  assert.equal(executionValueState({ ...actions, TEST_MODULE: 'not a module', EXECUTION_VALUE_KEY: key }).ready, false);
 });
 
 test('setup accepts only a dedicated Secrets Store reference for the value key', () => {

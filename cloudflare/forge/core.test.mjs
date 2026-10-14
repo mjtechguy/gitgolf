@@ -4253,3 +4253,32 @@ test('agent jobs and customer-runner jobs receive no values', async t => {
     assert.equal(/testValues|releaseExecutionValues|execution-values/.test(source), false, file);
   }
 });
+
+test('with the agent module beside the approved Actions workflow, values reach the workflow run and never the agent job', async t => {
+  const { releaseExecutionValues } = await import('./src/execution-values.mjs');
+  const f = await releaseFixture(t), agents = allocateAgents(f);
+  // The combined profile: the hosted workflow runs pull requests, the module only tests agent proposals.
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: f.path });
+  const config = await value(await f.call('', {}, ownerToken, '/native/config'));
+  assert.deepEqual([config.testModule, config.testWorkflowPath, config.agents], ['test_calc', f.path, true]);
+  const capability = (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.find(c => c.id === 'settings.repository-secrets');
+  assert.equal(capability.state, 'CAPABILITY_STATE_READY');
+  const run = await f.start(), execution = f.snapshot(run.id).execution;
+  assert.equal(execution.contract, 'golf.native.workflow-shell.v1'); assert.equal(execution.module, undefined); assert.equal(execution.values.bindingId, f.binding.id);
+  assert.deepEqual(await f.release(run.id), { state: 'RELEASED', environment: { DEPLOY_TOKEN: f.secret, REGION: 'eu-central' }, secrets: [f.secret] });
+  // An agent job at the same approved commit runs the module and has no test execution to release to.
+  const agent = (await value(await f.evidence({ ...f.input, advice: false, agent: { prompt: 'Improve the approved source file.' }, idempotencyKey: nonce() }))).job, snapshot = f.snapshot(agent.id);
+  assert.equal(snapshot.agent.module, 'test_calc'); assert.equal(snapshot.execution, undefined);
+  await f.advance(agent.id, 'agents'); await f.advance(agent.id, 'agents');
+  const task = agents.tasks.get(agent.id);
+  assert.equal(task.module, 'test_calc'); assert.equal(task.values, undefined); assert.equal(JSON.stringify(task).includes(f.secret), false);
+  assert.deepEqual(await f.release(agent.id), { state: 'REFUSED' });
+  // Even with its own authorization granted, an agent job is refused before a release is recorded.
+  assert.deepEqual(await releaseExecutionValues(f.env, agent.id, async () => ({ state: 'AUTHORIZED' })), { state: 'REFUSED' });
+  assert.deepEqual(f.releases().map(r => r.job_id), [run.id]);
+  assert.equal(f.stored().includes(f.secret), false);
+  // Without the workflow the same installation is module-only again, and the page closes with the module wording.
+  delete f.env.TEST_WORKFLOW_FORMAT; delete f.env.TEST_WORKFLOW_PATH;
+  const closed = (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.find(c => c.id === 'settings.repository-secrets');
+  assert.deepEqual([closed.state, closed.reason], ['CAPABILITY_STATE_DISABLED', 'Repository values need an operator-approved Actions workflow profile; this installation runs an approved Python test module.']);
+});
