@@ -129,20 +129,21 @@ resources, deploy the path-scoped Access login, then explicitly publish the
 reviewed discovery fixture:
 
 ```sh
+python3 scripts/cloudflare_alchemy_demo.py migrate NEW_DIRECTORY
 python3 scripts/cloudflare_alchemy_demo.py enable-public NEW_DIRECTORY
 python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
 python3 scripts/cloudflare_alchemy_demo.py seed-public NEW_DIRECTORY
 ```
 
-`enable-public` accepts only the recorded schema or its reviewed predecessor and
-adds migration 0022. It does not publish repositories. `seed-public` uses
+`enable-public` requires the current schema (`migrate` adds what is missing) and
+reads the public tables back. It does not publish repositories. `seed-public` uses
 [`deploy/demo/public.json`](../demo/public.json) to publish only `mj/fastapi` and
 the public profiles for `mj`, `mj-platform`, and `mj-labs`. Other repositories,
 organization membership and account emails remain private. A private seed receipt
 prevents silently republishing a repository made private later; customized public
 profiles are never overwritten. Ordinary redeployment does not rerun this seed. Before publishing, the command
 waits up to ten minutes for the Worker and existing workspace Durable Object to
-report matching source/configuration fingerprints and schema 22. A successful
+report matching source/configuration fingerprints and at least schema 22. A successful
 Worker upload alone does not mean every existing object has adopted the release.
 
 The Access application protects `/auth/login`; its signed cookie applies across

@@ -1,5 +1,25 @@
 # Golf implementation status
 
+## 2026-10-14 — Native repository environments govern protected previews
+
+Cloudflare native: repository Environments settings are available when
+protected previews and Access are configured. A repository has one environment
+named `preview`; its allowed head branches, lifetime (within the operator's
+`PREVIEW_TTL`) and concurrent-preview limit (at most four) are enforced when a
+protected preview is published or renewed, and existing previews are not
+revoked by a policy change. Changes need a verified Access sign-in by a
+repository administrator. Required reviewers, wait timers, tag/commit
+selectors, environment secrets and production deployment are not available.
+
+Schema 23 (`0023_repository_environments.sql`). On the Alchemy path
+`enable-public` no longer carries its own copy of migration 0022; it requires
+the current schema and `migrate` applies whatever is missing.
+
+Evidence: Worker tests, a local workerd/D1 check
+(`cloudflare/forge/environments-check.mjs`) and a mocked-backend browser test.
+Hosted acceptance is recorded in the next entry once the migration and deploy
+have run.
+
 ## 2026-10-14 — Alchemy path: schema migration, credential renewal, operations feed; scheduled runs failing
 
 Three operator steps were added to `cloudflare_alchemy_demo.py`: `migrate`
