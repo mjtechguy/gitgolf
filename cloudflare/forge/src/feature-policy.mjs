@@ -10,6 +10,7 @@ import { executionValueState } from './execution-values.mjs';
 import { operationsAdmin } from './operations.mjs';
 import { auditStatement, clientHeaders, locked } from './installation.mjs';
 import { settingsAuthority } from './repository-settings.mjs';
+import { aiAllocation } from './ai.mjs';
 
 // GitHub-style features: operator allocation ∩ installation ∩ organization ∩ repository choice ∩ dependencies.
 // Missing rows mean ALLOWED and enabled, so the migration alone changes nothing. Turning a feature off never deletes data.
@@ -31,6 +32,9 @@ const catalogue = [
   { id: 'releases', label: 'Releases', plural: true, group: 'Distribution', requires: [], choice: true, allocated: env => Boolean(env.EVIDENCE_BUCKET) || 'Releases need the private R2 bucket binding on this installation.' },
   { id: 'packages', label: 'Packages', plural: true, group: 'Distribution', requires: [], choice: true, allocated: env => Boolean(env.REGISTRY && env.REGISTRY_ORIGIN) || 'The operator has not connected an OCI registry to this installation.' },
   { id: 'public-repositories', label: 'Public repositories', plural: true, group: 'Distribution', requires: [], choice: false, allocated: env => env.PUBLIC_REPOSITORIES === 'true' || 'The operator has not enabled public repositories for this deployment.' },
+  // Workers AI runs: each needs the operator's AI allocation (approved AI, private gateway, AI workflow) and the feature it works on.
+  { id: 'ai-triage', label: 'AI label suggestions', plural: true, group: 'Automation', requires: ['issues'], choice: true, allocated: env => aiAllocation(env) || 'The operator has not allocated Workers AI runs (approved Workers AI, its private gateway and the AI workflow) on this installation.' },
+  { id: 'ai-release-notes', label: 'AI release notes drafts', plural: true, group: 'Automation', requires: ['releases'], choice: true, allocated: env => aiAllocation(env) || 'The operator has not allocated Workers AI runs (approved Workers AI, its private gateway and the AI workflow) on this installation.' },
 ];
 const known = new Map(catalogue.map(feature => [feature.id, feature]));
 const modes = ['UNSPECIFIED', 'DISABLED', 'ALLOWED', 'ENFORCED'], rank = { DISABLED: 0, ALLOWED: 1, ENFORCED: 2 };
@@ -142,7 +146,7 @@ export async function discussionFeatures(db, person, row, service, method, body)
 const capabilityFeatures = { 'native-pr-tests': 'actions', 'native-ci-automatic': 'actions', 'settings.repository-execution-policy': 'actions', 'settings.repository-secrets': 'secrets',
   'native-pr-previews': 'previews', 'native-preview-browser': 'previews', 'native-pr-apps': 'previews', 'settings.repository-environments': 'previews', 'native-pr-agents': 'agents',
   'discussion.attachments': 'attachments', 'settings.repository-webhooks': 'webhooks', 'repository.email-notifications': 'email', 'repository.releases': 'releases',
-  'repository.packages': 'packages', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues',
+  'repository.packages': 'packages', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues', 'discussion.ai-triage': 'ai-triage', 'repository.ai-release-notes': 'ai-release-notes',
   ...Object.fromEntries(['pull.merge-observation', 'pull.review-requests', 'pull.review-lifecycle', 'pull.pending-reviews', 'pull.codeowners'].map(id => [id, 'pull-requests'])) };
 export async function policyCapabilities(db, env, capabilities) {
   const { results } = await db.prepare("SELECT scope,feature,mode FROM feature_policies WHERE scope='installation' AND scope_id=''").all();

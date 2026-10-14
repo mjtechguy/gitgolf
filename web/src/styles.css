@@ -2094,3 +2094,19 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .probability-bar meter::-moz-meter-bar { border-radius:4px; background:var(--line-strong); }
 .probability-bar li.chosen meter::-moz-meter-bar { background:var(--accent); }
 @media(max-width:480px) { .probability-bar li { grid-template-columns:minmax(0,1fr) 3rem; gap:4px 10px; } .probability-bar meter { grid-column:1 / -1; grid-row:2; } }
+/* AI-C label suggestions (issue sidebar) and AI-D release notes drafts. */
+.discussion-sidebar .ai-advisory { margin-bottom:16px; }
+.discussion-sidebar .ai-advisory .browser-panel-heading { flex-wrap:wrap; gap:6px; }
+.discussion-sidebar .ai-advisory-lead { font-size:.9375rem; }
+.discussion-sidebar .ai-advisory .row-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.discussion-sidebar .probability-bar li { grid-template-columns:minmax(0,1fr) 3rem; gap:4px 10px; }
+.discussion-sidebar .probability-bar meter { grid-column:1 / -1; grid-row:2; }
+.label-odds .probability-label { min-width:0; }
+.label-odds .discussion-label-chip { font-weight:inherit; }
+.label-odds li.chosen .discussion-label-chip { border-color:var(--accent); }
+.ai-advisory .metadata-details .probability-bar { margin-top:8px; }
+.label-suggested { margin-left:auto; padding:0 7px; border:1px solid var(--accent); border-radius:var(--radius-badge); color:var(--accent); font-size:.75rem; line-height:1.6; white-space:nowrap; }
+.release-notes-draft-preview { max-height:22rem; overflow:auto; padding:4px 14px; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg); }
+.release-notes-draft-actions { display:flex; flex-wrap:wrap; align-items:end; justify-content:space-between; gap:10px 16px; }
+.release-notes-draft-actions label { display:grid; gap:4px; min-width:12rem; color:var(--muted); font-size:.8125rem; }
+.release-notes-draft-actions .row-actions { display:flex; flex-wrap:wrap; gap:8px; }

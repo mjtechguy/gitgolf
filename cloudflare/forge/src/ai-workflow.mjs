@@ -1,13 +1,19 @@
 import { digest, uuidOK, Fault, deny, invalid, reply } from './common.mjs';
 import { aiAllocation, aiDailyLimit, aiLimits, aiRun, aiUsage } from './ai.mjs';
 import { featureOff } from './feature-policy.mjs';
+import { triage } from './ai-triage.mjs';
+import { releaseNotes } from './ai-release-notes.mjs';
 
 // One entry per kind; each AI track adds one line here. A kind is
 // { feature (a feature-policy id, such as 'advice'), model, roles, target(value, row) → bounded JSON target or invalid(),
 //   prepare({ db, env, person, row, artifact, target }) → JSON input (in the workspace write queue: authority and exact bounded input only),
 //   infer({ env, input, model, run }) → JSON output (in the Workflow; `run(input, options)` makes the one gateway call),
-//   stale?({ db, env, person, row, artifact, target, input }) → boolean on status reads }.
-export const aiKinds = {};
+//   stale?({ db, env, person, row, artifact, target, input }) → boolean on status reads,
+//   admit?({ db, env, person, row, target }) → throws a Fault to refuse at admission (a short D1 check; prepare checks again) }.
+export const aiKinds = {
+  triage,
+  'release-notes': releaseNotes,
+};
 
 const time = () => new Date().toISOString();
 const bytes = value => new TextEncoder().encode(value).length;
@@ -54,6 +60,7 @@ export async function aiAPI(db, env, person, row, artifact, body) {
     if (run) return reply({ run: view(run) });
     const gate = await aiGate(db, env, kind, row.id);
     if (gate) throw new Fault('failed_precondition', 412, gate);
+    if (kind.admit) await kind.admit({ db, env, person, row, target: JSON.parse(target) });
     await reconcileAi(db);
     const day = await db.prepare('SELECT count(*) AS total FROM ai_runs WHERE created_at>=?').bind(time().slice(0, 10)).first();
     if (day.total >= aiDailyLimit(env)) throw new Fault('resource_exhausted', 429, "The installation's daily AI allocation is used.");
