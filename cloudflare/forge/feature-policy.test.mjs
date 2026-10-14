@@ -111,6 +111,12 @@ test('policy changes are version-fenced, widening needs the feature typed back, 
   assert.equal(enforced.policy.mode, 'FEATURE_POLICY_MODE_ENFORCED');
   const read = await f.signed('FeaturePolicyService/GetFeaturePolicy', { scope: 'FEATURE_POLICY_SCOPE_INSTALLATION' });
   assert.equal(read.lastChangedBy, 'alice'); assert.equal(read.revision, '3');
+  // The deploy-time lock stops every change while saved policies stay in force.
+  f.env.INSTALLATION_POLICY_EDITING = 'false';
+  assert.equal((await f.signed('FeaturePolicyService/GetFeaturePolicy', { scope: 'FEATURE_POLICY_SCOPE_INSTALLATION' })).canEdit, false);
+  const locked = await f.set('packages', 'ALLOWED');
+  assert.equal(locked.status, 412); assert.match(locked.message, /locked at deploy/);
+  assert.equal((await f.features()).packages.required, true);
 });
 
 test('capabilities and the repository feature read reflect the installation policy and name the level', async t => {

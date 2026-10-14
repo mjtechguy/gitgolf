@@ -8,7 +8,7 @@ import { webhookPolicy } from './webhooks.mjs';
 import { emailPolicy } from './email.mjs';
 import { executionValueState } from './execution-values.mjs';
 import { operationsAdmin } from './operations.mjs';
-import { auditStatement, clientHeaders } from './installation.mjs';
+import { auditStatement, clientHeaders, locked } from './installation.mjs';
 import { settingsAuthority } from './repository-settings.mjs';
 
 // GitHub-style features: operator allocation ∩ installation ∩ organization ∩ repository choice ∩ dependencies.
@@ -221,7 +221,7 @@ async function installationPolicy(db, env) {
       label: feature.label, group: feature.group, allocated: allocated === true, unavailableReason: allocated === true ? '' : allocated, requires: feature.requires,
       repositoriesOn: on, repositoriesTotal: repositories.length, repositoryChoice: feature.choice };
   });
-  return { scope: 'FEATURE_POLICY_SCOPE_INSTALLATION', scopeId: '', policies, revision: String(revision?.revision || 0), canEdit: true, lastChangedAt: latest?.updated_at || '', lastChangedBy: latest?.login || '' };
+  return { scope: 'FEATURE_POLICY_SCOPE_INSTALLATION', scopeId: '', policies, revision: String(revision?.revision || 0), canEdit: !locked(env), lastChangedAt: latest?.updated_at || '', lastChangedBy: latest?.login || '' };
 }
 export async function featurePolicyService(db, env, person, request, method, body) {
   if (!featurePolicyMethods.has(method)) unsupported();
@@ -230,6 +230,8 @@ export async function featurePolicyService(db, env, person, request, method, bod
   // Only an operations administrator under a verified human Access sign-in reads or changes the installation policy; bearer and service tokens never do.
   if (!await operationsAdmin(db, person, request)) throw new Fault('permission_denied', 403, 'Current workspace operations administrator sign-in required.');
   if (method === 'GetFeaturePolicy') return installationPolicy(db, env);
+  // The deploy-time lock (policy_editing: false) stops changes; policies already saved stay in force, so locking never turns a feature back on.
+  if (locked(env)) throw new Fault('failed_precondition', 412, 'Feature policies are locked at deploy (policy_editing: false). Saved policies stay in force; every change needs a deploy.');
   const feature = known.get(body.feature), mode = modes[named(body.mode, 'FEATURE_POLICY_MODE_', modes)];
   if (Object.keys(body).some(key => !['scope', 'organization', 'feature', 'mode', 'expectedVersion', 'confirmation', 'operationId'].includes(key)) || !feature || !rank.hasOwnProperty(mode) ||
       typeof body.expectedVersion !== 'string' || !/^(0|[1-9][0-9]{0,15})$/.test(body.expectedVersion) || !uuidOK(body.operationId) || body.confirmation !== undefined && typeof body.confirmation !== 'string')

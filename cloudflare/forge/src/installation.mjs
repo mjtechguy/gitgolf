@@ -169,7 +169,7 @@ export const installationPolicies = {
     overlay: value => ({ EVIDENCE_DAILY_LIMIT: String(value.dailyLimit) }),
     effect: { queued: 'Runs already admitted continue.', inFlight: 'Running jobs are not stopped.', new: 'The next admission counts against the new limit, including automatic push tests and previews.' } },
 };
-const locked = env => env.INSTALLATION_POLICY_EDITING === 'false';
+export const locked = env => env.INSTALLATION_POLICY_EDITING === 'false';
 // Before schema 30 there are no rows, so every deploy value applies.
 export async function installationSettings(db) {
   try { return new Map((await db.prepare('SELECT s.key,s.value,s.version,s.updated_at,u.login AS updated_by FROM installation_settings s LEFT JOIN users u ON u.id=s.updated_by').all()).results.map(row => [row.key, row])); }

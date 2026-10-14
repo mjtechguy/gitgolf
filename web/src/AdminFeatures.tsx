@@ -72,7 +72,7 @@ export function AdminFeatures({ userId, signingOut }: { userId: string; signingO
     finally { setPending(false); await query.refetch(); }
   }
   return <div className="page-stack">
-    <div className="settings-toolbar"><p className="field-help">Organization policies are not available yet: this installation policy and each repository’s own choice decide.</p><button type="button" className="button secondary policy-refresh" disabled={query.isFetching || pending} onClick={() => void query.refetch()}><RefreshCw size={15} aria-hidden="true" />Refresh</button></div>
+    <div className="settings-toolbar"><p className="field-help">{query.data && !query.data.canEdit ? 'Feature policies are locked at deploy (policy_editing: false): the saved policies below stay in force and every change needs a deploy.' : 'Organization policies are not available yet: this installation policy and each repository’s own choice decide.'}</p><button type="button" className="button secondary policy-refresh" disabled={query.isFetching || pending} onClick={() => void query.refetch()}><RefreshCw size={15} aria-hidden="true" />Refresh</button></div>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !query.data ? <Loading label="Reading feature policies…" /> : <>
       <SummaryBand label="Feature policy summary" items={[
         ['On everywhere', allocated.filter(policy => policy.mode === Mode.ENFORCED).length, 'Required for every repository'],
