@@ -7,6 +7,10 @@ verified. The Workers AI features already underway (review drafts, triage, relea
 notes, search, model selection) are covered in `docs/NATIVE_ADMIN_AND_AI_ROADMAP.md`.
 They become the "Cloudflare model" engine described below.
 
+Order changed on 2026-10-14: after phase 1a, the agentic mode track in
+[`AGENTIC_MODE_PLAN.md`](AGENTIC_MODE_PLAN.md) runs before phase 1b and phase 2,
+which build on its Source API, API tokens and landing path.
+
 The owner's goal is full flexibility. Golf ships many ready-made tools: code review
 in the style of Greptile, issue triage, and loops that look for improvements and
 open pull requests. Each tool can be pointed at any target and run on any engine,
