@@ -82,7 +82,7 @@ function gitAuth(cfg, repo) {
   return cfg.apiToken ? 'Bearer ' + cfg.apiToken : '';
 }
 const gitHeaders = (cfg, repo) => ({ ...accessHeaders(cfg), Authorization: gitAuth(cfg, repo) });
-const apiHeaders = cfg => ({ ...accessHeaders(cfg), ...(cfg.apiToken ? { Authorization: 'Bearer ' + cfg.apiToken } : {}), 'Content-Type': 'application/json' });
+const apiHeaders = cfg => ({ ...accessHeaders(cfg), ...(cfg.apiToken ? { Authorization: 'Bearer ' + cfg.apiToken } : {}), 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' });
 const gitUrl = (cfg, repo) => `${cfg.origin}/git/${repo}.git`;
 
 // Git reads its config from env so headers stay out of argv. User/system config and inherited
