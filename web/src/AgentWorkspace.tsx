@@ -10,9 +10,26 @@ import { currentPullPreviews } from './nativePreviews';
 import { jobMatchesPull, pullStage } from './agentWorkspace';
 import { repositoryOptions, type RepositoryLocation } from './navigation';
 import { NativeAgentTasks } from './NativeAgentTasks';
+import { AgentInbox } from './AgentInbox';
+import { agenticKey, readAgentic } from './agenticMode';
+import { useRuntimeCapabilities } from './useRuntimeCapabilities';
+import { settingAvailable } from './runtimeCapabilities';
 
 type Props = { location: RepositoryLocation; repositoryId: string; userId: string };
-export function AgentWorkspace({ location, repositoryId, userId }: Props) {
+// While agentic mode is on for the repository, /:owner/:repo/agents is the agentic inbox (docs/AGENTIC_MODE.md); otherwise, before
+// schema 43 or for one pull request (/agents/:number), the workspace view below.
+export function AgentWorkspace(props: Props) {
+  const { location, repositoryId, userId } = props;
+  const runtime = useRuntimeCapabilities();
+  const inboxReady = settingAvailable(runtime.isError ? undefined : runtime.data, 'repository.agent-inbox') && location.pull === undefined;
+  const context = { repository: { owner: location.owner, name: location.name }, repositoryId };
+  const agentic = useQuery({ ...privateQuery, queryKey: agenticKey(userId, location.owner, location.name), enabled: inboxReady, retry: false, queryFn: ({ signal }) => readAgentic(context, signal) });
+  if (inboxReady && agentic.isPending) return <Loading label="Reading agentic mode…"/>;
+  if (inboxReady && agentic.data?.settings.enabled && agentic.data.feature.allowed)
+    return <AgentInbox location={location} context={context} userId={userId} canLand={settingAvailable(runtime.data, 'repository.agentic-landing')}/>;
+  return <AgentWorkspaceView {...props}/>;
+}
+function AgentWorkspaceView({ location, repositoryId, userId }: Props) {
   const [detailError,setDetailError]=useState<Error>();
   const cache = useQueryClient(), visible = usePageVisible(), live = useLiveStatus() === 'live';
   const scope = ['repository',userId,location.owner,location.name,'agent-workspace'];

@@ -4,6 +4,7 @@ import { featureOff } from './feature-policy.mjs';
 import { reviewDraft } from './ai-review.mjs';
 import { triage } from './ai-triage.mjs';
 import { releaseNotes } from './ai-release-notes.mjs';
+import { intentSummary } from './ai-intent.mjs';
 import { aiModel, aiModelStillAllowed } from './ai-models.mjs';
 
 // One entry per kind; each AI track adds one line here. A kind is
@@ -11,11 +12,13 @@ import { aiModel, aiModelStillAllowed } from './ai-models.mjs';
 //   prepare({ db, env, person, row, artifact, target }) → JSON input (in the workspace write queue: authority and exact bounded input only),
 //   infer({ env, input, model, run }) → JSON output (in the Workflow; `run(input, options)` makes the one gateway call),
 //   stale?({ db, env, person, row, artifact, target, input }) → boolean on status reads,
-//   admit?({ db, env, person, row, target }) → throws a Fault to refuse at admission (a short D1 check; prepare checks again) }.
+//   admit?({ db, env, person, row, target }) → throws a Fault to refuse at admission (a short D1 check; prepare checks again),
+//   settled?({ db, env, run }) → in the workspace, once a run has SUCCEEDED (again on a settle retry): store the output elsewhere, idempotently }.
 export const aiKinds = {
   triage,
   'release-notes': releaseNotes,
   'review-draft': reviewDraft,
+  'intent-summary': intentSummary,
 };
 
 const time = () => new Date().toISOString();
@@ -52,38 +55,41 @@ export async function reconcileAi(db) {
   return { expired: refused.meta.changes + unknown.meta.changes, purged: purged.meta.changes };
 }
 
+// Admits one run of a kind for the caller (also used by /native/agent-inbox summarize) and returns its view. Faults refuse it.
+export async function createAiRun(db, env, person, row, body) {
+  const kind = Object.hasOwn(aiKinds, body.kind) ? aiKinds[body.kind] : null;
+  if (!kind) invalid('Use an offered AI kind.');
+  if (!kind.roles.includes(row.role)) deny();
+  if (!uuidOK(body.idempotencyKey)) invalid('Use a UUID v4 operation key.');
+  const target = JSON.stringify(kind.target(body.target, row)), hash = await digest(JSON.stringify([body.kind, target]));
+  if (bytes(target) > 4096) invalid('The AI target exceeds its limit.');
+  let run = await db.prepare('SELECT * FROM ai_runs WHERE user_id=? AND operation_key=?').bind(person.id, body.idempotencyKey).first();
+  if (run && (run.repository_id !== row.id || run.input_hash !== hash)) throw new Fault('already_exists', 409, 'Operation key belongs to different inputs.');
+  if (run) return view(run);
+  const gate = await aiGate(db, env, kind, row.id);
+  if (gate) throw new Fault('failed_precondition', 412, gate);
+  if (kind.admit) await kind.admit({ db, env, person, row, target: JSON.parse(target) });
+  await reconcileAi(db);
+  const day = await db.prepare('SELECT count(*) AS total FROM ai_runs WHERE created_at>=?').bind(time().slice(0, 10)).first();
+  if (day.total >= aiDailyLimit(env)) throw new Fault('resource_exhausted', 429, "The installation's daily AI allocation is used.");
+  const hour = await db.prepare('SELECT count(*) AS total FROM ai_runs WHERE user_id=? AND created_at>=?').bind(person.id, new Date(Date.now() - 3600_000).toISOString()).first();
+  if (hour.total >= aiLimits.hourlyPerUser) throw new Fault('resource_exhausted', 429, `You can start ${aiLimits.hourlyPerUser} AI runs an hour.`);
+  const model = kind.use ? (await aiModel(db, env, kind.use, row.id)).model : kind.model;
+  run = await db.prepare(`INSERT INTO ai_runs(id,kind,repository_id,user_id,operation_key,input_hash,target,model,state,created_at,updated_at,expires_at)
+    VALUES(?,?,?,?,?,?,?,?,'REQUESTED',?,?,?) RETURNING *`).bind(crypto.randomUUID(), body.kind, row.id, person.id, body.idempotencyKey, hash, target, model,
+    time(), time(), new Date(Date.now() + aiLimits.runMinutes * 60_000).toISOString()).first();
+  try { await env.AiWorkflow.create({ id: run.id, params: { runId: run.id } }); }
+  catch {
+    // A lost create response is reconciled by exact instance ID, never restarted. Prepare refuses any run that is no longer REQUESTED.
+    try { await (await env.AiWorkflow.get(run.id)).status(); }
+    catch { run = await db.prepare("UPDATE ai_runs SET state='REFUSED',refusal=?,updated_at=? WHERE id=? AND state='REQUESTED' RETURNING *").bind(refusals.start, time(), run.id).first() || run; }
+  }
+  return view(run);
+}
+
 // `/native/ai` (create) and `/native/ai/read` (status, list). A run belongs to the person who asked for it.
 export async function aiAPI(db, env, person, row, artifact, body) {
-  if (body.action === 'create') {
-    const kind = Object.hasOwn(aiKinds, body.kind) ? aiKinds[body.kind] : null;
-    if (!kind) invalid('Use an offered AI kind.');
-    if (!kind.roles.includes(row.role)) deny();
-    if (!uuidOK(body.idempotencyKey)) invalid('Use a UUID v4 operation key.');
-    const target = JSON.stringify(kind.target(body.target, row)), hash = await digest(JSON.stringify([body.kind, target]));
-    if (bytes(target) > 4096) invalid('The AI target exceeds its limit.');
-    let run = await db.prepare('SELECT * FROM ai_runs WHERE user_id=? AND operation_key=?').bind(person.id, body.idempotencyKey).first();
-    if (run && (run.repository_id !== row.id || run.input_hash !== hash)) throw new Fault('already_exists', 409, 'Operation key belongs to different inputs.');
-    if (run) return reply({ run: view(run) });
-    const gate = await aiGate(db, env, kind, row.id);
-    if (gate) throw new Fault('failed_precondition', 412, gate);
-    if (kind.admit) await kind.admit({ db, env, person, row, target: JSON.parse(target) });
-    await reconcileAi(db);
-    const day = await db.prepare('SELECT count(*) AS total FROM ai_runs WHERE created_at>=?').bind(time().slice(0, 10)).first();
-    if (day.total >= aiDailyLimit(env)) throw new Fault('resource_exhausted', 429, "The installation's daily AI allocation is used.");
-    const hour = await db.prepare('SELECT count(*) AS total FROM ai_runs WHERE user_id=? AND created_at>=?').bind(person.id, new Date(Date.now() - 3600_000).toISOString()).first();
-    if (hour.total >= aiLimits.hourlyPerUser) throw new Fault('resource_exhausted', 429, `You can start ${aiLimits.hourlyPerUser} AI runs an hour.`);
-    const model = kind.use ? (await aiModel(db, env, kind.use, row.id)).model : kind.model;
-    run = await db.prepare(`INSERT INTO ai_runs(id,kind,repository_id,user_id,operation_key,input_hash,target,model,state,created_at,updated_at,expires_at)
-      VALUES(?,?,?,?,?,?,?,?,'REQUESTED',?,?,?) RETURNING *`).bind(crypto.randomUUID(), body.kind, row.id, person.id, body.idempotencyKey, hash, target, model,
-      time(), time(), new Date(Date.now() + aiLimits.runMinutes * 60_000).toISOString()).first();
-    try { await env.AiWorkflow.create({ id: run.id, params: { runId: run.id } }); }
-    catch {
-      // A lost create response is reconciled by exact instance ID, never restarted. Prepare refuses any run that is no longer REQUESTED.
-      try { await (await env.AiWorkflow.get(run.id)).status(); }
-      catch { run = await db.prepare("UPDATE ai_runs SET state='REFUSED',refusal=?,updated_at=? WHERE id=? AND state='REQUESTED' RETURNING *").bind(refusals.start, time(), run.id).first() || run; }
-    }
-    return reply({ run: view(run) });
-  }
+  if (body.action === 'create') return reply({ run: await createAiRun(db, env, person, row, body) });
   if (body.action === 'list') {
     if (body.kind !== undefined && !Object.hasOwn(aiKinds, body.kind) || body.target !== undefined && body.kind === undefined) invalid('Filter by an offered AI kind, and by a target only within a kind.');
     const kind = body.kind ?? null, target = body.target === undefined ? null : JSON.stringify(aiKinds[kind].target(body.target, row));
@@ -125,14 +131,21 @@ export async function aiStep(db, env, run, context, phase, result) {
     return { id: run.id, state: (await db.prepare('SELECT state FROM ai_runs WHERE id=?').bind(run.id).first()).state };
   }
   if (phase !== 'settle') throw Error('Invalid AI phase');
+  // A kind that stores its output elsewhere does so once the run has succeeded; a settle retry repeats it idempotently.
+  const settled = async () => {
+    const kind = Object.hasOwn(aiKinds, run.kind) ? aiKinds[run.kind] : null, done = await db.prepare('SELECT * FROM ai_runs WHERE id=?').bind(run.id).first();
+    if (kind?.settled && done?.state === 'SUCCEEDED' && done.output !== null) await kind.settled({ db, env, run: done });
+    return { id: run.id, state: done.state };
+  };
   // A reservation never claimed by inference was never billed; once claimed, only a stored answer settles as success.
   const reason = result?.state === 'REFUSED' && typeof result.refusal === 'string' && result.refusal.endsWith('nothing was billed.') ? result.refusal.slice(0, 400) : '';
   if (run.state === 'REQUESTED') return refuse(reason || refusals.start);
+  if (run.state === 'SUCCEEDED') return settled();
   if (run.state !== 'RESERVED') return { id: run.id, state: run.state };
   if (!run.infer_started_at) return refuse(reason || refusals.unclaimed, 'RESERVED');
   const state = result?.state === 'INFERRED' && run.output !== null ? 'SUCCEEDED' : 'UNKNOWN';
   await db.prepare(`UPDATE ai_runs SET state=?,output=CASE WHEN ?='SUCCEEDED' THEN output ELSE NULL END,updated_at=? WHERE id=? AND state='RESERVED'`).bind(state, state, time(), run.id).run();
-  return { id: run.id, state: (await db.prepare('SELECT state FROM ai_runs WHERE id=?').bind(run.id).first()).state };
+  return settled();
 }
 
 // Workflow step, outside the workspace: one claimed gateway call, its answer stored only while the reservation stands.

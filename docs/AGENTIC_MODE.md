@@ -467,8 +467,126 @@ Then:
   sensitive change waiting, a failing change reverted on the hosted demo) are still
   open.
 
+## Inbox and intent summaries
+
+AM-5 of `docs/AGENTIC_MODE_PLAN.md`, first slice. Schema 43 adds `pull_intent_summaries`
+(migration `0043_intent_summaries.sql`). Capability `repository.agent-inbox` is READY at
+schema ≥ 43; its reason says whether intent summaries can run (Workers AI allocated).
+
+### The inbox (`agent-inbox.mjs`)
+
+`POST /native/agent-inbox/read` with `{ action: 'inbox', limit? }` (any reader; reads overlap)
+returns, for the repository:
+
+```text
+{ repositoryId, enabled, feature, generatedAt, limit,
+  inProgress: [{ id, state, tool, model, host, requestedBy, target: { kind, number, title }, branch, createdAt, startedAt }],
+  readyToLand: [Item], needsPerson: [Item],
+  landed: [{ id, pullRequestId, number, title, trigger, actor, state, method, headCommitId, landedCommitId, revertCommitId, createdAt, updatedAt }],
+  landingHistory: 'available' | 'unavailable',
+  pulls: { state: 'evaluated' | 'agentic_mode_off' | 'pull_requests_off', reason, open, evaluated, evaluateLimit: 25 },
+  truncated: { inProgress, pulls, landed }, summaries: { available, reason } }
+Item = { number, title, author, pullRequestId, origin, headCommitId, baseCommitId, decision, risk, reasons, sensitivePaths,
+  conflicts: [{ path, reason }], mergeable, changedPathCount, checks: { passed, pending, failed }, intent: Summary | null,
+  landing: { state, updatedAt } | null }
+```
+
+- `limit` (1–100, default 50) bounds the rows of **In progress** and **Landed**.
+- **In progress:** this repository's agent tasks in `QUEUED`, `CLAIMED` or `RUNNING`, newest first.
+- **Open pull requests** are evaluated only while agentic mode is on (setting and policy)
+  and pull requests are on. At most `min(limit, 25)` are evaluated per read, newest
+  (highest number) first, with the same `evaluate` as `/native/agentic-mode/read`, under
+  one artifact handle. `pulls.open` counts every open pull request and
+  `truncated.pulls` says when older ones were not evaluated.
+  - **Ready to land:** decision `land` or `waiting_checks`.
+  - **Needs a person:** `needs_person` or `blocked` with their reasons, the matched
+    sensitive paths and the merge conflicts. A pull request whose evaluation is
+    refused (for example a deleted branch) is listed with decision `unavailable` and
+    the refusal as its reason.
+- **Landed:** recent `LANDED` and `REVERTED` rows of `land_operations`, the land
+  queue's table (AM-4 item 4, another migration). The inbox reads it only when
+  `PRAGMA table_info(land_operations)` shows the columns it selects. Otherwise
+  `landed` is empty and `landingHistory` is `unavailable`. With the table, each open
+  item also carries its latest land operation's state.
+- An intent summary is attached only when one is stored for the item's current head.
+
+### Intent summaries (`ai-intent.mjs`)
+
+An intent summary is a Workers AI run of kind `intent-summary` through the existing
+AI runs (`ai-workflow.mjs`): the same admission, daily and per-person limits, private
+gateway, model check before inference, and usage recorded on the run (it shows in AI
+usage as "Intent summaries"). It runs under the **AI review drafts** feature and the
+model chosen for the `review-drafts` use ("Summaries and review drafts").
+
+- **Input:** the current base and head of an open pull request. Whole files of its diff,
+  in diff order, up to 48 KiB of annotated text; the other files are named as not
+  read. The title and the first 4 KiB of the description. No review comments. All of
+  it is marked as untrusted data. When no changed text file fits in 48 KiB, the run is
+  refused at prepare ("nothing was billed").
+- **Output:** strict JSON with exactly `intent` (≤ 600 characters), `areas` (≤ 8, each
+  ≤ 80), `risks` (≤ 8, each ≤ 300) and `confidence` (`high`, `medium` or `low`). Plain
+  text without control characters. Anything else fails validation whole: the run ends
+  `UNKNOWN` and nothing is stored.
+- **Storage:** when the run settles `SUCCEEDED`, the workspace inserts one row per
+  `(pull_request_id, head_commit_id)` with the model id. A row is never replaced: a
+  head that has one is refused at admission, and a new head commit gets its own row.
+  `summary` holds `{ intent, areas, risks, confidence, coverage, runId }`. Reads
+  return it with `aiWritten: true`.
+
+Routes (signed-in browser sessions only, like agentic mode; other callers get 403, an
+API token 401; outsiders 404):
+- `POST /native/agent-inbox/read` `{ action: 'summary', number }` (any reader) returns
+  `{ number, pullRequestId, baseCommitId, headCommitId, summary | null, run, inFlight,
+  summaries }` for the current head; `run` is the caller's own latest run for that head.
+- `POST /native/agent-inbox` `{ action: 'summarize', number, idempotencyKey }` (write or
+  admin; 403 otherwise) returns the same pull request fields with `state`:
+  - `STORED` with the summary when the head already has one (no AI call);
+  - `RUNNING` when a run for this head is already in flight, or the new run was admitted;
+  - `REFUSED` when the run was refused at admission.
+
+  Without Workers AI, or with AI review drafts turned off by a policy, it is refused
+  with 412 and the reason; nothing is admitted. Closed pull requests and deleted
+  branches are refused with 412.
+
+A successful `summarize` is audited like other AI requests, as `ai.run_request` with
+subject `intent-summary`. Inbox and summary reads are not recorded.
+
+### UI
+
+`/:owner/:repo/agents` is the inbox while the capability is ready and agentic mode is on
+for the repository. Otherwise it stays the Agent workspace view, as does
+`/agents/:number`.
+- Counts for the four sections, and how many open pull requests were evaluated.
+- **In progress**, **Ready to land**, **Needs a person** and **Landed**, each in the
+  shared DataTable. Search and sort cover the loaded rows. Pull requests link to their
+  pages.
+- **Summarize intent** (writers, when summaries are available) and **Show intent** open
+  an advisory panel marked **AI-written**, with the model, what it read and the head
+  commit. The panel links to the diff; it never replaces it. Readers see why they
+  cannot ask.
+- Live updates use the repository activity stream (topics `source`, `pulls`, `actions`,
+  `agents`). Without a live connection the inbox is read again every 30 seconds while
+  the page is visible.
+- **Land selected** and the selection boxes on rows that may land appear only while the
+  Worker reports capability `repository.agentic-landing` ready. The action sends one
+  `POST /native/land { action: 'land', number, headCommitId, idempotencyKey }` per
+  selected pull request and shows each answer. Without that capability the inbox says
+  that Golf does not land pull requests from it.
+
+### Limits of this slice
+
+- No revert action in **Landed**, and no batch approval: approvals stay on each pull
+  request.
+- The batch land request shape follows the land queue's route, which this slice does not
+  own. It must be checked against AM-4 item 4 when that lands.
+- Agent branches are not hidden from the branch list yet (AM-5 item 3).
+- The browser spec covers the default layout, not all nine layouts, and there is no hosted
+  walkthrough yet.
+
 ## Not yet implemented
 
-- The agentic inbox and batch approval (AM-5).
+- Batch approval, a revert action in the inbox and hiding agent branches (AM-5).
+- Policy landings that squash; queuing a pull request that is still waiting for checks.
+- A dedicated service account for comments and issues Golf writes (they use the admin who saved the setting).
 - Organization-level agentic policies beyond on/off.
 - Line-level merges (AM-6).

@@ -1,5 +1,66 @@
 # Golf implementation status
 
+## 2026-10-14 — Agentic inbox and intent summaries (agentic mode AM-5, first slice, schema 43)
+
+See `docs/AGENTIC_MODE.md`, "Inbox and intent summaries". This adds:
+- `agent-inbox.mjs`: `POST /native/agent-inbox/read` (`inbox`, `summary`; reads overlap)
+  and `/native/agent-inbox` (`summarize`), for signed-in browser sessions only.
+  Capability `repository.agent-inbox`. The inbox lists:
+  - agent tasks queued, claimed or running;
+  - open pull requests ready to land (`land`, `waiting_checks`);
+  - open pull requests that need a person (`needs_person`, `blocked`, or not evaluable),
+    with reasons, sensitive paths and conflicts;
+  - recent landings and reverts from `land_operations`, read only when that table
+    exists (AM-4 item 4). Otherwise it reports `landingHistory: 'unavailable'`.
+
+  It evaluates at most 25 open pull requests per read, newest first, with the existing
+  agentic-mode `evaluate` (now exported), and says when it stopped early.
+- Intent summaries (`ai-intent.mjs`, migration `0043_intent_summaries.sql`,
+  `pull_intent_summaries`): an AI run kind `intent-summary` through the existing AI
+  runs. That means the same limits, gateway, model selection (`review-drafts`), feature
+  (AI review drafts) and usage recording. The input is at most 48 KiB of whole diff
+  files, and the rest are named. The output is strict JSON with `intent`, `areas`,
+  `risks` and `confidence`. The summary is stored once per head commit with the model
+  id, when the run settles, through a new optional `settled` hook of AI kinds. It is
+  regenerated only for a new head. A summary request without Workers AI or with the
+  feature off is refused with the reason. Requests are audited as `ai.run_request`.
+- `ai-review.mjs` exports its bounded diff preparation (`preparePullDiff`, `pullTarget`);
+  `ai-workflow.mjs` exports `createAiRun`.
+- Web: `/:owner/:repo/agents` is the inbox while agentic mode is on. It has four
+  sections in the shared DataTable, live updates from the repository activity stream,
+  and **Summarize intent** / **Show intent** in a panel marked AI-written that links to
+  the diff. **Land selected** appears only when the Worker reports
+  `repository.agentic-landing`. Otherwise the existing Agent workspace view stays.
+
+Verified locally:
+- `node --test cloudflare/forge/*.test.mjs`: 628 tests, 627 pass, 1 skipped. Before
+  this change: 621, 620, 1 skipped. The 7 new tests are in `agent-inbox.test.mjs`:
+  - sections;
+  - bounds and the truncation flag;
+  - browser-only access and permission refusals;
+  - the land table absent, then present;
+  - summaries stored once per head and regenerated for a new head, with the 48 KiB
+    input bound;
+  - invalid model answers;
+  - AI unavailable or turned off by a policy.
+- Runtime checks with the schema 43 assertion pass: `ai-runtime-check`,
+  `search-runtime-check`, `environments-check`, `agent-hosts-runtime-check` and
+  `ui-check`. `ui-check` needs `web/dist-native`, built with
+  `vite build --config vite.native.config.ts`.
+- `npx tsc --noEmit -p web` is clean.
+- Playwright `agent-inbox.spec.ts`: 6/6 pass. `native-agent-hosts.spec.ts`,
+  `agentic-mode.spec.ts` and `pull-ai-draft.spec.ts` pass.
+- `repository-routes.spec.ts` has 2 failures (workspace frame alignment and the runner
+  chooser). They fail the same way on this branch with the web sources of main.
+
+Not done:
+- No revert action and no batch approval in the inbox.
+- Agent branches are not hidden from the branch list (AM-5 item 3).
+- The browser spec covers the default layout only, not all nine. No hosted walkthrough.
+- The batch land request (`/native/land` `{ action: 'land', number, headCommitId,
+  idempotencyKey }`) must be checked against the land queue's contract when AM-4 item 4
+  lands. It is hidden until the Worker reports `repository.agentic-landing`.
+
 ## 2026-10-14 — Landing without a global lock and automatic revert (agentic mode AM-4 items 4 and 5, schema 42)
 
 See `docs/AGENTIC_MODE.md` → Landing. This adds:
