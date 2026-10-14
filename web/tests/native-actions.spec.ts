@@ -34,6 +34,10 @@ async function backend(page: Page) {
     }
     if (body.action === 'jobLog') return route.fulfill({ json: { jobId: body.jobId, state: 'RUNNING', text: body.fromLine ? '' : log.join('\n') + '\n', nextLine: 9, totalLines: 9, complete: false } });
     if (body.action === 'dispatch') return route.fulfill({ json: { runId: '8', number: 8 } });
+    if (body.action === 'environments') return route.fulfill({ json: { canEdit: true, environments: [
+      { id: '1', name: 'production', url: 'https://demo.example', branches: ['main'], preventSelfReview: true, reviewers: [{ id: '2', login: 'reviewer' }], version: 1, updatedAt: at(60),
+        deployments: [{ id: '5', runId: '2', jobId: '21', action: 'start', commitId: 'c'.repeat(40), ref: 'refs/heads/main', url: 'https://demo.example', state: 'SUCCESS', actor: 'alex', createdAt: at(20) }] },
+      { id: '2', name: 'staging', url: '', branches: [], preventSelfReview: true, reviewers: [], version: 1, updatedAt: at(90), deployments: [] }] } });
     return route.fulfill({ json: { ok: true } });
   });
   await page.route('**/native/pipeline-runners', async route => {
@@ -85,6 +89,22 @@ test('workflow dispatch uses the declared inputs and a deployment waits for a re
   await expect.poll(() => calls.find(c => c.action === 'approve')).toMatchObject({ jobId: '42', approve: true, comment: 'Looks good' });
 });
 
+test('deployment environments list protection and history, with explicit New and Edit forms', async ({ page }) => {
+  const { calls } = await backend(page);
+  await page.goto('/alex/demo/actions');
+  await page.getByRole('navigation', { name: 'Workflows' }).getByRole('button', { name: 'Environments' }).click();
+  await expect(page.getByRole('table', { name: 'environments' })).toContainText('Required reviewers: reviewer');
+  await expect(page.getByRole('table', { name: 'deployments' })).toContainText('production');
+  await expect(page.getByRole('form', { name: 'New environment' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'New environment' }).click();
+  const form = page.getByRole('form', { name: 'New environment' });
+  await form.getByLabel('Name').fill('kind-production');
+  await form.getByLabel('Required reviewers').fill('reviewer');
+  await form.getByLabel('Deployment branches').fill('main');
+  await form.getByRole('button', { name: 'Save environment' }).click();
+  await expect.poll(() => calls.find(c => c.action === 'saveEnvironment')).toMatchObject({ name: 'kind-production', reviewers: ['reviewer'], branches: ['main'], preventSelfReview: true });
+});
+
 test('runner administration shows the inventory first and the exact register command after New runner', async ({ page }) => {
   const { calls } = await backend(page);
   await page.goto('/alex/demo/settings/runners');
@@ -98,10 +118,13 @@ test('runner administration shows the inventory first and the exact register com
 });
 
 const directory = process.env.GOLF_RUNNER_SHOTS;
+// Screenshots run while other local work loads the machine; waits are longer than the functional specs.
+const slow = expect.configure({ timeout: 20_000 });
 const looks = [['flare-dark', 'flare', 'console', 'dark', 1440, 900], ['classic-light', 'classic', 'primer', 'light', 1440, 900], ['golf-tiles', 'golf', 'tiles', 'dark', 1440, 900],
   ['flare-dark-390', 'flare', 'console', 'dark', 390, 844], ['classic-light-390', 'classic', 'primer', 'light', 390, 844], ['golf-tiles-390', 'golf', 'tiles', 'dark', 390, 844]] as const;
 for (const [look, appearance, layout, theme, width, height] of looks) test(`Actions screenshots in ${look}`, async ({ page }) => {
   test.skip(!directory, 'Set GOLF_RUNNER_SHOTS to write review screenshots.');
+  test.setTimeout(180_000);
   await mkdir(directory!, { recursive: true });
   await page.setViewportSize({ width, height });
   await page.addInitScript(([a, l, t]: [string, string, string]) => { localStorage.setItem('golf.appearance', a); localStorage.setItem('golf.layout.' + a, l); localStorage.setItem('golf.theme', t); }, [appearance, layout, theme] as [string, string, string]);
@@ -112,25 +135,29 @@ for (const [look, appearance, layout, theme, width, height] of looks) test(`Acti
     await page.screenshot({ path: `${directory}/${look}-${name}.png`, fullPage: true, animations: 'disabled' });
   };
   await page.goto('/alex/demo/actions');
-  await expect(page.getByRole('link', { name: 'Add services: postgres to the test job' })).toBeVisible();
+  await slow(page.getByRole('link', { name: 'Add services: postgres to the test job' })).toBeVisible();
   await shot('runs');
   await page.goto('/alex/demo/actions/runs/7');
-  await expect(page.getByRole('list', { name: 'Job graph' })).toBeVisible();
+  await slow(page.getByRole('list', { name: 'Job graph' })).toBeVisible();
   await shot('run-summary');
   await page.getByRole('navigation', { name: 'Jobs' }).getByRole('button', { name: /Node 22/ }).click();
-  await expect(page.getByRole('log', { name: 'Node 22 log' })).toContainText('✔ sum adds');
-  await page.getByRole('log', { name: 'Node 22 log' }).getByText('Run actions/setup-node@v4', { exact: true }).click();
+  await slow(page.getByRole('log', { name: 'Node 22 log' })).toContainText('✔ sum adds');
+  await page.getByRole('log', { name: 'Node 22 log' }).locator('summary').filter({ hasText: 'Run actions/setup-node@v4' }).click();
   await shot('job-log');
   await page.goto('/alex/demo/actions/runs/4');
-  await expect(page.getByRole('region', { name: 'Review deployment for deploy' })).toBeVisible();
+  await slow(page.getByRole('region', { name: 'Review deployment for deploy' })).toBeVisible();
   await shot('approval');
+  await page.goto('/alex/demo/actions');
+  await page.getByRole('navigation', { name: 'Workflows' }).getByRole('button', { name: 'Environments' }).click();
+  await slow(page.getByRole('table', { name: 'environments' })).toBeVisible();
+  await shot('environments');
   await page.goto('/alex/demo/settings/runners');
-  await expect(page.getByRole('table', { name: 'registered runners' })).toBeVisible();
+  await slow(page.getByRole('table', { name: 'registered runners' })).toBeVisible();
   await page.getByRole('button', { name: 'New runner' }).click();
   await page.getByRole('form', { name: 'New runner' }).getByRole('button', { name: 'Create registration token' }).click();
-  await expect(page.getByRole('region', { name: 'Register the runner' })).toBeVisible();
+  await slow(page.getByRole('region', { name: 'Register the runner' })).toBeVisible();
   await shot('repository-runners');
   await page.goto('/admin/settings/runners');
-  await expect(page.getByRole('table', { name: 'registered runners' })).toBeVisible();
+  await slow(page.getByRole('table', { name: 'registered runners' })).toBeVisible();
   await shot('admin-runners');
 });

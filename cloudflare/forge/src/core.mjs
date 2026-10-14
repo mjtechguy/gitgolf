@@ -19,7 +19,7 @@ import { operationsAdmin, operationsDashboard } from './operations.mjs';
 import { installationAPI, schemaVersion, installationOverlay, installationSettings, withInstallationPolicy } from './installation.mjs';
 import { nativeRunnerAdmin, nativeRunnerPlacement, nativeRunnerMachine } from './native-runners.mjs';
 import { gitLabRunner } from './gitlab-runner.mjs';
-import { pipelinePolicy } from './pipeline-policy.mjs';
+import { pipelinePolicy, pipelineCapabilities } from './pipeline-policy.mjs';
 import { pipelineAPI, pipelineRunnerAPI } from './pipeline-api.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
@@ -532,6 +532,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'ci.registry-publish', label: 'Job-scoped image publishing', state: env.REGISTRY && env.REGISTRY_CI_ENABLED === 'true' && testPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Operator-enabled OCI publishing from approved PR jobs. Job-only tags, current source/access checks and immutable digest receipts; general Docker build workflows remain separate.' },
       { id: 'repository.packages', label: 'OCI packages', state: env.REGISTRY && env.REGISTRY_ORIGIN ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.REGISTRY_PROVIDER === 'cloudflare' ? 'Cloudflare managed image storage; repository-scoped inventory and trusted CI publishing. Direct user credentials, scanning and registry policy are unavailable.' : 'Separate CFCR service; administrator enablement, current Git access and repository-scoped registry credentials.' },
       { id: 'repository.live', label: 'Live activity stream', state: env.watchRepository ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.watchRepository ? 'Authorized, resumable Connect streams; source snapshots stay pinned.' : 'No live stream coordinator is installed.' },
+      ...pipelineCapabilities(env),
       { id: 'settings.repository-rules', label: 'Rules and merge policy', state: 'CAPABILITY_STATE_READY', reason: 'Enforced branch locks and tag account restrictions on Golf-brokered Git writes, including administrators. Literal and trailing-prefix patterns; protected merge, review/check requirements and direct provider writes are not covered.' },
       { id: 'settings.repository-webhooks', label: 'Webhooks', state: webhookPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: webhookPolicy(env) ? 'Encrypted subscriptions, signed delivery and retries to operator-approved HTTPS origins; current sponsor authority, delivery history and daily attempt limits. Actions events cover native test jobs.' : 'Configure a dedicated Secrets Store encryption key and approved HTTPS webhook origins.' },
       await emailCapability(db, env),

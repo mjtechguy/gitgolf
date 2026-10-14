@@ -46,7 +46,7 @@ export function executionValueState(env) {
 export function executionValueCapability(env) {
   const state = executionValueState(env);
   return { id: 'settings.repository-secrets', label: 'Secrets and variables', state: state.ready ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED',
-    reason: state.reason || 'Encrypted repository secrets and plain variables, released as environment variables only to an administrator-approved exact commit of the approved workflow on Cloudflare-hosted pull-request jobs. Exact secret text is masked in stored output; transformed values are not detected. Jobs have no Internet access. Customer runners, agent jobs, environment scopes and secrets expressions do not receive values.' };
+    reason: state.reason || (pipelinePolicy(env) ? 'Encrypted repository secrets and variables for Actions workflows and pipelines: variables reach every run as vars; secrets reach only runs triggered from this repository (pushes, its own pull requests, dispatch), as secrets.NAME. Exact secret text of 4 or more characters is replaced by *** in stored logs; transformed values are not detected. Environment secrets live on each deployment environment.' : 'Encrypted repository secrets and plain variables, released as environment variables only to an administrator-approved exact commit of the approved workflow on Cloudflare-hosted pull-request jobs. Exact secret text is masked in stored output; transformed values are not detected. Jobs have no Internet access. Customer runners, agent jobs, environment scopes and secrets expressions do not receive values.') };
 }
 export function executionValueBindings(settings) {
   if (!settings.execution_values) return {};

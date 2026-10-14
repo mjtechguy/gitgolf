@@ -141,7 +141,7 @@ export async function discussionFeatures(db, person, row, service, method, body)
 }
 
 // Installation-wide decisions show in the capability list, so blocked pages and settings navigation name the level.
-const capabilityFeatures = { 'native-pr-tests': 'actions', 'native-ci-automatic': 'actions', 'settings.repository-execution-policy': 'actions', 'settings.repository-secrets': 'secrets',
+const capabilityFeatures = { 'native-pr-tests': 'actions', 'actions.pipelines': 'actions', 'actions.forgejo-runner': 'actions', 'actions.artifacts': 'actions', 'actions.environments': 'actions', 'settings.pipeline-runners': 'actions', 'native-ci-automatic': 'actions', 'settings.repository-execution-policy': 'actions', 'settings.repository-secrets': 'secrets',
   'native-pr-previews': 'previews', 'native-preview-browser': 'previews', 'native-pr-apps': 'previews', 'settings.repository-environments': 'previews', 'native-pr-agents': 'agents',
   'discussion.attachments': 'attachments', 'settings.repository-webhooks': 'webhooks', 'repository.email-notifications': 'email', 'repository.releases': 'releases',
   'repository.packages': 'packages', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues',

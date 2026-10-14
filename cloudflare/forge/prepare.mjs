@@ -38,6 +38,7 @@ const config = { name: settings.worker, compatibilityDate: '2026-10-08', workers
   exports: Object.fromEntries(['Workspace', 'RepositoryReads'].map(name => [name, mode === 'retire' ? { type: 'durable-object', state: 'deleted' } : { type: 'durable-object', storage: 'sqlite' }])) };
 if (settings.tests && mode === 'retire') config.exports.PRTestTask = { type: 'durable-object', state: 'deleted' };
 if (settings.agent_path && mode === 'retire') config.exports.PRAgentTask = { type: 'durable-object', state: 'deleted' };
+if (settings.pipelines && mode === 'retire') config.exports.PipelineRun = { type: 'durable-object', state: 'deleted' };
 if (mode === 'retire') {
   await esbuild.build({ stdin: { contents: "export default {fetch(){return new Response('retired',{status:410})}}" },
     outfile: resolve(bundle, 'worker.mjs'), bundle: true, format: 'esm' });
@@ -115,6 +116,25 @@ if (mode === 'retire') {
     config.exports.AgentOutbound = { type: 'worker' };
     await u.writeContainerConfig({ root, directoryName: 'pr-agents', config: { name: settings.worker + '-agents', schedulingPolicy: 'durable-object',
       observability: { enabled: false }, images: { agent: { localReference: settings.tests.image } } } });
+  }
+  // Actions/CI pipelines on stock Forgejo and GitLab runners (docs/NATIVE_ACTIONS_PIPELINES.md): logs and artifacts in R2,
+  // a coordinator Durable Object per run, optional intake Queue with a dead-letter queue.
+  if (settings.pipelines !== undefined) {
+    const p = settings.pipelines, name = value => typeof value === 'string' && /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(value);
+    if (!p || typeof p !== 'object' || Object.keys(p).some(key => !['bucket', 'queue', 'dead_letter', 'default_actions_url'].includes(key)) || !name(p.bucket) ||
+        p.queue !== undefined && !name(p.queue) || p.dead_letter !== undefined && (!p.queue || !name(p.dead_letter) || p.dead_letter === p.queue) ||
+        p.default_actions_url !== undefined && !/^https:\/\/[a-z0-9.-]+(?::\d+)?$/.test(p.default_actions_url)) throw Error('Invalid Actions pipeline allocation');
+    config.env.PIPELINE_BUCKET = { type: 'r2', name: p.bucket };
+    config.env.PIPELINES_ENABLED = { type: 'text', value: 'true' };
+    if (p.default_actions_url) config.env.ACTIONS_DEFAULT_URL = { type: 'text', value: p.default_actions_url };
+    config.exports.PipelineRun = { type: 'durable-object', storage: 'sqlite' };
+    if (p.queue) {
+      config.env.PIPELINE_QUEUE = { type: 'queue', name: p.queue };
+      config.env.PIPELINE_QUEUE_NAME = { type: 'text', value: p.queue };
+      config.triggers = [...(config.triggers || []), { type: 'queue', name: p.queue, maxBatchSize: 10, maxBatchTimeout: 2, maxConcurrency: 2, maxRetries: 5, ...(p.dead_letter ? { deadLetterQueue: p.dead_letter } : {}) }];
+    }
+    // The scheduled sweep retries lost intakes and advances runs whose coordinator alarm was lost.
+    if (!config.triggers?.some(trigger => trigger.type === 'scheduled')) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '*/5 * * * *' }];
   }
   if (settings.analytics_dataset !== undefined) {
     if (!settings.evidence || typeof settings.analytics_dataset !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(settings.analytics_dataset)) throw Error('Invalid evidence analytics dataset');

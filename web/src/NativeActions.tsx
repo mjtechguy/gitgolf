@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useForm } from '@tanstack/react-form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, CheckCircle2, ChevronRight, CircleDashed, CircleDot, Clock, Download, GitBranch, GitCommitHorizontal, Hand, LoaderCircle, MinusCircle, Play, RefreshCw, RotateCcw, ShieldCheck, Workflow, XCircle } from 'lucide-react';
+import { Ban, CheckCircle2, ChevronRight, CircleDashed, CircleDot, Clock, Download, GitBranch, GitCommitHorizontal, Hand, LoaderCircle, MinusCircle, Play, Plus, RefreshCw, Rocket, RotateCcw, ShieldCheck, Workflow, XCircle } from 'lucide-react';
 import { nativeAPI as api } from './nativeAPI';
 import { DateLabel, PageHeader, privateQuery, usePageVisible, Loading } from './RepositoryUI';
 import { DataTable, type DataTableColumn } from './DataTable';
@@ -42,7 +42,7 @@ export function NativeActions({ context, userId, runId, workflowPath, evidence }
 function NativeRunList({ context, userId, workflowPath, evidence }: { context: Context; userId: string; workflowPath?: string; evidence?: React.ReactNode }) {
   const live = useLiveStatus() === 'live', visible = usePageVisible();
   const [filters, setFilters] = useState({ event: '', status: '', branch: '', actor: '' });
-  const [page, setPage] = useState(1), [dispatching, setDispatching] = useState(false), [showEvidence, setShowEvidence] = useState(false);
+  const [page, setPage] = useState(1), [dispatching, setDispatching] = useState(false), [panel, setPanel] = useState<'runs' | 'evidence' | 'environments'>('runs');
   const runs = useQuery({ ...privateQuery, queryKey: ['native-pipelines', userId, context.repositoryId, 'runs', workflowPath || '', filters, page],
     queryFn: ({ signal }) => api<RunList>('/native/pipelines', { ...context, action: 'listRuns', ...(workflowPath ? { workflow: workflowPath } : {}), ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), page }, signal),
     refetchInterval: query => visible && (!live || query.state.data?.runs.some(run => active(run.state))) ? 5000 : false });
@@ -66,11 +66,12 @@ function NativeRunList({ context, userId, workflowPath, evidence }: { context: C
   const set = (key: keyof typeof filters, value: string) => { setPage(1); setFilters(current => ({ ...current, [key]: value })); };
   return <div className="page-stack repository-work-page"><div className="actions-workspace">
     <nav className="workflow-navigation-panel" aria-label="Workflows"><h2>Actions</h2><div className="workflow-navigation">
-      <Link className="workflow-nav-link" aria-current={!workflowPath && !showEvidence ? 'page' : undefined} {...repositoryOptions({ ...context.repository, view: 'actions', actionKind: undefined, workflowPath: undefined })} onClick={() => setShowEvidence(false)}><Workflow size={16} /><span>All workflows</span></Link>
-      {known.map(w => <Link key={w.path} className="workflow-nav-link" aria-current={workflowPath === w.path && !showEvidence ? 'page' : undefined} title={w.path} {...repositoryOptions({ ...context.repository, view: 'actions', actionKind: 'workflow', workflowPath: w.path })} onClick={() => setShowEvidence(false)}><Workflow size={16} /><span>{w.name}</span></Link>)}
-      {evidence ? <button type="button" className="workflow-nav-link" aria-current={showEvidence ? 'page' : undefined} onClick={() => setShowEvidence(true)}><ShieldCheck size={16} /><span>Pull request checks</span></button> : null}
+      <Link className="workflow-nav-link" aria-current={!workflowPath && panel === 'runs' ? 'page' : undefined} activeProps={{ 'aria-current': !workflowPath && panel === 'runs' ? 'page' : undefined }} {...repositoryOptions({ ...context.repository, view: 'actions', actionKind: undefined, workflowPath: undefined })} onClick={() => setPanel('runs')}><Workflow size={16} /><span>All workflows</span></Link>
+      {known.map(w => <Link key={w.path} className="workflow-nav-link" aria-current={workflowPath === w.path && panel === 'runs' ? 'page' : undefined} activeProps={{ 'aria-current': workflowPath === w.path && panel === 'runs' ? 'page' : undefined }} title={w.path} {...repositoryOptions({ ...context.repository, view: 'actions', actionKind: 'workflow', workflowPath: w.path })} onClick={() => setPanel('runs')}><Workflow size={16} /><span>{w.name}</span></Link>)}
+      <button type="button" className="workflow-nav-link" aria-current={panel === 'environments' ? 'page' : undefined} onClick={() => setPanel('environments')}><Rocket size={16} /><span>Environments</span></button>
+      {evidence ? <button type="button" className="workflow-nav-link" aria-current={panel === 'evidence' ? 'page' : undefined} onClick={() => setPanel('evidence')}><ShieldCheck size={16} /><span>Pull request checks</span></button> : null}
     </div>{workflows.data?.workflows.some(w => w.error) ? <p className="field-help">{workflows.data.workflows.filter(w => w.error).length} workflow file(s) on {workflows.data.branch} cannot run; open them to see why.</p> : null}</nav>
-    <div className="actions-main">{showEvidence ? evidence : <>
+    <div className="actions-main">{panel === 'evidence' ? evidence : panel === 'environments' ? <DeploymentEnvironments context={context} userId={userId} /> : <>
       <PageHeader title={selected?.name || 'All workflows'} description={selected ? selected.path : 'Workflow runs from pushes, pull requests and manual dispatch, run by your registered runners.'}
         actions={<div className="row-actions">{runs.data?.canWrite && definition?.dispatch && runs.data.enabled ? <button className="button primary" aria-expanded={dispatching} onClick={() => setDispatching(!dispatching)}><Play size={15} />Run workflow</button> : null}<button className="button secondary" aria-label="Refresh runs" disabled={runs.isFetching} onClick={() => { void runs.refetch(); void workflows.refetch(); }}><RefreshCw size={15} className={runs.isFetching ? 'spin' : ''} />Refresh</button></div>} />
       {definition?.error ? <p className="error" role="alert">This workflow file cannot run: {definition.error}</p> : null}
@@ -280,3 +281,75 @@ function LogLines({ lines, first }: { lines: string[]; first: number }) {
   return <ol className="pipeline-log-lines" start={first}>{lines.map((line, index) => <li key={index}><span className="pipeline-log-number" aria-hidden="true">{first + index}</span>{render(line)}</li>)}</ol>;
 }
 const failureText = (reason: string) => ({ timeout: 'Timed out', runner_lost: 'The runner stopped reporting', no_runner: 'No runner picked it up within 24 hours', environment_branch: 'This ref may not deploy to the environment', environment_rejected: 'Deployment rejected by a reviewer', actions_disabled: 'Actions were turned off', job_failed: 'Failed' } as Record<string, string>)[reason] || reason;
+
+type Environment = { id: string; name: string; url: string; branches: string[]; preventSelfReview: boolean; reviewers: { id: string; login: string }[]; version: number; updatedAt: string;
+  deployments: { id: string; runId: string; jobId: string; action: string; commitId: string; ref: string; url: string; state: string; actor: string; createdAt: string }[] };
+function DeploymentEnvironments({ context, userId }: { context: Context; userId: string }) {
+  const key = ['native-pipelines', userId, context.repositoryId, 'environments'];
+  const environments = useQuery({ ...privateQuery, queryKey: key, queryFn: ({ signal }) => api<{ canEdit: boolean; environments: Environment[] }>('/native/pipelines', { ...context, action: 'environments' }, signal) });
+  const [editing, setEditing] = useState<Environment | 'new'>(), [secretFor, setSecretFor] = useState<Environment>();
+  const deployments = (environments.data?.environments || []).flatMap(environment => environment.deployments.map(d => ({ ...d, environment: environment.name })));
+  return <div className="page-stack">
+    <PageHeader title="Environments" description="Deployment targets for jobs that name an environment. Required reviewers hold a deployment until one of them approves; environment secrets reach the job only after approval."
+      actions={environments.data?.canEdit ? <button className="button primary" onClick={() => { setSecretFor(undefined); setEditing('new'); }}><Plus size={15} />New environment</button> : undefined} />
+    {environments.isError ? <p className="error" role="alert">{message(environments.error)}</p> : null}
+    <section className="browser-panel"><div className="browser-panel-heading"><h3>Environments</h3></div>
+      {environments.data ? <DataTable data={environments.data.environments} getRowId={e => e.id} label="environments" emptyMessage="No environments yet. A job with environment: creates an unprotected one the first time it runs." columns={[
+        { accessorKey: 'name', header: 'Name', cell: ({ row }) => <strong>{row.original.name}</strong> },
+        { id: 'protection', header: 'Protection', accessorFn: e => e.reviewers.length ? `Reviewers: ${e.reviewers.map(r => r.login).join(', ')}` : 'No reviewers', cell: ({ row }) => row.original.reviewers.length ? <span>Required reviewers: {row.original.reviewers.map(r => r.login).join(', ')}{row.original.preventSelfReview ? ' · no self-review' : ''}</span> : <span className="field-help">Unprotected</span> },
+        { id: 'branches', header: 'Branches', accessorFn: e => e.branches.join(' ') || 'Any', cell: ({ row }) => row.original.branches.length ? <span className="pipeline-labels">{row.original.branches.map(b => <span key={b}>{b}</span>)}</span> : 'Any branch' },
+        { id: 'last', header: 'Latest deployment', accessorFn: e => e.deployments[0]?.createdAt || '', cell: ({ row }) => row.original.deployments[0] ? <span className="pipeline-when"><span><StateIcon state={row.original.deployments[0].state} /> <DateLabel value={row.original.deployments[0].createdAt} relative /></span></span> : 'Never' },
+        ...(environments.data.canEdit ? [{ id: 'edit', header: 'Actions', enableSorting: false, cell: ({ row }: { row: { original: Environment } }) => <div className="row-actions"><button className="button secondary" aria-label={`Edit ${row.original.name}`} onClick={() => { setSecretFor(undefined); setEditing(row.original); }}>Edit</button><button className="button secondary" aria-label={`Add a secret to ${row.original.name}`} onClick={() => { setEditing(undefined); setSecretFor(row.original); }}>Add secret</button></div> } as DataTableColumn<Environment>] : []),
+      ]} /> : <Loading label="Reading environments…" />}</section>
+    {editing ? <EnvironmentForm key={editing === 'new' ? 'new' : editing.id} context={context} environment={editing === 'new' ? undefined : editing} close={() => setEditing(undefined)} saved={() => { setEditing(undefined); void environments.refetch(); }} /> : null}
+    {secretFor ? <EnvironmentValueForm key={secretFor.id} context={context} environment={secretFor} close={() => setSecretFor(undefined)} /> : null}
+    <section className="browser-panel"><div className="browser-panel-heading"><h3>Deployment history</h3></div>
+      <DataTable data={deployments} getRowId={d => d.id} label="deployments" emptyMessage="No deployments yet." columns={[
+        { accessorKey: 'environment', header: 'Environment' },
+        { accessorKey: 'state', header: 'Result', cell: ({ row }) => <span className="run-state"><StateIcon state={row.original.state} />{stateLabels[row.original.state] || row.original.state}</span> },
+        { id: 'run', header: 'Run', accessorFn: d => d.runId, cell: ({ row }) => <Link {...repositoryOptions({ ...context.repository, view: 'actions', run: row.original.runId })}>#{row.original.runId}</Link> },
+        { id: 'commit', header: 'Commit', accessorFn: d => d.commitId, cell: ({ row }) => <code>{row.original.commitId.slice(0, 7)}</code> },
+        { accessorKey: 'actor', header: 'By' },
+        { id: 'url', header: 'URL', accessorFn: d => d.url, cell: ({ row }) => row.original.url ? <a href={row.original.url} target="_blank" rel="noopener noreferrer">{row.original.url}</a> : '—' },
+        { id: 'when', header: 'When', accessorFn: d => d.createdAt, cell: ({ row }) => <DateLabel value={row.original.createdAt} relative /> },
+      ]} /></section>
+  </div>;
+}
+function EnvironmentForm({ context, environment, close, saved }: { context: Context; environment?: Environment; close: () => void; saved: () => void }) {
+  const [error, setError] = useState<unknown>();
+  const form = useForm({ defaultValues: { name: environment?.name || '', reviewers: environment?.reviewers.map(r => r.login).join(', ') || '', branches: environment?.branches.join(', ') || '', url: environment?.url || '', preventSelfReview: environment?.preventSelfReview ?? true },
+    onSubmit: async ({ value }) => {
+      setError(undefined);
+      try {
+        await api('/native/pipelines', { ...context, action: 'saveEnvironment', name: value.name.trim(), reviewers: value.reviewers.split(/[\s,]+/).filter(Boolean), branches: value.branches.split(/[\s,]+/).filter(Boolean), url: value.url.trim(), preventSelfReview: value.preventSelfReview, ...(environment ? { expectedVersion: environment.version } : {}) });
+        saved();
+      } catch (e) { setError(e); }
+    } });
+  return <form className="browser-panel credential-form-content" aria-label={environment ? `Edit ${environment.name}` : 'New environment'} onSubmit={event => { event.preventDefault(); void form.handleSubmit(); }}>
+    <h3>{environment ? `Edit ${environment.name}` : 'New environment'}</h3>
+    <form.Field name="name">{field => <label>Name<input required maxLength={255} readOnly={Boolean(environment)} value={field.state.value} onChange={e => field.handleChange(e.target.value)} /></label>}</form.Field>
+    <form.Field name="reviewers">{field => <label>Required reviewers<input value={field.state.value} onChange={e => field.handleChange(e.target.value)} placeholder="login, login" /></label>}</form.Field>
+    <p className="field-help">Up to six accounts with access to this repository. Any one of them can approve. Leave empty for no approval.</p>
+    <form.Field name="preventSelfReview">{field => <label className="checkbox-label"><input type="checkbox" checked={field.state.value} onChange={e => field.handleChange(e.target.checked)} />Prevent the person who started the run from approving it</label>}</form.Field>
+    <form.Field name="branches">{field => <label>Deployment branches<input value={field.state.value} onChange={e => field.handleChange(e.target.value)} placeholder="main, release/*" /></label>}</form.Field>
+    <form.Field name="url">{field => <label>Environment URL<input type="url" value={field.state.value} onChange={e => field.handleChange(e.target.value)} placeholder="https://" /></label>}</form.Field>
+    {error ? <p className="error" role="alert">{message(error)}</p> : null}
+    <form.Subscribe selector={state => state.isSubmitting}>{submitting => <div className="credential-actions"><button className="button primary" disabled={submitting}>Save environment</button><button type="button" className="button secondary" onClick={close}>Cancel</button></div>}</form.Subscribe>
+  </form>;
+}
+function EnvironmentValueForm({ context, environment, close }: { context: Context; environment: Environment; close: () => void }) {
+  const [error, setError] = useState<unknown>(), [done, setDone] = useState('');
+  const form = useForm({ defaultValues: { name: '', kind: 'secret', value: '' }, onSubmit: async ({ value, formApi }) => {
+    setError(undefined); setDone('');
+    try { await api('/native/pipelines', { ...context, action: 'saveEnvironmentValue', environmentId: environment.id, name: value.name, kind: value.kind, value: value.value }); setDone(value.name); formApi.reset(); }
+    catch (e) { setError(e); }
+  } });
+  return <form className="browser-panel credential-form-content" aria-label={`Add a value to ${environment.name}`} onSubmit={event => { event.preventDefault(); void form.handleSubmit(); }}>
+    <h3>Add a secret or variable to {environment.name}</h3><p className="field-help">Saving a name again replaces its value. Secret values are never shown again.</p>
+    <form.Field name="kind">{field => <label>Kind<select value={field.state.value} onChange={e => field.handleChange(e.target.value)}><option value="secret">Secret</option><option value="variable">Variable</option></select></label>}</form.Field>
+    <form.Field name="name">{field => <label>Name<input required pattern="[A-Z][A-Z0-9_]*" maxLength={64} value={field.state.value} onChange={e => field.handleChange(e.target.value.toUpperCase())} /></label>}</form.Field>
+    <form.Field name="value">{field => <label>Value<textarea required rows={3} value={field.state.value} onChange={e => field.handleChange(e.target.value)} /></label>}</form.Field>
+    {error ? <p className="error" role="alert">{message(error)}</p> : null}{done ? <p className="field-help" role="status">{done} saved.</p> : null}
+    <form.Subscribe selector={state => state.isSubmitting}>{submitting => <div className="credential-actions"><button className="button primary" disabled={submitting}>Save value</button><button type="button" className="button secondary" onClick={close}>Close</button></div>}</form.Subscribe>
+  </form>;
+}
