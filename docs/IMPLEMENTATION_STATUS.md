@@ -1,5 +1,47 @@
 # Golf implementation status
 
+## 2026-10-14 — Agent access: API tokens and remote MCP (agentic mode AM-3, schema 39)
+
+Personal API tokens (`golf_pat_…`, stored as SHA-256, migration `0039_api_tokens.sql`)
+scope an agent to:
+- a list of repositories, or all the owner can access;
+- `read` or `write`;
+- an optional write branch pattern (exact, or a trailing `*`).
+
+Every call caps a token by its owner's current grant, and an identity change ends it.
+There are at most 50 active tokens per account, and the `agent-access` feature policy
+can turn token use off per repository. Tokens are accepted only on:
+- `/mcp`;
+- `/native/source/*`;
+- `/git/*` (Bearer or Basic password).
+
+They are refused (401) everywhere else. The public Worker lets token requests on those
+paths past Access with cookies stripped and no Access identity.
+
+Pushes and Source API writes re-check the token in the reservation statement
+(`person.token_guard`). Create and revoke are audited, and so are uses a token's own
+scope refuses. The `POST /mcp` Streamable HTTP endpoint (stateless JSON-RPC, `mcp.mjs`)
+offers 11 read tools and 4 write tools. They run through the UI's own handlers as
+internal requests, under an environment flag. Settings → Developer → API tokens lists
+your tokens first; New token shows the secret once, with Claude Code, Codex, OpenCode
+and Git setups. Capability `agents.mcp`. See [AGENT_ACCESS.md](AGENT_ACCESS.md).
+
+Verified locally:
+- `api-tokens.test.mjs` (6 tests) and `mcp.test.mjs` (7 tests) cover lifecycle,
+  hashing, expiry, revocation, identity invalidation, scope, branch patterns, the
+  race guard, route refusals, the Access bypass, the protocol, tools and their errors;
+- one `mcp.test.mjs` case runs end to end against the real Source API and a real bare
+  Git repository. An `agent/*` token lists, reads, branches, commits and opens a pull
+  request, gets a stale-head refusal that carries `currentHead`, and is refused on
+  `main`. Read tokens cannot write, and a token revoked mid-request leaves the branch
+  where it was;
+- a `workspace-admission.test.mjs` MCP admission case;
+- `web/tests/api-tokens.spec.ts` (3 tests).
+
+Remaining:
+- the hosted exit run (Claude Code on `/mcp` with an `agent/*` token committing and
+  opening a pull request), and the Access bypass policy on the hosted demo;
+- telling agent host tasks about the endpoint (AM-3 item 4).
 ## 2026-10-14 — Source API routes (agentic mode AM-2, schema 38)
 
 `POST /native/source/commit`, `branch`, `files` and `tree` (`source-api.mjs`, contract in

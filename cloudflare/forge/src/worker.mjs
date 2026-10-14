@@ -6,7 +6,7 @@ import { runMaintenance } from './operations.mjs';
 import { withInstallationPolicy } from './installation.mjs';
 import { publicFetch } from './public.mjs';
 import { DurableObject, WorkflowEntrypoint, WorkerEntrypoint } from 'cloudflare:workers';
-import { handle, serialize, admission, concurrentRead, advanceEvidence, advanceAi, advanceSearch, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI } from './core.mjs';
+import { handle, serialize, admission, admitMCP, concurrentRead, advanceEvidence, advanceAi, advanceSearch, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI } from './core.mjs';
 import { consumeEvidence, consumeEvidenceDeadLetters, reconcileEvidence } from './evidence.mjs';
 import { Fault, deny } from './common.mjs';
 import { reconcileIndexes } from './repository-indexes.mjs';
@@ -119,9 +119,11 @@ export class Workspace extends DurableObject {
         this.ctx.abort('A newer release is serving this workspace.');
       })());
     }
+    // MCP: the body names the tool, so it is read before admission (mcpClass): read tools overlap reads, Source API tools are transfers.
     const response = path === activityPath ? handle(request, this.configured)
+      : path === '/mcp' ? admitMCP(request).then(admitted => admitted instanceof Response ? admitted : this.authority(admitted))
       : path === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' || path.startsWith('/native/') || !concurrentRead(request) ? this.authority(request) : this.dispatch(request);
-    if (this.env.CI_AUTO === 'true' && request.method === 'POST' && (path.endsWith('/git-receive-pack') || path === '/native/source/commit' || path === '/native/source/branch')) this.ctx.waitUntil(response.then(() => this.runCI()));
+    if (this.env.CI_AUTO === 'true' && request.method === 'POST' && (path.endsWith('/git-receive-pack') || path === '/native/source/commit' || path === '/native/source/branch' || path === '/mcp')) this.ctx.waitUntil(response.then(() => this.runCI()));
     return response;
   }
 }
