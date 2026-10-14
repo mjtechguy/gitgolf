@@ -43,7 +43,12 @@ const catalogue = [
   { id: 'agent-hosts', label: 'Coding agents on your machines', plural: true, group: 'Automation', requires: ['issues'], choice: true, allocated: () => true },
   // API tokens and remote MCP (docs/AGENT_ACCESS.md): no operator binding; off here refuses every golf_pat_ call on the repository.
   { id: 'agent-access', label: 'API tokens and MCP', plural: true, group: 'Integrations', requires: [], choice: true, allocated: () => true },
+  // Agentic mode (docs/AGENTIC_MODE.md): each repository turns it on in its own setting, off by default; policy may only forbid it.
+  { id: 'agentic-mode', label: 'Agentic mode', group: 'Automation', requires: ['pull-requests'], choice: false, allocated: () => true },
 ];
+// Features a policy can turn off but never require: each repository keeps its own setting (visibility, the agentic mode switch).
+const neverRequired = { 'public-repositories': 'Public repositories can never be required: each repository keeps its own visibility.',
+  'agentic-mode': 'Agentic mode can never be required: each repository administrator turns it on in the repository settings.' };
 const known = new Map(catalogue.map(feature => [feature.id, feature]));
 const needs = (feature, env) => typeof feature.requires === 'function' ? feature.requires(env) : feature.requires;
 const modes = ['UNSPECIFIED', 'DISABLED', 'ALLOWED', 'ENFORCED'], rank = { DISABLED: 0, ALLOWED: 1, ENFORCED: 2 };
@@ -66,7 +71,7 @@ const levels = { INSTALLATION: 'installation', ORGANIZATION: 'organization', REP
 export function effectiveFeatures(env, row, subject = 'this repository') {
   const policies = parse(row.feature_policy, []), choices = new Map(parse(row.feature_choice, []).map(([id, enabled, version]) => [id, { enabled, version }]));
   const execution = parse(row.feature_execution, null), organization = row.owner_kind === 'ORGANIZATION', result = new Map();
-  const mode = (scope, id) => { const value = policies.find(([s, f]) => s === scope && f === id)?.[2] || 'ALLOWED'; return id === 'public-repositories' && value === 'ENFORCED' ? 'ALLOWED' : value; };
+  const mode = (scope, id) => { const value = policies.find(([s, f]) => s === scope && f === id)?.[2] || 'ALLOWED'; return Object.hasOwn(neverRequired, id) && value === 'ENFORCED' ? 'ALLOWED' : value; };
   for (const feature of catalogue) {
     const { id, label } = feature, installation = mode('installation', id), owner = organization ? mode('organization', id) : 'ALLOWED';
     const enforced = installation === 'ENFORCED' || owner === 'ENFORCED', allocated = feature.allocated(env);
@@ -155,7 +160,7 @@ export async function discussionFeatures(db, person, row, service, method, body)
 const capabilityFeatures = { 'native-pr-tests': 'actions', 'actions.pipelines': 'actions', 'actions.forgejo-runner': 'actions', 'actions.artifacts': 'actions', 'actions.environments': 'actions', 'settings.pipeline-runners': 'actions', 'native-ci-automatic': 'actions', 'settings.repository-execution-policy': 'actions', 'settings.repository-secrets': 'secrets',
   'native-pr-previews': 'previews', 'native-preview-browser': 'previews', 'native-pr-apps': 'previews', 'settings.repository-environments': 'previews', 'native-pr-agents': 'agents',
   'discussion.attachments': 'attachments', 'settings.repository-webhooks': 'webhooks', 'repository.email-notifications': 'email', 'repository.releases': 'releases',
-  'repository.packages': 'packages', 'pull.ai-review-drafts': 'ai-review-drafts', 'repository.semantic-search': 'semantic-search', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues', 'discussion.ai-triage': 'ai-triage', 'repository.ai-release-notes': 'ai-release-notes', 'agents.hosts': 'agent-hosts', 'agents.mcp': 'agent-access',
+  'repository.packages': 'packages', 'pull.ai-review-drafts': 'ai-review-drafts', 'repository.semantic-search': 'semantic-search', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues', 'discussion.ai-triage': 'ai-triage', 'repository.ai-release-notes': 'ai-release-notes', 'agents.hosts': 'agent-hosts', 'agents.mcp': 'agent-access', 'repository.agentic-mode': 'agentic-mode',
   ...Object.fromEntries(['pull.merge-observation', 'pull.review-requests', 'pull.review-lifecycle', 'pull.pending-reviews', 'pull.codeowners'].map(id => [id, 'pull-requests'])) };
 export async function policyCapabilities(db, env, capabilities) {
   const { results } = await db.prepare("SELECT scope,feature,mode FROM feature_policies WHERE scope='installation' AND scope_id=''").all();
@@ -226,10 +231,12 @@ async function installationPolicy(db, env) {
     db.prepare("SELECT p.*,u.login FROM feature_policies p LEFT JOIN users u ON u.id=p.updated_by WHERE p.scope='installation' AND p.scope_id=''").all(),
     db.prepare(`SELECT r.id,r.artifact_name,o.kind AS owner_kind,COALESCE(v.is_public,0) AS is_public,${featureColumns} FROM repositories r ${ownerJoin} LEFT JOIN repository_visibility v ON v.repository_id=r.id WHERE r.state='ACTIVE'`).all(),
     db.prepare("SELECT revision FROM policy_revisions WHERE scope='installation' AND scope_id=''").first()]);
+  // Agentic mode is on where the policy allows it and the repository turned it on (schema 41; before it, nowhere).
+  const agentic = new Set(await (async () => { try { return (await db.prepare('SELECT repository_id FROM repository_agentic_settings WHERE enabled=1').all()).results.map(row => row.repository_id); } catch { return []; } })());
   const reach = repositories.map(row => [row, effectiveFeatures(env, row)]), latest = rows.reduce((last, row) => !last || row.updated_at > last.updated_at ? row : last, null);
   const policies = catalogue.map(feature => {
     const row = rows.find(item => item.feature === feature.id), allocated = feature.allocated(env);
-    const on = reach.filter(([repository, features]) => features.get(feature.id).effective && (feature.id !== 'public-repositories' || repository.is_public)).length;
+    const on = reach.filter(([repository, features]) => features.get(feature.id).effective && (feature.id !== 'public-repositories' || repository.is_public) && (feature.id !== 'agentic-mode' || agentic.has(repository.id))).length;
     return { feature: feature.id, mode: 'FEATURE_POLICY_MODE_' + (row?.mode || 'ALLOWED'), version: String(row?.version || 0), updatedBy: row?.login || '', updatedAt: row?.updated_at || '',
       label: feature.label, group: feature.group, allocated: allocated === true, unavailableReason: allocated === true ? '' : allocated, requires: needs(feature, env),
       repositoriesOn: on, repositoriesTotal: repositories.length, repositoryChoice: feature.choice };
@@ -250,7 +257,7 @@ export async function featurePolicyService(db, env, person, request, method, bod
       typeof body.expectedVersion !== 'string' || !/^(0|[1-9][0-9]{0,15})$/.test(body.expectedVersion) || !uuidOK(body.operationId) || body.confirmation !== undefined && typeof body.confirmation !== 'string')
     invalid('Choose a known feature, a mode, the observed version and a UUID v4 operation ID.');
   if (feature.allocated(env) !== true) throw new Fault('failed_precondition', 412, `${feature.label} ${be(feature)} not allocated on this installation; a policy would have no effect.`);
-  if (feature.id === 'public-repositories' && mode === 'ENFORCED') invalid('Public repositories can never be required: each repository keeps its own visibility.');
+  if (Object.hasOwn(neverRequired, feature.id) && mode === 'ENFORCED') invalid(neverRequired[feature.id]);
   const current = await db.prepare("SELECT * FROM feature_policies WHERE scope='installation' AND scope_id='' AND feature=?").bind(feature.id).first(), before = current?.mode || 'ALLOWED';
   if (body.expectedVersion !== String(current?.version || 0)) policyStale();
   if (before === mode) invalid(`${feature.label} ${be(feature)} already ${mode.toLowerCase()}.`);

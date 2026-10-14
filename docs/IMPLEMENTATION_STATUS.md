@@ -1,5 +1,66 @@
 # Golf implementation status
 
+## 2026-10-14 — Agentic mode setting and landing policy (agentic mode AM-4 items 2 and 3, schema 41)
+
+See `docs/AGENTIC_MODE.md`. This adds:
+- The per-repository **agentic mode** setting (migration `0041_agentic_mode.sql`,
+  `repository_agentic_settings`). It holds:
+  - on/off, off by default;
+  - low-risk path patterns, default `docs/**`, `**/*.md`;
+  - sensitive path patterns, default CI configuration, `deploy/**` and `**/CODEOWNERS`;
+  - land without a person, off by default;
+  - required checks, default every pipeline of the head commit;
+  - revert on failure, on by default.
+
+  Every save rechecks the version and the administrator's authority in the same
+  statement, and is audited as `agentic_mode.update` ("Agentic mode").
+- Feature `agentic-mode` in the feature policy hierarchy (requires pull requests). A
+  policy can turn it off but never require it.
+- `land-policy.mjs`, a pure `evaluateLanding`. It returns `land`, `needs_person`,
+  `waiting_checks` or `blocked`, with reasons, a risk (`low`, `normal` or `sensitive`)
+  and the matched paths. Glob matching is anchored and has no dependencies or RegExp.
+  Sensitive paths always need approval from a writer who is not the author and not an
+  agent.
+- `POST /native/agentic-mode` (`set`) and `/native/agentic-mode/read` (`get` and
+  `evaluate`; reads overlap), for signed-in browser sessions only. `evaluate` gathers:
+  - the changed paths from the merge base to the head tree;
+  - the pipeline runs, jobs and reported checks of the head commit;
+  - the current writers' reviews;
+  - the author kind;
+  - the existing merge blocker and the base branch lock.
+
+  Capability `repository.agentic-mode`.
+- `pull_request_origins`: `CreatePullRequest` records `person`, `api-token` (MCP) or
+  `agent-task`. An `agentTaskId` must name a SUCCEEDED task of the repository whose
+  branch is the head branch. The agent task panel's **Open pull request** sends it.
+- Web:
+  - **Settings → Agentic mode**: current values and path rules first; Edit opens a
+    TanStack Form with a warning for landing without a person.
+  - A read-only **Landing** panel in the pull request sidebar while agentic mode is on.
+
+Verified locally:
+- `node --test cloudflare/forge/*.test.mjs`: 612 tests, 611 pass, 1 skipped. Before
+  this change: 567, 566, 1 skipped. The new tests are 39 in `land-policy.test.mjs`
+  (truth table and glob edge cases) and 6 in `agentic-mode.test.mjs` (setting, policy,
+  audit, evaluation and origins).
+- Runtime checks with the schema 41 assertion: `agent-hosts-runtime-check`,
+  `ai-runtime-check`, `search-runtime-check`, `environments-check` and `ui-check` pass.
+  `ui-check` had not started on main, because its module list missed `agent-hosts.mjs`
+  and later modules; it now loads every forge module its explicit lists leave out.
+- `npx tsc --noEmit -p web` is clean.
+- Playwright `agentic-mode.spec.ts`: 6/6 pass. `native-agent-hosts.spec.ts` and
+  `repository-routes.spec.ts` were updated for the new settings entry and `agentTaskId`;
+  both pass with 2 workers.
+- In a run with more workers, the pull-request, merge, settings and route specs
+  failed. The same specs, run on main's web sources, also failed, and the specs that
+  failed only on this branch pass when rerun.
+
+Not done:
+- Golf does not land, queue or revert anything yet (AM-4 items 1, 4 and 5).
+- A diverged pull request reads as `blocked` (`base_not_ancestor`) until the
+  three-way merge lands.
+- No hosted evidence yet.
+
 ## 2026-10-14 — Native merges of diverged branches and squash (agentic mode AM-4 item 1)
 
 Cloudflare-native pull request merges (`pull-merge.mjs`) now use the AM-2

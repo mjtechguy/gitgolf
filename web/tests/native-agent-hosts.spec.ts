@@ -5,6 +5,7 @@ import { CreatePullRequestRequestSchema, CreatePullRequestResponseSchema, GetAut
   ResolveRepositorySourceRequestSchema, ResolveRepositorySourceResponseSchema, GetPullRequestDiscussionResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { GetRepositoryFeaturesResponseSchema, FeatureDecider } from '../src/gen/golf/v1/feature_policy_pb';
 import { reject, request, respond } from './rpc';
+import { fromJson, type JsonValue } from '@bufbuild/protobuf';
 
 // Agent hosts on the Cloudflare-native runtime (docs/AGENT_HOSTS.md): host settings at three scopes, "Assign to agent" and the task panel
 // on issues and pull requests, against mocked /native/agent-hosts and /native/agent-tasks shaped like the contract's user API.
@@ -59,7 +60,9 @@ async function backend(page: Page, { refuse = false, finish = true, role = 'admi
       return respond(route, ResolveRepositorySourceResponseSchema, { repositoryId, repository: key, resolution: RepositorySourceResolution.RESOLVED, selection: { kind: RepositorySourceRefKind.BRANCH, name, commitId: commits[name] } });
     }
     if (method === 'CreatePullRequest') {
-      const input = request(route, CreatePullRequestRequestSchema); state.prs.push(input);
+      // The agent task panel adds agentTaskId (agentic mode), which the generated request type does not carry.
+      const { agentTaskId, ...raw } = route.request().postDataJSON() as Record<string, unknown>;
+      const input = fromJson(CreatePullRequestRequestSchema, raw as JsonValue); state.prs.push({ ...input, agentTaskId });
       return respond(route, CreatePullRequestResponseSchema, { pullRequest: { id: '950', number: 13, title: input.title, state: IssueState.OPEN, base: { repositoryId, ref: input.baseBranch, commitId: input.baseCommitId }, head: { repositoryId, ref: input.headBranch, commitId: input.headCommitId } } });
     }
     return reject(route, 'unimplemented', 'Fixture procedure not supplied.');
@@ -214,7 +217,7 @@ test('assigning an issue shows unusable tools disabled with their reason, stream
   await expect(form.getByLabel('Pull request title')).toHaveValue('Retry webhook deliveries with backoff');
   await form.getByRole('button', { name: 'Create pull request' }).click();
   await expect(detail.getByRole('link', { name: '#13' })).toHaveAttribute('href', '/alex/demo/pull/13');
-  expect(state.prs[0]).toMatchObject({ baseBranch: 'main', headBranch: 'golf-agent/1a2b3c4d', baseCommitId: main, headCommitId: head, repositoryId, sourceRepositoryId: repositoryId });
+  expect(state.prs[0]).toMatchObject({ baseBranch: 'main', headBranch: 'golf-agent/1a2b3c4d', baseCommitId: main, headCommitId: head, repositoryId, sourceRepositoryId: repositoryId, agentTaskId: taskId });
 });
 
 test('a failed task shows why, and a refused assignment shows the server’s reason', async ({ page }) => {

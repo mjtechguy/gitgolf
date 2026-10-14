@@ -29,6 +29,7 @@ import { mcpEndpoint, mcpClass, mcpBodyLimit } from './mcp.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { reserveRefWrite, finishRefWrite, sendRefUpdate, refWriteBlocker } from './ref-writes.mjs';
 import { sourceAPI, sourceCapability } from './source-api.mjs';
+import { agenticModeAPI, agenticCapability } from './agentic-mode.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
@@ -114,7 +115,7 @@ export async function admitMCP(request) {
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
-  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/search/read'].includes(new URL(request.url).pathname)) return true;
+  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/search/read', '/native/agentic-mode/read'].includes(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
   if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
   if (/^\/rpc\/golf\.v1\.(?:FeaturePolicyService\/GetFeaturePolicy|RepositoryFeatureService\/GetRepositoryFeatures)$/.test(new URL(request.url).pathname)) return true;
@@ -495,6 +496,13 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       return result instanceof Response ? result : reply(result);
     }
     if (url.pathname === '/native/api-tokens') return reply(await apiTokensAPI(db, env, person, request, body));
+    if (url.pathname === '/native/agentic-mode' || url.pathname === '/native/agentic-mode/read') {
+      // Agentic mode (docs/AGENTIC_MODE.md): the setting changes on the exclusive route; reading it and evaluating a pull request overlap.
+      if (url.pathname.endsWith('/read') !== ['get', 'evaluate'].includes(body.action)) invalid(url.pathname.endsWith('/read') ? 'This route only reads agentic mode.' : 'This route only changes agentic mode.');
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
+      return reply(await agenticModeAPI(db, env, person, row, request, body, action => withArtifact(env, row, action)));
+    }
     if (url.pathname === '/native/agent-tasks') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
@@ -647,6 +655,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       await agentHostCapability(db),
       await sourceCapability(db),
       await apiTokenCapability(db),
+      await agenticCapability(db),
       ...[
         ['settings.repository-teams', 'Repository team access', 'Team membership and inherited repository permissions are not implemented on Cloudflare native. Direct collaborators and invitations are available in Access.'],
         ['settings.repository-deploy-keys', 'SSH deploy keys', 'Cloudflare native serves Git over HTTPS. SSH transport and SSH deploy keys are not available.'],

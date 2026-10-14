@@ -218,8 +218,9 @@ function OpenPullRequest({ context, task, targetTitle }: { context: Context; tas
     try {
       const [baseCommitId, headCommitId] = await Promise.all([resolve(base), resolve(task.branch)]);
       if (headCommitId !== task.commitId) throw new Error(`The branch ${task.branch} moved after the task finished; open the pull request from the compare page instead.`);
-      const response = await repositoryClient.createPullRequest({ repository: context.repository, repositoryId: context.repositoryId, sourceRepository: context.repository, sourceRepositoryId: context.repositoryId,
-        baseBranch: base, headBranch: task.branch, baseCommitId, headCommitId, title: value.title.trim(), body: value.body, draft: false, idempotencyKey: idempotencyKey.current }, { timeoutMs: 15000 });
+      // The Connect JSON route, with agentTaskId: Golf verifies the finished task and records the pull request as opened from it (agentic mode).
+      const response = await api<{ pullRequest?: { number: number } }>('/rpc/golf.v1.RepositoryService/CreatePullRequest', { repository: context.repository, repositoryId: context.repositoryId, sourceRepository: context.repository, sourceRepositoryId: context.repositoryId,
+        baseBranch: base, headBranch: task.branch, baseCommitId, headCommitId, title: value.title.trim(), body: value.body, draft: false, idempotencyKey: idempotencyKey.current, agentTaskId: task.id }, AbortSignal.timeout(15000));
       if (!response.pullRequest) throw new Error('Golf recorded the request but returned no pull request. Check the pull requests list before trying again.');
       setOpened(response.pullRequest.number); setOpen(false);
     } catch (e) { if (e instanceof ConnectError) idempotencyKey.current = crypto.randomUUID(); setError(e); }

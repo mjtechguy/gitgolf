@@ -5,6 +5,7 @@ import { digest, uuidOK, Fault, deny, invalid, unsupported, conflict, page, user
 import { advertisedRefs, gitRequest, sha, validRef } from './git.mjs';
 import { comparison, diff } from './repository-diff.mjs';
 import { wireCommit } from './repository-reads.mjs';
+import { pullOrigin } from './agentic-mode.mjs';
 
 export const collaborationMethods = new Set([
   'CreateIssue', 'GetIssue', 'ListIssues', 'UpdateIssue', 'CreateIssueComment', 'ListIssueComments', 'GetIssueMutation',
@@ -318,6 +319,10 @@ export async function collaboration(db, env, person, method, body, row, artifact
       }
       statements.push(db.prepare(`INSERT INTO pull_requests(id,discussion_id,base_branch,head_branch,base_commit,head_commit,draft) SELECT ?,?,?,?,?,?,? WHERE ${admitted}`)
         .bind(resultId, discussionId, body.baseBranch, body.headBranch, body.baseCommitId, body.headCommitId, Number(body.draft || false), op.id));
+      // How it was opened (agentic mode, schema 41): a person, an API token (MCP), or a finished agent task's proposal branch.
+      const origin = await pullOrigin(db, person, row, body);
+      if (origin) statements.push(db.prepare(`INSERT INTO pull_request_origins(pull_request_id,kind,api_token_id,agent_task_id,created_at) SELECT ?,?,?,?,? WHERE ${admitted}`)
+        .bind(resultId, origin.kind, origin.apiTokenId, origin.agentTaskId, op.time, op.id));
     }
     statements.push(...discussionEvent(db, person, discussionId, op.time, 'opened', {}, admitted, [op.id]));
     await commitMutation(db, statements);

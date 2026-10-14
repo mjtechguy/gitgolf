@@ -16,6 +16,8 @@ export function emailNotificationsMounted(manifest: RuntimeManifest | undefined)
 export function settingForRoute(kind: string, view?: string, native = false) {
   // One audit log service serves installation, organization and repository scope; every runtime must report it.
   if (kind === 'repository-audit' || kind === 'organization-audit') return 'settings.installation-audit';
+  // Agentic mode (docs/AGENTIC_MODE.md) is a native Worker service; a runtime that does not report it does not open the page.
+  if (kind === 'repository-agentic-mode') return 'repository.agentic-mode';
   // Agent hosts (docs/AGENT_HOSTS.md) exist only where the native Worker reports them; the portable runtime keeps its own coding agent pages.
   // API tokens and remote MCP (docs/AGENT_ACCESS.md) are a native Worker service.
   if (kind === 'account-api-tokens') return 'agents.mcp';

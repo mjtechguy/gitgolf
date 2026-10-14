@@ -1,7 +1,7 @@
 // Real local Access dev context, workerd, D1 and built assets; no provider writes.
 import assert from 'node:assert/strict';
 import { packetLine } from './src/git.mjs';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -28,6 +28,10 @@ modules.push({ type: 'ESModule', path: 'forge/src/issue-templates.mjs', contents
 modules.push({ type: 'ESModule', path: 'forge/src/performance.mjs', contents: await readFile(new URL('./src/performance.mjs', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'forge/src/rate-limit.mjs', contents: await readFile(new URL('./src/rate-limit.mjs', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'forge/data/languages.mjs', contents: 'export default ' + await readFile(new URL('./data/languages.json', import.meta.url), 'utf8') });
+// Every other forge module as written: modules added since the lists above were last extended (agent hosts, API tokens, agentic mode, …).
+const listed = new Set(modules.map(module => module.path));
+for (const file of (await readdir(new URL('./src/', import.meta.url))).filter(name => name.endsWith('.mjs') && !['agent-worker.mjs', 'test-worker.mjs', 'agent-entry.mjs', 'test-entry.mjs'].includes(name) && !listed.has('forge/src/' + name)))
+  modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: await readFile(new URL('./src/' + file, import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'agents/src/policy.mjs', contents: await readFile(new URL('../agents/src/policy.mjs', import.meta.url), 'utf8') });
 const origin = 'http://127.0.0.1:18789', mailSender = 'golf@mail.example.invalid';
 const runtime = new Miniflare(convertV4MiniflareOptions({
@@ -55,7 +59,7 @@ try {
   assert.equal(session.status, 200, await session.clone().text()); assert.equal((await session.json()).user.login, 'local-reviewer');
   const rpc = (path, body = {}) => runtime.dispatchFetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Origin: origin }, body: JSON.stringify(body) });
   assert.equal((await (await rpc('/rpc/golf.v1.SessionService/GetSession')).json()).user.isInstanceAdmin,true);
-  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 40);
+  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 41);
   const inbox = await rpc('/rpc/golf.v1.RepositoryInvitationService/ListOwnRepositoryInvitations');
   assert.equal(inbox.status, 200, await inbox.clone().text()); assert.deepEqual((await inbox.json()).invitations, []);
   const config = await (await rpc('/native/config')).json();

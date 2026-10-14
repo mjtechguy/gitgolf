@@ -112,6 +112,11 @@ const native = {
       branchPattern: clip(body.branchPattern, 200) || undefined, lifetimeHours: whole(body.lifetimeHours) }) }
     : body.action === 'revoke' && { action: 'api_token.revoke', scope: 'installation', subject: async c => (token(body.id) && (await one(c.db, 'SELECT label FROM api_tokens WHERE id=?', whole(body.id) ?? 0))?.label) || token(body.id),
       after: () => clean({ id: token(body.id) }) },
+  // Agentic mode settings (docs/AGENTIC_MODE.md): the stored setting before, the saved values after. Reads and evaluations are not recorded.
+  'agentic-mode': body => body.action === 'set' && { action: 'agentic_mode.update', scope: 'repository', key: () => token(body.repositoryId) && whole(body.expectedVersion) !== undefined && `${body.repositoryId}:${whole(body.expectedVersion)}`,
+    before: async c => { const s = await one(c.db, 'SELECT * FROM repository_agentic_settings WHERE repository_id=?', c.repository.id); return s ? agenticSummary({ enabled: Boolean(s.enabled), landWithoutPerson: Boolean(s.land_without_person),
+      revertOnFailure: Boolean(s.revert_on_failure), lowRiskPaths: JSON.parse(s.low_risk_paths), sensitivePaths: JSON.parse(s.sensitive_paths), requiredChecks: JSON.parse(s.required_checks) }) : null; },
+    after: () => agenticSummary(body) },
   ai: body => body.action === 'create' && { action: 'ai.run_request', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => clip(body.kind, 40),
     after: () => clean({ kind: clip(body.kind, 40), number: whole(body.target?.number), tag: clip(body.target?.tagName, 100) }) },
   installation: body => ({ action: 'installation_policy.update', scope: 'installation', batch: true, subject: () => clip(body.key, 40) }),
@@ -128,6 +133,8 @@ async function agentHostScope(db, body) {
 }
 const agentHostSummary = h => clean({ name: clip(h.name, 128), state: h.state, shareSignins: Boolean(h.share_signins), allowedUsers: JSON.parse(h.allowed_users || '[]').length, allowedRepositories: JSON.parse(h.allowed_repositories || '[]').length,
   enabledTools: names(JSON.parse(h.enabled_tools || '[]'), 4), maxConcurrent: h.max_concurrent });
+const agenticSummary = value => clean({ enabled: flag(value.enabled), landWithoutPerson: flag(value.landWithoutPerson), revertOnFailure: flag(value.revertOnFailure),
+  lowRiskPaths: names(value.lowRiskPaths, 50), sensitivePaths: names(value.sensitivePaths, 50), requiredChecks: names(value.requiredChecks, 50) });
 const pipelineRunnerActions = { createToken: 'pipeline_runner.token_create', revokeToken: 'pipeline_runner.token_revoke', update: 'pipeline_runner.update', delete: 'pipeline_runner.delete' };
 const valueKinds = ['', 'secret', 'variable'], ruleActions = ['', 'CREATE_BRANCH', 'EDIT_BRANCH', 'REMOVE_BRANCH', 'CREATE_TAG', 'EDIT_TAG', 'REMOVE_TAG', 'EDIT_MERGE'];
 const resourceKinds = ['UNSPECIFIED', 'CREATE_LABEL', 'UPDATE_LABEL', 'DELETE_LABEL', 'CREATE_MILESTONE', 'UPDATE_MILESTONE', 'DELETE_MILESTONE'], releaseKinds = ['', 'EDIT', 'DELETE', 'UPLOAD_ASSET', 'RENAME_ASSET', 'DELETE_ASSET'];
@@ -307,7 +314,7 @@ export async function audited(request, env, run, identify) {
 
 /* Reading. Categories are the action prefix; the first installation policy rows used the bare action 'update'. */
 const categories = [['installation_policy', 'Installation policy', ['update', 'installation_policy.']], ['feature_policy', 'Feature policy'], ['ai_model', 'AI models', ['ai_model.', 'repository_ai_model.']],
-  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.']], ['api_token', 'API tokens'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
+  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.']], ['api_token', 'API tokens'], ['agentic_mode', 'Agentic mode'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
   ['repository_invitation', 'Invitations'], ['protected_branch', 'Rules', ['protected_branch.', 'protected_tag.']], ['hook', 'Webhooks'], ['repository_secret', 'Secrets and variables', ['repository_secret.', 'repository_variable.']],
   ['environment', 'Environments'], ['git_credential', 'Git credentials'], ['git_write', 'Git writes'], ['preview', 'Previews'], ['release', 'Releases', ['release.', 'release_asset.']], ['pull_request', 'Pull requests', ['pull_request.', 'pull_request_review.']],
   ['label', 'Labels and milestones', ['label.', 'milestone.']], ['ai', 'AI runs', ['ai.']], ['actions', 'Actions runs']].map(([id, label, prefixes]) => ({ id, label, prefixes: prefixes || [id + '.'] }));
@@ -362,6 +369,7 @@ const phrases = {
   'agent_host.token_revoke': ['revoked', 'revoke', () => 'an agent host registration token'], 'agent_host.update': ['updated', 'update', e => named('agent host', e.subject)], 'agent_host.delete': ['deleted', 'delete', e => named('agent host', e.subject)],
   'agent_task.create': ['assigned', 'assign', e => `${e.after?.kind === 'pull_request' ? 'pull request' : e.after?.kind === 'issue' ? 'issue' : ''} ${e.subject} to a coding agent${e.after?.tool ? ' (' + e.after.tool + ')' : ''}`.replace(/^ /, '')],
   'agent_task.cancel': ['cancelled', 'cancel', () => 'a coding agent task'],
+  'agentic_mode.update': ['changed', 'change', e => `agentic mode${e.after?.enabled === true ? ' (on' + (e.after.landWithoutPerson ? ', landing low-risk changes without a person' : '') + ')' : e.after?.enabled === false ? ' (off)' : ''}`],
   'api_token.create': ['created', 'create', e => `${e.after?.permission ? e.after.permission + ' ' : ''}API token ${e.subject}`], 'api_token.revoke': ['revoked', 'revoke', e => named('API token', e.subject)],
   'api_token.use_denied': ['was refused with', 'use', e => `an API token (${e.after?.reason === 'branch' ? 'branch outside its pattern' : e.after?.reason === 'permission' ? 'read-only token' : 'repository outside its scope'})`],
   'environment.save': ['saved', 'save', e => named('environment', e.subject)], 'environment.save_value': ['saved', 'save', e => `${e.after?.kind || 'a value'} ${e.subject} of an environment`],
