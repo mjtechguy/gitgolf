@@ -120,3 +120,12 @@ test('mutation notices target issue versus PR discussions, and pure observations
   assert.equal(await activitySelection(write(activityPath, input())), undefined);
   assert.deepEqual((await activitySelection(new Request('https://golf.example.com/git/alice/repo.git/git-receive-pack', { method: 'POST', body: '' }))).topics, ['source', 'pulls', 'actions']);
 });
+
+test('mutation selection re-reads an ordinary body under the unchanged 96 KiB bound', async () => {
+  const write = size => new Request('https://golf.example.com/rpc/golf.v1.RepositoryService/CreateIssue', { method: 'POST', body: JSON.stringify({ ...input(), body: 'x'.repeat(size) }) });
+  assert.deepEqual(await activitySelection(write(90 * 1024)), { name: 'repo', id: '1', topics: ['issues'] });
+  // Node settles a cancelled clone branch only once its sibling is released; workerd settles it at once.
+  const oversized = write(300 * 1024), selection = activitySelection(oversized);
+  await oversized.body.cancel();
+  assert.equal(await selection, undefined);
+});

@@ -7,7 +7,7 @@ import { inflateSync } from 'node:zlib';
 import { digest, handle, serialize, concurrentRead, advanceEvidence, testGit, agentGit, servePreview, cleanupPreviews, runCI } from './src/core.mjs';
 import { allocateApps } from './app-fixture.mjs';
 import { previewBundle } from './src/delivery.mjs';
-import { deny } from './src/common.mjs';
+import { deny, bodyLimit } from './src/common.mjs';
 import { reconcileIndexes } from './src/repository-indexes.mjs';
 import { consumeEvidence, reconcileEvidence } from './src/evidence.mjs';
 import { advertisedRefs, packetLine, receiveCommand, gitRequest } from './src/git.mjs';
@@ -2930,7 +2930,7 @@ test('native merge writes one verified merge commit through the push journal and
   const again=(await value(await f.submit(f.input({selection:compared,expectedPullRevision:merged.revision})))).operation;
   assert.equal(again.phase,mergePhase('REJECTED'));assert.equal(again.failureCode,'preflight_refused');assert.equal(f.journal()[1].detail,'pull_request_not_open');
   assert.equal(f.counts().effects,1);
-  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,27);
+  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,29);
   const capability=(await value(await f.call('',{},ownerToken,'/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c=>c.id==='pull.merge');
   assert.equal(capability.length,1);assert.equal(capability[0].state,'CAPABILITY_STATE_READY');
 });
@@ -4281,4 +4281,26 @@ test('with the agent module beside the approved Actions workflow, values reach t
   delete f.env.TEST_WORKFLOW_FORMAT; delete f.env.TEST_WORKFLOW_PATH;
   const closed = (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.find(c => c.id === 'settings.repository-secrets');
   assert.deepEqual([closed.state, closed.reason], ['CAPABILITY_STATE_DISABLED', 'Repository values need an operator-approved Actions workflow profile; this installation runs an approved Python test module.']);
+});
+
+test('only the four upload procedures accept a 300 KiB JSON body; every other request keeps the 96 KiB bound', async t => {
+  const f = await fixture(t); await f.create();
+  const uploads = ['RepositoryReleaseManagementService/SubmitRepositoryReleaseOperation', 'DiscussionAttachmentUploadService/SubmitDiscussionAttachmentUpload', 'RepositoryFileMutationService/SubmitRepositoryFileMutation', 'RepositoryFileBatchService/SubmitRepositoryFileBatch'];
+  const body = size => ({ repository: { owner: 'alice', name: 'project' }, repositoryId: '1', padding: 'x'.repeat(size) });
+  for (const procedure of uploads) {
+    const path = '/rpc/golf.v1.' + procedure;
+    assert.equal(bodyLimit(path), 400 * 1024);
+    // Past the bound the request reaches ordinary dispatch, whatever that procedure then answers.
+    const accepted = await f.call('', body(300 * 1024), ownerToken, path);
+    assert.notEqual(accepted.status, 429); assert.notEqual((await accepted.json()).code, 'resource_exhausted');
+    const refused = await f.call('', body(400 * 1024), ownerToken, path);
+    assert.equal(refused.status, 429); assert.equal((await refused.json()).code, 'resource_exhausted');
+  }
+  for (const path of ['/rpc/golf.v1.RepositoryService/CreateIssue', '/rpc/golf.v1.RepositoryService/SubmitRepositoryReleaseOperation', '/rpc/golf.v1.RepositoryReleaseManagementService/GetRepositoryReleaseOperation',
+    '/rpc/golf.v1.DiscussionAttachmentService/DownloadDiscussionAttachment', '/rpc/golf.v1.RepositoryFileMutationService/GetRepositoryFileMutationAccess', '/native/repository-grant', '/native/rpc/golf.v1.RepositoryFileBatchService/SubmitRepositoryFileBatch']) {
+    assert.equal(bodyLimit(path), 96 * 1024);
+    const refused = await f.call('', body(300 * 1024), ownerToken, path);
+    assert.equal(refused.status, 429, path); assert.equal((await refused.json()).code, 'resource_exhausted');
+  }
+  assert.equal((await f.call('GetRepository', body(90 * 1024))).status, 200);
 });

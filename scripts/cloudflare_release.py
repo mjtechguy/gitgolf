@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -131,6 +131,10 @@ class Release:
             self.check_execution_value_schema()
         if self.manifest['schema'] >= 27:
             self.check_email_schema()
+        if self.manifest['schema'] >= 28:
+            self.check_release_schema()
+        if self.manifest['schema'] >= 29:
+            self.check_attachment_schema()
         deployments =self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -215,7 +219,70 @@ class Release:
             self.migrate_execution_value_schema(applied)
         if self.manifest['schema'] >= 27:
             self.migrate_email_schema(applied)
+        if self.manifest['schema'] >= 28:
+            self.migrate_release_schema(applied)
+        if self.manifest['schema'] >= 29:
+            self.migrate_attachment_schema(applied)
         return applied or 'already-applied'
+
+    def check_attachment_schema(self):
+        required = {'discussion_attachments': {'id', 'repository_id', 'discussion_id', 'comment_id', 'name', 'size', 'sha256', 'r2_key', 'author_id', 'created_at'},
+                    'discussion_attachment_operations': {'actor_id', 'operation_id', 'repository_id', 'discussion_id', 'comment_id', 'input_hash', 'original', 'phase', 'attachment_id', 'object', 'created_at', 'updated_at'}}
+        for table, fields in required.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
+            if {row['name'] for row in columns} != fields:
+                raise ValueError('Apply reviewed 0029 discussion attachment migration before releasing')
+
+    def migrate_attachment_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0029_discussion_attachments.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0029') not in (None, digest):
+            raise ValueError('Recorded discussion attachment migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        prefixes = ['CREATE TABLE IF NOT EXISTS discussion_attachments (', 'CREATE UNIQUE INDEX IF NOT EXISTS discussion_attachments_name ON discussion_attachments(',
+                    'CREATE TABLE IF NOT EXISTS discussion_attachment_operations (']
+        if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement, prefix in zip(statements, prefixes)):
+            raise ValueError('Attachment migration must only add reviewed tables and indexes')
+        ready = False
+        try:
+            self.check_attachment_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0029') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_attachment_schema()
+            self.state['migration0029'] = digest; self.save(); applied.append('0029')
+
+    def check_release_schema(self):
+        required = {'repository_releases': {'id', 'repository_id', 'artifact_name', 'tag_name', 'tag_object_id', 'commit_id', 'title', 'body', 'draft', 'prerelease', 'author_id', 'revision', 'created_at', 'published_at', 'deleted'},
+                    'repository_release_assets': {'id', 'release_id', 'name', 'size', 'sha256', 'r2_key', 'downloads', 'created_at', 'deleted'},
+                    'repository_release_operations': {'actor_id', 'operation_id', 'repository_id', 'kind', 'input_hash', 'receipt', 'phase', 'result_id', 'object', 'updated_at'}}
+        for table, fields in required.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
+            if {row['name'] for row in columns} != fields:
+                raise ValueError('Apply reviewed 0028 repository release migration before releasing')
+
+    def migrate_release_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0028_releases.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0028') not in (None, digest):
+            raise ValueError('Recorded repository release migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        prefixes = ['CREATE TABLE IF NOT EXISTS repository_releases (', 'CREATE UNIQUE INDEX IF NOT EXISTS repository_releases_tag ON repository_releases(',
+                    'CREATE INDEX IF NOT EXISTS repository_releases_inventory ON repository_releases(', 'CREATE TABLE IF NOT EXISTS repository_release_assets (',
+                    'CREATE UNIQUE INDEX IF NOT EXISTS repository_release_assets_name ON repository_release_assets(', 'CREATE INDEX IF NOT EXISTS repository_release_assets_state ON repository_release_assets(',
+                    'CREATE TABLE IF NOT EXISTS repository_release_operations (']
+        if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement, prefix in zip(statements, prefixes)):
+            raise ValueError('Release migration must only add reviewed tables and indexes')
+        ready = False
+        try:
+            self.check_release_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0028') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_release_schema()
+            self.state['migration0028'] = digest; self.save(); applied.append('0028')
 
     def check_execution_policy_schema(self):
         columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info(repository_execution_policy)')[0]['results']
