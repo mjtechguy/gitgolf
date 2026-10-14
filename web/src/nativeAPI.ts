@@ -10,6 +10,8 @@ export async function nativeAPI<T>(path: string, body: object = {}, signal?: Abo
   const action = (body as { action?: string }).action;
   if (response.status === 501 && (path === '/native/pr-evidence/read' && ['list', 'status', 'report', 'compare'].includes(action || '') || path === '/native/pr-preview/read' && action === 'list'))
     return nativeAPI<T>(path.slice(0, -5), body, signal);
+  // Right after a deploy the page can be newer than the Worker answering it; say so rather than "not implemented".
+  if (response.status === 501) throw new NativeError('This installation’s Worker does not offer this yet. Right after a deploy it can take a few minutes to catch up; try again shortly.', 501);
   if (!response.ok) throw new NativeError(typeof value.message === 'string' ? value.message : 'Request failed.', response.status);
   return value as T;
 }
