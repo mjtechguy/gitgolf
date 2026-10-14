@@ -74,17 +74,17 @@ Open the [local / Docker simulation](https://gitgolf.app/demo/local) or the [Clo
 
 ## Quick start
 
-Requires Git, Docker with Compose and OpenSSL.
+Requires Git, Python 3, curl and Docker with Compose v2 and BuildKit, on an amd64 or arm64 host.
 
 ```sh
 git clone git@github.com:mjtechguy/golf-git.git
 cd golf-git
-./scripts/init-env.sh
+./scripts/init-env.sh        # writes a private .env with generated secrets; never overwrites one
 docker compose up -d --build
-curl --fail http://localhost:8080/readyz
+curl --fail --retry 30 --retry-delay 2 --retry-connrefused http://localhost:8080/readyz
 ```
 
-Open **http://localhost:8080** for Golf and **http://localhost:3001** for Forgejo. Use `localhost` throughout so request origins match the configuration. A 503 during first startup means PostgreSQL or Forgejo isn't ready yet.
+Open **http://localhost:8080** for Golf and **http://localhost:3001** for Forgejo. Use `localhost` throughout so request origins match the configuration. The readiness check retries while PostgreSQL and Forgejo start; the first build takes a few minutes.
 
 Registration is disabled, so create your first account next: a Forgejo user, a scoped Forgejo token and a Golf account mapped to it. Follow **[your first local installation](https://docs.gitgolf.app/docs/installation/)** for the exact commands.
 
@@ -92,6 +92,7 @@ Registration is disabled, so create your first account next: a Forgejo user, a s
 docker compose stop    # pause
 docker compose start   # resume with the same data
 docker compose down    # remove containers; named volumes are kept
+docker compose up -d   # recreate after down, or apply .env changes
 ```
 
 Keep `.env`, the encryption keys, both databases and the Forgejo data together. Don't add `--volumes` to a routine restart.
@@ -109,7 +110,7 @@ Keep `.env`, the encryption keys, both databases and the Forgejo data together. 
 
 ## Develop
 
-Use the Go version in `go.mod` and Node 24.
+Use the Go version in `go.mod` and Node 24 (`make build` also builds the web UI).
 
 ```sh
 make cli
