@@ -102,6 +102,10 @@ try {
   assert.equal((await rpc('/rpc/golf.v1.ExecutionPolicyService/UpdateExecutionPolicy',change)).status,412);
   assert.equal((await db.prepare('SELECT version FROM repository_execution_policy WHERE repository_id=1').first()).version,1);
   console.log('Real Access/workerd/D1 repository execution switch: enabled default, version-fenced save and stale refusal passed');
+  await db.prepare("INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,advice_state,test_state,agent_state,created_at,updated_at,expires_at) VALUES('11111111-1111-4111-8111-111111111111',1,1,'original','hash',?,'NONE','PASSED','NONE','2026-10-14T00:00:00.000Z','2026-10-14T00:00:00.000Z','2026-10-14T00:10:00.000Z')").bind(JSON.stringify({selection:{number:7,headCommitId:'b'.repeat(40)}})).run();
+  const recent=await (await rpc('/native/pr-evidence/read',{action:'list',repository:target.repository,repositoryId:'1'})).json();
+  assert.deepEqual([recent.truncated,recent.jobs.map(job=>[job.selection.number,job.testState])],[false,[[7,'PASSED']]]);
+  console.log('Real Access/workerd/D1 recent repository runs read stored selections without a provider binding');
   console.log('Built native UI, real local Access identity mapping, spoof rejection and D1 session passed');
   if (serve) {
     console.log('Temporary UI browser check at ' + origin + '; automatically disposed in 120 seconds');
