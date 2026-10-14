@@ -106,6 +106,52 @@ class Observability(unittest.TestCase):
             self.assertEqual(saved['settings'],{'evidence':{'daily_limit':40},'webhooks':{'origins':['https://hooks.example.com','https://other.example.com'],'dailyLimit':500}})
 
 
+class GuardedMigration(unittest.TestCase):
+    table='CREATE TABLE IF NOT EXISTS journal (\n id INTEGER PRIMARY KEY -- one row; per entry\n);\nCREATE UNIQUE INDEX IF NOT EXISTS journal_id ON journal(id);\n'
+    trigger="CREATE TRIGGER IF NOT EXISTS journal_seen AFTER INSERT ON journal BEGIN\n INSERT INTO seen(id) VALUES(NEW.id);\n UPDATE seen SET n=CASE WHEN n>0 THEN n ELSE 1 END;\nEND;\n"
+
+    def test_only_repeatable_creates_are_named(self):
+        self.assertEqual(demo.migration_objects(self.table+self.trigger),['journal','journal_id','journal_seen'])
+        for refused in ('ALTER TABLE journal ADD COLUMN note TEXT;','CREATE TABLE journal (id INTEGER);',self.table+'DROP TABLE users;',
+                        self.trigger+'DELETE FROM users;','CREATE TRIGGER IF NOT EXISTS t AFTER INSERT ON journal BEGIN\n SELECT 1;\n','-- nothing\n'):
+            with self.assertRaises(ValueError): demo.migration_objects(refused)
+
+    def test_pending_migrations_follow_the_reviewed_tail(self):
+        import hashlib
+        digest=lambda text: hashlib.sha256(text.encode()).hexdigest()
+        base='CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY);\n'
+        files=[('0002_b.sql',self.trigger),('0001_a.sql',self.table)]
+        schema=base+'\n'+self.table+'\n'+self.trigger
+        self.assertEqual(demo.pending_migrations(schema,digest(schema),files),[])
+        self.assertEqual([name for name,_,_ in demo.pending_migrations(schema,digest(base),files)],['0001_a.sql','0002_b.sql'])
+        after=demo.pending_migrations(schema,digest(base+'\n'+self.table),files)
+        self.assertEqual([(name,digest(result)) for name,_,result in after],[('0002_b.sql',digest(schema))])
+        with self.assertRaisesRegex(ValueError,'predecessor'): demo.pending_migrations(schema,digest('other'),files)
+        with self.assertRaisesRegex(ValueError,'does not end'): demo.pending_migrations(schema+'\n-- edited',digest(base),files)
+
+    def test_migrate_applies_reads_back_and_advances_the_receipt(self):
+        import hashlib
+        import sqlite3
+        with tempfile.TemporaryDirectory() as temporary, sqlite3.connect(':memory:') as db:
+            directory=Path(temporary); db.row_factory=sqlite3.Row
+            schema=(demo.ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration=(demo.ROOT/'cloudflare/forge/migrations/0022_public_repositories.sql').read_text()
+            previous=schema[:-len('\n'+migration)]; db.executescript(previous)
+            replace_private_json(directory/'forge.json',{'database':{'uuid':'database'}})
+            replace_private_json(directory/'schema-receipt.json',{'database':'database','sha256':hashlib.sha256(previous.encode()).hexdigest()})
+            def cf(config,*args):
+                if args[:2]==('d1','get'): return {'name':'example','uuid':'database'}
+                body=json.loads(args[-1])
+                if body['sql'].startswith('SELECT'): return [{'results':[dict(row) for row in db.execute(body['sql'],body['params'])]}]
+                db.executescript(body['sql']); return [{'results':[]}]
+            with patch.object(demo,'cf',side_effect=cf):
+                with self.assertRaisesRegex(ValueError,'ownership'): demo.migrate(directory,{'name':'other'})
+                demo.migrate(directory,{'name':'example'})
+                demo.migrate(directory,{'name':'example'})
+            self.assertEqual(db.execute('SELECT count(*) FROM repository_visibility').fetchone()[0],0)
+            self.assertEqual(json.loads((directory/'schema-receipt.json').read_text())['sha256'],hashlib.sha256(schema.encode()).hexdigest())
+
+
 class PublicMigration(unittest.TestCase):
     def test_public_enable_requires_owned_database_and_reviewed_predecessor(self):
         import hashlib

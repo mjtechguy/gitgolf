@@ -201,6 +201,22 @@ keep the key, because saved subscriptions are encrypted with it. Receiver URLs
 and signing secrets are entered in the repository's Webhooks settings, never in
 this directory. Retries ride the stack's five-minute schedule.
 
+When a checkout adds schema migrations, `deploy` refuses until they are applied:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py migrate NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+`migrate` works back from the tail of `cloudflare/forge/schema.sql` through the
+files in `cloudflare/forge/migrations/` until it reaches the schema recorded in
+the private `schema-receipt.json`, then applies the missing ones oldest first.
+It applies only migrations made of `CREATE TABLE`, `CREATE INDEX` and `CREATE
+TRIGGER` statements with `IF NOT EXISTS`, so an interrupted run can be repeated;
+anything else needs its own reviewed step. After each migration it reads the
+created objects back from D1 and only then advances the receipt. Migrate before
+deploying: the new tables are unused by the running Worker.
+
 Enable Workers AI, and optionally agent proposals, on a retained installation:
 
 ```sh
