@@ -144,6 +144,8 @@ const cleanup = async () => {
   for (const child of children) if (child.exitCode === null) child.kill('SIGTERM');
   await new Promise(done => setTimeout(done, 1500));
   await runtime.dispose().catch(() => {});
+  // Job containers write the shared /cache as root; remove it with the same Docker daemon.
+  try { execFileSync('docker', ['run', '--rm', '-v', work + ':/w', 'alpine:3.23', 'rm', '-rf', '/w/cache'], { env: { ...process.env, DOCKER_HOST: process.env.DOCKER_HOST || 'unix:///var/run/docker.sock' }, stdio: 'ignore' }); } catch { /* no Docker phase */ }
   await rm(work, { recursive: true, force: true }).catch(() => {});
 };
 process.on('SIGINT', async () => { await cleanup(); process.exit(130); });
