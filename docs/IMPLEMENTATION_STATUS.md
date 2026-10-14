@@ -1,5 +1,34 @@
 # Golf implementation status
 
+## 2026-10-14 — Native releases and discussion attachments on R2
+
+Cloudflare native serves repository releases for existing tags by current
+administrators while no tag rules exist (schema 28): D1 notes and original
+receipts, up to 25 assets of 256 KiB per release written once to private R2
+with readback settlement, and downloads streamed only with current repository
+access; tags still arrive only by `git push`. It also serves discussion
+attachments (schema 29): up to 100 files of 256 KiB per description or comment
+in private R2, portable upload authority, original receipts and SHA-256
+verified downloads; there is no deletion or replacement. The four upload and
+file-write procedures accept bodies of about 400 KiB; everything else stays at
+96 KiB.
+
+Verified locally by Worker tests (403, 402 pass, 1 skipped), real
+workerd/D1/R2 runtime checks and native Playwright specs against the Worker
+handlers; hosted acceptance is recorded separately.
+
+## 2026-10-14 — Native email accepted on the retained installation
+
+After `migrate` (applied `0027_email_notifications.sql`), `enable-email
+--email-limit 200`, `renew-deploy` (the account offered `Email Sending Write`)
+and a deploy, Cloudflare created the sending subdomain
+`mail.demo.gitgolf.mjtechguy.com` and the capability reported `DEGRADED`. After
+the administrator enabled email with background consent and subscribed
+`mj/merge-probe` to issues, opening issue 3 there queued one delivery, which
+Cloudflare Email Service accepted on the first attempt with a provider message
+id; the acceptance was recorded and the capability turned `READY`. Delivery to
+the inbox is not observed by Golf.
+
 ## 2026-10-14 — Native repository email notifications (not yet qualified live)
 
 Cloudflare-native repository email notifications are implemented in source but
