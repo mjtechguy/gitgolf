@@ -643,44 +643,72 @@ Local review runtime check (uses fixture Artifacts reads, actual workerd/D1):
 node cloudflare/forge/review-runtime-check.mjs "$(command -v cf)"
 ```
 
-### Native pull request merge, first slice (schema24)
+### Native pull request merge and squash (schema24)
 
 Apply additive migration 0024 before serving schema24: every pull request read
 joins `pull_merge_operations`. The Python/`cf` release path applies and verifies
 it, including both partial unique indexes; on the Alchemy path run
 `cloudflare_alchemy_demo.py migrate DIRECTORY` before `deploy`. `pull.merge`
-then reports ready.
+then reports ready. Three-way merges and squash (2026-10-14) need no further
+migration.
 
-The slice merges a same-repository pull request with a merge commit only when
-the base branch tip is already contained in the head branch. The merge commit
-then has the head's tree and parents `[base tip, head tip]`; no tree merge is
-computed. The Worker builds that one commit, sends it as a one-object pack
-through the same single-ref reservation, Git rules and `git_operations` journal
-as a brokered push, and confirms it by reading the branch and the commit back.
-Author and committer are the acting account's display name with
+A same-repository pull request merges with a merge commit (parents
+`[base tip, head tip]`) or a squash commit (one parent, the base tip). The tree is:
+- the head's tree when the head already contains the base tip;
+- otherwise a path-level three-way merge (`tree-merge.mjs`) of the base and head
+  trees against their merge base. The merge base comes from the same bounded
+  ancestry read as pull request comparisons (at most 500 commits per side). When
+  only one side changed a path, that side is taken; identical changes are taken
+  once; different changes to the same path (content, mode, delete, file versus
+  directory) are a conflict. Lines inside a file are never merged.
+
+The Worker builds the commit and only the new tree objects a merge creates, sends
+them as one pack through the same single-ref reservation, Git rules and
+`git_operations` journal as a brokered push (merges still reserve the whole
+repository with `write_pending`), and confirms by reading the branch and the
+commit back. Author and committer are the acting account's display name with
 `<login>@users.noreply.<public host>`. Commit title and message are bound in the
-request fingerprint and written into the commit; D1 does not store them.
+request fingerprint and written into the commit; D1 does not store them. With no
+title, a merge says `Merge pull request #N from head into base` and a squash uses
+the pull request title and `(#N)`.
 
-Squash, rebase, a base with commits the head lacks, fork sources, drafts, closed
-or changed pull requests and locked targets are recorded as `REJECTED` /
-`preflight_refused` with a plain `detail` in `pull_merge_operations`, and nothing
-is sent. The merge observation names the same reason before a request is made.
-Protected merge, review/check requirements and CODEOWNERS policy are not part of
-this slice. A merge does not start automatic PR tests; its journal row is
-recorded with `ci_state` `NONE`.
+Refusals are recorded as `REJECTED` / `preflight_refused` with a plain `detail`
+in `pull_merge_operations`, also returned to the requester as `refusalCode`, and
+nothing is sent:
+- `merge_conflict`: the conflicting paths (at most 50, with their full count) are
+  kept in the journal row and returned with the receipt;
+- `nothing_to_merge`: the base already contains the head;
+- `ancestry_unproven`: no single merge base within the bounded read (longer
+  history, criss-cross merges with several merge bases, or unrelated histories);
+- rebase, fork sources, drafts, closed or changed pull requests, an unresolved
+  write and locked targets, as before.
+
+The merge observation names the same reason before a request is made, lists
+conflicting paths, and reports both merge commits and squash as allowed when a
+request would currently be admitted. Protected merge, review/check requirements
+and CODEOWNERS policy are not part of this slice. A merge does not start
+automatic PR tests; its journal row is recorded with `ci_state` `NONE`.
 
 Any failure after the reservation is `DISPATCH_UNKNOWN`: the operation, its pull
 request and the repository's `write_pending` fence stay as they are, exactly like
-an unconfirmed push. Inspecting the original operation settles it only when the
-branch names the dispatched commit and that commit reads back with the expected
-parents. The pack is never sent again and there is no automatic conclusion that
-a write did not land; that case needs the same operator reconciliation as an
-unconfirmed push, and must also resolve the `pull_merge_operations` row.
+an unconfirmed push. The journal records the expected tree (`expectedTreeId` in
+the row's `original` JSON, not returned in receipts). Inspecting the original
+operation settles it only when the branch names the dispatched commit and that
+commit reads back with the expected parents (`[base, head]` for a merge, `[base]`
+for a squash) and the expected tree. Rows from before this change have no
+expected tree and are checked by parents only. The pack is never sent again and
+there is no automatic conclusion that a write did not land; that case needs the
+same operator reconciliation as an unconfirmed push, and must also resolve the
+`pull_merge_operations` row.
 
-Local source tests feed the generated pack to real Git, and this check runs the
-whole merge in actual workerd/D1 against a real local repository (the Artifacts
-binding is a fixture). Cloudflare Artifacts accepting this pack is not proven
-until a hosted merge is observed; probe it on a scratch repository first.
+Local source tests feed the generated pack to real Git and compare merged trees
+with `git merge-tree --write-tree`. This check runs the whole merge in actual
+workerd/D1 against a real local repository (the Artifacts binding is a fixture):
+a merge whose head contains the base, a diverged three-way merge, a diverged
+squash, a conflict refusal with its paths, replay of each, and unknown outcomes
+for a merge and a squash settled by readback. Cloudflare Artifacts accepting
+these packs is not proven until a hosted merge is observed; probe it on a scratch
+repository first.
 
 ```sh
 node cloudflare/forge/merge-runtime-check.mjs "$(command -v cf)"

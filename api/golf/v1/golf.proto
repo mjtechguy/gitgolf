@@ -4061,6 +4061,16 @@ message PullRequestMergeObservation {
   optional string source_owner_id = 16;
   // Native review observations only; does not establish reviewer eligibility or a merge permit.
   ProtectedReviewObservation protected_reviews = 17;
+  // With unavailable_reason native_merge_conflict: up to 50 paths the path-level tree merge cannot combine,
+  // and the full number of such paths.
+  repeated PullMergeConflict merge_conflicts = 18;
+  uint32 merge_conflict_count = 19;
+}
+// A path where both sides changed differently. Reason: both_modified, both_added, deleted_by_us,
+// deleted_by_them, file_directory or unrepresentable_name. No line-level merge is attempted.
+message PullMergeConflict {
+  string path = 1;
+  string reason = 2;
 }
 message GetPullRequestMergeObservationResponse { PullRequestMergeObservation observation = 1; }
 
@@ -4138,6 +4148,11 @@ message StandardPullMergeOperation {
  RepositoryKey source_repository = 21;
  string source_repository_id = 22;
  string source_owner_id = 23;
+ // Only for REJECTED: the preflight refusal (failure_code stays preflight_refused), and for
+ // merge_conflict up to 50 conflicting paths plus their full number.
+ string refusal_code = 24;
+ repeated PullMergeConflict conflicts = 25;
+ uint32 conflict_count = 26;
 }
 message SubmitStandardPullMergeResponse { StandardPullMergeOperation operation = 1; }
 message GetStandardPullMergeOperationResponse { StandardPullMergeOperation operation = 1; }

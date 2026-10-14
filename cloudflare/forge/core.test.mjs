@@ -12,6 +12,7 @@ import { deny, bodyLimit } from './src/common.mjs';
 import { reconcileIndexes } from './src/repository-indexes.mjs';
 import { consumeEvidence, reconcileEvidence } from './src/evidence.mjs';
 import { advertisedRefs, packetLine, receiveCommand, gitRequest } from './src/git.mjs';
+import { treeObject } from './src/git-objects.mjs';
 
 const ownerToken = 'golf_native_' + 'a'.repeat(43), readerToken = 'golf_native_' + 'b'.repeat(43);
 const zero = '0'.repeat(40), commit = 'a'.repeat(40);
@@ -19,18 +20,38 @@ const push = (ref = 'refs/heads/main', old = zero, next = commit) => new Uint8Ar
   packetLine(`${old} ${next} ${ref}\0 report-status side-band-64k object-format=sha1 agent=git/2.54.0\n`), Buffer.from('0000PACK\0\0\0\x02'),
 ]));
 
-// Independent decoder for the one-commit pack a native merge sends; the fixture provider stores only what it can verify.
-function unpackCommit(pack) {
-  assert.equal(pack.subarray(0, 12).toString('hex'), '5041434b0000000200000001');
+// Independent decoder for the pack a native merge sends: one commit, plus the trees a three-way merge created.
+// The fixture provider stores only what it can verify.
+const treeTypes = { '40000': 'tree', '100644': 'blob', '100755': 'exec', '120000': 'symlink', '160000': 'gitlink' };
+function unpackObjects(pack) {
+  assert.equal(pack.subarray(0, 8).toString('hex'), '5041434b00000002');
   assert.deepEqual(pack.subarray(-20), createHash('sha1').update(pack.subarray(0, -20)).digest());
-  let offset = 12, byte = pack[offset++], size = byte & 15, shift = 4; assert.equal(byte >> 4 & 7, 1);
-  while (byte & 0x80) { byte = pack[offset++]; size |= (byte & 0x7f) << shift; shift += 7; }
-  const body = inflateSync(pack.subarray(offset, -20)); assert.equal(body.length, size);
-  const text = body.toString(), split = text.indexOf('\n\n'), headers = text.slice(0, split).split('\n');
-  const author = /^author (.+) <([^<> ]+)> (\d+) \+0000$/.exec(headers.find(line => line.startsWith('author ')));
-  assert.equal(headers.at(-1), headers.at(-2).replace('author ', 'committer '));
-  return { hash: createHash('sha1').update(`commit ${size}\0`).update(body).digest('hex'), treeHash: headers[0].slice(5), parents: headers.filter(line => line.startsWith('parent ')).map(line => line.slice(7)),
-    message: text.slice(split + 2), author: { name: author[1], email: author[2] }, authoredAt: Number(author[3]) };
+  const count = pack.readUInt32BE(8), objects = []; let offset = 12;
+  for (let i = 0; i < count; i++) {
+    let byte = pack[offset++], size = byte & 15, shift = 4; const type = { 1: 'commit', 2: 'tree' }[byte >> 4 & 7]; assert.ok(type);
+    while (byte & 0x80) { byte = pack[offset++]; size |= (byte & 0x7f) << shift; shift += 7; }
+    const { buffer: body, engine } = inflateSync(pack.subarray(offset, -20), { info: true }); assert.equal(body.length, size); offset += engine.bytesWritten;
+    const hash = createHash('sha1').update(`${type} ${size}\0`).update(body).digest('hex');
+    if (type === 'tree') {
+      const entries = [];
+      for (let at = 0; at < body.length;) { const space = body.indexOf(32, at), nul = body.indexOf(0, space); const mode = body.subarray(at, space).toString();
+        entries.push({ name: body.subarray(space + 1, nul).toString(), hash: body.subarray(nul + 1, nul + 21).toString('hex'), type: treeTypes[mode], mode: mode.padStart(6, '0') }); at = nul + 21; }
+      objects.push({ type, hash, entries }); continue;
+    }
+    const text = body.toString(), split = text.indexOf('\n\n'), headers = text.slice(0, split).split('\n');
+    const author = /^author (.+) <([^<> ]+)> (\d+) \+0000$/.exec(headers.find(line => line.startsWith('author ')));
+    assert.equal(headers.at(-1), headers.at(-2).replace('author ', 'committer '));
+    objects.push({ type, commit: { hash, treeHash: headers[0].slice(5), parents: headers.filter(line => line.startsWith('parent ')).map(line => line.slice(7)),
+      message: text.slice(split + 2), author: { name: author[1], email: author[2] }, authoredAt: Number(author[3]) } });
+  }
+  assert.equal(offset, pack.length - 20);
+  return objects;
+}
+function unpackCommit(pack, trees) {
+  const objects = unpackObjects(pack), commits = objects.filter(object => object.type === 'commit');
+  assert.equal(commits.length, 1);
+  for (const object of objects) if (object.type === 'tree') trees?.set(object.hash, object.entries);
+  return commits[0].commit;
 }
 
 async function fixture(t) {
@@ -66,11 +87,11 @@ async function fixture(t) {
         async listTokens() { return { tokens: [], total: 0 }; },
         async log(options = {}) { return repos.get(name).ref && !options.offset ? [{ hash: commit, treeHash: 'f'.repeat(40), parents: [], message: 'Native commit', author: { name: 'Alice' }, authoredAt: 1700000000 }] : []; },
         async readCommit(hash) { return repos.get(name).commits?.get(hash) || ([commit, 'b'.repeat(40), 'c'.repeat(40)].includes(hash) ? { hash, treeHash: 'f'.repeat(40), parents: hash === 'c'.repeat(40) ? ['b'.repeat(40)] : hash === 'b'.repeat(40) ? [commit] : [], message: 'Native commit', author: { name: 'Alice' }, authoredAt: 1700000000 } : null); },
-        async readTree(hash) { return hash === 'f'.repeat(40) ? [
+        async readTree(hash) { return repos.get(name).trees?.get(hash) || (hash === 'f'.repeat(40) ? [
           { name: 'hello.txt', hash: '1'.repeat(40), type: 'blob', mode: '100644' },
           { name: 'link', hash: '2'.repeat(40), type: 'symlink', mode: '120000' },
           { name: 'module', hash: '3'.repeat(40), type: 'gitlink', mode: '160000' },
-        ] : null; },
+        ] : null); },
         async readBlob(hash) { return hash === '1'.repeat(40) ? new Blob(['hello native\n']) : hash === '2'.repeat(40) ? new Blob(['hello.txt']) : null; },
         async readFile({ ref, path }) { return ref === commit && path === 'hello.txt' ? new Blob(['hello native\n']) : null; },
         async createToken(scope, ttl) { assert.equal(ttl, 60); const plaintext = `art_v1_${scope === 'write' ? 'd' : 'e'}`.padEnd(71, scope === 'write' ? 'd' : 'e') + '?expires=2000000000'; tokens.add(plaintext); return { plaintext }; },
@@ -86,13 +107,13 @@ async function fixture(t) {
       effects++;
       const command = receiveCommand(options.body), sent = Buffer.from(options.body), pack = sent.subarray(parseInt(sent.subarray(0, 4).toString(), 16) + 4);
       const apply = () => {
-        if (pack.length > 8) { const object = unpackCommit(pack); assert.equal(object.hash, command.next); assert.equal(repos.get(name).refs.get(command.ref), command.old); (repos.get(name).commits ||= new Map()).set(object.hash, object); }
+        if (pack.length > 8) { const object = unpackCommit(pack, repos.get(name).trees ||= new Map()); assert.equal(object.hash, command.next); assert.equal(repos.get(name).refs.get(command.ref), command.old); (repos.get(name).commits ||= new Map()).set(object.hash, object); }
         repos.get(name).ref = command.next; repos.get(name).refs.set(command.ref, command.next);
       };
       // A lost push may still land later (land); a lost reply follows an applied write.
       if (losePush) { held = apply; throw Error('unknown provider outcome containing sensitive metadata'); }
       // The provider keeps the unpacked object but refuses the ref update, as for a lost compare-and-swap.
-      if (refuseRef) { (repos.get(name).commits ||= new Map()).set(command.next, unpackCommit(pack)); return new Response(Buffer.concat([packetLine('unpack ok\n'), packetLine(`ng ${command.ref} failed to update ref\n`), Buffer.from('0000')]), { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } }); }
+      if (refuseRef) { (repos.get(name).commits ||= new Map()).set(command.next, unpackCommit(pack, repos.get(name).trees ||= new Map())); return new Response(Buffer.concat([packetLine('unpack ok\n'), packetLine(`ng ${command.ref} failed to update ref\n`), Buffer.from('0000')]), { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } }); }
       apply();
       if (loseReply) { loseReply = false; throw Error('lost provider reply'); }
       return new Response(Buffer.concat([packetLine('unpack ok\n'), packetLine(`ok ${command.ref}\n`), Buffer.from('0000')]), { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } });
@@ -3001,7 +3022,7 @@ test('native merge diagnostics bind live source, locks, base ancestry and curren
   assert.equal(initial.nativeCallerCanMerge,true);
   assert.equal(initial.currentTargetWriter,true);
   assert.equal(initial.unavailableReason,'protected_integration_unqualified');
-  assert.deepEqual(initial.mergeConfiguration,{allowMergeCommits:true,defaultMergeStyle:'merge',defaultUpdateStyle:'merge'});
+  assert.deepEqual(initial.mergeConfiguration,{allowMergeCommits:true,allowSquashMerge:true,defaultMergeStyle:'merge',defaultUpdateStyle:'merge'});
   const reader=(await value(await read(input,readerToken))).observation;
   assert.equal(reader.currentTargetWriter,false);assert.equal(reader.nativeCallerCanMerge,false);assert.equal(Object.values(reader.mergeConfiguration).some(v=>v===true),false);
   assert.equal((await read({...input,expectedPullRevision:'0'.repeat(64)})).status,412);
@@ -3077,15 +3098,14 @@ test('native merge writes one verified merge commit through the push journal and
   assert.equal(capability.length,1);assert.equal(capability[0].state,'CAPABILITY_STATE_READY');
 });
 
-test('native merge refuses everything outside its first slice with a durable receipt and no provider write', async t => {
+test('native merge refuses everything outside its slice with a durable receipt and no provider write', async t => {
   const f=await mergeFixture(t), refused=async(body,detail)=>{
     const operation=(await value(await f.submit(body))).operation, row=f.journal().at(-1);
-    assert.equal(operation.phase,mergePhase('REJECTED'));assert.equal(operation.failureCode,'preflight_refused');assert.equal(operation.mergeCommitId,'');assert.equal(operation.actualBaseCommitId,'');
+    assert.equal(operation.phase,mergePhase('REJECTED'));assert.equal(operation.failureCode,'preflight_refused');assert.equal(operation.refusalCode,detail);assert.equal(operation.mergeCommitId,'');assert.equal(operation.actualBaseCommitId,'');
     assert.equal(row.operation_id,body.operationId);assert.equal(row.detail,detail);assert.equal(row.git_operation_id,null);
     assert.deepEqual((await value(await f.inspect(body))).operation,operation);
     return operation;
   };
-  assert.equal((await refused(f.input({method:'squash'}),'squash_unsupported')).method,'squash');
   const fork={sourceRepository:{owner:'bob',name:'fork'},sourceRepositoryId:'7',sourceOwnerId:'2'}, forked=await refused(f.input(fork),'fork_source_unsupported');
   assert.equal(forked.contract,'golf.pull.standard-native-merge.v2');assert.deepEqual(forked.sourceRepository,fork.sourceRepository);assert.equal(forked.sourceRepositoryId,'7');assert.equal(forked.sourceOwnerId,'2');
   await refused(f.input({expectedPullRevision:'0'.repeat(64)}),'pull_request_changed');
@@ -3094,17 +3114,18 @@ test('native merge refuses everything outside its first slice with a durable rec
   f.sql.prepare('INSERT INTO repository_rules(repository_id,artifact_name,version,branches,tags,next_tag) VALUES(1,?,1,?,\'[]\',1)').run(artifact,JSON.stringify([{ruleName:'main'}]));
   await refused(f.input(),'target_locked');
   f.sql.exec('DELETE FROM repository_rules');
-  // The base gained a commit the head does not contain: no tree merge exists in this slice.
-  const moved='d'.repeat(40), get=f.env.ARTIFACTS.get;
-  f.env.ARTIFACTS.get=async name=>{const repo=await get(name);return {...repo,async readCommit(hash){return hash===moved?{hash,treeHash:'f'.repeat(40),parents:[commit],message:'Base moved',author:{name:'Bob'},authoredAt:1700000001}:repo.readCommit(hash);}};};
-  f.setRefs([['refs/heads/main',moved],['refs/heads/feature','b'.repeat(40)]]);
-  const diverged=await f.pull(), observed=(await value(await f.observe(diverged))).observation;
-  assert.equal(observed.nativeCallerCanMerge,false);assert.equal(observed.unavailableReason,'native_base_not_ancestor');assert.equal(Object.values(observed.mergeConfiguration).some(v=>v===true),false);
-  await refused(f.input({selection:{...f.selection,baseCommitId:moved},expectedPullRevision:diverged.revision}),'base_not_ancestor');
-  // The base already contains the head: nothing to merge.
+  // A criss-cross history has two merge bases: no single three-way merge is proven, so nothing is guessed.
+  const [x1,x2,m1,m2]=['a1','a2','a3','a4'].map(p=>p.repeat(20)), graph={[x1]:[commit],[x2]:[commit],[m1]:[x1,x2],[m2]:[x2,x1]}, get=f.env.ARTIFACTS.get;
+  f.env.ARTIFACTS.get=async name=>{const repo=await get(name);return {...repo,async readCommit(hash){return graph[hash]?{hash,treeHash:'f'.repeat(40),parents:graph[hash],message:'Criss-cross',author:{name:'Bob'},authoredAt:1700000001}:repo.readCommit(hash);}};};
+  f.setRefs([['refs/heads/main',m1],['refs/heads/feature',m2]]);
+  const crossed=await f.pull(), observed=(await value(await f.observe(crossed))).observation;
+  assert.equal(observed.nativeCallerCanMerge,false);assert.equal(observed.unavailableReason,'native_ancestry_unproven');assert.equal(Object.values(observed.mergeConfiguration).some(v=>v===true),false);
+  for(const method of ['merge','squash']) await refused(f.input({method,selection:{...f.selection,baseCommitId:m1,headCommitId:m2},expectedPullRevision:crossed.revision}),'ancestry_unproven');
+  // The base already contains the head: nothing to merge or squash.
   f.setRefs([['refs/heads/main','c'.repeat(40)],['refs/heads/feature','b'.repeat(40)]]);
   const ahead=await f.pull();
-  await refused(f.input({selection:{...f.selection,baseCommitId:'c'.repeat(40)},expectedPullRevision:ahead.revision}),'base_not_ancestor');
+  assert.equal((await value(await f.observe(ahead))).observation.unavailableReason,'native_nothing_to_merge');
+  for(const method of ['merge','squash']) await refused(f.input({method,selection:{...f.selection,baseCommitId:'c'.repeat(40)},expectedPullRevision:ahead.revision}),'nothing_to_merge');
   f.setRefs([['refs/heads/main',commit],['refs/heads/feature','b'.repeat(40)]]);
   const drafted=(await value(await f.call('UpdatePullRequest',{repository:key,repositoryId:'1',pullRequestId:f.pr.id,number:f.pr.number,expectedRevision:f.pr.revision,idempotencyKey:nonce(),draft:true}))).pullRequest;
   await refused(f.input({expectedPullRevision:drafted.revision}),'pull_request_draft');
@@ -3206,6 +3227,112 @@ test('a readback that differs from the dispatched merge commit never becomes suc
   assert.notEqual(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);assert.equal((await f.pull()).merged,false);
   f.env.ARTIFACTS.get=get;
   assert.equal((await value(await f.inspect(body))).operation.phase,mergePhase('SUCCEEDED'));assert.equal(f.counts().effects,1);
+});
+
+// Diverged history over the fixture: main gains d and feature gains e, each with its own tree; their merge base is the fixture commit (tree f).
+const fixtureEntries=[{name:'hello.txt',hash:'1'.repeat(40),type:'blob',mode:'100644'},{name:'link',hash:'2'.repeat(40),type:'symlink',mode:'120000'},{name:'module',hash:'3'.repeat(40),type:'gitlink',mode:'160000'}];
+const fileEntry=(name,hash)=>({name,hash,type:'blob',mode:'100644'});
+function diverge(f,baseTree,headTree){
+  const [d,e,dt,et]=['d','e','6','7'].map(c=>c.repeat(40)), get=f.env.ARTIFACTS.get;
+  const commits={[d]:{tree:dt,parents:[commit]},[e]:{tree:et,parents:['b'.repeat(40)]}}, trees={[dt]:baseTree,[et]:headTree};
+  f.env.ARTIFACTS.get=async name=>{const repo=await get(name);return {...repo,
+    async readCommit(hash){const c=commits[hash];return c?{hash,treeHash:c.tree,parents:c.parents,message:'Diverged',author:{name:'Bob'},authoredAt:1700000001}:repo.readCommit(hash);},
+    async readTree(hash){return trees[hash]||repo.readTree(hash);}};};
+  f.setRefs([['refs/heads/main',d],['refs/heads/feature',e]]);
+  return {d,e,selection:{...f.selection,baseCommitId:d,headCommitId:e}};
+}
+const providerRepo=async f=>f.env.ARTIFACTS.get(f.sql.prepare('SELECT artifact_name FROM repositories WHERE id=1').get().artifact_name);
+const cleanDivergence=async f=>{
+  const v=diverge(f,[...fixtureEntries,fileEntry('base.txt','4'.repeat(40))],[...fixtureEntries,fileEntry('feature.txt','5'.repeat(40))]);
+  return {...v,tree:await treeObject([...fixtureEntries,fileEntry('base.txt','4'.repeat(40)),fileEntry('feature.txt','5'.repeat(40))]),pull:await f.pull()};
+};
+
+test('native merge three-way merges diverged branches into a verified two-parent commit with the merged tree', async t => {
+  const f=await mergeFixture(t), v=await cleanDivergence(f);
+  const observed=(await value(await f.observe(v.pull))).observation;
+  assert.equal(observed.nativeCallerCanMerge,true);assert.equal(observed.unavailableReason,'protected_integration_unqualified');assert.equal(observed.mergeConflicts,undefined);
+  assert.deepEqual(observed.mergeConfiguration,{allowMergeCommits:true,allowSquashMerge:true,defaultMergeStyle:'merge',defaultUpdateStyle:'merge'});
+  const body=f.input({selection:v.selection,expectedPullRevision:v.pull.revision}), operation=(await value(await f.submit(body))).operation;
+  assert.equal(operation.phase,mergePhase('SUCCEEDED'));assert.equal(operation.actualBaseCommitId,v.d);assert.equal(operation.headCommitId,v.e);
+  // Journal evidence stays out of the receipt.
+  assert.deepEqual(Object.keys(operation).sort(),['actorId','actualBaseCommitId','contract','createdAt','expectedPullRevision','failureCode','headCommitId','mergeCommitId','method','number','observedBaseCommitId','operationId','ownerId','phase','pullRequestId','repository','repositoryId','sourceRef','targetRef','updatedAt']);
+  assert.equal(JSON.parse(f.journal()[0].original).expectedTreeId,v.tree.id);
+  // The provider decoded the commit and the new merged tree from the one pack.
+  const repo=await providerRepo(f), stored=await repo.readCommit(operation.mergeCommitId);
+  assert.deepEqual(stored.parents,[v.d,v.e]);assert.equal(stored.treeHash,v.tree.id);assert.equal(stored.message,`Merge pull request #${f.pr.number} from feature into main\n`);
+  assert.deepEqual((await repo.readTree(v.tree.id)).map(entry=>[entry.name,entry.hash,entry.mode]),[['base.txt','4'.repeat(40),'100644'],['feature.txt','5'.repeat(40),'100644'],['hello.txt','1'.repeat(40),'100644'],['link','2'.repeat(40),'120000'],['module','3'.repeat(40),'160000']]);
+  assert.deepEqual({...f.sql.prepare('SELECT old_sha,new_sha,state FROM git_operations').get()},{old_sha:v.d,new_sha:operation.mergeCommitId,state:'APPLIED'});
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);
+  assert.deepEqual((await value(await f.submit(body))).operation,operation);assert.deepEqual((await value(await f.inspect(body))).operation,operation);
+  assert.equal(f.counts().effects,1);assert.equal(f.journal().length,1);
+  const merged=await f.pull();
+  assert.equal(merged.merged,true);assert.equal(merged.mergeCommitId,operation.mergeCommitId);assert.equal(merged.base.commitId,v.d);assert.equal(merged.head.commitId,v.e);assert.equal(merged.mergeBaseCommitId,commit);
+});
+
+test('native squash writes one commit with the base as its only parent and the head or merged tree', async t => {
+  await t.test('head contains the base', async t => {
+    const f=await mergeFixture(t), body=f.input({method:'squash'}), operation=(await value(await f.submit(body))).operation;
+    assert.equal(operation.phase,mergePhase('SUCCEEDED'));assert.equal(operation.method,'squash');assert.equal(operation.actualBaseCommitId,commit);
+    const stored=await (await providerRepo(f)).readCommit(operation.mergeCommitId);
+    assert.deepEqual(stored.parents,[commit]);assert.equal(stored.treeHash,'f'.repeat(40));assert.equal(stored.message,`Proposal (#${f.pr.number})\n`);
+    assert.equal(JSON.parse(f.journal()[0].original).expectedTreeId,'f'.repeat(40));
+    assert.deepEqual((await value(await f.submit(body))).operation,operation);assert.equal(f.counts().effects,1);
+    const merged=await f.pull();assert.equal(merged.merged,true);assert.equal(merged.state,'ISSUE_STATE_CLOSED');assert.equal(merged.mergeCommitId,operation.mergeCommitId);
+  });
+  await t.test('diverged branches', async t => {
+    const f=await mergeFixture(t), v=await cleanDivergence(f);
+    const body=f.input({method:'squash',commitTitle:'Squash feature',commitMessage:'Both sides kept.',selection:v.selection,expectedPullRevision:v.pull.revision});
+    const operation=(await value(await f.submit(body))).operation;
+    assert.equal(operation.phase,mergePhase('SUCCEEDED'));assert.equal(operation.actualBaseCommitId,v.d);
+    const stored=await (await providerRepo(f)).readCommit(operation.mergeCommitId);
+    assert.deepEqual(stored.parents,[v.d]);assert.equal(stored.treeHash,v.tree.id);assert.equal(stored.message,'Squash feature\n\nBoth sides kept.\n');
+    assert.doesNotMatch(JSON.stringify(f.journal()),/Squash feature|Both sides/);
+    assert.deepEqual((await value(await f.submit(body))).operation,operation);assert.deepEqual((await value(await f.inspect(body))).operation,operation);assert.equal(f.counts().effects,1);
+  });
+});
+
+test('native merge refuses conflicting diverged branches and lists at most 50 conflicting paths with their count', async t => {
+  const f=await mergeFixture(t), files=prefix=>Array.from({length:60},(_,i)=>fileEntry('c'+String(i).padStart(2,'0'),prefix+String(i).padStart(39,'0')));
+  const others=fixtureEntries.filter(entry=>entry.name!=='hello.txt');
+  const v=diverge(f,[...others,fileEntry('hello.txt','8'.repeat(40)),...files('4')],[...others,fileEntry('hello.txt','9'.repeat(40)),...files('5')]), pull=await f.pull();
+  const expected=Array.from({length:50},(_,i)=>({path:'c'+String(i).padStart(2,'0'),reason:'both_added'}));
+  const observed=(await value(await f.observe(pull))).observation;
+  assert.equal(observed.nativeCallerCanMerge,false);assert.equal(observed.unavailableReason,'native_merge_conflict');assert.equal(Object.values(observed.mergeConfiguration).some(v=>v===true),false);
+  assert.deepEqual(observed.mergeConflicts,expected);assert.equal(observed.mergeConflictCount,61);
+  for(const method of ['merge','squash']) {
+    const body=f.input({method,selection:v.selection,expectedPullRevision:pull.revision}), operation=(await value(await f.submit(body))).operation, row=f.journal().at(-1);
+    assert.equal(operation.phase,mergePhase('REJECTED'));assert.equal(operation.failureCode,'preflight_refused');assert.equal(operation.refusalCode,'merge_conflict');
+    assert.deepEqual(operation.conflicts,expected);assert.equal(operation.conflictCount,61);assert.equal(operation.mergeCommitId,'');
+    assert.equal(row.detail,'merge_conflict');assert.equal(row.git_operation_id,null);assert.equal(JSON.parse(row.original).conflicts.length,50);
+    assert.deepEqual((await value(await f.submit(body))).operation,operation);assert.deepEqual((await value(await f.inspect(body))).operation,operation);
+  }
+  // Only the two differently changed files conflict when the rest merges.
+  const small=diverge(f,[...others,fileEntry('hello.txt','8'.repeat(40))],[...others.filter(entry=>entry.name!=='link'),fileEntry('hello.txt','9'.repeat(40))]);
+  const conflicted=(await value(await f.observe(await f.pull()))).observation;
+  assert.deepEqual(conflicted.mergeConflicts,[{path:'hello.txt',reason:'both_modified'}]);assert.equal(conflicted.mergeConflictCount,1);assert.equal(small.d,v.d);
+  assert.equal(f.counts().effects,0);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_operations').get().n,0);assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);
+  assert.equal((await f.pull()).merged,false);
+});
+
+test('an unconfirmed diverged merge or squash settles only when the readback has the expected parents and tree', async t => {
+  for(const method of ['merge','squash']) await t.test(method, async t => {
+    const f=await mergeFixture(t), v=await cleanDivergence(f), body=f.input({method,selection:v.selection,expectedPullRevision:v.pull.revision}); f.losePush();
+    const unknown=(await value(await f.submit(body))).operation, git=f.sql.prepare('SELECT * FROM git_operations').get();
+    assert.equal(unknown.phase,mergePhase('DISPATCH_UNKNOWN'));assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,git.id);
+    assert.equal(JSON.parse(f.journal()[0].original).expectedTreeId,v.tree.id);
+    const blocked=(await value(await f.observe(v.pull))).observation;assert.equal(blocked.unavailableReason,'native_write_unresolved');assert.equal(blocked.nativeCallerCanMerge,false);
+    f.land();
+    // The ref names the dispatched commit, but a readback with any other tree is never adopted.
+    const get=f.env.ARTIFACTS.get;
+    f.env.ARTIFACTS.get=async name=>{const repo=await get(name);return {...repo,async readCommit(hash){const value=await repo.readCommit(hash);return hash===git.new_sha?{...value,treeHash:'f'.repeat(40)}:value;}};};
+    assert.equal((await value(await f.inspect(body))).operation.phase,mergePhase('DISPATCH_UNKNOWN'));
+    f.env.ARTIFACTS.get=get;
+    const settled=(await value(await f.inspect(body))).operation, stored=await (await providerRepo(f)).readCommit(git.new_sha);
+    assert.equal(settled.phase,mergePhase('SUCCEEDED'));assert.equal(settled.mergeCommitId,git.new_sha);assert.equal(settled.actualBaseCommitId,v.d);
+    assert.deepEqual(stored.parents,method==='squash'?[v.d]:[v.d,v.e]);assert.equal(stored.treeHash,v.tree.id);
+    assert.equal(f.counts().effects,1);assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);
+    assert.deepEqual((await value(await f.submit(body))).operation,settled);assert.equal(f.counts().effects,1);
+  });
 });
 
 test('CI registry broker requires an admitted exact-source job and never forwards caller credentials', async t => {

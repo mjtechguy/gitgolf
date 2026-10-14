@@ -1,7 +1,7 @@
 import { portableRuntimeFixture } from './runtime-fixture';
 import {expect,test,type Page} from '@playwright/test';
 import {create,clone,toJson} from '@bufbuild/protobuf';
-import {GetSessionResponseSchema,GetAuthenticationOptionsResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryResponseSchema,GetPullRequestResponseSchema,ListPullRequestReviewsResponseSchema,ListReviewerRunsResponseSchema,GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,GetPullRequestMergeObservationRequestSchema,GetPullRequestMergeObservationResponseSchema,PullRequestSchema,PullRequestMergeObservationSchema,ProtectedReviewObservationSchema,RepositorySchema,UserSchema,IssueState,PullMergeTargetProtection,PullMergeSourceState,RepositorySourceRefKind,WatchRepositoryResponseSchema,type PullRequestMergeObservation} from '../src/gen/golf/v1/golf_pb';
+import {GetSessionResponseSchema,GetAuthenticationOptionsResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryResponseSchema,GetPullRequestResponseSchema,ListPullRequestReviewsResponseSchema,ListReviewerRunsResponseSchema,GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,GetPullRequestMergeObservationRequestSchema,GetPullRequestMergeObservationResponseSchema,PullRequestSchema,PullRequestMergeObservationSchema,PullMergeConflictSchema,ProtectedReviewObservationSchema,RepositorySchema,UserSchema,IssueState,PullMergeTargetProtection,PullMergeSourceState,RepositorySourceRefKind,WatchRepositoryResponseSchema,type PullRequestMergeObservation} from '../src/gen/golf/v1/golf_pb';
 import {respond,request,reject,disabledAgentTasks} from './rpc';
 
 const key={owner:'alex',name:'private'},H='a'.repeat(40),B='b'.repeat(40),R='e'.repeat(64);
@@ -224,20 +224,38 @@ for (const view of ['conversation', 'checks']) test(`native ${view} connects eac
  await expect(page.getByRole('link', { name: 'Open protected preview' })).toHaveCount(0);
 });
 
-// Cloudflare-native merge slice: same repository, merge commits only, and a named reason when the slice does not admit the pull request.
-const nativeReasons={native_base_not_ancestor:'update the head branch from the base first',native_ancestry_unproven:'too large or too complex to prove',native_write_unresolved:'no confirmed outcome'} as const;
+// Cloudflare-native merge slice: same repository, merge commits and squash, and a named reason when the slice does not admit the pull request.
+const nativeReasons={native_nothing_to_merge:'nothing to merge',native_ancestry_unproven:'too large or too complex to find a single merge base',native_write_unresolved:'no confirmed outcome'} as const;
 function sameRepository(state:Awaited<ReturnType<typeof backend>>,change:(v:PullRequestMergeObservation)=>void=()=>{}){
  state.pull.head!.repositoryId='11';
- state.change=v=>{v.sourceRepository=create(PullRequestMergeObservationSchema,{sourceRepository:key}).sourceRepository;v.sourceRepositoryId='11';v.sourceOwnerId='42';v.currentTargetWriter=true;v.nativeCallerCanMerge=true;v.mergeConfiguration!.allowSquashMerge=false;change(v);};
+ state.change=v=>{v.sourceRepository=create(PullRequestMergeObservationSchema,{sourceRepository:key}).sourceRepository;v.sourceRepositoryId='11';v.sourceOwnerId='42';v.currentTargetWriter=true;v.nativeCallerCanMerge=true;change(v);};
 }
-test('native eligible same-repository observation enables only a merge commit',async({page})=>{
+const refuse=(v:PullRequestMergeObservation,reason:string)=>{v.nativeCallerCanMerge=false;v.mergeConfiguration!.allowMergeCommits=false;v.mergeConfiguration!.allowSquashMerge=false;v.unavailableReason=reason;};
+const conflicts=(count:number)=>Array.from({length:count},(_,index)=>create(PullMergeConflictSchema,{path:`src/file-${String(index).padStart(2,'0')}.ts`,reason:index?'both_modified':'deleted_by_them'}));
+test('native eligible same-repository observation enables a merge commit and squash',async({page})=>{
  const state=await backend(page,true,true);sameRepository(state);await open(page);
  await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);await inspect(page);
  await expect(panel(page)).toContainText('Standard native merge scope observed');await panel(page).getByText('Native merge observations',{exact:true}).click();
- await expect(panel(page)).toContainText('Merge commit');await expect(panel(page)).not.toContainText('Squash');
+ await expect(panel(page)).toContainText('Merge commit, Squash');
  await page.getByRole('button',{name:'Merge pull request',exact:true}).click();
- await expect(page.getByRole('dialog').getByRole('option')).toHaveText(['Create a merge commit']);await page.keyboard.press('Escape');
+ await expect(page.getByRole('dialog').getByRole('option')).toHaveText(['Create a merge commit','Squash and merge']);await page.keyboard.press('Escape');
  expect(state.methods).not.toContain('SubmitStandardPullMerge');
+});
+test('native merge conflict names the refusal and lists at most 50 conflicting paths with their count',async({page})=>{
+ const state=await backend(page,true,true);sameRepository(state,v=>{refuse(v,'native_merge_conflict');v.mergeConflicts=conflicts(50);v.mergeConflictCount=61;});
+ await open(page);await inspect(page);await expect(panel(page)).toContainText('Merge unavailable');await expect(panel(page)).toContainText('changed the same paths differently');
+ await expect(panel(page)).toContainText('61 paths conflict; the first 50 are listed');
+ const listed=panel(page).getByRole('list',{name:'Conflicting paths'}).getByRole('listitem');
+ await expect(listed).toHaveCount(50);await expect(listed.first()).toHaveText('src/file-00.ts changed on the base branch, deleted on the head branch');await expect(listed.nth(1)).toHaveText('src/file-01.ts changed differently on both branches');
+ await expect(page.getByRole('region',{name:'Standard native merge'})).toContainText('Standard merge is unavailable');
+ await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);expect(state.methods).not.toContain('SubmitStandardPullMerge');
+});
+for(const fault of ['no-paths','too-many','short-count','bad-reason','duplicate-path','paths-without-conflict'] as const)test(`native merge conflict with ${fault} is rejected`,async({page})=>{
+ const state=await backend(page,true,true);sameRepository(state,v=>{refuse(v,fault==='paths-without-conflict'?'native_nothing_to_merge':'native_merge_conflict');
+  v.mergeConflicts=fault==='no-paths'?[]:conflicts(fault==='too-many'?51:2);v.mergeConflictCount=fault==='short-count'?1:fault==='too-many'?51:2;
+  if(fault==='bad-reason')v.mergeConflicts[0]!.reason='line_conflict';if(fault==='duplicate-path')v.mergeConflicts[1]!.path=v.mergeConflicts[0]!.path;});
+ await open(page);await inspect(page);await expect(panel(page).getByRole('alert')).toContainText('does not match');
+ await expect(page.getByRole('list',{name:'Conflicting paths'})).toHaveCount(0);await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);
 });
 test('native merge stays unmounted until the installation reports it ready',async({page})=>{
  const state=await backend(page,true,false);sameRepository(state);await open(page);await inspect(page);
@@ -245,13 +263,13 @@ test('native merge stays unmounted until the installation reports it ready',asyn
  await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);
 });
 for(const [reason,text] of Object.entries(nativeReasons))test(`native ${reason} names the refusal and offers no merge`,async({page})=>{
- const state=await backend(page,true,true);sameRepository(state,v=>{v.nativeCallerCanMerge=false;v.mergeConfiguration!.allowMergeCommits=false;v.unavailableReason=reason;});
- await open(page);await inspect(page);await expect(panel(page)).toContainText('Merge unavailable');await expect(panel(page)).toContainText(text);
+ const state=await backend(page,true,true);sameRepository(state,v=>refuse(v,reason));
+ await open(page);await inspect(page);await expect(panel(page)).toContainText('Merge unavailable');await expect(panel(page)).toContainText(text);await expect(panel(page).getByRole('list',{name:'Conflicting paths'})).toHaveCount(0);
  await expect(page.getByRole('region',{name:'Standard native merge'})).toContainText('Standard merge is unavailable');
  await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);expect(state.methods).not.toContain('SubmitStandardPullMerge');
 });
-for(const fault of ['positive-flag','enabled-strategy','unknown-reason','empty-reason'] as const)test(`native reason with ${fault} is rejected`,async({page})=>{
- const state=await backend(page,true,true);sameRepository(state,v=>{v.nativeCallerCanMerge=fault==='positive-flag';v.mergeConfiguration!.allowMergeCommits=fault==='enabled-strategy';v.unavailableReason=fault==='unknown-reason'?'native_anything_else':fault==='empty-reason'?'':'native_base_not_ancestor';});
+for(const fault of ['positive-flag','enabled-strategy','enabled-squash','unknown-reason','retired-reason','empty-reason'] as const)test(`native reason with ${fault} is rejected`,async({page})=>{
+ const state=await backend(page,true,true);sameRepository(state,v=>{refuse(v,fault==='unknown-reason'?'native_anything_else':fault==='retired-reason'?'native_base_not_ancestor':fault==='empty-reason'?'':'native_nothing_to_merge');v.nativeCallerCanMerge=fault==='positive-flag';v.mergeConfiguration!.allowMergeCommits=fault==='enabled-strategy';v.mergeConfiguration!.allowSquashMerge=fault==='enabled-squash';});
  await open(page);await inspect(page);await expect(panel(page).getByRole('alert')).toContainText('does not match');
  await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);expect(state.methods).not.toContain('SubmitStandardPullMerge');
 });
