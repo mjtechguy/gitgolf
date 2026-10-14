@@ -23,7 +23,7 @@ services:
       FORGEJO__database__NAME: forgejo
       FORGEJO__database__USER: forgejo
       FORGEJO__database__PASSWD: ${FORGEJO_DB_PASSWORD:?Run scripts/init-forgejo-env.py}
-      FORGEJO__server__ROOT_URL: ${GOLF_FORGE_PUBLIC_URL:-http://localhost:3001/}
+      FORGEJO__server__ROOT_URL: ${GOLF_FORGE_PUBLIC_URL:-http://localhost:${GOLF_FORGE_HTTP_PORT:-3001}/}
       FORGEJO__server__PUBLIC_URL_DETECTION: never
       FORGEJO__server__SSH_DOMAIN: localhost
       FORGEJO__server__SSH_PORT: ${GOLF_FORGE_SSH_PORT:-2222}
@@ -48,7 +48,7 @@ services:
       GOLF_LISTEN_ADDR: ':8080'
       GOLF_PUSH_CI_ENABLED: ${GOLF_PUSH_CI_ENABLED:-false}
       GOLF_REPOSITORY_EVENT_CONNECTIONS: ${GOLF_REPOSITORY_EVENT_CONNECTIONS:-}
-      GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:-http://localhost:8080}
+      GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:-http://localhost:${GOLF_HTTP_PORT:-8080}}
       GOLF_DEPLOYMENT_RUNTIME: docker
       GOLF_ALLOW_INSECURE_COOKIES: ${GOLF_ALLOW_INSECURE_COOKIES:-true}
       GOLF_WEB_DIR: /app/web/dist

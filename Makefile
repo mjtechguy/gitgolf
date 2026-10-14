@@ -157,6 +157,17 @@ qualify-cloudflare-product:
 check: fmt vet test web-check generate-check engine-check compatibility-check cloudflare-check
 helm-check:
 	python3 deploy/helm/golf/check.py
+# One command from a fresh clone to a signed-in admin; pass flags with INSTALL_ARGS.
+.PHONY: install uninstall install-check
+install:
+	./scripts/install.sh $(INSTALL_ARGS)
+install-check:
+	@if command -v shellcheck >/dev/null 2>&1; then shellcheck scripts/install.sh; else echo 'shellcheck not installed; lint skipped'; fi
+	bash -n scripts/install.sh
+	./scripts/install.sh --dry-run --yes
+# Removes containers only; volumes and .env are kept.
+uninstall:
+	./scripts/install.sh --uninstall
 up: setup
 	docker compose up -d --build
 down:

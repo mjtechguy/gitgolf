@@ -4,6 +4,21 @@ Forgejo 15.0.9 is the default Git backend for fresh portable Golf installs. The 
 
 ## Local Compose
 
+### One command
+
+```sh
+./scripts/install.sh          # or: make install INSTALL_ARGS='--username me --email me@example.com'
+./scripts/install.sh --dry-run --yes   # checks and plan only
+```
+
+The installer preflights Docker, Compose v2, BuildKit, the host architecture, Python 3, curl, free ports and disk space; runs `init-env.sh` only when `.env` is missing; runs `docker compose up -d --build` and waits on `/readyz`. It then creates the Forgejo administrator with `forgejo admin user create --random-password` (the native password is not shown; Golf has its own), generates a token with `forgejo admin user generate-access-token --scopes write:user,write:repository,read:issue,read:organization --raw`, writes a temporary mode-0600 enrollment JSON under `.tmp/local-account/`, pipes it to `golf local-account create` and deletes it. A generated Golf password is saved to `.tmp/local-account/<project>-<user>-password.txt` (mode 0600); `--prompt-password` asks for one instead and saves nothing. Re-running is idempotent: an existing `.env`, Forgejo user and Golf account are kept, and an existing Golf account skips enrollment. Forgejo reserves `admin`, so the offered default username is `golf-admin`.
+
+For a second stack on one host, give a fresh checkout its own project and ports before `.env` exists: `--project NAME --http-port P --forge-port P --ssh-port P`. These are written to `.env` as `COMPOSE_PROJECT_NAME`, `GOLF_HTTP_PORT`, `GOLF_FORGE_HTTP_PORT` and `GOLF_FORGE_SSH_PORT`; `compose.yaml` derives the loopback Golf origin and Forgejo `ROOT_URL` from those ports unless `GOLF_PUBLIC_URL`/`GOLF_FORGE_PUBLIC_URL` are set. (Setting `GOLF_FORGE_PUBLIC_URL` also signals Forgejo OAuth to Golf, which then requires the OAuth client settings.) The installer refuses to reuse a project name that is running from another directory.
+
+`./scripts/install.sh --uninstall` (or `make uninstall`) only runs `docker compose down`: volumes, `.env` and saved files stay. Deleting data is deliberately not automated. After a backup, `docker compose -p <project> down --volumes && rm .env` destroys every Golf, Forgejo and PostgreSQL record permanently.
+
+### Step by step
+
 ```sh
 make setup
 make up
