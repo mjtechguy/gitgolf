@@ -79,7 +79,7 @@ def install(value, image, image_id):
 
 
 def init_input(name, account, profile, zone, host, preview_host, email, team_domain, image_id, who,
-               secret_store=None, image=IMAGE, daily_limit=40):
+               secret_store=None, image=IMAGE, daily_limit=40, identity_provider=None):
     """The private Alchemy input for a fresh installation, without a previous receipt. Pure: contacts nothing."""
     if not re.fullmatch('golf-alchemy-[0-9]{8}-[a-f0-9]{8}', name):
         raise ValueError('Installation name differs')
@@ -117,7 +117,21 @@ def init_input(name, account, profile, zone, host, preview_host, email, team_dom
         'previewHostname': preview_host, 'email': email, 'settings': settings}
     if secret_store:
         value['secretStoreId'] = secret_store
+    if identity_provider is not None:
+        if not re.fullmatch('[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', identity_provider):
+            raise ValueError('Use the Access identity provider UUID')
+        # Zero Trust allows one one-time PIN login method per account. Reuse it unmanaged, so destroying
+        # this installation never removes a login method another installation depends on.
+        value['accessIdentityProviderId'] = identity_provider
     return credentials(value, who)
+
+
+def existing_one_time_pin(config):
+    """Read-only: the account's one-time PIN identity provider, if one exists."""
+    providers = cf(config, 'zero-trust', 'identity-providers', 'list') or []
+    if isinstance(providers, dict): providers = providers.get('result') or []
+    pins = [p['id'] for p in providers if isinstance(p, dict) and p.get('type') == 'onetimepin' and p.get('id')]
+    return pins[0] if pins else None
 
 
 def init(args):
@@ -133,8 +147,10 @@ def init(args):
         # Read-only: the Access organization's issuer, which signs the login cookie the Worker verifies.
         organization = cf({'profile': args.profile, 'account': args.account_id}, 'zero-trust', 'organization', 'get')
         team = 'https://' + organization['auth_domain'] if organization and organization.get('auth_domain') else ''
+    identity_provider = args.access_identity_provider_id or existing_one_time_pin({'profile': args.profile, 'account': args.account_id})
     value = init_input(new_name(), args.account_id, args.profile, args.zone_id, args.hostname, args.preview_hostname,
-        args.email, team, approved_image(), who, args.secrets_store_id, daily_limit=args.evidence_daily_limit)
+        args.email, team, approved_image(), who, args.secrets_store_id, daily_limit=args.evidence_daily_limit,
+        identity_provider=identity_provider)
     install(value, IMAGE, value['settings']['tests']['image_id'])
 
 
@@ -646,6 +662,7 @@ def build_parser():
     fresh.add_argument('--preview-hostname', help='unused preview hostname, such as golf-previews.example.com')
     fresh.add_argument('--email', help='existing Cloudflare Access email of the administrator')
     fresh.add_argument('--secrets-store-id', help='existing Secrets Store ID; required when the account already has a store (one per account), otherwise the stack creates one')
+    fresh.add_argument('--access-identity-provider-id', help='Existing one-time PIN Access identity provider to reuse; default: the account\'s existing one, if any')
     fresh.add_argument('--access-team-domain', help='https://TEAM.cloudflareaccess.com; default read from the account\'s Access organization')
     fresh.add_argument('--evidence-daily-limit', type=int, default=40, help='CI admissions per day, 1 to 50')
     who = parser.add_argument_group('administrator identity (init and prepare; saved in the private input for later actions)')
