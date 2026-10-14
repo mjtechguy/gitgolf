@@ -67,6 +67,15 @@ class Observability(unittest.TestCase):
             saved=json.loads((directory/'alchemy-input.json').read_text())['settings']['operations']
             self.assertEqual(saved,{'service_health':True,'analytics_secret':{'store':'store','name':'secret'},'observability':{'enabled':True,'sampling':0.01}})
 
+    def test_enabling_analytics_names_a_valid_dataset_and_keeps_other_settings(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            value={'name':'golf-alchemy-20261013-0f2087f8','settings':{'evidence':{'daily_limit':40}}}
+            demo.enable_analytics(directory,value)
+            demo.enable_analytics(directory,value)
+            saved=json.loads((directory/'alchemy-input.json').read_text())['settings']
+            self.assertEqual(saved,{'evidence':{'daily_limit':40},'analytics_dataset':'golf_alchemy_20261013_0f2087f8'})
+
 
 class PublicMigration(unittest.TestCase):
     def test_public_enable_requires_owned_database_and_reviewed_predecessor(self):
