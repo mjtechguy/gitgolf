@@ -179,7 +179,9 @@ try {
   const runnerEnv = { ...process.env, HOME: runnerDir, DOCKER_HOST: args['docker-host'] ? String(args['docker-host']) : process.env.DOCKER_HOST || `unix:///run/user/${process.getuid()}/docker.sock` };
   execFileSync(binary, ['register', '--no-interactive', '--instance', origin, '--token', registration.token, '--name', 'golf-proof', '--labels', `ubuntu-latest:docker://${image}`], { cwd: runnerDir, env: runnerEnv, stdio: 'inherit' });
   const config = execFileSync(binary, ['generate-config'], { env: runnerEnv }).toString()
-    .replace(/capacity: \d+/, 'capacity: 1').replace(/fetch_interval: \S+/, 'fetch_interval: 2s').replace(/timeout: 3h/, 'timeout: 1h');
+    .replace(/capacity: \d+/, 'capacity: 1').replace(/fetch_interval: \S+/, 'fetch_interval: 2s').replace(/timeout: 3h/, 'timeout: 1h')
+    // --network=host: job and service containers share the engine's network, so localhost reaches services as on a GitHub VM.
+    .replace(/^  network: ""$/m, args.network ? `  network: "${args.network}"` : '  network: ""');
   writeFileSync(join(runnerDir, 'config.yml'), config);
   const daemon = spawn(binary, ['daemon', '--config', 'config.yml'], { cwd: runnerDir, env: runnerEnv, stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(daemon);
