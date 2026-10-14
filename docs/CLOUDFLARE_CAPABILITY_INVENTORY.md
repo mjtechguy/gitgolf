@@ -39,7 +39,7 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | RepositoryTeamAccessService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryLifecycleService | 0 | 5 | Native migration required; portable service remains available on its own setup path. |
 | EmailNotificationService | 0 | 12 | Native migration required; portable service remains available on its own setup path. |
-| RepositoryExecutionValueService | 0 | 7 | Native migration required; portable service remains available on its own setup path. |
+| RepositoryExecutionValueService | 7 | 0 | Encrypted repository secrets and plain variables with exact-commit approvals of the one operator-approved Actions workflow; Access-verified administrators, version-fenced writes and original receipts. Pull-request head branch approvals only: no typed inputs, manual dispatch, organization values, environment scopes or secrets expressions. |
 | RepositoryInvitationService | 7 | 0 | Enrolled Access users only; current issuer administration, expiring consent, atomic grant/decision and original receipt lookup. No email delivery or automatic enrollment. |
 | RepositoryRulesService | 3 | 0 | Branch locks and tag account restrictions enforced on Golf Git; exact/prefix patterns, current admin, atomic receipts. No protected merge, review/check gates, teams or provider-side enforcement. |
 | RunnerControlService | 0 | 5 | Native migration required; portable service remains available on its own setup path. |
@@ -262,13 +262,13 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | EmailNotificationService/SaveRepositoryEmailSubscription | golf.proto | Missing native adapter |
 | EmailNotificationService/ListOwnEmailDeliveries | golf.proto | Missing native adapter |
 | EmailNotificationService/RedeliverOwnEmail | golf.proto | Missing native adapter |
-| RepositoryExecutionValueService/ListRepositoryExecutionValues | golf.proto | Missing native adapter |
-| RepositoryExecutionValueService/SaveRepositoryExecutionValue | golf.proto | Missing native adapter |
-| RepositoryExecutionValueService/DeleteRepositoryExecutionValue | golf.proto | Missing native adapter |
-| RepositoryExecutionValueService/GetRepositoryExecutionVariable | golf.proto | Missing native adapter |
-| RepositoryExecutionValueService/SaveRepositoryExecutionBinding | golf.proto | Missing native adapter |
-| RepositoryExecutionValueService/DeleteRepositoryExecutionBinding | golf.proto | Missing native adapter |
-| RepositoryExecutionValueService/GetRepositoryExecutionValueOperation | golf.proto | Missing native adapter |
+| RepositoryExecutionValueService/ListRepositoryExecutionValues | golf.proto | Bounded adapter |
+| RepositoryExecutionValueService/SaveRepositoryExecutionValue | golf.proto | Bounded adapter |
+| RepositoryExecutionValueService/DeleteRepositoryExecutionValue | golf.proto | Bounded adapter |
+| RepositoryExecutionValueService/GetRepositoryExecutionVariable | golf.proto | Bounded adapter |
+| RepositoryExecutionValueService/SaveRepositoryExecutionBinding | golf.proto | Bounded adapter |
+| RepositoryExecutionValueService/DeleteRepositoryExecutionBinding | golf.proto | Bounded adapter |
+| RepositoryExecutionValueService/GetRepositoryExecutionValueOperation | golf.proto | Bounded adapter |
 | RepositoryInvitationService/PreviewRepositoryInvitationRecipient | golf.proto | Bounded adapter |
 | RepositoryInvitationService/CreateRepositoryInvitation | golf.proto | Bounded adapter |
 | RepositoryInvitationService/ListRepositoryInvitations | golf.proto | Bounded adapter |

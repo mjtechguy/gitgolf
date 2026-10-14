@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -127,6 +127,8 @@ class Release:
             self.check_pull_merge_schema()
         if self.manifest['schema'] >= 25:
             self.check_execution_policy_schema()
+        if self.manifest['schema'] >= 26:
+            self.check_execution_value_schema()
         deployments =self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -207,6 +209,8 @@ class Release:
             self.migrate_pull_merge_schema(applied)
         if self.manifest['schema'] >= 25:
             self.migrate_execution_policy_schema(applied)
+        if self.manifest['schema'] >= 26:
+            self.migrate_execution_value_schema(applied)
         return applied or 'already-applied'
 
     def check_execution_policy_schema(self):
@@ -318,6 +322,36 @@ class Release:
             self.command('d1', 'query', self.manifest['database'], '--sql', sql)
             self.check_public_schema()
             self.state['migration0022'] = digest; self.save(); applied.append('0022')
+
+    def check_execution_value_schema(self):
+        required = {'execution_value_brokers': {'repository_id', 'artifact_name', 'revision'},
+                    'execution_values': {'id', 'repository_id', 'artifact_name', 'name', 'kind', 'version', 'deleted', 'value_bytes', 'created_at', 'updated_at'},
+                    'execution_value_versions': {'id', 'version', 'value_bytes', 'encrypted', 'key_id', 'created_at'},
+                    'execution_bindings': {'id', 'repository_id', 'artifact_name', 'version', 'deleted', 'workflow_path', 'commit_id', 'blob_id', 'source_sha256', 'engine_catalog', 'event_ref', 'value_refs', 'sponsor_id', 'identity_version', 'grant_generation', 'expires_at', 'created_at', 'updated_at'},
+                    'execution_value_operations': {'operation_id', 'repository_id', 'actor_id', 'action', 'item_id', 'accepted_version', 'accepted_broker_revision', 'input_hash', 'created_at'}}
+        for table, fields in required.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
+            if {row['name'] for row in columns} != fields:
+                raise ValueError('Apply reviewed 0026 execution value migration before releasing')
+
+    def migrate_execution_value_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0026_execution_values.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0026') not in (None, digest):
+            raise ValueError('Recorded execution value migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        reviewed = r'CREATE (?:TABLE IF NOT EXISTS execution_(?:value_brokers|values|value_versions|bindings|value_operations) \(|INDEX IF NOT EXISTS execution_bindings_source ON execution_bindings\()'
+        if len(statements) != 6 or any(not re.match(reviewed, statement) for statement in statements):
+            raise ValueError('Execution value migration must only add reviewed tables and index')
+        ready = False
+        try:
+            self.check_execution_value_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0026') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_execution_value_schema()
+            self.state['migration0026'] = digest; self.save(); applied.append('0026')
 
     def check_owner_schema(self):
         required = {'native_owners': {'id','slug','kind','user_id','full_name','description','creator_id','creation_key','input_hash'},

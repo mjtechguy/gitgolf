@@ -168,6 +168,27 @@ class Observability(unittest.TestCase):
             self.assertEqual(saved['webhookKey'],key)
             self.assertEqual(saved['settings'],{'evidence':{'daily_limit':40},'webhooks':{'origins':['https://hooks.example.com','https://other.example.com'],'dailyLimit':500}})
 
+    def test_enabling_secrets_generates_one_dedicated_key_and_keeps_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            value={'settings':{'evidence':{'daily_limit':40},'tests':{'module':'test_calc'}},'webhookKey':'webhook-fixture'}
+            with patch('builtins.print') as printed: demo.enable_secrets(directory,value)
+            self.assertIn('stay unavailable until this installation has an approved Actions workflow profile',printed.call_args.args[0])
+            saved=json.loads((directory/'alchemy-input.json').read_text())
+            key=saved['executionValueKey']
+            self.assertRegex(key,r'^[A-Za-z0-9+/]{43}=$')
+            self.assertEqual(saved['webhookKey'],'webhook-fixture')
+            # The profile is not this action's to change, and the binding is derived by the stack.
+            self.assertEqual(saved['settings'],{'evidence':{'daily_limit':40},'tests':{'module':'test_calc'}})
+            value['settings']['tests']={'workflow':{'format':'actions','path':'.github/workflows/check.yml'}}
+            with patch('builtins.print') as printed: demo.enable_secrets(directory,value)
+            self.assertNotIn('unavailable',printed.call_args.args[0])
+            self.assertEqual(json.loads((directory/'alchemy-input.json').read_text())['executionValueKey'],key)
+            with self.assertRaises(ValueError): demo.enable_secrets(directory,{'settings':{},'webhookKey':key,'executionValueKey':key})
+            stack=(demo.ROOT/'deploy/alchemy/alchemy.run.ts').read_text()
+            self.assertIn("input.executionValueKey ? [Cloudflare.SecretsStore.Secret('ExecutionValueSecret', { store, name: name + '-execution-values', value: Redacted.make(input.executionValueKey) })] : []",stack)
+            self.assertIn("input.executionValueKey ? { execution_values: { key: { store: storeId, name: name + '-execution-values' } } } : {}",stack)
+
 
 class GuardedMigration(unittest.TestCase):
     table='CREATE TABLE IF NOT EXISTS journal (\n id INTEGER PRIMARY KEY -- one row; per entry\n);\nCREATE UNIQUE INDEX IF NOT EXISTS journal_id ON journal(id);\n'

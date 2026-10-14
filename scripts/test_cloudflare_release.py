@@ -536,14 +536,14 @@ class ReleaseTests(unittest.TestCase):
             release.state['migration0024'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_pull_merge_schema([])
 
-    def test_execution_policy_migration_is_the_schema_tail_resumes_and_leaves_repositories_enabled(self):
+    def test_execution_policy_migration_follows_its_predecessor_resumes_and_leaves_repositories_enabled(self):
         release = self.release()
         with sqlite3.connect(':memory:') as db:
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0025_repository_execution_policy.sql').read_text()
-            self.assertTrue(schema.endswith(';\n\n'+migration))
-            db.executescript(schema[:-len('\n'+migration)])
+            self.assertIn(';\n\n'+migration, schema)
+            db.executescript(schema[:schema.index('\n'+migration)])
             lost = True
             def command(*args, **kwargs):
                 nonlocal lost
@@ -710,5 +710,40 @@ class RehearsalAssetsTest(unittest.TestCase):
             self.assertTrue((destination/'native.html').read_text().startswith('<html>Golf</html>'))
             self.assertIn('rollback baseline', (destination/'native.html').read_text())
             self.assertEqual((source/'theme.js').read_bytes(), (destination/'theme.js').read_bytes())
+
+
+class ExecutionValueMigrationTest(unittest.TestCase):
+    setUp = ReleaseTests.setUp
+    release = ReleaseTests.release
+
+    def test_execution_value_migration_is_the_schema_tail_resumes_and_adds_only_reviewed_objects(self):
+        release = self.release(); release.manifest['schema'] = 26
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0026_execution_values.sql').read_text()
+            self.assertTrue(schema.endswith(';\n\n'+migration))
+            db.executescript(schema[:-len('\n'+migration)])
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith('PRAGMA'):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost execution value migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0026'): release.check_execution_value_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost execution value'): release.migrate_execution_value_schema([])
+            applied = []; release.migrate_execution_value_schema(applied)
+            self.assertEqual(applied, ['0026'])
+            self.assertEqual(db.execute('SELECT count(*) FROM execution_values').fetchone()[0], 0)
+            applied = []; release.migrate_execution_value_schema(applied)
+            self.assertEqual(applied, [])
+            release.state['migration0026'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_execution_value_schema([])
 
 if __name__ == '__main__': unittest.main()

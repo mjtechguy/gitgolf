@@ -9,6 +9,7 @@ import { standardPullMerge, pullMergeMethods } from './pull-merge.mjs';
 import { gitCredentialActor, confirmGitCredential, gitCredentialSQL, gitCredentials, gitCredentialMethods } from './git-credentials.mjs';
 import { repositoryRules, enforceGitRules, ruleMethods } from './repository-rules.mjs';
 import { repositoryWebhooks, webhookPolicy } from './webhooks.mjs';
+import { repositoryExecutionValues, executionValueMethods, executionValueCapability } from './execution-values.mjs';
 import { engagement, engagementMethods } from './discussion-engagement.mjs';
 import { issueTemplates } from './issue-templates.mjs';
 import { resourceMethods, discussionResources, resourceOperation } from './discussion-resources.mjs';
@@ -362,7 +363,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const budget = await db.prepare('PRAGMA table_info(repository_index_budget)').all();
       const operations = await db.prepare('PRAGMA table_info(operations_maintenance)').all();
       const access = await db.prepare('PRAGMA table_info(repository_access_operations)').all();
-      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(repository_execution_policy)').all()).results.length ? 25 : (await db.prepare('PRAGMA table_info(pull_merge_operations)').all()).results.length ? 24 : (await db.prepare('PRAGMA table_info(repository_environment_operations)').all()).results.length ? 23 : (await db.prepare('PRAGMA table_info(repository_visibility)').all()).results.length ? 22 : (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
+      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(execution_value_brokers)').all()).results.length ? 26 : (await db.prepare('PRAGMA table_info(repository_execution_policy)').all()).results.length ? 25 : (await db.prepare('PRAGMA table_info(pull_merge_operations)').all()).results.length ? 24 : (await db.prepare('PRAGMA table_info(repository_environment_operations)').all()).results.length ? 23 : (await db.prepare('PRAGMA table_info(repository_visibility)').all()).results.length ? 22 : (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
         configuration, runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG });
     }
     if (url.pathname === '/native/preview-resume') {
@@ -435,6 +436,12 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId);
       return reply(await repositoryEnvironments(db, env, person, row, request, environment[1], body));
     }
+    const valueRoute = /^\/rpc\/golf\.v1\.RepositoryExecutionValueService\/([A-Za-z]+)$/.exec(url.pathname);
+    if (valueRoute) {
+      if (!executionValueMethods.has(valueRoute[1])) unsupported();
+      const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId);
+      return reply(await repositoryExecutionValues(db, env, person, row, request, valueRoute[1], body, action => withArtifact(env, row, action)));
+    }
     const route = /^\/rpc\/golf\.v1\.(SessionService|RepositoryService|CapabilityService|ProfileService|OrganizationService|RepositorySettingsService|RepositoryAccessService|RepositoryInvitationService|RepositoryWebhookService|RepositoryRulesService|GitTransportService|PullReviewRequestService|PullReviewAuthoringService|PullMergeObservationService|StandardPullMergeService|DiscussionCollaborationService)\/([A-Za-z]+)$/.exec(url.pathname);
     if (!route) unsupported();
     const [, service, method] = route;
@@ -470,10 +477,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'settings.repository-invitations', label: 'Repository invitations', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Access-authenticated enrolled accounts; expiring consent, current issuer authority and atomic acceptance receipts.' },
       { id: 'settings.repository-git', label: 'Git credentials', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Access-authenticated own-account HTTPS credentials scoped to one repository, read/write mode and at most one hour; current identity/grant generations, explicit revocation and Git rules. Access machine admission is separately required.' },
       { id: 'settings.repository-environments', label: 'Environments', state: environmentPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: environmentPolicy(env) ? 'One environment named preview governs protected pull-request previews: allowed head branches, preview lifetime within the operator limit and concurrent previews. Required reviewers, wait timers, environment secrets and production deployment are not available. Changes need a verified Access sign-in.' : `Repository environments need ${[!previewPolicy(env) && 'an operator-approved protected preview allocation', !env.ACCESS_AUD && 'Cloudflare Access sign-in'].filter(Boolean).join(' and ')} on this installation.` },
+      executionValueCapability(env),
       ...[
         ['settings.repository-teams', 'Repository team access', 'Team membership and inherited repository permissions are not implemented on Cloudflare native. Direct collaborators and invitations are available in Access.'],
         ['settings.repository-deploy-keys', 'SSH deploy keys', 'Cloudflare native serves Git over HTTPS. SSH transport and SSH deploy keys are not available.'],
-        ['settings.repository-secrets', 'Secrets and variables', 'Repository secret and variable management for general workflows is not implemented on Cloudflare native. Operator-managed execution bindings do not provide this editor.'],
         ['settings.repository-lifecycle', 'Archive, transfer and deletion'],
         ['settings.repository-agents', 'Agent policy editor'],
         ['repository.source-write', 'Browser file editing'], ['pull.advanced-reviews', 'Inline and pending reviews'],
@@ -686,6 +693,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const response = reply({ code: error.code, message: error.message }, error.status);
       if (error.status===401 && new URL(request.url).pathname.startsWith('/git/')) response.headers.set('WWW-Authenticate','Basic realm="Golf Git"');
       if (/^\/rpc\/golf\.v1\.RepositoryAccessService\/(SetRepositoryCollaborator|RemoveRepositoryCollaborator)$/.test(new URL(request.url).pathname)) response.headers.set('Golf-Access-Effect', 'none');
+      // Every refusal here precedes the one batch that writes; an unconfirmed batch is not a Fault.
+      if (/^\/rpc\/golf\.v1\.RepositoryExecutionValueService\/(Save|Delete)/.test(new URL(request.url).pathname)) response.headers.set('Golf-Execution-Effect', 'none');
       return response;
     }
     return reply({ code: 'unavailable', message: 'Native repository operation could not be confirmed.' }, 503);

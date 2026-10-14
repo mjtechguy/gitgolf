@@ -253,6 +253,22 @@ anything else needs its own reviewed step. After each migration it reads the
 created objects back from D1 and only then advances the receipt. Migrate before
 deploying: the new tables are unused by the running Worker.
 
+Prepare repository secrets and variables on a retained installation:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-secrets NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+The first run generates a separate 32-byte key in the private input; the stack
+stores it as its own Secrets Store secret and binds it as `EXECUTION_VALUE_KEY`.
+Later runs keep it, because stored values are encrypted with it; it is never the
+webhook key, and losing it makes stored values unreadable. Run `migrate` first:
+the database needs the execution value tables. The key alone does not turn the
+feature on:
+the settings page stays unavailable until the installation's test profile is an
+approved Actions workflow, since values are released only to that hosted lane.
+
 Enable Workers AI, and optionally agent proposals, on a retained installation:
 
 ```sh
