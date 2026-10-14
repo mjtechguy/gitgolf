@@ -63,13 +63,13 @@ function columns(scope: AuditScope['kind']): DataTableColumn<AuditEvent>[] {
   return [
     { id: 'event', header: 'Event', accessorFn: row => `${actorName(row)} ${row.description} ${row.repository} ${row.action} ${row.categoryLabel}`, cell: ({ row: { original: entry } }) => {
       const [owner, name] = entry.repository.split('/');
-      return <div className="audit-event"><p><strong>{actorName(entry)}</strong> {entry.description}{scope !== 'repository' && owner && name ? <> in <Link {...repositoryOptions({ owner, name })}>{entry.repository}</Link></> : null}</p>
-        <p className="audit-event-meta"><code className="audit-action">{entry.action}</code><span>{entry.categoryLabel || entry.category}</span>{entry.widening ? <span className="visibility configured">Widening</span> : null}</p></div>;
+      return <div className="audit-log-event"><p><strong>{actorName(entry)}</strong> {entry.description}{scope !== 'repository' && owner && name ? <> in <Link {...repositoryOptions({ owner, name })}>{entry.repository}</Link></> : null}</p>
+        <p className="audit-event-meta"><code className="audit-action">{entry.action}</code><span>{entry.categoryLabel || entry.category}</span>{entry.widening ? <span className="visibility configured">Widening</span> : null}</p>
+        <Details entry={entry} /></div>;
     } },
     { id: 'at', header: 'When', accessorFn: row => row.at, cell: ({ row }) => <DateLabel value={row.original.at} relative /> },
     { id: 'outcome', header: 'Outcome', accessorFn: row => (outcomes[row.outcome] || outcomes.unknown)[0], cell: ({ row }) => { const [label, tone] = outcomes[row.original.outcome] || outcomes.unknown; return <span className={`visibility ${tone}`}>{label}</span>; } },
     { id: 'from', header: 'From', accessorFn: row => origin(row.client) || 'Not recorded', cell: ({ row }) => origin(row.original.client) ? <span className="audit-origin" title={row.original.client.ip ? `IP ${row.original.client.ip}` : undefined}>{origin(row.original.client)}</span> : <span className="muted">Not recorded</span> },
-    { id: 'details', header: 'Details', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <Details entry={row.original} /> },
   ];
 }
 
@@ -92,7 +92,7 @@ export function AuditLog({ scope, userId, signingOut }: { scope: AuditScope; use
   const recording = first?.recording, label = `${scopeText[scope.kind]} audit log`;
   const error = query.error ? query.error instanceof ConnectError && query.error.code === Code.PermissionDenied ? new Error(`${denied[scope.kind]} ${query.error.rawMessage}`.trim()) : query.error : null;
   const clear = () => { form.reset(); setFormError(''); setFilters(none); };
-  const text = (name: 'actor' | 'repository' | 'query', title: string, placeholder: string, max: number) => <form.Field name={name}>{field => <label className={name === 'query' ? 'audit-filter-search' : undefined}>{title}<input type={name === 'query' ? 'search' : 'text'} autoComplete="off" spellCheck={false} maxLength={max} placeholder={placeholder} value={field.state.value} onChange={event => field.handleChange(event.target.value)} /></label>}</form.Field>;
+  const text = (name: 'actor' | 'repository' | 'query', title: string, placeholder: string, max: number) => <form.Field name={name}>{field => <label className={name === 'query' ? 'audit-filter-search' : name === 'actor' && scope.kind === 'repository' ? 'audit-filter-wide' : undefined}>{title}<input type={name === 'query' ? 'search' : 'text'} autoComplete="off" spellCheck={false} maxLength={max} placeholder={placeholder} value={field.state.value} onChange={event => field.handleChange(event.target.value)} /></label>}</form.Field>;
   return <div className="page-stack audit-log">
     <section className="browser-panel" aria-labelledby={`${id}-filters`}>
       <div className="browser-panel-heading"><h2 id={`${id}-filters`}>Filters{activeCount ? <span className="count-badge" aria-label={`${activeCount} active`}>{activeCount} active</span> : null}</h2></div>
