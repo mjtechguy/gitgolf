@@ -130,7 +130,8 @@ From the second scoping pass, still to build on the native backend:
   with its own one-minute trigger received none in 25 minutes). Maintenance runs
   from the workspace Durable Object's alarm instead; the cause is Cloudflare's to
   diagnose.
-- The Operations analytics feed fails inside the Worker although the same token and
-  query succeed outside it; the cause is not established.
+- Resolved 2026-10-14: the Operations analytics feed failed inside the Worker because
+  Workers reject `fetch` with `redirect: 'error'`. With `manual` it reports live Worker
+  requests, errors and subrequests on the retained installation (#51).
 - `mj/merge-probe` is a scratch repository on the retained installation and stays
   until repository deletion exists.
