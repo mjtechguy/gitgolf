@@ -76,6 +76,8 @@ export async function workflowInventory(db, env, person, row, request, method, b
           const plan = nativeWorkflow(format, source);
           Object.assign(item, { state: 'WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET', name: plan.name, events: format === 'actions' ? ['pull_request'] : [],
             jobs: [{ id: plan.jobId, name: '', stage: '', stepCount: plan.steps.length }] });
+          // Admission refuses a job image other than the operator's; say so before a run is attempted.
+          if (plan.image && plan.image !== env.TEST_IMAGE_REF) item.diagnostics.push({ code: 'image_not_approved', message: 'The job image is not the operator-approved container image; a run would be refused.' });
         } catch { item.diagnostics.push({ code: 'outside_native_subset', message: subset[format] }); }
       }
       if (!allowed && profile) item.diagnostics.push({ code: 'not_approved_path', message: 'Not the operator-approved path; it cannot run on this installation.' });

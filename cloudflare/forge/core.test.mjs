@@ -3641,6 +3641,13 @@ test('workflow inventory bounds files, bytes and entry kinds and keeps the appro
   assert.deepEqual([listed['binary.yaml'].state, listed['binary.yaml'].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_INVALID', 'not_utf8']);
   for (const name of ['link.yml', 'run.yml', '.gitlab-ci.yml']) assert.deepEqual([listed[name].state, listed[name].blobId, listed[name].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_UNSUPPORTED', '', 'not_regular_file']);
   assert.deepEqual(result.diagnostics.map(d => d.code), ['unlisted_names', 'module_profile']);
+  // A syntactically valid GitLab job whose image admission would refuse is reported before anyone tries to run it.
+  const h = await inventoryFixture(t); h.env.TEST_IMAGE_REF = 'alpine:3.23@sha256:' + 'b'.repeat(64);
+  workflowFiles(h, { '.gitlab-ci.yml': `check:\n  image: alpine:3.23@sha256:${'a'.repeat(64)}\n  script: echo pinned\n` });
+  const image = (await value(await inspect(h))).configurations[0];
+  assert.deepEqual([image.state, image.diagnostics.map(d => d.code)], ['WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET', ['image_not_approved']]);
+  h.env.TEST_IMAGE_REF = 'alpine:3.23@sha256:' + 'a'.repeat(64);
+  assert.deepEqual((await value(await inspect(h))).configurations[0].diagnostics, []);
 });
 
 const policyCall = (f, method, body = {}, token = ownerToken) => f.call('', { scope: 'EXECUTION_SCOPE_REPOSITORY', repository: key, ...body }, token, '/rpc/golf.v1.ExecutionPolicyService/' + method);

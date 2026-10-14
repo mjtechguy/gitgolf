@@ -423,7 +423,7 @@ test('native workflow settings list files, mark the approved path and mount no d
   const state = await nativeBackend(page); await page.goto(path);
   const table = page.getByRole('table', { name: 'Workflow configurations', exact: true });
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(2);
-  await expect(page.getByText('Pull-request runs use the one operator-approved path, read from the pull request’s head commit. Pull-request execution is allocated.', { exact: true })).toBeVisible();
+  await expect(page.getByText('This inventory starts nothing. Where an operator-approved path is marked, pull-request runs read it from the pull request’s head commit. Pull-request execution is allocated.', { exact: true })).toBeVisible();
   const approved = table.getByRole('row').filter({ hasText: '.github/workflows/ci.yml' }), other = table.getByRole('row').filter({ hasText: '.gitlab-ci.yml' });
   await expect(approved.getByText('Pull-request runs: Allowed', { exact: true })).toBeVisible();
   await expect(approved.getByText('Automatic on push: Denied', { exact: true })).toBeVisible();
