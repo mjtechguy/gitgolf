@@ -5,8 +5,16 @@ import { nativeWorkflowContract, nativeActionsContract, nativeActionsBuildContra
 export const testModuleOK = value => typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,8}$/.test(value) && value.length <= 128;
 export const executionDiagnostic = error => String(error?.message || 'Native execution failed')
   .replace(/golf_native_[A-Za-z0-9_-]+|art_v1_[^\s"']+|cfcr\.[A-Za-z0-9_-]+\.[a-f0-9]{64}|(?:Bearer|Basic)\s+[^\s"']+|https?:\/\/[^\s"']+/gi, '[private]').slice(0, 512);
+// One approved source per installation, or the hosted Actions shell workflow beside a module:
+// PR runs then use the workflow and the module only tests agent proposals.
+export function testProfile(tests) {
+  const workflow = tests?.workflow, module = tests?.module;
+  if (workflow !== undefined && (!workflow || typeof workflow !== 'object' || Array.isArray(workflow) || Object.keys(workflow).some(key => !['format', 'path'].includes(key)) || !nativeWorkflowPath(workflow.format, workflow.path)) ||
+      (workflow === undefined || module !== undefined) && !testModuleOK(module) || workflow && module !== undefined && workflow.format !== 'actions') throw Error('Invalid approved native test source');
+  return { workflow, module };
+}
 export function testPolicy(env) {
-  return env.TEST_EXECUTION_ENABLED === 'true' && (env.TEST_WORKFLOW_FORMAT ? nativeWorkflowPath(env.TEST_WORKFLOW_FORMAT, env.TEST_WORKFLOW_PATH) : testModuleOK(env.TEST_MODULE)) &&
+  return env.TEST_EXECUTION_ENABLED === 'true' && (env.TEST_WORKFLOW_FORMAT ? nativeWorkflowPath(env.TEST_WORKFLOW_FORMAT, env.TEST_WORKFLOW_PATH) && (env.TEST_MODULE === undefined || env.TEST_WORKFLOW_FORMAT === 'actions' && testModuleOK(env.TEST_MODULE)) : testModuleOK(env.TEST_MODULE)) &&
     /^[a-f0-9]{64}$/.test(env.TEST_POLICY_SHA256 || '') && Boolean(env.testTasks);
 }
 export function testResult(value, jobId, source) {

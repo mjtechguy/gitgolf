@@ -49,7 +49,7 @@ export function NativeSettings({ config }: { config: Config }) {
   const settings = [
     { name: 'Canonical Git', value: 'Private Cloudflare Artifacts repositories' },
     { name: 'Sign-in', value: config.accessLogin ? 'Cloudflare Access with active Golf user and repository grants' : 'Scoped Golf bearer credentials; browser Access login is unallocated' },
-    { name: 'Approved execution', value: config.tests ? config.testWorkflowFormat ? `${config.testWorkflowFormat.startsWith('actions') ? 'Actions' : 'GitLab'} · ${config.testWorkflowPath}` : config.testModule : 'Unallocated' },
+    { name: 'Approved execution', value: config.tests ? config.testWorkflowFormat ? `${config.testWorkflowFormat.startsWith('actions') ? 'Actions' : 'GitLab'} · ${config.testWorkflowPath}${config.testModule ? ` for pull requests · ${config.testModule} for agent proposals` : ''}` : config.testModule : 'Unallocated' },
     { name: 'Automatic PR push CI', value: config.automaticCI ? 'Enabled within approved test policy' : 'Disabled' },
     { name: 'Daily evidence admissions', value: String(config.dailyLimit) },
     { name: 'Agent edit path', value: config.agents ? config.agentPath : 'Unallocated' },

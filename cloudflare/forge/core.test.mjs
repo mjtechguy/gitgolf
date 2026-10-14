@@ -3487,3 +3487,56 @@ test('the stored preview environment governs publication: head branch, lifetime 
   await value(await f.human('DeleteRepositoryEnvironment', { target: await f.target(), environmentId: relaxed.environment.id, expectedVersion: relaxed.environment.version, operationId: nonce() }));
   const ungoverned = (await value(await publish())).preview; assert.ok(remaining(ungoverned) <= 900 && remaining(ungoverned) > 890, String(remaining(ungoverned)));
 });
+
+// Workflow files layered over the fixture tree: '.github/workflows/<name>' and root entries, each a source string or { type, source }.
+const shellWorkflow = 'name: Verify\non: pull_request\njobs:\n  check:\n    runs-on: golf-native-linux\n    steps:\n      - run: python3 -m unittest -v test_calc\n';
+function workflowFiles(f, files) {
+  const get = f.env.ARTIFACTS.get, github = '4'.repeat(40), folder = '5'.repeat(40), blobs = new Map(), root = [], nested = [];
+  let reads = 0;
+  Object.entries(files).forEach(([path, value], index) => {
+    const hash = (index + 1).toString(16).padStart(4, '0').repeat(10), name = path.replace('.github/workflows/', '');
+    blobs.set(hash, typeof value === 'string' ? value : value.source);
+    (name === path ? root : nested).push({ name, hash, type: value.type || 'blob', mode: '100644' });
+  });
+  f.env.ARTIFACTS.get = async name => {
+    const repo = await get(name), readTree = repo.readTree, readBlob = repo.readBlob;
+    return { ...repo,
+      async readTree(hash) { return hash === 'f'.repeat(40) ? [...await readTree(hash), ...root, ...(nested.length ? [{ name: '.github', hash: github, type: 'tree', mode: '040000' }] : [])] :
+        hash === github ? [{ name: 'workflows', hash: folder, type: 'tree', mode: '040000' }] : hash === folder ? nested : readTree(hash); },
+      async readBlob(hash) { if (!blobs.has(hash)) return readBlob(hash); reads++; return new Blob([blobs.get(hash)]); },
+    };
+  };
+  return { reads: () => reads };
+}
+
+test('an approved Actions workflow beside the approved module leaves agent admission unchanged', async t => {
+  for (const combined of [false, true]) await t.test(combined ? 'module and workflow' : 'module only', async t => {
+    const f = await evidenceFixture(t), input = { ...f.input, advice: false, agent: { prompt: 'Improve the approved source file.' } };
+    assert.equal((await f.evidence(input)).status, 412);
+    const execution = allocateAgents(f);
+    if (combined) { Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/ci.yml' }); workflowFiles(f, { '.github/workflows/ci.yml': shellWorkflow }); }
+    const config = await value(await f.call('', {}, ownerToken, '/native/config'));
+    assert.equal(config.agents, true); assert.equal(config.testModule, 'test_calc'); assert.equal(config.testWorkflowPath, combined ? '.github/workflows/ci.yml' : '');
+    assert.equal((await f.evidence(input, readerToken)).status, 404);
+    for (const agent of [null, {}, { prompt: '' }, { prompt: 'a'.repeat(16385) }, { prompt: 'Fix', remote: 'external' }]) assert.equal((await f.evidence({ ...input, agent })).status, 400);
+    assert.equal((await f.evidence({ ...input, runTests: true })).status, 400);
+    const job = (await value(await f.evidence(input))).job;
+    assert.equal(job.agentState, 'REQUESTED'); assert.equal((await value(await f.evidence(input))).job.id, job.id);
+    assert.equal((await f.evidence({ ...input, agent: { prompt: 'Different' } })).status, 409);
+    const snapshot = JSON.parse(f.sql.prepare('SELECT snapshot FROM evidence_jobs WHERE id=?').get(job.id).snapshot);
+    assert.equal(snapshot.agent.module, 'test_calc'); assert.equal(snapshot.execution, undefined);
+    await f.advance(job.id, 'agents'); await f.advance(job.id, 'agents');
+    assert.equal(execution.admissions(), 1); assert.equal(f.forks(), 1);
+    const task = execution.tasks.get(job.id);
+    assert.equal(task.commitId, f.selection.headCommitId); assert.equal(task.module, 'test_calc'); assert.equal(task.workflow, undefined);
+    assert.equal((await f.advance(job.id, 'authorize-agent')).state, 'AUTHORIZED');
+    // Pull-request runs take the workflow when one is approved; the agent job keeps its module.
+    const run = (await value(await f.evidence({ ...f.input, advice: false, runTests: true, idempotencyKey: nonce() }))).job;
+    const execute = JSON.parse(f.sql.prepare('SELECT snapshot FROM evidence_jobs WHERE id=?').get(run.id).snapshot).execution;
+    assert.equal(execute.contract, combined ? 'golf.native.workflow-shell.v1' : 'golf.native.pr-test.v1');
+    assert.equal(execute.module, combined ? undefined : 'test_calc'); assert.equal(execute.workflow?.path, combined ? '.github/workflows/ci.yml' : undefined);
+    assert.equal((await f.advance(run.id, 'authorize-test')).state, 'AUTHORIZED');
+    f.env.TEST_MODULE = 'other_module';
+    assert.equal((await f.advance(job.id, 'agents')).state, 'REFUSED');
+  });
+});
