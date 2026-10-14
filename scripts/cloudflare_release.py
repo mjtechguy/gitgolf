@@ -328,7 +328,8 @@ class Release:
                     'execution_values': {'id', 'repository_id', 'artifact_name', 'name', 'kind', 'version', 'deleted', 'value_bytes', 'created_at', 'updated_at'},
                     'execution_value_versions': {'id', 'version', 'value_bytes', 'encrypted', 'key_id', 'created_at'},
                     'execution_bindings': {'id', 'repository_id', 'artifact_name', 'version', 'deleted', 'workflow_path', 'commit_id', 'blob_id', 'source_sha256', 'engine_catalog', 'event_ref', 'value_refs', 'sponsor_id', 'identity_version', 'grant_generation', 'expires_at', 'created_at', 'updated_at'},
-                    'execution_value_operations': {'operation_id', 'repository_id', 'actor_id', 'action', 'item_id', 'accepted_version', 'accepted_broker_revision', 'input_hash', 'created_at'}}
+                    'execution_value_operations': {'operation_id', 'repository_id', 'actor_id', 'action', 'item_id', 'accepted_version', 'accepted_broker_revision', 'input_hash', 'created_at'},
+                    'execution_value_releases': {'job_id', 'binding_id', 'binding_version', 'released_at'}}
         for table, fields in required.items():
             columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
             if {row['name'] for row in columns} != fields:
@@ -340,8 +341,8 @@ class Release:
         if self.state.get('migration0026') not in (None, digest):
             raise ValueError('Recorded execution value migration differs from reviewed source')
         statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
-        reviewed = r'CREATE (?:TABLE IF NOT EXISTS execution_(?:value_brokers|values|value_versions|bindings|value_operations) \(|INDEX IF NOT EXISTS execution_bindings_source ON execution_bindings\()'
-        if len(statements) != 6 or any(not re.match(reviewed, statement) for statement in statements):
+        reviewed = r'CREATE (?:TABLE IF NOT EXISTS execution_(?:value_brokers|values|value_versions|bindings|value_operations|value_releases) \(|INDEX IF NOT EXISTS execution_bindings_source ON execution_bindings\()'
+        if len(statements) != 7 or any(not re.match(reviewed, statement) for statement in statements):
             raise ValueError('Execution value migration must only add reviewed tables and index')
         ready = False
         try:

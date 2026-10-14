@@ -9,6 +9,7 @@ import { nativeRunnerAdmission, nativeRunnerProgress } from './native-runners.mj
 import { agentPolicy } from './agent-policy.mjs';
 import { agentStep, agentSource } from './agents.mjs';
 import { repositoryExecution } from './execution-policy.mjs';
+import { admitExecutionValues, executionValueNote, maskReleasedOutput } from './execution-values.mjs';
 
 const terminal = new Set(['SUCCEEDED', 'REFUSED', 'EXPIRED']);
 const choices = ['inspect_changes', 'run_tests', 'resolve_feedback'];
@@ -16,8 +17,9 @@ const time = () => new Date().toISOString();
 const exhausted = () => { throw new Fault('resource_exhausted', 429, 'The workspace daily evidence allocation is used.'); };
 export function publicEvidenceExecution(execution) {
   if (![nativeWorkflowContract, nativeActionsContract, nativeActionsBuildContract].includes(execution?.contract)) return execution;
-  const { path, blobId, plan } = execution.workflow;
-  return { ...execution, workflow: { path, blobId, format: plan.format,
+  // Which approval and value versions a job was admitted with stay out of the report readers can open.
+  const { path, blobId, plan } = execution.workflow, { values, ...visible } = execution;
+  return { ...visible, workflow: { path, blobId, format: plan.format,
     ...(plan.format === 'actions-act' ? { catalog: plan.catalog } : { jobId: plan.jobId }) } };
 }
 export function evidencePolicy(env) {
@@ -141,6 +143,8 @@ export async function evidenceAPI(db, env, person, row, artifact, body, origin =
           ...(runner ? { runner } : {}),
           ...(env.REGISTRY_CI_ENABLED === 'true' && env.REGISTRY ? { registry: { origin:env.REGISTRY_ORIGIN, name:registryRepository(env,row) } } : {}) };
       });
+      const values = execution && await admitExecutionValues(db, env, row, execution);
+      if (values) execution.values = values;
       const snapshot = JSON.stringify({ selection: s, pullRequest: observed.pr, reviews: reviews.reviews, reportedChecks: checks.checks,
         ...(execution ? { execution } : {}), ...(agent ? { agent, artifactName: row.artifact_name } : {}),
         truncated: { reviews: Boolean(reviews.page.nextPage), checks: Boolean(checks.page.nextPage) } });
@@ -165,7 +169,7 @@ export async function evidenceAPI(db, env, person, row, artifact, body, origin =
         if (JSON.parse(job.snapshot).execution?.runner) await nativeRunnerProgress(db, job, 'finish-tests');
         else {
           const result = await env.testTasks.getByName(job.id).cancel();
-          if (result.state !== 'ABSENT') await saveTests(db, job, JSON.parse(job.snapshot), result);
+          if (result.state !== 'ABSENT') await saveTests(db, env, job, JSON.parse(job.snapshot), result);
         }
       }
     }
@@ -185,8 +189,8 @@ async function update(db, job, state) {
   job.state = state;
   return { id: job.id, state };
 }
-async function saveTests(db, job, snapshot, result) {
-  const safe = testResult(result, job.id, snapshot.execution);
+async function saveTests(db, env, job, snapshot, result) {
+  const safe = await maskReleasedOutput(db, env, job, snapshot, testResult(result, job.id, snapshot.execution));
   await db.prepare('UPDATE evidence_jobs SET test_state=?,test_result=?,updated_at=? WHERE id=?').bind(safe.state, JSON.stringify(safe), time(), job.id).run();
   job.test_state = safe.state; job.test_result = JSON.stringify(safe);
   return { id: job.id, state: safe.state };
@@ -220,7 +224,7 @@ export async function evidenceStep(db, env, job, context, phase, workflows) {
     const task = env.testTasks.getByName(job.id);
     if (phase === 'finish-tests') {
       const result = await task.status();
-      return saveTests(db, job, snapshot, ['ADMITTED', 'RUNNING', 'ABSENT', 'FINALIZING', 'CLEANUP_FAILED'].includes(result.state) ? await task.cancel() : result);
+      return saveTests(db, env, job, snapshot, ['ADMITTED', 'RUNNING', 'ABSENT', 'FINALIZING', 'CLEANUP_FAILED'].includes(result.state) ? await task.cancel() : result);
     }
     const input = { jobId: job.id, ...snapshot.execution, remote: remote(env, row.artifact_name), deadline: Date.parse(job.expires_at) };
     // The container authority deduplicates this exact admission across lost replies.
@@ -228,7 +232,7 @@ export async function evidenceStep(db, env, job, context, phase, workflows) {
     await db.prepare("UPDATE evidence_jobs SET test_state='RUNNING',updated_at=? WHERE id=? AND test_state='REQUESTED'").bind(time(), job.id).run();
     const result = await task.status();
     if (['ADMITTED', 'RUNNING', 'FINALIZING'].includes(result.state)) return { id: job.id, state: 'RUNNING' };
-    return saveTests(db, job, snapshot, result);
+    return saveTests(db, env, job, snapshot, result);
   }
   if (phase === 'start') {
     try { await workflows.create({ id: job.id, params: { jobId: job.id } }); }
@@ -289,6 +293,7 @@ export async function evidenceStep(db, env, job, context, phase, workflows) {
         'The pinned Actions catalog ran on a customer host; GitHub-hosted runner parity and merge authorization are not claimed.' : snapshot.execution ?
         'Only the operator-approved test module was executed; no code review or merge authorization.' : 'Metadata snapshot; no code diff or tests executed.',
       ...(snapshot.execution?.runner ? ['A customer-hosted runner reported its own isolation and cleanup; Golf cannot independently attest the host.'] : []),
+      ...await executionValueNote(db, job, snapshot),
       'Reviews and reported checks do not authorize merge.'],
     ...publicSnapshot, agentResult: job.agent_result ? JSON.parse(job.agent_result) : { state: job.agent_state }, tests: job.test_result ? JSON.parse(job.test_result) : { state: job.test_state }, advice: { state: job.advice_state, ...(job.advice ? JSON.parse(job.advice) : {}) } });
   const hash = await digest(report), key = `pr-evidence/${env.WORKSPACE_SLUG}/${job.repository_id}/${job.id}/${hash}.json`;

@@ -66,3 +66,41 @@ test('setup accepts only a dedicated Secrets Store reference for the value key',
     assert.throws(() => executionValueBindings({ execution_values: { key }, ...other }), /their own Secrets Store/);
   assert.equal(executionValueBindings({ execution_values: { key }, webhooks: { key: { ...key, name: 'golf-webhook' } } }).EXECUTION_VALUE_KEY.secretName, key.name);
 });
+
+test('exact secret text is masked across chunk boundaries, overlaps and multi-byte characters', async () => {
+  const { maskExecutionOutput, maskExecutionResult } = await import('./src/execution-values.mjs');
+  const secret = 'fixture-secret-value', bytes = value => new TextEncoder().encode(value).length;
+  assert.deepEqual(maskExecutionOutput(['before ' + secret + ' after'], [secret]), ['before ' + '*'.repeat(20) + ' after']);
+  // Split at every possible position between two chunks, and over three chunks.
+  for (let cut = 1; cut < secret.length; cut++) assert.deepEqual(maskExecutionOutput(['a' + secret.slice(0, cut), secret.slice(cut) + 'z'], [secret]), ['a' + '*'.repeat(cut), '*'.repeat(secret.length - cut) + 'z']);
+  assert.deepEqual(maskExecutionOutput([secret.slice(0, 3), secret.slice(3, 17), secret.slice(17)], [secret]), ['***', '*'.repeat(14), '***']);
+  assert.deepEqual(maskExecutionOutput(['', secret, ''], [secret]), ['', '*'.repeat(20), '']);
+  // Overlapping occurrences and one secret inside or across another leave no unmasked remainder.
+  assert.deepEqual(maskExecutionOutput(['x' + 'a'.repeat(11) + 'x'], ['a'.repeat(8)]), ['x' + '*'.repeat(11) + 'x']);
+  assert.deepEqual(maskExecutionOutput(['abcabcabcab-'], ['abcabcab']), ['***********-']);
+  assert.deepEqual(maskExecutionOutput(['12345678ABCDEFGH!'], ['12345678ABCD', '5678ABCDEFGH', '12345678ABCD']), ['****************!']);
+  const wide = 'pässwörd-✓-😀';
+  assert.deepEqual(maskExecutionOutput(['é' + wide.slice(0, 4), wide.slice(4) + 'é'], [wide]), ['é' + '*'.repeat(bytes(wide.slice(0, 4))), '*'.repeat(bytes(wide.slice(4))) + 'é']);
+  const untouched = ['nothing here', secret.slice(1), secret.slice(0, -1).toUpperCase(), '\u0000 nul and   separators'];
+  assert.deepEqual(maskExecutionOutput(untouched, [secret]), untouched);
+  assert.deepEqual(maskExecutionOutput(['kept'], []), ['kept']);
+  for (const invalid of ['short77', '', 'two\nlines-of-text', null]) assert.throws(() => maskExecutionOutput(['text'], [invalid]), /Invalid masking secret/);
+  // A result keeps its shape; the stdout-to-stderr junction counts as one transcript, and an unmaskable result is withheld.
+  const result = { state: 'FAILED', exitCode: 1, stdout: 'out ' + secret.slice(0, 9), stderr: secret.slice(9) + ' err ' + secret, diagnostic: 'said ' + secret, image: { tag: 'ci' } };
+  assert.deepEqual(maskExecutionResult(result, [secret]), { ...result, stdout: 'out ' + '*'.repeat(9), stderr: '*'.repeat(11) + ' err ' + '*'.repeat(20), diagnostic: 'said ' + '*'.repeat(20) });
+  assert.equal(maskExecutionResult(result, []), result); assert.equal(maskExecutionResult(result, undefined), result);
+  assert.deepEqual(maskExecutionResult({ state: 'CANCELLED' }, [secret]), { state: 'CANCELLED' });
+  const withheld = maskExecutionResult(result, ['short77']);
+  assert.deepEqual([withheld.stdout, withheld.stderr, withheld.diagnostic, withheld.exitCode], ['', 'Output withheld: it could not be checked for repository secrets.\n', '', 1]);
+});
+
+test('the capability opens only with the key and the hosted Actions profile, in the agreed words', async () => {
+  const { executionValueCapability } = await import('./src/execution-values.mjs');
+  const actions = { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/check.yml' };
+  assert.deepEqual(executionValueCapability({ ...actions, EXECUTION_VALUE_KEY: binding(1) }), { id: 'settings.repository-secrets', label: 'Secrets and variables', state: 'CAPABILITY_STATE_READY',
+    reason: 'Encrypted repository secrets and plain variables, released as environment variables only to an administrator-approved exact commit of the approved workflow on Cloudflare-hosted pull-request jobs. Exact secret text is masked in stored output; transformed values are not detected. Jobs have no Internet access. Customer runners, agent jobs, environment scopes and secrets expressions do not receive values.' });
+  assert.deepEqual(executionValueCapability(actions), { id: 'settings.repository-secrets', label: 'Secrets and variables', state: 'CAPABILITY_STATE_DISABLED', reason: 'Configure a dedicated Secrets Store encryption key for repository values.' });
+  // The hosted installation today: a module profile, with or without the key.
+  for (const env of [{ TEST_MODULE: 'test_calc' }, { TEST_MODULE: 'test_calc', EXECUTION_VALUE_KEY: binding(1) }]) assert.deepEqual(executionValueCapability(env), { id: 'settings.repository-secrets', label: 'Secrets and variables', state: 'CAPABILITY_STATE_DISABLED',
+    reason: 'Repository values need an operator-approved Actions workflow profile; this installation runs an approved Python test module.' });
+});

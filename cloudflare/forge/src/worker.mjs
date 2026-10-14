@@ -15,6 +15,7 @@ import { PerformanceHistory } from './performance.mjs';
 import { executionDiagnostic } from './test-policy.mjs';
 import { nativeRunnerStop } from './native-runners.mjs';
 import { managedRegistry } from './managed-registry.mjs';
+import { releaseExecutionValues } from './execution-values.mjs';
 
 
 const heartbeat = 5 * 60_000;
@@ -34,7 +35,7 @@ export class Workspace extends DurableObject {
       const selection = await activitySelection(event);
       let result;
       try {
-        result = await (event instanceof Request ? handle(event, configured) : event.ci ? runCI(configured) : event.preview ? servePreview(configured, event.preview) : event.cleanup ? cleanupPreviews(configured) : event.git
+        result = await (event instanceof Request ? handle(event, configured) : event.ci ? runCI(configured) : event.preview ? servePreview(configured, event.preview) : event.cleanup ? cleanupPreviews(configured) : event.values ? releaseExecutionValues(configured, event.id, id => advanceEvidence(configured, id, 'authorize-test', workflows)) : event.git
           ? event.phase ? agentGit(configured, event.id, event.git, event.phase, workflows) : testGit(configured, event.id, event.git, workflows)
           : event.registry ? testRegistry(configured,event.id,event.registry) : event.notify ? undefined : advanceEvidence(configured, event.id, event.phase, workflows));
         return result;
@@ -77,6 +78,8 @@ export class Workspace extends DurableObject {
   agentGit(id, request, phase) { return this.dispatch({ id, git: request, phase }); }
   testRegistry(id, request) { return this.dispatch({ id, registry: request }); }
   testGit(id, request) { return this.dispatch({ id, git: request }); }
+  // Callable only from this Worker's own test task; the reply carries released plaintext and is never logged or stored here.
+  testValues(id) { return this.dispatch({ id, values: true }); }
   fetch(request) {
     // One partition owner serializes provider effects and permission changes.
     // Durable pending records fence writes after restart or an ambiguous response.

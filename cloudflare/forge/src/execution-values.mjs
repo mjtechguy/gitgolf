@@ -32,11 +32,10 @@ export function executionValueState(env) {
   if (!env.EXECUTION_VALUE_KEY?.get) return { ready: false, reason: 'Configure a dedicated Secrets Store encryption key for repository values.' };
   return { ready: true, reason: '' };
 }
-// Storage alone is not the feature: the page opens only once approved values reach a job.
 export function executionValueCapability(env) {
   const state = executionValueState(env);
-  return { id: 'settings.repository-secrets', label: 'Secrets and variables', state: 'CAPABILITY_STATE_DISABLED',
-    reason: state.reason || 'Encrypted repository values and exact-commit approvals can be stored, but no job receives them on this installation yet.' };
+  return { id: 'settings.repository-secrets', label: 'Secrets and variables', state: state.ready ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED',
+    reason: state.reason || 'Encrypted repository secrets and plain variables, released as environment variables only to an administrator-approved exact commit of the approved workflow on Cloudflare-hosted pull-request jobs. Exact secret text is masked in stored output; transformed values are not detected. Jobs have no Internet access. Customer runners, agent jobs, environment scopes and secrets expressions do not receive values.' };
 }
 export function executionValueBindings(settings) {
   if (!settings.execution_values) return {};
@@ -208,7 +207,114 @@ export async function repositoryExecutionValues(db, env, person, row, request, m
       ON CONFLICT(repository_id) DO UPDATE SET revision=revision+1`).bind(row.id, row.artifact_name),
     db.prepare(`INSERT INTO execution_value_operations(operation_id,repository_id,actor_id,action,item_id,accepted_version,accepted_broker_revision,input_hash,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE changes()=1`)
       .bind(body.operationId, row.id, person.id, action, body.id, version + 1, revision + 1, fingerprint, time));
+  // A changed value or approval ends every queued job admitted under the former one, in the same batch as the change.
+  const admitted = action.endsWith('binding') ? `json_extract(snapshot,'$.execution.values.bindingId')=?` : `EXISTS(SELECT 1 FROM json_each(snapshot,'$.execution.values.refs') s WHERE json_extract(s.value,'$.id')=?)`;
+  const { results: running } = await db.prepare(`SELECT id FROM evidence_jobs WHERE repository_id=? AND state='QUEUED' AND test_state='RUNNING' AND ${admitted}`).bind(row.id, body.id).all();
+  const fence = db.prepare(`UPDATE evidence_jobs SET state='REFUSED',updated_at=? WHERE repository_id=? AND state='QUEUED' AND ${admitted} AND EXISTS(SELECT 1 FROM execution_value_operations WHERE operation_id=?)`).bind(time, row.id, body.id, body.operationId);
+  statements.push(fence);
   const results = await db.batch(statements);
-  if (!results.at(-1).meta.changes) changed();
+  if (!results.at(-2).meta.changes) changed();
+  // The refusal already denies every later release, Git and registry request; destroying the container also ends a step that holds values.
+  const stopped = Promise.allSettled(running.map(async job => env.testTasks.getByName(job.id).cancel()));
+  if (env.waitUntil) env.waitUntil(stopped); else await stopped;
   return { operation: receipt(await db.prepare('SELECT * FROM execution_value_operations WHERE operation_id=?').bind(body.operationId).first(), false) };
+}
+
+const valuesCurrent = `(SELECT COUNT(*) FROM json_each(b.value_refs) s JOIN execution_values v ON v.id=json_extract(s.value,'$.id') AND v.version=json_extract(s.value,'$.version')
+ WHERE v.repository_id=b.repository_id AND v.artifact_name=b.artifact_name AND v.deleted=0)=json_array_length(b.value_refs)`;
+const exactSource = 'b.deleted=0 AND b.workflow_path=? AND b.commit_id=? AND b.blob_id=? AND b.source_sha256=? AND b.event_ref=?';
+const sourceOf = async execution => [execution.workflow.path, execution.commitId, execution.workflow.blobId, await executionSource(execution.commitId, execution.treeId, execution.workflowSha256), 'refs/heads/' + execution.branch];
+const hostedActions = execution => execution?.contract === nativeWorkflowContract && execution.workflow?.plan?.format === 'actions' && !execution.runner;
+// Admission records which approval and value versions a hosted job may later ask for: identities only. No approval, or more than one, means the job runs without values.
+export async function admitExecutionValues(db, env, row, execution) {
+  if (!executionValueState(env).ready || !hostedActions(execution)) return null;
+  const { results } = await db.prepare(`${bindingSelect} WHERE b.repository_id=? AND b.artifact_name=? AND ${exactSource} AND b.expires_at>? AND ${valuesCurrent}`).bind(row.id, row.artifact_name, ...await sourceOf(execution), now()).all();
+  const approved = results.filter(binding => binding.authorized);
+  return approved.length === 1 ? { bindingId: approved[0].id, bindingVersion: approved[0].version, refs: JSON.parse(approved[0].value_refs) } : null;
+}
+// The only place plaintext leaves storage: one guarded release per job, to the hosted test task that asked from inside the workspace.
+export async function releaseExecutionValues(env, id, authorize) {
+  if (!uuidOK(id)) throw Error('Invalid value release');
+  // The same authorization the job's Git and registry brokers need: current policy, actor, pull request head and job state.
+  if ((await authorize(id)).state !== 'AUTHORIZED') return { state: 'REFUSED' };
+  const db = env.DB.withSession('first-primary'), job = await db.prepare('SELECT * FROM evidence_jobs WHERE id=?').bind(id).first();
+  const snapshot = JSON.parse(job.snapshot), execution = snapshot.execution, approved = execution.values;
+  if (!approved) return { state: 'NONE' };
+  const row = await db.prepare("SELECT id,artifact_name FROM repositories WHERE id=? AND state='ACTIVE'").bind(job.repository_id).first();
+  if (!row || !executionValueState(env).ready || !hostedActions(execution) || snapshot.agent || job.agent_state !== 'NONE') return { state: 'REFUSED' };
+  const time = now();
+  // The approval version, its expiry, its approver's authority, every value version and the running job are re-read by the statement that records the release.
+  const released = await db.prepare(`INSERT INTO execution_value_releases(job_id,binding_id,binding_version,released_at) SELECT ?,b.id,b.version,? FROM execution_bindings b
+    WHERE b.id=? AND b.version=? AND b.repository_id=? AND b.artifact_name=? AND ${exactSource} AND b.expires_at>? AND ${sponsorAuthority} AND ${valuesCurrent}
+    AND EXISTS(SELECT 1 FROM evidence_jobs j WHERE j.id=? AND j.state='QUEUED' AND j.test_state='RUNNING') ON CONFLICT(job_id) DO NOTHING`)
+    .bind(id, time, approved.bindingId, approved.bindingVersion, row.id, row.artifact_name, ...await sourceOf(execution), time, id).run();
+  if (!released.meta.changes) return { state: 'REFUSED' };
+  const environment = {}, secrets = [];
+  for (const ref of approved.refs) {
+    const value = await db.prepare('SELECT * FROM execution_values WHERE id=? AND repository_id=? AND artifact_name=? AND version=? AND deleted=0').bind(ref.id, row.id, row.artifact_name, ref.version).first();
+    if (!value || !executionValueName(value.name) || Object.hasOwn(environment, value.name)) throw Error('Repository value unavailable');
+    environment[value.name] = await openVersion(db, env, row, value, value.version);
+    if (value.kind === 'secret') secrets.push(environment[value.name]);
+  }
+  return { state: 'RELEASED', environment, secrets };
+}
+
+// Marks every byte of every exact occurrence across the ordered chunks, so a secret split over a chunk boundary is covered and chunk lengths are kept.
+export function maskExecutionOutput(chunks, secrets) {
+  const parts = chunks.map(chunk => text.encode(chunk)), combined = new Uint8Array(parts.reduce((total, part) => total + part.length, 0)), marks = new Int32Array(combined.length + 1);
+  parts.reduce((offset, part) => (combined.set(part, offset), offset + part.length), 0);
+  for (const secret of new Set(secrets)) {
+    if (!executionValueBody(secret, true)) throw Error('Invalid masking secret');
+    // KMP keeps overlapping matches without re-reading repeated bytes.
+    const pattern = text.encode(secret), failure = new Int32Array(pattern.length);
+    for (let i = 1, j = 0; i < pattern.length; i++) {
+      while (j > 0 && pattern[i] !== pattern[j]) j = failure[j - 1];
+      if (pattern[i] === pattern[j]) j++;
+      failure[i] = j;
+    }
+    for (let i = 0, j = 0; i < combined.length; i++) {
+      while (j > 0 && combined[i] !== pattern[j]) j = failure[j - 1];
+      if (combined[i] === pattern[j]) j++;
+      if (j === pattern.length) { marks[i - pattern.length + 1]++; marks[i + 1]--; j = failure[j - 1]; }
+    }
+  }
+  for (let i = 0, active = 0; i < combined.length; i++) { active += marks[i]; if (active > 0) combined[i] = 42; }
+  let offset = 0;
+  return parts.map(part => new TextDecoder('utf-8', { fatal: true }).decode(combined.subarray(offset, offset += part.length)));
+}
+const outputFields = result => ['stdout', 'stderr', 'diagnostic'].filter(field => typeof result[field] === 'string');
+// Output that cannot be masked is withheld, never stored as it was.
+const withheld = result => ({ ...result, ...Object.fromEntries(outputFields(result).map(field => [field, field === 'stderr' ? 'Output withheld: it could not be checked for repository secrets.\n' : ''])) });
+export function maskExecutionResult(result, secrets) {
+  if (!secrets?.length) return result;
+  const fields = outputFields(result);
+  try {
+    const masked = maskExecutionOutput(fields.map(field => result[field]), secrets);
+    return { ...result, ...Object.fromEntries(fields.map((field, index) => [field, masked[index]])) };
+  } catch { return withheld(result); }
+}
+const releasedTo = (db, job) => db.prepare('SELECT 1 AS released FROM execution_value_releases WHERE job_id=?').bind(job.id).first();
+// The task masks before it stores anything. This second pass re-opens the released secrets where the result becomes durable.
+export async function maskReleasedOutput(db, env, job, snapshot, result) {
+  const approved = snapshot.execution?.values;
+  if (!approved || !await releasedTo(db, job)) return result;
+  const secrets = [];
+  try {
+    const row = await db.prepare('SELECT id,artifact_name FROM repositories WHERE id=?').bind(job.repository_id).first();
+    for (const ref of approved.refs) {
+      const value = await db.prepare('SELECT * FROM execution_values WHERE id=? AND repository_id=? AND artifact_name=?').bind(ref.id, row.id, row.artifact_name).first();
+      if (value.kind === 'secret') secrets.push(await openVersion(db, env, row, value, ref.version));
+    }
+  } catch { return withheld(result); }
+  return maskExecutionResult(result, secrets);
+}
+// Said in the job's report, so a run without values is never mistaken for one with them.
+export async function executionValueNote(db, job, snapshot) {
+  const execution = snapshot.execution;
+  if (!execution) return [];
+  if (execution.values) return [await releasedTo(db, job) ? 'Repository values were released to this administrator-approved exact commit. Exact secret text is masked in the stored output; transformed values are not detected.' :
+    'Repository values were approved for this commit at admission but were not released to the job.'];
+  if (!await db.prepare('SELECT 1 AS approved FROM execution_bindings WHERE repository_id=? AND deleted=0 LIMIT 1').bind(job.repository_id).first()) return [];
+  return [execution.runner ? 'This job ran without repository values: customer-runner jobs do not receive them.' :
+    'This job ran without repository values: no current administrator approval matches this exact commit, workflow and head branch.'];
 }

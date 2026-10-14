@@ -4047,3 +4047,207 @@ test('repository values stay unavailable without a dedicated key or an approved 
   await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { id: nonce(), expectedVersion: '0', expectedBrokerRevision: '0', operationId: nonce(), name: 'DEPLOY_TOKEN', kind: 1, value: 'fixture-secret-value' }), 412);
   assert.equal((await f.human('NotAMethod')).status, 501);
 });
+
+async function releaseFixture(t) {
+  const { releaseExecutionValues } = await import('./src/execution-values.mjs');
+  const f = await executionValueFixture(t), secret = 'fixture-secret-not-a-real-credential';
+  f.env.EVIDENCE_DAILY_LIMIT = '20';
+  await value(await f.save('DEPLOY_TOKEN', secret)); await value(await f.save('REGION', 'eu-central', { kind: 2 }));
+  const values = (await f.list()).values, binding = { id: nonce() };
+  await value(await f.approve(values, binding));
+  // The hosted task asks through the workspace; here the same function runs with the same authorization callback.
+  const release = id => releaseExecutionValues(f.env, id, job => advanceEvidence(f.env, job, 'authorize-test', f.env.workflow));
+  const start = async () => { const job = (await value(await f.evidence({ ...f.input, advice: false, runTests: true, idempotencyKey: nonce() }))).job; assert.equal((await f.advance(job.id, 'tests')).state, 'RUNNING'); return job; };
+  const snapshot = id => JSON.parse(f.sql.prepare('SELECT snapshot FROM evidence_jobs WHERE id=?').get(id).snapshot);
+  const finish = async (id, output) => { Object.assign(f.execution.tasks.get(id), { state: 'PASSED', cleanup: 'destroyed', exitCode: 0, stdout: '', stderr: '', finishedAt: Date.now(), ...output });
+    await f.advance(id, 'tests'); await f.advance(id, 'advice'); await f.advance(id, 'store'); return value(await f.read(id, 'report', readerToken)); };
+  // What a new job at the pull request head is admitted with; the job is stopped again so the two-container bound never interferes.
+  const admitted = async () => { const job = await start(), approved = snapshot(job.id).execution.values; await value(await f.read(job.id, 'cancel')); return approved; };
+  return { ...f, secret, values, binding, release, start, snapshot, finish, admitted, releases: () => f.sql.prepare('SELECT * FROM execution_value_releases').all() };
+}
+
+test('an approved exact commit is released once to the hosted job and plaintext reaches no store or report', async t => {
+  const f = await releaseFixture(t), job = await f.start(), admitted = f.snapshot(job.id).execution.values, task = f.execution.tasks.get(job.id);
+  assert.deepEqual(admitted, { bindingId: f.binding.id, bindingVersion: 1, refs: f.values.map(v => ({ id: v.id, version: 1 })).sort((a, b) => a.id < b.id ? -1 : 1) });
+  // The task is admitted with the same identities, bound into its hash, and nothing else.
+  assert.deepEqual(task.values, admitted); assert.equal(JSON.stringify(task).includes(f.secret), false);
+  assert.equal(f.stored().includes(f.secret), false); assert.deepEqual(f.releases(), []);
+  const released = await f.release(job.id);
+  assert.deepEqual(released, { state: 'RELEASED', environment: { DEPLOY_TOKEN: f.secret, REGION: 'eu-central' }, secrets: [f.secret] });
+  assert.deepEqual(f.releases().map(r => [r.job_id, r.binding_id, r.binding_version]), [[job.id, f.binding.id, 1]]);
+  // A second request for the same job gets nothing.
+  assert.deepEqual(await f.release(job.id), { state: 'REFUSED' });
+  assert.equal(f.stored().includes(f.secret), false);
+  // Even a task that reported unmasked output cannot make it durable: the save masks again.
+  const half = f.secret.slice(0, 12), stars = '*'.repeat(f.secret.length);
+  const result = await f.finish(job.id, { stdout: 'token is ' + f.secret + '\nfirst half ' + half, stderr: f.secret.slice(12) + ' printed by a later step\nregion eu-central\n' });
+  assert.equal(result.report.tests.stdout, 'token is ' + stars + '\nfirst half ' + '*'.repeat(12));
+  assert.equal(result.report.tests.stderr, '*'.repeat(f.secret.length - 12) + ' printed by a later step\nregion eu-central\n');
+  assert.equal(result.report.execution.values, undefined); assert.equal(JSON.stringify(result).includes(f.binding.id), false);
+  assert.ok(result.report.limitations.includes('Repository values were released to this administrator-approved exact commit. Exact secret text is masked in the stored output; transformed values are not detected.'));
+  for (const [where, text] of [['D1', f.stored()], ['R2', JSON.stringify([...f.objects])], ['report', JSON.stringify(result)], ['status', await (await f.read(job.id)).text()]]) {
+    assert.equal(text.includes(f.secret), false, where); assert.equal(text.includes(half), false, where);
+  }
+  // A finished job cannot be used to ask again.
+  assert.deepEqual(await f.release(job.id), { state: 'REFUSED' });
+  const capability = (await value(await f.call('', {}, readerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c => c.id === 'settings.repository-secrets');
+  assert.deepEqual(capability.map(c => c.state), ['CAPABILITY_STATE_READY']); assert.match(capability[0].reason, /^Encrypted repository secrets and plain variables, released as environment variables only to an administrator-approved exact commit/);
+});
+
+test('a job at an unapproved commit, branch or workflow runs without values and its report says so', async t => {
+  const f = await releaseFixture(t), without = 'This job ran without repository values: no current administrator approval matches this exact commit, workflow and head branch.';
+  const edit = async fields => value(await f.approve(f.values, { id: f.binding.id, expectedVersion: (await f.list()).bindings[0].version, ...fields }));
+  await edit({ commitId: commit });
+  const other = await f.start();
+  assert.equal(f.snapshot(other.id).execution.values, undefined); assert.equal(f.execution.tasks.get(other.id).values, undefined);
+  assert.deepEqual(await f.release(other.id), { state: 'NONE' });
+  // The job's output is stored as it was: nothing was released, so nothing is masked.
+  const report = (await f.finish(other.id, { stdout: 'echo ' + f.secret })).report;
+  assert.ok(report.limitations.includes(without)); assert.equal(report.tests.stdout, 'echo ' + f.secret);
+  await edit({ eventRef: 'refs/heads/other' });
+  assert.equal(await f.admitted(), undefined);
+  await edit({});
+  assert.equal((await f.admitted()).bindingId, f.binding.id);
+  // The same commit with another workflow file at the approved path is a different source.
+  f.state.source = f.state.source.replace('./check.sh', './check.sh && env');
+  assert.equal(await f.admitted(), undefined);
+  f.state.source = f.state.source.replace(' && env', '');
+  assert.equal((await f.admitted()).bindingId, f.binding.id);
+  // Two approvals for one source are ambiguous, an expired one is not an approval, and neither is one whose approver lost administration.
+  await value(await f.approve([f.values[0]]));
+  assert.equal(await f.admitted(), undefined);
+  f.sql.prepare('UPDATE execution_bindings SET deleted=1 WHERE id<>?').run(f.binding.id);
+  assert.equal((await f.admitted()).bindingId, f.binding.id);
+  f.sql.prepare("UPDATE execution_bindings SET expires_at='2000-01-01T00:00:00.000Z'").run();
+  assert.equal(await f.admitted(), undefined);
+  f.sql.prepare('UPDATE execution_bindings SET expires_at=?').run(new Date(Date.now() + 600000).toISOString());
+  assert.equal((await f.admitted()).bindingId, f.binding.id);
+  f.sql.exec("UPDATE grants SET role='admin' WHERE user_id=2; UPDATE grants SET role='write' WHERE user_id=1");
+  assert.equal(await f.admitted(), undefined);
+  assert.deepEqual(f.releases(), []);
+  // A repository with no approvals says nothing about values.
+  f.sql.exec('UPDATE execution_bindings SET deleted=1');
+  const quiet = await f.start();
+  assert.equal((await f.finish(quiet.id, {})).report.limitations.some(line => line.includes('repository values')), false);
+});
+
+test('a stale approval, changed value, expiry, revoked approver or lost job authority releases nothing', async t => {
+  const f = await releaseFixture(t), job = await f.start(), refused = async why => { assert.deepEqual(await f.release(job.id), { state: 'REFUSED' }, why); assert.deepEqual(f.releases(), [], why); };
+  assert.ok(f.snapshot(job.id).execution.values);
+  const tamper = async (why, change, restore) => { f.sql.exec(change); await refused(why); f.sql.exec(restore); };
+  const expiry = f.sql.prepare('SELECT expires_at FROM execution_bindings').get().expires_at, source = f.sql.prepare('SELECT source_sha256 FROM execution_bindings').get().source_sha256;
+  await tamper('expired approval', "UPDATE execution_bindings SET expires_at='2000-01-01T00:00:00.000Z'", `UPDATE execution_bindings SET expires_at='${expiry}'`);
+  await tamper('newer approval version', 'UPDATE execution_bindings SET version=version+1', 'UPDATE execution_bindings SET version=version-1');
+  await tamper('removed approval', 'UPDATE execution_bindings SET deleted=1', 'UPDATE execution_bindings SET deleted=0');
+  await tamper('approval moved to another commit', `UPDATE execution_bindings SET commit_id='${commit}'`, `UPDATE execution_bindings SET commit_id='${'b'.repeat(40)}'`);
+  await tamper('approval moved to another branch', "UPDATE execution_bindings SET event_ref='refs/heads/main'", "UPDATE execution_bindings SET event_ref='refs/heads/feature'");
+  await tamper('approval of another compiled source', `UPDATE execution_bindings SET source_sha256='${'0'.repeat(64)}'`, `UPDATE execution_bindings SET source_sha256='${source}'`);
+  await tamper('rotated value', "UPDATE execution_values SET version=version+1 WHERE name='DEPLOY_TOKEN'", "UPDATE execution_values SET version=version-1 WHERE name='DEPLOY_TOKEN'");
+  await tamper('removed value', "UPDATE execution_values SET deleted=1 WHERE name='REGION'", "UPDATE execution_values SET deleted=0 WHERE name='REGION'");
+  await tamper('job no longer running its tests', "UPDATE evidence_jobs SET test_state='REQUESTED'", "UPDATE evidence_jobs SET test_state='RUNNING'");
+  await tamper('agent job', "UPDATE evidence_jobs SET agent_state='RUNNING'", "UPDATE evidence_jobs SET agent_state='NONE'");
+  await tamper('approver identity changed', 'UPDATE native_identity_versions SET version=version+1 WHERE user_id=1', 'UPDATE native_identity_versions SET version=version-1 WHERE user_id=1');
+  await tamper('approval names another approver', 'UPDATE execution_bindings SET sponsor_id=2', 'UPDATE execution_bindings SET sponsor_id=1');
+  const key = f.env.EXECUTION_VALUE_KEY; delete f.env.EXECUTION_VALUE_KEY; await refused('key removed'); f.env.EXECUTION_VALUE_KEY = key;
+  // The job's own authorization is asked first and its answer is final.
+  const { releaseExecutionValues } = await import('./src/execution-values.mjs');
+  assert.deepEqual(await releaseExecutionValues(f.env, job.id, async () => ({ state: 'REFUSED' })), { state: 'REFUSED' }); assert.deepEqual(f.releases(), []);
+  // Everything restored: the same job is released, which shows each refusal above came from its one change.
+  assert.equal((await f.release(job.id)).state, 'RELEASED');
+  assert.equal(f.releases().length, 1);
+  // The approver loses administration while a second job waits; the job's own actor is still a writer.
+  f.sql.exec("DELETE FROM execution_value_releases; UPDATE evidence_jobs SET state='REFUSED'");
+  const waiting = await f.start();
+  f.sql.exec("UPDATE grants SET role='admin' WHERE user_id=2; UPDATE grants SET role='write' WHERE user_id=1");
+  assert.equal((await f.advance(waiting.id, 'authorize-test')).state, 'AUTHORIZED');
+  assert.deepEqual(await f.release(waiting.id), { state: 'REFUSED' });
+  f.sql.exec("UPDATE grants SET role='admin' WHERE user_id=1");
+  assert.deepEqual(await f.release(waiting.id), { state: 'REFUSED' });
+  // The pull request head moves: the job's authorization itself ends.
+  f.setRefs([['refs/heads/main', commit], ['refs/heads/feature', 'c'.repeat(40)]]);
+  assert.deepEqual(await f.release(waiting.id), { state: 'REFUSED' });
+  assert.deepEqual(f.releases(), []);
+});
+
+test('a key that cannot open the released versions delivers nothing and stored output is withheld', async t => {
+  const f = await releaseFixture(t), job = await f.start(), key = f.env.EXECUTION_VALUE_KEY;
+  f.env.EXECUTION_VALUE_KEY = { get: async () => Buffer.alloc(32, 4).toString('base64') };
+  await assert.rejects(f.release(job.id), /^Error: Repository value unavailable$/);
+  // The release was recorded, so the job cannot ask again once the key is back, and nothing it prints is stored unchecked.
+  assert.equal(f.releases().length, 1);
+  const report = (await f.finish(job.id, { stdout: 'unchecked ' + f.secret, stderr: 'also ' + f.secret })).report;
+  assert.deepEqual([report.tests.state, report.tests.stdout, report.tests.stderr], ['PASSED', '', 'Output withheld: it could not be checked for repository secrets.\n']);
+  f.env.EXECUTION_VALUE_KEY = key;
+  assert.deepEqual(await f.release(job.id), { state: 'REFUSED' });
+  assert.equal(f.stored().includes(f.secret), false); assert.equal(JSON.stringify([...f.objects]).includes(f.secret), false);
+});
+
+test('rotating a value or changing an approval refuses queued jobs admitted under it and stops their containers', async t => {
+  const f = await releaseFixture(t), first = await f.start(), state = id => f.sql.prepare('SELECT state FROM evidence_jobs WHERE id=?').get(id).state;
+  assert.equal((await f.release(first.id)).state, 'RELEASED');
+  const token = f.values.find(v => v.name === 'DEPLOY_TOKEN');
+  await value(await f.save('DEPLOY_TOKEN', 'rotated-fixture-secret', { id: token.id, expectedVersion: '1' }));
+  assert.equal(state(first.id), 'REFUSED'); assert.equal(f.execution.tasks.get(first.id).state, 'CANCELLED');
+  assert.equal((await f.advance(first.id, 'authorize-test')).state, 'REFUSED');
+  // The approval still names the old version, so the next job runs without values until an administrator approves again.
+  const unapproved = await f.start();
+  assert.equal(f.snapshot(unapproved.id).execution.values, undefined);
+  const current = (await f.list()).values;
+  await value(await f.approve(current, { id: f.binding.id, expectedVersion: '1' }));
+  // A job that never had values is not touched by an approval change.
+  assert.equal(state(unapproved.id), 'QUEUED'); assert.equal(f.execution.tasks.get(unapproved.id).state, 'RUNNING');
+  await f.read(unapproved.id, 'cancel');
+  const second = await f.start();
+  assert.equal(f.snapshot(second.id).execution.values.bindingVersion, 2);
+  await value(await f.human('DeleteRepositoryExecutionBinding', { id: f.binding.id, expectedVersion: '2', expectedBrokerRevision: (await f.list()).brokerRevision, operationId: nonce() }));
+  assert.equal(state(second.id), 'REFUSED'); assert.equal(f.execution.tasks.get(second.id).state, 'CANCELLED');
+  assert.deepEqual(await f.release(second.id), { state: 'REFUSED' });
+  // A refused change fences nothing.
+  await value(await f.approve(current, { id: f.binding.id, expectedVersion: '3' }));
+  const third = await f.start();
+  await refusedBeforeCommit(await f.approve(current, { id: f.binding.id, expectedVersion: '9' }), 409);
+  assert.equal(state(third.id), 'QUEUED');
+  const region = current.find(v => v.name === 'REGION');
+  await value(await f.human('DeleteRepositoryExecutionValue', { id: region.id, expectedVersion: region.version, expectedBrokerRevision: (await f.list()).brokerRevision, operationId: nonce() }));
+  assert.equal(state(third.id), 'REFUSED');
+  assert.equal(f.stored().includes('rotated-fixture-secret'), false);
+});
+
+test('agent jobs and customer-runner jobs receive no values', async t => {
+  const { releaseExecutionValues } = await import('./src/execution-values.mjs');
+  const f = await releaseFixture(t), authorized = async () => ({ state: 'AUTHORIZED' });
+  const hosted = await f.start(), approved = f.snapshot(hosted.id).execution.values;
+  // An agent job has no test execution at all; even one forged to carry an approval is refused before the release is recorded.
+  const forge = (id, change) => { const snapshot = f.snapshot(id); change(snapshot); f.sql.prepare('UPDATE evidence_jobs SET snapshot=? WHERE id=?').run(JSON.stringify(snapshot), id); };
+  forge(hosted.id, snapshot => { snapshot.agent = { commitId: 'b'.repeat(40), allowedPath: 'calc.py' }; });
+  assert.deepEqual(await releaseExecutionValues(f.env, hosted.id, authorized), { state: 'REFUSED' });
+  forge(hosted.id, snapshot => { delete snapshot.agent; snapshot.execution.runner = { poolId: nonce(), poolVersion: 1, placementVersion: 1, imageId: 'sha256:' + 'a'.repeat(64) }; });
+  assert.deepEqual(await releaseExecutionValues(f.env, hosted.id, authorized), { state: 'REFUSED' });
+  for (const contract of ['golf.native.pr-test.v1', 'golf.native.actions-act.v1', 'golf.native.actions-act-build.v1']) {
+    forge(hosted.id, snapshot => { delete snapshot.execution.runner; snapshot.execution.contract = contract; });
+    assert.deepEqual(await releaseExecutionValues(f.env, hosted.id, authorized), { state: 'REFUSED' }, contract);
+  }
+  forge(hosted.id, snapshot => { snapshot.execution.contract = 'golf.native.workflow-shell.v1'; snapshot.execution.workflow.plan.format = 'gitlab'; });
+  assert.deepEqual(await releaseExecutionValues(f.env, hosted.id, authorized), { state: 'REFUSED' });
+  assert.deepEqual(f.releases(), []);
+  await assert.rejects(releaseExecutionValues(f.env, 'not-a-job', authorized), /Invalid value release/);
+  await f.read(hosted.id, 'cancel');
+  // The same approved commit placed on a customer runner is admitted without values and says why.
+  const pool = nonce();
+  f.env.TEST_IMAGE_ID = 'sha256:' + 'a'.repeat(64);
+  f.sql.prepare("INSERT INTO native_runner_pools(id,name,version,state,trust_class,max_parallel,image_id,created_at) VALUES(?,'pool',1,'ACTIVE','UNTRUSTED',1,?,'2026-01-01T00:00:00.000Z')").run(pool, f.env.TEST_IMAGE_ID);
+  f.sql.prepare("INSERT INTO native_runner_placements(repository_id,pool_id,pool_version,version,updated_at) VALUES(1,?,1,1,'2026-01-01T00:00:00.000Z')").run(pool);
+  const placed = (await value(await f.evidence({ ...f.input, advice: false, runTests: true, idempotencyKey: nonce() }))).job, execution = f.snapshot(placed.id).execution;
+  assert.ok(execution.runner); assert.equal(execution.values, undefined);
+  assert.deepEqual(await f.release(placed.id), { state: 'NONE' });
+  const { executionValueNote } = await import('./src/execution-values.mjs');
+  const db = f.env.DB, note = snapshot => executionValueNote(db, { id: placed.id, repository_id: 1 }, snapshot);
+  assert.deepEqual(await note(f.snapshot(placed.id)), ['This job ran without repository values: customer-runner jobs do not receive them.']);
+  assert.deepEqual(await note({ execution: { ...execution, values: approved } }), ['Repository values were approved for this commit at admission but were not released to the job.']);
+  assert.deepEqual(await note({ agent: {} }), []);
+  // Neither the agent task nor the customer-runner protocol has a path to the release.
+  for (const file of ['./src/agent-worker.mjs', './src/agents.mjs', './src/native-runners.mjs', './src/gitlab-runner.mjs', '../agents/src/worker.mjs']) {
+    const source = await readFile(new URL(file, import.meta.url), 'utf8');
+    assert.equal(/testValues|releaseExecutionValues|execution-values/.test(source), false, file);
+  }
+});

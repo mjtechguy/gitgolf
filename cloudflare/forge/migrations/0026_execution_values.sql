@@ -25,3 +25,7 @@ CREATE TABLE IF NOT EXISTS execution_value_operations (
  action TEXT NOT NULL CHECK(action IN ('save_value','delete_value','save_binding','delete_binding')), item_id TEXT NOT NULL,
  accepted_version INTEGER NOT NULL, accepted_broker_revision INTEGER NOT NULL, input_hash TEXT NOT NULL, created_at TEXT NOT NULL
 );
+-- One release per job: which approval version let its values leave storage, and when. Never the values.
+CREATE TABLE IF NOT EXISTS execution_value_releases (
+ job_id TEXT PRIMARY KEY REFERENCES evidence_jobs(id), binding_id TEXT NOT NULL REFERENCES execution_bindings(id), binding_version INTEGER NOT NULL, released_at TEXT NOT NULL
+);
