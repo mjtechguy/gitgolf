@@ -781,6 +781,13 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .discussion-sidebar .pull-ref dl>div { margin-top:6px; }
 .discussion-sidebar .pull-merge-record { margin:12px 0; }
 .discussion-sidebar>.metadata-details { margin-top:16px; }
+/* Agentic mode landing evaluation (PullLanding): decision, reasons and sensitive paths, compact in the sidebar. */
+.pull-landing>p { margin:6px 0; }
+.pull-landing-decision.land { color:var(--accent); }
+.pull-landing-decision.waiting_checks,.pull-landing-decision.needs_person { color:var(--warning); }
+.pull-landing-decision.blocked { color:var(--error); }
+.pull-landing-reasons,.pull-landing-paths { margin:6px 0; padding-left:18px; color:var(--muted); }
+.pull-landing-reasons li,.pull-landing-paths li { margin:2px 0; overflow-wrap:anywhere; }
 @media(min-width:721px) { .repository-browser .ref-picker>summary { padding-block:6px; min-height:32px; } }
 @media(min-width:901px) {
  .discussion-summary.pull-detail { display:grid; grid-template-columns:minmax(0,1fr) auto; column-gap:16px; }

@@ -60,20 +60,22 @@ export function RepositorySettingsLayout({ children, owner, name, userId = '' }:
   // Own repository email shares the Webhooks page; on the native runtime it can be allocated without webhooks.
   const emailOnly = manifest?.runtimeProfile === 'cloudflare-native' && !settingAvailable(manifest, 'settings.repository-webhooks') && emailNotificationsMounted(manifest);
   const pathname = useLocation({select: location => location.pathname});
-  const audit = settingAvailable(manifest, 'settings.installation-audit');
-  const entries = [
+  const audit = settingAvailable(manifest, 'settings.installation-audit'), agentic = settingAvailable(manifest, 'repository.agentic-mode');
+  const entries = ([
     { label: 'General', group: '', suffix: '', icon: UserRound, enabled: runtimeFeature(manifest, 'settings.repository-general'), to: '/$owner/$name/settings' },
     { label: 'Access', group: 'Access and security', suffix: '/access', icon: ShieldCheck, enabled: runtimeFeature(manifest, 'settings.repository-access'), to: '/$owner/$name/settings/access' },
     { label: 'Git credentials', group: 'Access and security', suffix: '/git', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-git'), to: '/$owner/$name/settings/git' },
     { label: 'Rules and merge policy', group: 'Access and security', suffix: '/rules', icon: ShieldCheck, enabled: runtimeFeature(manifest, 'settings.repository-rules'), to: '/$owner/$name/settings/rules' },
     // One audit log service at every scope; a runtime that does not report it does not list it.
     ...(audit || manifest?.runtimeProfile === 'cloudflare-native' || !runtime.isSuccess ? [{ label: 'Audit log', group: 'Access and security', suffix: '/audit', icon: ScrollText, enabled: audit, to: '/$owner/$name/settings/audit' } as const] : []),
+    // Agentic mode is a native Worker service; a runtime that does not report it does not list it.
+    { label: 'Agentic mode', group: 'Automation', suffix: '/agentic-mode', icon: Bot, enabled: agentic, to: '/$owner/$name/settings/agentic-mode', feature: 'agentic-mode', listed: agentic || manifest?.runtimeProfile === 'cloudflare-native' || !runtime.isSuccess },
     { label: 'Workflows', group: 'Automation', suffix: '/workflows', icon: History, enabled: runtimeFeature(manifest, 'settings.repository-workflows'), to: '/$owner/$name/settings/workflows' },
     { label: 'Runners', group: 'Automation', suffix: '/runners', icon: Server, enabled: settingAvailable(runtime.isError ? undefined : runtime.data, runtime.data?.runtimeProfile === 'cloudflare-native' ? 'settings.native-runners' : 'settings.runners'), to: '/$owner/$name/settings/runners', feature: 'actions' },
     { label: 'Secrets and variables', group: 'Automation', suffix: '/secrets', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-secrets'), to: '/$owner/$name/settings/secrets', feature: 'secrets' },
     { label: 'Environments', group: 'Automation', suffix: '/environments', icon: Rocket, enabled: runtimeFeature(manifest, 'settings.repository-environments'), to: '/$owner/$name/settings/environments', feature: 'previews' },
     { label: emailOnly ? 'Email notifications' : 'Webhooks', group: 'Integrations', suffix: '/webhooks', icon: Webhook, enabled: runtimeFeature(manifest, 'settings.repository-webhooks') || emailOnly, to: '/$owner/$name/settings/webhooks', feature: emailOnly ? 'email' : 'webhooks' },
-  ] as const;
+  ] as const).filter(entry => !('listed' in entry) || entry.listed);
   // Sections a feature policy turned off move to their own group, which names the level that decided.
   // The Webhooks page also carries own email subscriptions, so it stays open while either is on.
   const turnedOff = (entry: (typeof entries)[number]) => !('feature' in entry) ? undefined : entry.feature === 'webhooks' && emailNotificationsMounted(manifest) && !policyOff(features, 'email') ? undefined : policyOff(features, entry.feature);
