@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -219,3 +220,16 @@ func clip(s string, max int) string {
 }
 
 func isRuneStart(b byte) bool { return b&0xC0 != 0x80 }
+
+// wireID reads an id Golf sends as a decimal string (its usual form, like other ids in the API) or as a JSON number.
+type wireID int64
+
+func (v *wireID) UnmarshalJSON(data []byte) error {
+	text := strings.Trim(string(data), `"`)
+	n, err := strconv.ParseInt(text, 10, 64)
+	if err != nil || n < 0 || len(data) > 2 && data[0] == '"' && data[len(data)-1] != '"' {
+		return fmt.Errorf("invalid id %s", data)
+	}
+	*v = wireID(n)
+	return nil
+}

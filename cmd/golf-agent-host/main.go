@@ -242,7 +242,7 @@ func cmdRegister(args []string, stdout io.Writer) error {
 	}
 	c := newAPIClient(*origin, "")
 	var out struct {
-		HostID     int64  `json:"hostId"`
+		HostID     wireID `json:"hostId"`
 		UUID       string `json:"uuid"`
 		Credential string `json:"credential"`
 	}
@@ -255,10 +255,10 @@ func cmdRegister(args []string, stdout io.Writer) error {
 		return fmt.Errorf("registration failed: %w", err)
 	}
 	m := credentialPattern.FindStringSubmatch(out.Credential)
-	if !uuidPattern.MatchString(out.UUID) || m == nil || m[1] != out.UUID || out.HostID < 1 {
+	if !uuidPattern.MatchString(out.UUID) || m == nil || m[1] != out.UUID || int64(out.HostID) < 1 {
 		return errors.New("registration response did not hold a valid host credential")
 	}
-	h := hostFile{Origin: *origin, HostID: out.HostID, UUID: out.UUID, Name: *name, Credential: out.Credential}
+	h := hostFile{Origin: *origin, HostID: int64(out.HostID), UUID: out.UUID, Name: *name, Credential: out.Credential}
 	if err := writePrivateJSON(filepath.Join(*state, "host.json"), h); err != nil {
 		return err
 	}
