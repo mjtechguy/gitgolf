@@ -91,6 +91,12 @@ above and the editable "AI on/off" approval.
 | AI run foundation (`ai_runs`, `AiWorkflow`, `/native/ai`): one gateway call per run, gated and rate-limited, shared by the features below | Workers AI, AI Gateway, Workflows | shipped (no feature uses it yet) |
 | Further candidates to evaluate: test failure explanation from the masked log, merge commit message suggestion, documentation Q&A | Workers AI, AI Search | candidates |
 
+Coding agents on Cloudflare sandboxes and on machines users connect (agent hosts, SSH,
+Tailscale, Workers VPC), the credential vault and the built-in automation library
+(PR reviewer, triage, Issue → PR, CI fixer, improvement loops and more) are planned
+in [AGENTS_AND_AUTOMATIONS_PLAN.md](AGENTS_AND_AUTOMATIONS_PLAN.md). Model selection
+per use case becomes engine selection there.
+
 ## 3. Remaining capability work
 
 From the second scoping pass, still to build on the native backend:
