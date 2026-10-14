@@ -154,7 +154,7 @@ async function buildTask(db, env, { job, run, repository, token }) {
     repository_id: String(repository.id), repository_owner: owner, repository_owner_id: String(repository.owner_id || 0), repositoryUrl: origin + '/' + full + '.git', retention_days: '30',
     run_attempt: String(job.attempt), run_id: String(run.id), run_number: String(run.number), secret_source: 'Actions', server_url: origin, sha: run.commit_id,
     token, triggering_actor: actor?.login || '', workflow: run.workflow_name, workflow_ref: `${full}/${run.workflow_path}@${ref}`, workspace: '',
-    forgejo_default_actions_url: actions, gitea_default_actions_url: actions, forgejo_runtime_token: token, gitea_runtime_token: token, forgejo_server_version: 'golf-native',
+    forgejo_default_actions_url: actions, gitea_default_actions_url: actions, forgejo_runtime_token: token, gitea_runtime_token: token, forgejo_server_version: '1.0.0+golf-native',
   };
   const needs = {};
   for (const key of parse(job.needs, [])) {
@@ -176,8 +176,8 @@ export async function actionsGit(request, env, withArtifact) {
   const url = new URL(request.url), match = /^\/([^/]+)\/(.+?)(?:\.git)?\/(info\/refs|git-upload-pack)$/.exec(url.pathname);
   const header = request.headers.get('Authorization') || '';
   let token = '';
-  if (header.startsWith('Basic ')) { try { const pair = atob(header.slice(6)), at = pair.indexOf(':'); token = at >= 0 ? pair.slice(at + 1) : ''; } catch { token = ''; } }
-  else if (header.startsWith('Bearer ')) token = header.slice(7);
+  if (/^basic /i.test(header)) { try { const pair = atob(header.slice(6)), at = pair.indexOf(':'); token = at >= 0 ? pair.slice(at + 1) : ''; } catch { token = ''; } }
+  else if (/^bearer /i.test(header)) token = header.slice(7);
   const challenge = () => new Response('Job token required', { status: 401, headers: { 'WWW-Authenticate': 'Basic realm="Golf Actions"', 'Cache-Control': 'no-store' } });
   if (!token) return challenge();
   try {

@@ -512,7 +512,11 @@ export async function playManualJob(db, env, person, jobId) {
   if (run.attempt !== job.attempt || run.cancel_requested) refuse('The run changed; refresh.');
   await requireAllowed(db, env, run.repository_id);
   const time = now();
-  await db.prepare("UPDATE pipeline_jobs SET state='QUEUED',allow_failure=0,queued_at=?,updated_at=? WHERE id=? AND state='MANUAL'").bind(time, time, job.id).run();
+  // A played job is no longer manual: it goes through its environment gate (protected → APPROVAL) like any other job.
+  const gate = job.environment ? await environmentGate(db, run, job) : { state: 'QUEUED', reason: '' };
+  const played = await db.prepare("UPDATE pipeline_jobs SET state=?,when_mode='on_success',allow_failure=0,failure_reason=?,queued_at=?,updated_at=?,finished_at=CASE WHEN ?='FAILURE' THEN ? ELSE finished_at END WHERE id=? AND state='MANUAL'")
+    .bind(gate.state, gate.reason || '', time, time, gate.state, time, job.id).run();
+  if (played.meta.changes !== 1) refuse('The job changed; refresh.');
   await db.prepare("UPDATE pipeline_runs SET state='RUNNING',finished_at=NULL,updated_at=? WHERE id=?").bind(time, run.id).run();
   return advancePipelineRun(env, run.id);
 }

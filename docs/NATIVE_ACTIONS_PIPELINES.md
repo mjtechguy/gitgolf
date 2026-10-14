@@ -28,7 +28,7 @@ Capability ids (honest: READY only when the route exists and the binding is pres
 `actions.pipelines` (runs, triggers, UI), `actions.forgejo-runner` (stock Forgejo Runner protocol),
 `actions.gitlab-runner` (RUN-C), `actions.artifacts` (v4 Twirp artifacts in R2), `settings.pipeline-runners`.
 
-## D1 schema — migration `0033_actions_pipelines.sql` (also appended to `schema.sql`; schema version 33)
+## D1 schema — migration `0034_actions_pipelines.sql` (also appended to `schema.sql`; schema version 34)
 
 ```sql
 CREATE TABLE IF NOT EXISTS pipeline_registration_tokens (
