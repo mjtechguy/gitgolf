@@ -1,5 +1,25 @@
 # Golf implementation status
 
+## 2026-10-14 — AI model selection per use case and AI usage (AI-G, AI-F)
+
+Administrators choose the default and allowed Workers AI models for agents,
+summaries and review drafts, release notes and search embeddings at `/admin/ai`,
+from the account's model catalog (cached 6 hours) filtered by task and capability
+and bounded by the deploy list `AI_MODELS`; review advice and triage stay on Clef.
+A per-use-case switch lets repository administrators pick from the allowed list in
+repository settings. Writes are revision-fenced and audited; widening needs the
+typed key and a recent Access sign-in; `policy_editing: false` locks it (schema
+33). Every AI run records the model it used; the agent model is part of the agent
+policy identity, so a change refuses queued proposals at their next step.
+`/admin/ai-usage` shows Golf's own ledger by feature, model and day against the
+daily AI limit, and an AI Gateway analytics panel that stays "Degraded" until a
+live read succeeds.
+
+Verified locally: Worker tests (448, 447 pass, 1 skipped), agents package (4),
+real workerd AI/runtime/UI/environments checks, web typecheck and builds, and the
+model-selection Playwright specs. Unverified live: the catalog's property names
+and whether the analytics token reads the AI Gateway dataset.
+
 ## 2026-10-14 — Workers AI run foundation and the Clef recommendation card (AI-0, AI-A)
 
 Workers AI runs (AI-0) are admitted and prepared in the workspace, inferred once

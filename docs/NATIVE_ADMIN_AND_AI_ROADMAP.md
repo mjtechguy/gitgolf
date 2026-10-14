@@ -86,10 +86,23 @@ above and the editable "AI on/off" approval.
 | Issue triage: label suggestions from the repository's own labels | Workers AI `@cf/cloudflare/clef` | planned |
 | Release notes draft from merged pull requests since the previous tag | Workers AI text generation | planned |
 | Semantic search over code and issues, filtered by the reader's current access | Workers AI embeddings, Vectorize | planned |
-| AI Gateway usage in the admin portal: requests, tokens, cost against the daily limit | AI Gateway analytics | planned |
-| Model selection per AI use case: an administrator picks the default and the allowed models for agents, advice, summaries, triage, release notes and search embeddings from a dropdown fed by the account's Workers AI catalog; repositories choose from the allowed list only where the administrator allows overrides; every report records the model used | Workers AI model catalog | planned (asked for on 2026-10-14) |
+| AI usage in the admin portal (`/admin/ai-usage`): Golf's own run ledger by feature, model and day against the daily AI limit; AI Gateway analytics (requests, tokens, cost estimate, last 24 h) as a separate panel that stays degraded, with its reason, until a live read succeeds; no claim about remaining allowance | Golf ledger in D1, AI Gateway analytics (GraphQL) | shipped (gateway dataset unverified live; hosted acceptance pending) |
+| Model selection per AI use case (`/admin/ai`, repository settings): an administrator picks the default and the allowed models for agents, summaries and review drafts, release notes and search embeddings from a dropdown fed by the account's Workers AI catalog, inside the deploy list `AI_MODELS`; advice and triage keep Clef; repositories choose from the allowed list only where the administrator allows overrides; every AI run and agent proposal records the model used | Workers AI model catalog | shipped (catalog property ids unverified live; hosted acceptance pending) |
 | AI run foundation (`ai_runs`, `AiWorkflow`, `/native/ai`): one gateway call per run, gated and rate-limited, shared by the features below | Workers AI, AI Gateway, Workflows | shipped (no feature uses it yet) |
 | Further candidates to evaluate: test failure explanation from the masked log, merge commit message suggestion, documentation Q&A | Workers AI, AI Search | candidates |
+
+### Choosing the model in a new AI kind
+
+Every AI kind reads its model through one helper, `aiModel(db, env, use, repositoryId)` in
+`cloudflare/forge/src/ai-models.mjs`. It returns `{ model, source, note }`, where source is
+`fixed` (Clef), `repository`, `installation` or `deploy`, and throws a 412 when nothing usable is
+allowed. A kind in `aiKinds` names its use case (`use: 'review-drafts'`, `'release-notes'`,
+`'search'`; `'agents'` is bound into the agent policy identity by `withAgentModel`) instead of a
+fixed `model`; `/native/ai` then records the effective model on the run, and prepare and infer
+refuse, unbilled, a run whose model is no longer allowed (`aiModelStillAllowed`). The search
+index treats a stored model that differs from `aiModel(..., 'search', ...)` as a rebuild and keeps
+serving the old generation until the new one completes. New use cases are added to `aiUses` and
+to the deploy list `ai_models` in `forge.json`.
 
 Coding agents on Cloudflare sandboxes and on machines users connect (agent hosts, SSH,
 Tailscale, Workers VPC), the credential vault and the built-in automation library

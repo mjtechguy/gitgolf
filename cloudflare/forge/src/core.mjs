@@ -34,6 +34,8 @@ import { organizations, profile, stars } from './workspace-ui.mjs';
 import { collaboration, collaborationMethods, operationRepository } from './collaboration.mjs';
 import { evidenceAPI, evidenceStep, evidencePolicy } from './evidence.mjs';
 import { aiAPI, aiStep, aiKinds } from './ai-workflow.mjs';
+import { aiModelsAPI, withAgentModel } from './ai-models.mjs';
+import { aiUsageAPI } from './ai-usage.mjs';
 import { agentPolicy } from './agent-policy.mjs';
 import { executionDiagnostic, testPolicy } from './test-policy.mjs';
 import { appPolicy } from './app-policy.mjs';
@@ -73,7 +75,7 @@ export function serialize(handler, isRead = () => false) {
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
-  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read'].includes(new URL(request.url).pathname)) return true;
+  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read'].includes(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
   if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
   if (/^\/rpc\/golf\.v1\.(?:FeaturePolicyService\/GetFeaturePolicy|RepositoryFeatureService\/GetRepositoryFeatures)$/.test(new URL(request.url).pathname)) return true;
@@ -82,7 +84,7 @@ export function concurrentRead(request) {
   if (/^\/rpc\/golf\.v1\.(?:DiscussionAttachmentService\/(?:ListDiscussionAttachments|DownloadDiscussionAttachment)|DiscussionAttachmentUploadService\/GetDiscussionAttachmentUploadState)$/.test(new URL(request.url).pathname)) return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
-const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume|ai)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
+const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume|ai|ai-models|ai-usage)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
 async function input(request) {
   if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') invalid('Use JSON.');
@@ -395,6 +397,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) || 0, previewTTL: Number(env.PREVIEW_TTL) || 0, appTTL: appPolicy(env)?.ttl || 0 });
     if (url.pathname === '/native/installation' || url.pathname === '/native/installation/read') return await installationAPI(db, env, person, request, body, url.pathname.endsWith('/read'));
     if (url.pathname === '/native/runner-admin') return await nativeRunnerAdmin(db, env, person, request, body);
+    if (url.pathname === '/native/ai-models' || url.pathname === '/native/ai-models/read') return await aiModelsAPI(db, env, person, request, body, url.pathname.endsWith('/read'), () => authorizedRepository(db, person, body.repository, env, body.repositoryId));
+    if (url.pathname === '/native/ai-usage/read') return await aiUsageAPI(db, env, person, request, body, providerFetch);
     if (url.pathname === '/native/runner-placement') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'actions');
       if (body.repositoryId !== String(row.id)) deny();
@@ -429,7 +433,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const id = body.action === 'create' ? body.selection?.repositoryId : body.repositoryId;
       const row = await authorizedRepository(db, person, key, env, id, 'pull-requests');
       if (id !== String(row.id)) deny();
-      return await evidenceAPI(db, env, person, row, action => withArtifact(env, row, action), body);
+      // The repository's agent model is bound into the agent policy identity recorded at admission.
+      return await evidenceAPI(db, await withAgentModel(db, env, row.id), person, row, action => withArtifact(env, row, action), body);
     }
     if (url.pathname === '/native/ai' || url.pathname === '/native/ai/read') {
       if (url.pathname.endsWith('/read') !== ['status', 'list'].includes(body.action)) invalid(url.pathname.endsWith('/read') ? 'This route only reads AI runs.' : 'This route only creates AI runs.');
@@ -541,6 +546,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'settings.repository-workflows', label: 'Workflows', state: 'CAPABILITY_STATE_READY', reason: workflowCapability(env, Boolean(testPolicy(env)) && evidencePolicy(env)) },
       { id: 'settings.repository-execution-policy', label: 'Repository execution switch', state: testPolicy(env) && evidencePolicy(env) && env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: executionPolicyCapability(Boolean(testPolicy(env)) && evidencePolicy(env), Boolean(env.ACCESS_AUD)) },
       { id: 'settings.native', label: 'Cloudflare allocation settings', state: 'CAPABILITY_STATE_READY', reason: "Operations administrators signed in through Access see every installation setting the Worker holds: allocations, approved origins, sender, limits and today's use. Secret values are never shown. " + (env.INSTALLATION_POLICY_EDITING === 'false' ? 'Installation policy is locked at deploy.' : 'Webhook origins and limits, email, AI advice, agent proposals, preview lifetime and slots, anonymous rate limiting and daily evidence admissions are editable within the deploy allocation; widening needs typed confirmation and a recent Access sign-in.') },
+      { id: 'settings.ai-models', label: 'AI models', state: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'Operations administrators choose the Workers AI model for each AI use case within the deploy list, from the account catalog; repositories choose only where allowed. Clef stays fixed for advice and triage.' : 'Workers AI is not allocated on this installation (enable-ai).' },
+      { id: 'operations.ai-usage', label: 'AI usage', state: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'Golf’s own run ledger by feature, model and day against the daily AI limit; AI Gateway analytics when an Account Analytics Read token is bound. Cloudflare billing is authoritative.' : 'Workers AI is not allocated on this installation (enable-ai).' },
       { id: 'settings.installation-audit', label: 'Installation audit log', state: env.installationSchema ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.installationSchema ? 'Append-only record of installation policy changes, readable by operations administrators signed in through Access.' : 'Apply the schema 30 migration to keep an installation audit log.' },
       // The portable administration pages these name have no native service; the specific reason replaces a generic blocked page.
       { id: 'settings.execution', label: 'Installation execution policy', state: 'CAPABILITY_STATE_DISABLED', reason: 'Cloudflare native has no installation-wide execution policy service. Repository administrators switch pull-request runs per repository; the approved workflow is fixed at deploy.' },
@@ -823,6 +830,8 @@ export async function advanceEvidence(env, id, phase, workflows) {
   // Each step reads the installation policy in force now, so a feature turned off refuses work that is still queued.
   env = await withInstallationPolicy(env, db);
   const job = await db.prepare('SELECT * FROM evidence_jobs WHERE id=?').bind(id).first();
+  // The agent model in force now: a change since admission changes the policy identity, so the step below refuses the job.
+  if (job) env = await withAgentModel(db, env, job.repository_id);
   let context;
   if (job) {
     const person = await db.prepare('SELECT * FROM users WHERE id=? AND active=1').bind(job.user_id).first();

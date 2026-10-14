@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { agentResult, agentPathOK, filePolicy } from './src/agent-policy.mjs';
-import { nativePolicy } from '../agents/src/policy.mjs';
+import { nativePolicy, policyIdentity } from '../agents/src/policy.mjs';
 
 const hooks = registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'cloudflare:workers') return { url: 'data:text/javascript,' + encodeURIComponent('export class DurableObject {constructor(ctx,env){this.ctx=ctx;this.env=env}} export class WorkerEntrypoint extends DurableObject {}'), shortCircuit: true };
@@ -125,4 +125,27 @@ test('oversized or unbound native results cannot become review evidence', async 
   assert.throws(() => agentResult({ ...result, first_inference_at: result.finished_at + 1 }, f.input.jobId, f.input));
   assert.throws(() => agentResult({ ...result, patch: 'a'.repeat(100 * 1024) }, f.input.jobId, f.input));
   assert.throws(() => f.task.validateProposal('a'.repeat(81 * 1024), {}));
+});
+
+test('a native agent runs exactly the admitted model, bound into its policy identity', async () => {
+  const f = fixture(), deploy = 'a'.repeat(64), chosen = '@cf/zai-org/glm-5.3', used = [];
+  Object.assign(f.task.env, { AGENT_POLICY_SHA256: deploy, AI_MODELS: JSON.stringify({ agents: { default: '@cf/zai-org/glm-5.3-flash', allowed: ['@cf/zai-org/glm-5.3-flash', chosen] } }) });
+  f.task.env.AI = { async run(model, body) { used.push([model, body.model]); return { choices: [] }; } };
+  // The identity must be the deploy hash bound to this model, and the model must be on the deploy list.
+  await assert.rejects(f.task.create({ ...f.input, model: chosen, policySha256: await policyIdentity(deploy, '@cf/zai-org/glm-5.3-flash') }), /admission/);
+  await assert.rejects(f.task.create({ ...f.input, model: '@cf/meta/llama-4', policySha256: await policyIdentity(deploy, '@cf/meta/llama-4') }), /admission/);
+  assert.equal(f.task.record, undefined);
+  const input = { ...f.input, model: chosen, policySha256: await policyIdentity(deploy, chosen) };
+  await f.task.create(input); await f.task.alarm();
+  assert.equal(JSON.parse(f.container.files['/auth/opencode.json']).provider.golf.models.coder.name, chosen);
+  // The proxy forces the admitted model whatever the harness sends.
+  await f.task.outbound(new Request('https://golf-ai.internal/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: 'golf/coder', messages: [] }) }));
+  assert.deepEqual(used, [[chosen, chosen]]);
+  await f.task.alarm();
+  const result = await f.task.status();
+  assert.equal(agentResult(result, input.jobId, input, chosen).model, chosen);
+  assert.throws(() => agentResult(result, input.jobId, input, '@cf/zai-org/glm-5.3-flash'), /different model/);
+  // The deploy hash covers the policy without a model; the default policy file is unchanged for the fixture roles.
+  assert.equal(filePolicy('calc.py', null).provider.golf.models.coder.name, undefined);
+  assert.equal(JSON.stringify(filePolicy('calc.py')), JSON.stringify(filePolicy('calc.py', '@cf/zai-org/glm-5.3-flash')));
 });

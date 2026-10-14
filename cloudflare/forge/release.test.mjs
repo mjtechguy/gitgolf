@@ -12,10 +12,10 @@ test('release retention parses only bounded embedded static manifests without ex
 
 test('the release migration ends schema.sql after every earlier migration; schema 24 bounds merge operations', async t => {
   const migrations = (await readdir(new URL('./migrations/', import.meta.url))).filter(name => /^\d{4}_.+\.sql$/.test(name)).sort();
-  assert.equal(migrations.at(-1), '0032_ai_runs.sql');
+  assert.equal(migrations.at(-1), '0033_ai_models.sql');
   const latest = (await Promise.all(migrations.filter(name => name >= '0025').map(name => readFile(new URL('./migrations/' + name, import.meta.url), 'utf8')))).join('\n');
   const migration = await readFile(new URL('./migrations/0024_pull_merges.sql', import.meta.url), 'utf8'), schema = await readFile(new URL('./schema.sql', import.meta.url), 'utf8');
-  assert.match(await readFile(new URL('./release.mjs', import.meta.url), 'utf8'), /contract: 1, schema: 32, /);
+  assert.match(await readFile(new URL('./release.mjs', import.meta.url), 'utf8'), /contract: 1, schema: 33, /);
   // Tail migrations are appended after one blank line; the Alchemy migrate step peels exactly that.
   assert.ok(schema.endsWith(';\n\n' + migration + '\n' + latest));
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());
