@@ -385,5 +385,11 @@ try {
   assert.equal((await database.prepare("SELECT state FROM operations_provider WHERE service='r2'").first()).state,'succeeded');
   await database.prepare('UPDATE credentials SET revoked=1').run();
   assert.equal((await call('/rpc/golf.v1.SessionService/GetSession')).status, 401);
+  // The audit log records the names and states of everything above, never a value, a signing secret or a Git credential.
+  const audit = (await database.prepare('SELECT action,subject,after,client FROM installation_audit ORDER BY id').all()).results, auditText = JSON.stringify(audit);
+  for (const action of ['repo.update_visibility', 'repository_secret.create', 'repository_variable.create', 'hook.create']) assert.ok(audit.some(row => row.action === action), action);
+  assert.deepEqual(JSON.parse(audit.find(row => row.action === 'repository_secret.create' && JSON.parse(row.client).outcome === 'success').after), { name: 'RUNTIME_TOKEN', kind: 'secret' });
+  for (const forbidden of [runtimeSecret, 'another-runtime-secret', 'runtime-region', webhookSecret]) assert.equal(auditText.includes(forbidden), false, forbidden);
+  console.log('Real workerd/D1 audit rows for visibility, secret, variable and webhook changes hold names only');
   console.log('Native workerd/D1/DO, real Queues/Workflows expired/failed-job denial, durable dead-letter intake, scheduled maintenance/R2 health, conditional R2 and revocation passed');
 } finally { await runtime.dispose(); }

@@ -169,6 +169,16 @@ try {
   await db.prepare("UPDATE email_acceptance SET sender='previous@mail.example.invalid'").run();
   assert.equal(await mailState(),'CAPABILITY_STATE_DEGRADED');
   console.log('Real Access/workerd/D1 email: consent, subscription, post-mutation send, redelivery and one scheduled retry through the local Email Service simulator, and recorded acceptance passed');
+  // The audit log read through the same Access identity: privileged actions above are listed by name and the one-time Git secret is nowhere in it.
+  const auditRead = await rpc('/native/audit/read', { scope: 'installation', page: { page: 1, limit: 100 } });
+  assert.equal(auditRead.status, 200, await auditRead.clone().text());
+  const auditLog = await auditRead.json(), auditText = JSON.stringify(auditLog);
+  assert.ok(auditLog.entries.some(entry => entry.action === 'git_credential.create' && entry.actor === 'local-reviewer' && entry.outcome === 'success' && entry.description === 'issued write Git credential Runtime proof'), auditText);
+  assert.ok(auditLog.entries.some(entry => entry.action === 'git_credential.revoke'), auditText);
+  assert.ok(auditLog.entries.some(entry => entry.action === 'feature_policy.update'), auditText);
+  assert.equal(auditText.includes(issued.secret), false);
+  assert.equal((await rpc('/native/audit/read', { scope: 'repository', repository: target.repository, repositoryId: '1', page: { page: 1, limit: 100 } })).status, 200);
+  console.log('Real Access/workerd/D1 audit log lists the Git credential issuance and revocation and the feature policy change; the one-time secret is not stored');
   if (serve) {
     console.log('Temporary UI browser check at ' + origin + '; automatically disposed in 120 seconds');
     await new Promise(resolve => { const timer = setTimeout(resolve, 120000); for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { clearTimeout(timer); resolve(); }); });
