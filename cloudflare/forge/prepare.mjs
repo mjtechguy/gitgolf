@@ -83,6 +83,15 @@ if (mode === 'retire') {
       config.env.AI_DAILY_LIMIT = { type: 'text', value: String(limit) };
     }
   }
+  // Semantic search: the Vectorize index created at deploy (enable-search), its fixed dimension and the embedding model. Embeddings use the AI gateway above.
+  if (settings.search !== undefined) {
+    const q = settings.search;
+    if (!settings.evidence?.allow_ai || !q || Object.keys(q).some(key => !['index', 'dimensions', 'model'].includes(key)) || typeof q.index !== 'string' || !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(q.index) ||
+        !Number.isInteger(q.dimensions) || q.dimensions < 32 || q.dimensions > 4096 || typeof q.model !== 'string' || !/^@cf\/[a-z0-9-]+\/[a-z0-9._-]+$/.test(q.model)) throw Error('Invalid semantic search allocation');
+    config.env.SEARCH_INDEX = { type: 'vectorize', name: q.index };
+    config.env.SEARCH_DIMENSIONS = { type: 'text', value: String(q.dimensions) };
+    config.env.SEARCH_MODEL = { type: 'text', value: q.model };
+  }
   if (settings.evidence && !settings.previews && !settings.automatic_ci) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '*/5 * * * *' }];
   if (settings.tests) {
     const { testProfile } = await import('./src/test-policy.mjs');

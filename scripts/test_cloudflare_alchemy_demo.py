@@ -210,6 +210,27 @@ class Observability(unittest.TestCase):
             # A sender and a limit: no key, token or recipient is written.
             self.assertEqual(saved,{'hostname':'demo.example.com','settings':{'evidence':{'daily_limit':40},'email':{'sender':'golf@mail.demo.example.com','dailyLimit':50}}})
 
+    def test_enabling_search_needs_ai_and_the_current_schema_and_names_one_index(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            value={'name':'golf-alchemy-20261014-0f2087f8','settings':{'evidence':{'daily_limit':40,'allow_ai':False}}}
+            current=hashlib.sha256((demo.ROOT/'cloudflare/forge/schema.sql').read_text().encode()).hexdigest()
+            replace_private_json(directory/'schema-receipt.json',{'database':'database','sha256':current})
+            with self.assertRaisesRegex(ValueError,'enable-ai'): demo.enable_search(directory,value,1024,'@cf/qwen/qwen3-embedding-0.6b')
+            value['settings']['evidence']['allow_ai']=True
+            for dimensions,model in ((16,'@cf/qwen/qwen3-embedding-0.6b'),(5000,'@cf/qwen/qwen3-embedding-0.6b'),(True,'@cf/qwen/qwen3-embedding-0.6b'),(1024,'@cf/meta/llama'),(1024,'@cf/zai-org/glm-5.3')):
+                with self.assertRaises(ValueError): demo.enable_search(directory,value,dimensions,model)
+            replace_private_json(directory/'schema-receipt.json',{'database':'database','sha256':'older'})
+            with self.assertRaisesRegex(ValueError,'migrate'): demo.enable_search(directory,value,1024,'@cf/qwen/qwen3-embedding-0.6b')
+            self.assertFalse((directory/'alchemy-input.json').exists())
+            replace_private_json(directory/'schema-receipt.json',{'database':'database','sha256':current})
+            demo.enable_search(directory,value,1024,'@cf/qwen/qwen3-embedding-0.6b')
+            demo.enable_search(directory,value,1024,'@cf/baai/bge-m3')
+            saved=json.loads((directory/'alchemy-input.json').read_text())['settings']
+            self.assertEqual(saved['search'],{'index':'golf-alchemy-20261014-0f2087f8-search','dimensions':1024,'model':'@cf/baai/bge-m3'})
+            self.assertEqual(saved['evidence'],{'daily_limit':40,'allow_ai':True})
+
     def test_deploy_token_gains_the_email_permission_only_when_email_is_enabled(self):
         base={'Account Settings Read','Account API Tokens Write','Artifacts Write','D1 Write','Workers Scripts Write','Workers R2 Storage Write','Workers Containers Write','Queues Write',
             'Secrets Store Write','Access: Apps and Policies Write','Access: Organizations, Identity Providers, and Groups Write','Access: Service Tokens Write'}
@@ -229,6 +250,8 @@ class Observability(unittest.TestCase):
         self.assertEqual(run({'evidence':{},'email':{'sender':'golf@mail.demo.example.com','dailyLimit':200}},offered),base|{'Email Sending Write'})
         # An account that does not offer the permission stops here, before any token is created.
         with self.assertRaisesRegex(ValueError,'permissions are unavailable'): run({'evidence':{},'email':{'sender':'golf@mail.demo.example.com','dailyLimit':200}},base)
+        self.assertEqual(run({'evidence':{},'search':{'index':'example-search','dimensions':1024,'model':'@cf/qwen/qwen3-embedding-0.6b'}},offered|{'Vectorize Write'}),base|{'Vectorize Write'})
+        with self.assertRaisesRegex(ValueError,'permissions are unavailable'): run({'evidence':{},'search':{'index':'example-search','dimensions':1024}},offered)
 
 
 class GuardedMigration(unittest.TestCase):

@@ -93,6 +93,9 @@ def renew_deploy(directory, value):
     if value['settings'].get('email'):
         # Registers the sending subdomain; the Worker itself sends through its binding and holds no token.
         account_names.add('Email Sending Write')
+    if value['settings'].get('search'):
+        # Creates the search index and its metadata index; the Worker only reads and writes vectors through its binding.
+        account_names.add('Vectorize Write')
     zone_names = {'Zone Read', 'DNS Write', 'Workers Routes Write'}
     policies = []
     for scope, names, resource in [('com.cloudflare.api.account', account_names, value['account']),
@@ -290,6 +293,32 @@ def enable_email(directory, value, limit):
     replace_private_json(directory/'alchemy-input.json', value)
     print('Repository email prepared from '+sender+', at most '+str(limit)+' attempts a day; run renew-deploy for the Email Sending permission, then deploy.'
         +' Deployment registers the sending subdomain. The capability stays degraded until Cloudflare accepts a first message.')
+
+
+SEARCH_MODELS = {'@cf/qwen/qwen3-embedding-0.6b', '@cf/baai/bge-m3', '@cf/google/embeddinggemma-300m'}
+
+
+def enable_search(directory, value, dimensions, model):
+    # Embeddings go through the installation's private AI Gateway, so search needs enable-ai first.
+    if not value['settings'].get('evidence', {}).get('allow_ai'):
+        raise ValueError('Run enable-ai before enabling semantic search')
+    if type(dimensions) is not int or not 32 <= dimensions <= 4096:
+        raise ValueError('Use a Vectorize dimension between 32 and 4096')
+    if model not in SEARCH_MODELS:
+        raise ValueError('Use one of the qualified embedding models: '+', '.join(sorted(SEARCH_MODELS)))
+    if len(value['name']+'-search') > 63:
+        raise ValueError('The installation name cannot name a Vectorize index')
+    # The search tables arrive with the current schema; the migrate action applies whatever the installation is missing.
+    current = hashlib.sha256((ROOT/'cloudflare/forge/schema.sql').read_text().encode()).hexdigest()
+    if json.loads(private_read(directory/'schema-receipt.json'))['sha256'] != current:
+        raise ValueError('Run the migrate action before enabling semantic search')
+    previous = value['settings'].get('search')
+    value['settings']['search'] = {'index': value['name']+'-search', 'dimensions': dimensions, 'model': model}
+    replace_private_json(directory/'alchemy-input.json', value)
+    changed = previous is not None and previous.get('dimensions') != dimensions
+    print('Semantic search prepared with '+model+' into a '+str(dimensions)+'-dimension Vectorize index; run renew-deploy for the Vectorize permission, then deploy.'
+        +(' The dimension changed: deploy replaces the index and every repository index is rebuilt.' if changed else '')
+        +' Repository administrators start indexing per repository; embedding calls are billed by Cloudflare.')
 
 
 def enable_public(directory, value):
@@ -493,13 +522,15 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email', 'rename-workspace'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email', 'enable-search', 'rename-workspace'])
     parser.add_argument('--slug', help='new workspace name for rename-workspace')
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--days', type=int, default=7, help='lifetime for renew-credentials, 1 to 30 days')
     parser.add_argument('--email-limit', type=int, default=200, help='daily send attempts for enable-email, 1 to 5000')
     parser.add_argument('--limit', type=int, default=300, help='approximate anonymous requests per period for enable-rate-limit, 10 to 10000')
     parser.add_argument('--period', type=int, default=60, choices=[10, 60], help='counting period in seconds for enable-rate-limit')
+    parser.add_argument('--dimensions', type=int, default=1024, help='Vectorize index dimension for enable-search; must match the embedding model')
+    parser.add_argument('--model', default='@cf/qwen/qwen3-embedding-0.6b', help='embedding model for enable-search')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
     parser.add_argument('--workflow-path', help='the one approved Actions workflow path for enable-workflow, .github/workflows/NAME.yml')
     parser.add_argument('directory', nargs='?')
@@ -516,6 +547,7 @@ def main():
     if args.action == 'enable-analytics': return enable_analytics(directory, value)
     if args.action == 'enable-webhooks': return enable_webhooks(directory, value, args.origin)
     if args.action == 'enable-email': return enable_email(directory, value, args.email_limit)
+    if args.action == 'enable-search': return enable_search(directory, value, args.dimensions, args.model)
     if args.action == 'enable-ai': return enable_ai(directory, value, args.agent_path)
     if args.action == 'enable-workflow': return enable_workflow(directory, value, args.workflow_path)
     if args.action == 'enable-dead-letter': return enable_dead_letter(directory, value)
