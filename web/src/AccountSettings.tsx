@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { organizationClient } from './api';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
 import type { AccessObservationTarget } from './RepositoryAccessObservation';
+import { useRepositoryFeatures, policyOff, deciderLabels } from './RepositoryFeatures';
 
 const OwnEmailNotifications = lazy(() => import('./EmailNotificationSettings').then(module => ({ default: module.OwnEmailNotifications })));
 const RepositoryAccessObservation = lazy(() => import('./RepositoryAccessObservation').then(module => ({ default: module.RepositoryAccessObservation })));
@@ -48,8 +49,8 @@ export function OrganizationSettingsLayout({ children, organization }: { childre
   </nav><div className="account-content">{children}</div></div>;
 }
 
-export function RepositorySettingsLayout({ children, owner, name }: { children: ReactNode; owner: string; name: string }) {
-  const runtime = useRuntimeCapabilities(), navigate = useNavigate();
+export function RepositorySettingsLayout({ children, owner, name, userId = '' }: { children: ReactNode; owner: string; name: string; userId?: string }) {
+  const runtime = useRuntimeCapabilities(), navigate = useNavigate(), features = useRepositoryFeatures(userId, owner, name).data?.features;
   const manifest = runtime.isError ? undefined : runtime.data;
   // Own repository email shares the Webhooks page; on the native runtime it can be allocated without webhooks.
   const emailOnly = manifest?.runtimeProfile === 'cloudflare-native' && !settingAvailable(manifest, 'settings.repository-webhooks') && emailNotificationsMounted(manifest);
@@ -60,22 +61,27 @@ export function RepositorySettingsLayout({ children, owner, name }: { children: 
     { label: 'Git credentials', group: 'Access and security', suffix: '/git', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-git'), to: '/$owner/$name/settings/git' },
     { label: 'Rules and merge policy', group: 'Access and security', suffix: '/rules', icon: ShieldCheck, enabled: runtimeFeature(manifest, 'settings.repository-rules'), to: '/$owner/$name/settings/rules' },
     { label: 'Workflows', group: 'Automation', suffix: '/workflows', icon: History, enabled: runtimeFeature(manifest, 'settings.repository-workflows'), to: '/$owner/$name/settings/workflows' },
-    { label: 'Runners', group: 'Automation', suffix: '/runners', icon: Server, enabled: settingAvailable(runtime.isError ? undefined : runtime.data, runtime.data?.runtimeProfile === 'cloudflare-native' ? 'settings.native-runners' : 'settings.runners'), to: '/$owner/$name/settings/runners' },
-    { label: 'Secrets and variables', group: 'Automation', suffix: '/secrets', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-secrets'), to: '/$owner/$name/settings/secrets' },
-    { label: 'Environments', group: 'Automation', suffix: '/environments', icon: Rocket, enabled: runtimeFeature(manifest, 'settings.repository-environments'), to: '/$owner/$name/settings/environments' },
-    { label: emailOnly ? 'Email notifications' : 'Webhooks', group: 'Integrations', suffix: '/webhooks', icon: Webhook, enabled: runtimeFeature(manifest, 'settings.repository-webhooks') || emailOnly, to: '/$owner/$name/settings/webhooks' },
+    { label: 'Runners', group: 'Automation', suffix: '/runners', icon: Server, enabled: settingAvailable(runtime.isError ? undefined : runtime.data, runtime.data?.runtimeProfile === 'cloudflare-native' ? 'settings.native-runners' : 'settings.runners'), to: '/$owner/$name/settings/runners', feature: 'actions' },
+    { label: 'Secrets and variables', group: 'Automation', suffix: '/secrets', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-secrets'), to: '/$owner/$name/settings/secrets', feature: 'secrets' },
+    { label: 'Environments', group: 'Automation', suffix: '/environments', icon: Rocket, enabled: runtimeFeature(manifest, 'settings.repository-environments'), to: '/$owner/$name/settings/environments', feature: 'previews' },
+    { label: emailOnly ? 'Email notifications' : 'Webhooks', group: 'Integrations', suffix: '/webhooks', icon: Webhook, enabled: runtimeFeature(manifest, 'settings.repository-webhooks') || emailOnly, to: '/$owner/$name/settings/webhooks', feature: emailOnly ? 'email' : 'webhooks' },
   ] as const;
+  // Sections a feature policy turned off move to their own group, which names the level that decided.
+  // The Webhooks page also carries own email subscriptions, so it stays open while either is on.
+  const turnedOff = (entry: (typeof entries)[number]) => !('feature' in entry) ? undefined : entry.feature === 'webhooks' && emailNotificationsMounted(manifest) && !policyOff(features, 'email') ? undefined : policyOff(features, entry.feature);
   const availability = (enabled: boolean) => enabled ? '' : runtime.isPending ? 'Checking…' : runtime.isError ? 'Status unknown' : 'Unavailable';
+  const optionState = (entry: (typeof entries)[number]) => turnedOff(entry) ? 'Turned off' : availability(entry.enabled);
   const current = entries.find(entry => pathname.endsWith('/settings'+entry.suffix));
   // Once the installation has reported, sections it does not provide move to one group at the foot.
-  const settled = runtime.isSuccess, missing = settled ? entries.filter(entry => !entry.enabled) : [];
+  const settled = runtime.isSuccess, off = settled ? entries.filter(entry => turnedOff(entry)) : [], missing = settled ? entries.filter(entry => !entry.enabled && !off.includes(entry)) : [];
   return <div className="account-layout repository-settings-layout">
     <label className="settings-section-picker">Settings section<select aria-label="Settings section" value={current?.to || ''} onChange={event=>{const entry=entries.find(item=>item.to===event.target.value);if(entry)void navigate({to:entry.to,params:{owner,name}});}}>
       {!current ? <option value="" disabled>Current settings page</option> : null}
-      {entries.map(entry=><option key={entry.to} value={entry.to}>{entry.label}{availability(entry.enabled) ? ` — ${availability(entry.enabled)}` : ''}</option>)}
+      {entries.map(entry=><option key={entry.to} value={entry.to}>{entry.label}{optionState(entry) ? ` — ${optionState(entry)}` : ''}</option>)}
     </select></label>
     <nav className="account-navigation" aria-label="Repository settings">
-      {['', 'Access and security', 'Automation', 'Integrations'].map(group => {const items=entries.filter(entry=>entry.group===group&&(entry.enabled||!settled));return items.length ? <div className="settings-navigation-group" key={group}>{group?<h2>{group}</h2>:null}{items.map(entry=><Link key={entry.to} to={entry.to} params={{owner,name}} activeOptions={{exact:true}}><entry.icon size={18} aria-hidden="true"/><span className="settings-navigation-label">{entry.label}{availability(entry.enabled) ? <small>{availability(entry.enabled)}</small> : null}</span></Link>)}</div>:null;})}
+      {['', 'Access and security', 'Automation', 'Integrations'].map(group => {const items=entries.filter(entry=>entry.group===group&&(entry.enabled||!settled)&&!off.includes(entry));return items.length ? <div className="settings-navigation-group" key={group}>{group?<h2>{group}</h2>:null}{items.map(entry=><Link key={entry.to} to={entry.to} params={{owner,name}} activeOptions={{exact:true}}><entry.icon size={18} aria-hidden="true"/><span className="settings-navigation-label">{entry.label}{availability(entry.enabled) ? <small>{availability(entry.enabled)}</small> : null}</span></Link>)}</div>:null;})}
+      {off.length ? <details className="settings-navigation-group settings-navigation-unavailable" open={off.some(entry => entry === current) || undefined}><summary>Turned off by policy<span>{off.length}</span></summary>{off.map(entry=><Link key={entry.to} to={entry.to} params={{owner,name}} activeOptions={{exact:true}}><entry.icon size={18} aria-hidden="true"/><span className="settings-navigation-label">{entry.label}<small>{deciderLabels[turnedOff(entry)!.decidedBy]}</small></span></Link>)}</details> : null}
       {missing.length ? <details className="settings-navigation-group settings-navigation-unavailable" open={missing.some(entry => entry === current) || undefined}><summary>Not on this installation<span>{missing.length}</span></summary>{missing.map(entry=><Link key={entry.to} to={entry.to} params={{owner,name}} activeOptions={{exact:true}}><entry.icon size={18} aria-hidden="true"/><span className="settings-navigation-label">{entry.label}</span></Link>)}</details> : null}
     </nav><div className="account-content">{children}</div>
   </div>;

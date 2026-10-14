@@ -1485,7 +1485,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 :root[data-appearance=golf] .workspace-breadcrumbs [aria-current=page] { color:var(--accent); }
 :root[data-appearance=golf] .repository-context { font-size:1.375rem; font-weight:700; }
 :root[data-appearance=golf] .repository-context > span:first-child { color:var(--muted); }
-:root[data-appearance=golf] .visibility:not(.available,.configured) { font-size:.6875rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+:root[data-appearance=golf] .visibility { font-size:.6875rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
 
 /* Classic and Flare share system type and softer headings. */
 :root:is([data-appearance=classic],[data-appearance=flare]) { --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
@@ -2022,3 +2022,52 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .credential-form-content.settings-policy-form { padding:0; }
 .settings-policy-form textarea { font-family:var(--mono); font-size:.8125rem; }
 .settings-policy-effect { margin:14px 0 0; }
+
+/* Feature policies: grouped cards, one row per feature with a mode chip, its reach and Edit on request. Shared by the installation page and repository settings. */
+.policy-groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr)); gap:var(--section-gap); align-items:start; }
+.policy-card .browser-panel-heading h2 { display:inline-flex; align-items:center; gap:8px; font-size:.9375rem; }
+.policy-card .browser-panel-heading h2>svg { color:var(--accent); }
+.policy-card-note { color:var(--muted); font-size:.75rem; }
+.policy-list { list-style:none; margin:0; padding:0; }
+.policy-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 12px; align-items:start; padding:12px var(--panel-padding); border-top:1px solid var(--line); }
+.policy-row:first-child { border-top:0; }
+.policy-row-main { min-width:0; }
+.policy-row-title { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
+.policy-row-title h3 { font-size:.9375rem; letter-spacing:-.01em; margin:0; }
+.policy-row-detail { margin:3px 0 0; color:var(--muted); font-size:.8125rem; line-height:1.5; overflow-wrap:anywhere; }
+.policy-reach { display:flex; align-items:center; gap:8px; }
+.policy-reach meter { flex:0 0 72px; width:72px; height:6px; appearance:none; border:0; border-radius:var(--radius-badge); background:var(--raised); overflow:hidden; }
+.policy-reach meter::-webkit-meter-bar { background:var(--raised); border:0; border-radius:var(--radius-badge); height:6px; }
+.policy-reach meter::-webkit-meter-optimum-value { background:var(--accent); border-radius:var(--radius-badge); }
+.policy-reach meter::-moz-meter-bar { background:var(--accent); border-radius:var(--radius-badge); }
+.policy-edit { min-height:32px; padding:4px 12px; }
+.policy-row > .policy-editor { grid-column:1/-1; }
+.policy-editor { margin-top:4px; padding:12px; border:1px solid var(--line); border-radius:var(--radius-panel); background:var(--bg); }
+.policy-editor .field-help { margin:10px 0 0; }
+.policy-editor .credential-actions { margin-top:12px; }
+.policy-choices { border:0; margin:0; padding:0; display:grid; gap:8px; grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr)); min-width:0; }
+.policy-choices legend { padding:0; margin-bottom:8px; color:var(--muted); font-size:.8125rem; }
+.policy-choice { display:flex; align-items:flex-start; gap:10px; margin:0; padding:10px 12px; min-height:44px; border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); cursor:pointer; font-weight:400; }
+.policy-choice:hover { border-color:var(--line-strong); }
+.policy-choice:has(input:checked) { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.policy-choice:has(input:disabled) { opacity:.55; cursor:not-allowed; }
+.policy-choice input { width:auto; margin:3px 0 0; accent-color:var(--accent); }
+.policy-choice strong { display:block; font-size:.875rem; }
+.policy-choice small { display:block; color:var(--muted); font-size:.75rem; line-height:1.45; }
+.policy-confirm { max-width:360px; margin:12px 0 0; }
+.policy-confirm input { margin-top:6px; font-family:var(--mono); }
+.policy-notice { margin:0; padding:10px 12px; border:1px solid var(--accent); border-radius:var(--radius); background:color-mix(in srgb,var(--accent) 8%,var(--panel)); font-size:.875rem; }
+.feature-policy-blocked .feature-unavailable-state { margin:0; }
+@media(max-width:720px) { .policy-row { grid-template-columns:minmax(0,1fr); } .policy-edit { justify-self:start; min-height:44px; } .policy-card .browser-panel-heading { align-items:flex-start; flex-direction:column; gap:2px; padding-block:8px; } }
+.visibility.unallocated { border-style:dashed; }
+.policy-feature-group + .policy-feature-group { border-top:1px solid var(--line); }
+.policy-feature-group > h3 { margin:0; padding:10px var(--panel-padding) 0; color:var(--muted); font-size:.6875rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+.policy-row-title h4 { font-size:.875rem; letter-spacing:-.01em; margin:0; }
+.policy-decider { color:var(--muted); font-size:.75rem; }
+.policy-decider::before { content:"·"; margin-right:8px; }
+.policy-toggles { grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); }
+.policy-groups > .browser-panel { margin:0; }
+.policy-refresh { flex-shrink:0; white-space:nowrap; }
+.feature-policy-blocked h2 { margin:0; padding:0; border:0; background:none; color:var(--text); font-size:1.0625rem; min-height:0; }
+.feature-policy-blocked .credential-actions { justify-content:center; }
+.policy-choices > .policy-choice,.credential-form-content .policy-choices > label.policy-choice { display:flex; margin:0; }

@@ -25,8 +25,15 @@ export function settingForRoute(kind: string, view?: string, native = false) {
     const nativeAdmin: Record<string, string> = { operations: 'operations.dashboard', execution: 'settings.execution', organizations: 'settings.organization-creation', agents: 'settings.agents-admin', runners: 'settings.native-runners', audit: 'settings.installation-audit' };
     if (view && nativeAdmin[view]) return nativeAdmin[view];
   }
+  // Feature policies: native installations report this; the portable server does not yet.
+  if (kind === 'instance-settings' && view === 'features') return 'settings.feature-policy';
   if (kind === 'instance-settings') return view === 'audit' ? 'settings.installation-audit' : view === 'infrastructure' ? 'settings.infrastructure' : view === 'runners' ? 'settings.runners' : view === 'notifications' ? 'settings.notifications' : view === 'accounts' || !view ? 'settings.local-auth' : null;
   if (kind === 'repository-runners') return 'settings.runners';
   if (['account-security', 'sessions', 'ssh-keys'].includes(kind)) return 'settings.local-auth';
   return null;
+}
+// Installation capability and repository feature policy combined: a feature a policy turned off (not one the operator never allocated) is unavailable here.
+export type FeatureState = { feature: string; effective: boolean; decidedBy: number };
+export function repositoryFeature(manifest: RuntimeManifest | undefined, features: FeatureState[] | undefined, id: string, capability?: string) {
+  return !features?.some(f => f.feature === id && !f.effective && f.decidedBy !== 1) && (!capability || runtimeFeature(manifest, capability));
 }

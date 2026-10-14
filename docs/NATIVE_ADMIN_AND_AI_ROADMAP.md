@@ -63,8 +63,8 @@ enforce public repositories, read secrets or erase the audit log.
 | --- | --- | --- |
 | 1 | Installation overview for administrators: every allocated service and setting with current values (never secrets), operations fixes, dead admin links removed | shipped |
 | 2 | Editable installation approvals and the installation audit log | shipped |
-| 3 | Feature policy model at installation scope, enforcement at every gate, `/admin/features` | in progress |
-| 4 | Repository Features section; issues, pull requests and merge gates | in progress |
+| 3 | Feature policy model at installation scope, enforcement at every gate, `/admin/features` | shipped (hosted acceptance pending) |
+| 4 | Repository Features section; issues, pull requests and merge gates | shipped (hosted acceptance pending) |
 | 5 | Organization policies (narrow only) | planned |
 | 6 | Organization secrets inherited by selected repositories | planned |
 | 7 | Organization webhooks (no contract exists in either runtime) | deferred |

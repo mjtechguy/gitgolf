@@ -5,6 +5,7 @@ import { repositoryAccess } from './repository-settings.mjs';
 import { nativeWorkflowContract, nativeWorkflowPath, nativeWorkflowSource } from './native-workflow.mjs';
 import { sealingKey, seal, open } from './sealed.mjs';
 import { testProfile } from './test-policy.mjs';
+import { featureOff } from './feature-policy.mjs';
 
 export const executionValueMethods = new Set(['ListRepositoryExecutionValues', 'SaveRepositoryExecutionValue', 'DeleteRepositoryExecutionValue', 'GetRepositoryExecutionVariable',
   'SaveRepositoryExecutionBinding', 'DeleteRepositoryExecutionBinding', 'GetRepositoryExecutionValueOperation']);
@@ -250,7 +251,7 @@ export async function releaseExecutionValues(env, id, authorize) {
   if (snapshot.agent || job.agent_state !== 'NONE') return { state: 'REFUSED' };
   if (!approved) return { state: 'NONE' };
   const row = await db.prepare("SELECT id,artifact_name FROM repositories WHERE id=? AND state='ACTIVE'").bind(job.repository_id).first();
-  if (!row || !executionValueState(env).ready || !hostedActions(execution)) return { state: 'REFUSED' };
+  if (!row || !executionValueState(env).ready || !hostedActions(execution) || await featureOff(db, env, row.id, 'secrets')) return { state: 'REFUSED' };
   const time = now();
   // The approval version, its expiry, its approver's authority, every value version and the running job are re-read by the statement that records the release.
   const released = await db.prepare(`INSERT INTO execution_value_releases(job_id,binding_id,binding_version,released_at) SELECT ?,b.id,b.version,? FROM execution_bindings b

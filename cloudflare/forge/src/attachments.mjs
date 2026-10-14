@@ -1,5 +1,6 @@
 import { settingsAuthority } from './repository-settings.mjs';
 import { digest, uuidOK, deny, invalid, unsupported, Fault } from './common.mjs';
+import { featureOff } from './feature-policy.mjs';
 import { idOK, fileNameOK, decodeBytes, bytesDigest, storeObject, objectStored, uploadLimit } from './releases.mjs';
 
 export const attachmentMethods = {
@@ -98,7 +99,7 @@ export async function discussionAttachments(db, env, person, row, method, body) 
   }
   const list = await inventory(db, scope);
   if (method === 'ListDiscussionAttachments') return { target: scope.wire, attachments: list.attachments, snapshotRevision: list.revision };
-  if (method === 'GetDiscussionAttachmentUploadState') return { target: scope.wire, actorId: String(person.id), canUpload: allowed(row, person, scope) && list.rows.length < attachmentLimit,
+  if (method === 'GetDiscussionAttachmentUploadState') return { target: scope.wire, actorId: String(person.id), canUpload: allowed(row, person, scope) && list.rows.length < attachmentLimit && !await featureOff(db, env, row, 'attachments'),
     targetRevision: await targetRevision(person, scope), attachmentsRevision: list.revision, allowedTypes: '', maxSizeBytes: String(uploadLimit) };
   if (!idOK(body.attachmentId) || !hashOK(body.expectedRevision)) invalid('Select the attachment and its observed revision.');
   const index = list.rows.findIndex(a => String(a.id) === body.attachmentId);

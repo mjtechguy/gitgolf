@@ -5,6 +5,8 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | Service | Adapted procedures | Remaining procedures | Boundary |
 | --- | ---: | ---: | --- |
 | AgentControlService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
+| FeaturePolicyService | 2 | 0 | Installation scope only: current operations administrators under a verified human Access sign-in read every feature with its mode, operator allocation and reach, and change one mode at a time with a version fence; widening needs the feature id typed back and public repositories can never be required. Organization policies are not available yet. |
+| RepositoryFeatureService | 2 | 0 | Effective state of every governed feature for one repository and the level that decided it, joined into the repository grant read. Current administrators under a verified human Access sign-in turn allowed features on or off with a revision fence; Actions writes through the repository execution switch. Off keeps data. |
 | RepositoryFileBatchService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
 | DiscussionAttachmentService | 2 | 0 | Current repository readers list and download description or comment files; SHA-256 verified before bytes are returned. No replacement or deletion. |
 | DiscussionAttachmentUploadService | 3 | 0 | Up to 100 files of 256 KiB per description or comment in private R2; the author or a writer for descriptions, the writing author or an administrator for comments. Original receipts; an unacknowledged write settles by readback and is never sent twice. |
@@ -74,6 +76,10 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | AgentControlService/GetAgentControl | agent_control088.proto | Missing native adapter |
 | AgentControlService/SubmitAgentCommand | agent_control088.proto | Missing native adapter |
 | AgentControlService/ListWorkflowAgentChildren | agent_control088.proto | Missing native adapter |
+| FeaturePolicyService/GetFeaturePolicy | feature_policy.proto | Bounded adapter |
+| FeaturePolicyService/UpdateFeaturePolicy | feature_policy.proto | Bounded adapter |
+| RepositoryFeatureService/GetRepositoryFeatures | feature_policy.proto | Bounded adapter |
+| RepositoryFeatureService/UpdateRepositoryFeatures | feature_policy.proto | Bounded adapter |
 | RepositoryFileBatchService/SubmitRepositoryFileBatch | forge089.proto | Missing native adapter |
 | RepositoryFileBatchService/GetRepositoryFileBatchOperation | forge089.proto | Missing native adapter |
 | DiscussionAttachmentService/ListDiscussionAttachments | forge089.proto | Bounded adapter |

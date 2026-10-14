@@ -1,6 +1,7 @@
 import { digest, deny, invalid, Fault, page, uuidOK } from './common.mjs';
 import { ownerJoin, ownerSlug } from './owners.mjs';
 import { sealingKey, seal as sealValue, open as openValue } from './sealed.mjs';
+import { deliveryCancelled } from './feature-policy.mjs';
 
 export const webhookMethods = new Set(['ListRepositoryWebhooks', 'SaveRepositoryWebhook', 'ListRepositoryWebhookDeliveries', 'TestRepositoryWebhook', 'RedeliverRepositoryWebhook']);
 const text = new TextEncoder(), now = () => new Date().toISOString();
@@ -168,6 +169,7 @@ export async function drainWebhooks(env, options = {}) {
     if (!d.enabled || !d.authorized || d.version !== d.subscription_version) {
       await db.prepare("UPDATE webhook_deliveries SET state='cancelled',failure_code='authority_changed',completed_at=? WHERE id=? AND state IN ('queued','retrying')").bind(now(),d.id).run(); continue;
     }
+    if (await deliveryCancelled(db, env, d.repository_id, 'webhooks', d.id)) continue;
     let value;
     try { value = await open(env, {id:d.repository_id,artifact_name:d.artifact_name}, {id:d.subscription_id,credential_version:d.credential_version,encrypted:d.encrypted}); destination(env,value.endpoint); }
     catch { await db.prepare("UPDATE webhook_deliveries SET state='failed',failure_code='destination_or_credential_unavailable',completed_at=? WHERE id=? AND state IN ('queued','retrying')").bind(now(),d.id).run(); continue; }
