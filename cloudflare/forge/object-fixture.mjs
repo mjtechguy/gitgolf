@@ -11,7 +11,7 @@ import { publicFetch } from './src/public.mjs';
 import * as esbuild from '../agents/node_modules/esbuild/lib/main.js';
 
 // The generated descriptors the browser uses: responses must parse strictly and hash identically.
-const generated = await esbuild.build({ stdin: { contents: "export * from './web/src/gen/golf/v1/golf_pb.ts'; export * from './web/src/gen/golf/v1/forge089_pb.ts'; export { create, toBinary, toJson, fromJson } from './web/node_modules/@bufbuild/protobuf/dist/esm/index.js'", resolveDir: fileURLToPath(new URL('../../', import.meta.url)) }, bundle: true, write: false, format: 'esm', platform: 'neutral' });
+const generated = await esbuild.build({ stdin: { contents: "export * from './web/src/gen/golf/v1/golf_pb.ts'; export * from './web/src/gen/golf/v1/forge089_pb.ts'; export { create, toBinary, toJson, fromJson, equals } from './web/node_modules/@bufbuild/protobuf/dist/esm/index.js'", resolveDir: fileURLToPath(new URL('../../', import.meta.url)) }, bundle: true, write: false, format: 'esm', platform: 'neutral' });
 export const proto = await import('data:text/javascript;base64,' + Buffer.from(generated.outputFiles[0].text).toString('base64'));
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export const tokens = Object.fromEntries(['admin', 'writer', 'reader', 'outsider'].map((name, index) => [name, 'golf_native_' + String.fromCharCode(97 + index).repeat(43)]));

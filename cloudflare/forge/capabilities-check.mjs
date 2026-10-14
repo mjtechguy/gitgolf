@@ -8,6 +8,7 @@ import { emailMethods } from './src/email.mjs';
 import { environmentMethods } from './src/environments.mjs';
 import { executionValueMethods } from './src/execution-values.mjs';
 import { releaseMethods, releaseReadMethods } from './src/releases.mjs';
+import { attachmentMethods } from './src/attachments.mjs';
 import { engagementMethods } from './src/discussion-engagement.mjs';
 import { resourceMethods } from './src/discussion-resources.mjs';
 // Inventory every public RPC against the explicitly bounded native adapter.
@@ -33,6 +34,7 @@ const supported = {
   RepositoryEnvironmentService: environmentMethods,
   RepositoryExecutionValueService: executionValueMethods,
   ...releaseMethods,
+  ...attachmentMethods,
   DiscussionCollaborationService: engagementMethods,
   RepositoryActivityService: new Set(['WatchRepository']),
   OperationsService: new Set(['GetOperationsDashboard']),
@@ -49,6 +51,8 @@ for (const method of releaseReadMethods) supported.RepositoryService.add(method)
 const limitations = {
   PullMergeObservationService: 'Exact current same-repository comparison, branch locks, retained source, current writer and base-ancestry observations. No executable merge authority; merge commits are reported only for a pull request the native merge slice would currently admit.',
   StandardPullMergeService: 'Same-repository merge commits when the base tip is already contained in the head: writer authority, rules, one journaled single-ref write and ref/commit readback; original receipts. Squash, diverged branches, forks and locked targets are durably refused; an unconfirmed write stays unknown and fences the repository. Provider acceptance of the generated pack needs hosted proof.',
+  DiscussionAttachmentService: 'Current repository readers list and download description or comment files; SHA-256 verified before bytes are returned. No replacement or deletion.',
+  DiscussionAttachmentUploadService: 'Up to 100 files of 256 KiB per description or comment in private R2; the author or a writer for descriptions, the writing author or an administrator for comments. Original receipts; an unacknowledged write settles by readback and is never sent twice.',
   RepositoryReleasePublicationService: 'One publication per existing tag by a current administrator while the repository has no tag rules; never creates or moves a tag. Atomic D1 release and original receipt.',
   RepositoryReleaseManagementService: 'Revision-fenced edits, removal and up to 25 assets of 256 KiB in private R2 under original receipts; an unacknowledged upload settles by readback and is never sent twice. Downloads stream only with current repository access.',
   PullReviewAuthoringService: 'Private pending overall summaries, exact-source update/publication and discard with original receipts. No saved inline draft transfer or comment edits.',
@@ -72,7 +76,7 @@ const limitations = {
   RepositoryInvitationService: 'Enrolled Access users only; current issuer administration, expiring consent, atomic grant/decision and original receipt lookup. No email delivery or automatic enrollment.',
   RepositoryService: 'Bounded Git/read contract, immutable source pages and complete bounded filename/path indexes, overall reviews and same-repository PRs. Repository labels/milestones, issue/PR assignment and author/admin comment editing; no protected merge, inline review threads or organization labels. Pending overall drafts use PullReviewAuthoringService.',
 };
-const source = (await Promise.all(['core.mjs', 'file-index.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'owners.mjs', 'workspace-ui.mjs', 'environments.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs', 'execution-values.mjs', 'email.mjs', 'releases.mjs'].map(name => readFile(new URL('./src/' + name, import.meta.url), 'utf8')))).join('\n');
+const source = (await Promise.all(['core.mjs', 'file-index.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'owners.mjs', 'workspace-ui.mjs', 'environments.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs', 'execution-values.mjs', 'email.mjs', 'releases.mjs', 'attachments.mjs'].map(name => readFile(new URL('./src/' + name, import.meta.url), 'utf8')))).join('\n');
 for (const methods of Object.values(supported)) for (const method of methods) if (!collaborationMethods.has(method) && !source.includes("'" + method + "'") && !source.includes("/" + method + "'")) throw Error('Native adapter declaration has no maintained implementation: ' + method);
 const inventory = [];
 for (const proto of protos) for (const service of proto.text.matchAll(/service\s+(\w+)\s*\{(.*?)\n\}/gs)) for (const method of service[2].matchAll(/rpc\s+(\w+)/g)) inventory.push({ service: service[1], method: method[1], contract: proto.name, adapter: supported[service[1]]?.has(method[1]) ? 'Bounded adapter' : 'Missing native adapter' });

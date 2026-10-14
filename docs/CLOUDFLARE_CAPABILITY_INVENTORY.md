@@ -6,8 +6,8 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | --- | ---: | ---: | --- |
 | AgentControlService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryFileBatchService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
-| DiscussionAttachmentService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
-| DiscussionAttachmentUploadService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
+| DiscussionAttachmentService | 2 | 0 | Current repository readers list and download description or comment files; SHA-256 verified before bytes are returned. No replacement or deletion. |
+| DiscussionAttachmentUploadService | 3 | 0 | Up to 100 files of 256 KiB per description or comment in private R2; the author or a writer for descriptions, the writing author or an administrator for comments. Original receipts; an unacknowledged write settles by readback and is never sent twice. |
 | SessionService | 2 | 8 | Access identity; local password, MFA, SSH and account lifecycle remain separate. |
 | ApiCredentialService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
 | GitAccessService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
@@ -76,11 +76,11 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | AgentControlService/ListWorkflowAgentChildren | agent_control088.proto | Missing native adapter |
 | RepositoryFileBatchService/SubmitRepositoryFileBatch | forge089.proto | Missing native adapter |
 | RepositoryFileBatchService/GetRepositoryFileBatchOperation | forge089.proto | Missing native adapter |
-| DiscussionAttachmentService/ListDiscussionAttachments | forge089.proto | Missing native adapter |
-| DiscussionAttachmentService/DownloadDiscussionAttachment | forge089.proto | Missing native adapter |
-| DiscussionAttachmentUploadService/GetDiscussionAttachmentUploadState | forge089.proto | Missing native adapter |
-| DiscussionAttachmentUploadService/SubmitDiscussionAttachmentUpload | forge089.proto | Missing native adapter |
-| DiscussionAttachmentUploadService/GetDiscussionAttachmentUploadOperation | forge089.proto | Missing native adapter |
+| DiscussionAttachmentService/ListDiscussionAttachments | forge089.proto | Bounded adapter |
+| DiscussionAttachmentService/DownloadDiscussionAttachment | forge089.proto | Bounded adapter |
+| DiscussionAttachmentUploadService/GetDiscussionAttachmentUploadState | forge089.proto | Bounded adapter |
+| DiscussionAttachmentUploadService/SubmitDiscussionAttachmentUpload | forge089.proto | Bounded adapter |
+| DiscussionAttachmentUploadService/GetDiscussionAttachmentUploadOperation | forge089.proto | Bounded adapter |
 | SessionService/GetAuthenticationOptions | golf.proto | Bounded adapter |
 | SessionService/BeginGiteaOAuth | golf.proto | Missing native adapter |
 | SessionService/LoginWithPassword | golf.proto | Missing native adapter |

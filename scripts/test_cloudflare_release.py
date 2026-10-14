@@ -634,6 +634,7 @@ class ReleaseTests(unittest.TestCase):
                 release.manifest['schema'] = schema; called.clear(); release.migrate()
                 self.assertEqual(called, expected)
 
+
     def test_uncertain_deployment_is_not_dispatched_twice(self):
         release = self.release(); release.check = lambda: 'previous'; release.retain = lambda: 1
         release.state['releases'][release.manifest['release']] = {'state':'dispatched'}
@@ -783,14 +784,14 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             release.state['migration0026'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_execution_value_schema([])
 
-    def test_release_migration_is_the_schema_tail_resumes_without_replaying(self):
+    def test_release_migration_follows_its_predecessor_and_resumes_without_replaying(self):
         release = self.release(); release.manifest['schema'] = 28
         with sqlite3.connect(':memory:') as db:
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0028_releases.sql').read_text()
-            self.assertTrue(schema.endswith(';\n\n'+migration))
-            db.executescript(schema[:-len('\n'+migration)])
+            self.assertIn(';\n\n'+migration, schema)
+            db.executescript(schema[:schema.index('\n'+migration)])
             lost = True
             def command(*args, **kwargs):
                 nonlocal lost
@@ -813,5 +814,35 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             self.assertEqual(db.execute("SELECT sql FROM sqlite_master WHERE name='repository_release_assets_name'").fetchone()[0].split(' WHERE ')[1], 'deleted=0')
             release.state['migration0028'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_release_schema([])
+
+    def test_attachment_migration_is_the_schema_tail_resumes_without_replaying(self):
+        release = self.release(); release.manifest['schema'] = 29
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0029_discussion_attachments.sql').read_text()
+            self.assertTrue(schema.endswith(';\n\n'+migration))
+            db.executescript(schema[:-len('\n'+migration)])
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith('PRAGMA'):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost attachment migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0029'): release.check_attachment_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost attachment'): release.migrate_attachment_schema([])
+            applied = []; release.migrate_attachment_schema(applied)
+            self.assertEqual(applied, ['0029']); release.check_attachment_schema()
+            self.assertEqual(db.execute('SELECT count(*) FROM discussion_attachments').fetchone()[0], 0)
+            applied = []; release.migrate_attachment_schema(applied)
+            self.assertEqual(applied, [])
+            release.state['migration0029'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_attachment_schema([])
 
 if __name__ == '__main__': unittest.main()

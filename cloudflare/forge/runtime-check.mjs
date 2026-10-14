@@ -17,7 +17,7 @@ modules.push({ type: 'ESModule', path: 'forge/src/performance.mjs', contents: aw
 modules.push({ type: 'ESModule', path: 'forge/src/rate-limit.mjs', contents: await readFile(new URL('./src/rate-limit.mjs', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'forge/src/activity.mjs', contents: activity.outputFiles[0].text });
 for (const file of ['execution-values.mjs', 'sealed.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: await readFile(new URL('./src/' + file, import.meta.url), 'utf8') });
-for (const file of ['releases.mjs', 'asset-download.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: await readFile(new URL('./src/' + file, import.meta.url), 'utf8') });
+for (const file of ['releases.mjs', 'asset-download.mjs', 'attachments.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: await readFile(new URL('./src/' + file, import.meta.url), 'utf8') });
 const access = await esbuild.build({ entryPoints: ['cloudflare/forge/src/access.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral' });
 modules.push({ type: 'ESModule', path: 'forge/src/access.mjs', contents: access.outputFiles[0].text });
 const nativeWorkflow = await esbuild.build({ entryPoints: ['cloudflare/forge/src/native-workflow.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./git.mjs'] });
@@ -325,6 +325,18 @@ try {
   await releaseChange({ kind: 5, assetId: uploaded.assetId });
   assert.equal((await bucket.list({ prefix: 'releases/' })).objects.length, 0);
   assert.equal((await runtime.dispatchFetch(assetPath, { headers: { Authorization: 'Bearer ' + token } })).status, 404);
+  const now = new Date().toISOString(), proofIssue = await database.prepare("INSERT INTO discussions(repository_id,number,kind,author_id,title,body,state,created_at,updated_at) SELECT 1,COALESCE(max(number),0)+1,'issue',1,'Attachment proof','','OPEN',?,? FROM discussions WHERE repository_id=1 RETURNING id,number").bind(now, now).first();
+  const attachmentTarget = { repository: { owner: 'alice', name: 'runtime' }, repositoryId: '1', issueId: String(proofIssue.id), number: proofIssue.number };
+  const attachmentState = await (await call('/rpc/golf.v1.DiscussionAttachmentUploadService/GetDiscussionAttachmentUploadState', token, {}, { target: attachmentTarget })).json();
+  assert.equal(attachmentState.canUpload, true, JSON.stringify(attachmentState));
+  const attachmentBytes = assetBytes.subarray(0, 4096), attachmentHash = createHash('sha256').update(attachmentBytes).digest('hex');
+  const attached = await (await call('/rpc/golf.v1.DiscussionAttachmentUploadService/SubmitDiscussionAttachmentUpload', token, {}, { target: attachmentTarget, expectedTargetRevision: attachmentState.targetRevision,
+    expectedAttachmentsRevision: attachmentState.attachmentsRevision, operationId: crypto.randomUUID(), name: 'proof.bin', content: Buffer.from(attachmentBytes).toString('base64'), contentSha256: attachmentHash, contentSizeBytes: '4096' })).json();
+  assert.equal(attached.operation.phase, 'DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED', JSON.stringify(attached));
+  assert.equal((await bucket.list({ prefix: 'attachments/1/' + proofIssue.id + '/' })).objects.length, 1);
+  const fetched = await (await call('/rpc/golf.v1.DiscussionAttachmentService/DownloadDiscussionAttachment', token, {}, { target: attachmentTarget, attachmentId: attached.operation.attachment.id, expectedRevision: attached.operation.attachment.revision })).json();
+  assert.equal(fetched.contentSha256, attachmentHash); assert.deepEqual(new Uint8Array(Buffer.from(fetched.content, 'base64')), attachmentBytes);
+  console.log('Real workerd/D1/R2 discussion attachment: checked conditional write and SHA-256 verified download passed');
   console.log(`Real workerd/D1/R2 release asset: 256 KiB checked conditional write in ${uploadMs.toFixed(0)} ms wall time, authorized public-Worker stream, grant revocation and confirmed removal passed`);
   const expired = crypto.randomUUID();
   await database.prepare(`INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,advice_state,created_at,updated_at,expires_at)
