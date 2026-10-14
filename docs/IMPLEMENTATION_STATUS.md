@@ -1,5 +1,64 @@
 # Golf implementation status
 
+## 2026-10-14 — Agentic mode AM-0 to AM-3 measured and verified on the hosted demo
+
+`https://demo.gitgolf.mjtechguy.com`, measured with `scripts/agent_speed_bench.mjs` against eight repositories
+(`mj/agent-bench-1..8`), 20 s per step. Evidence is in `docs/compatibility/evidence/agent-speed-20261014-hosted-*.json`:
+`baseline` (before #77), `am1` (#77), `am2-am3` (#79, #82, #83), `am-final` (#88, schema 40) and `am-source` (S6).
+
+**Pushes to separate branches of one repository (S2), successes over attempts**
+
+| Workers | Baseline | After #77 | After #82–#88 |
+| --- | --- | --- | --- |
+| 16 | 0/32 | 0/80 | 48/48 |
+| 64 | 0/64 | 0/128 | 93/93 |
+
+- **Baseline (S1):** two pushes racing on one branch left `write_pending` set with nothing to clear it. Every later push to that repository was refused (412).
+- **#77:** a lost race is now Git's own "fetch first", and unknown outcomes settle by readback.
+- **#82:** Artifacts sometimes fails one of several concurrent receive-packs into the same repository without reporting the branch refused; the same compare-and-swap is now resent.
+- **#88:** an outcome that stays unknown fences only its branch.
+
+**Pushes spread across repositories (S3)**
+
+| Workers | Baseline | After |
+| --- | --- | --- |
+| 16 | 21/24 at 0.38 s⁻¹, p50 24 s | 48/48 at 2.19 s⁻¹, p50 7.6 s |
+| 64 | 51/64, p50 76 s | 93/93 at 1.6 s⁻¹, p50 37 s |
+
+**Shallow clones under push load (S4)**
+
+| Cloners | Baseline | After |
+| --- | --- | --- |
+| 16 | p50 19.6 s | p50 10.3 s, background pushes 39/39 |
+| 64 | 62/166 (104 refused 429) | 70/70, background pushes 75/75 |
+
+**Throughput ceiling.** Total throughput levels off near 2 writes/s for the deployment. That is the single Workspace object plus the provider. The next step is the conditional `RepositoryWrites` split in AM-1.
+
+**Source API (S6), `/native/source/commit` with an API token, no clone**
+
+| Mode | Workers | Successes | Rate | p50 |
+| --- | --- | --- | --- | --- |
+| A branch per writer | 16 | 48/48 | 1.85 s⁻¹ | 8.3 s |
+| A branch per writer | 64 | 61/93 | | 32 client timeouts at 60 s |
+| One shared branch (`onStale: merge`) | 16 | 13/63 | | 49 refused after 3 merge attempts |
+
+On one shared branch, merges cannot keep up with 16 writers. AM-4's landing queue addresses that case.
+
+**Remote MCP (AM-3).** Claude Code on this workstation was connected to hosted `/mcp` with a `golf_pat_` token limited to `mj/actions-demo` and `agent/*`, with no Access headers. Using only MCP tools it:
+1. read the repository;
+2. created `agent/mcp-subtract`;
+3. committed a subtract function with tests (`0adb0da`);
+4. opened PR #4;
+5. commented on it.
+
+Checked independently with `git ls-remote` using the token. A commit to `main` was refused by the branch scope. `/mcp` without a token, and the token on a browser RPC route, both answer 401. This run also found the admin-role bug fixed in #86.
+
+**Not verified on hosted yet:**
+- the diverged merge and squash from #94;
+- the agentic mode landing panel from #96;
+- S5 (RPC reads), which needs a browser identity or token access to RPC routes;
+- the per-repository `RepositoryWrites` split.
+
 ## 2026-10-14 — Agentic mode setting and landing policy (agentic mode AM-4 items 2 and 3, schema 41)
 
 See `docs/AGENTIC_MODE.md`. This adds:
