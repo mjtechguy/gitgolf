@@ -1,7 +1,9 @@
 import { readdir, lstat, readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 
-// Static Assets currently drops ctx.access; keep this bounded UI in the control Worker.
+// Static Assets currently drops ctx.access; keep this bounded UI in the control Worker. 6 MiB of assets is about 8 MiB as base64,
+// which compresses well within the Worker script limit.
+const limitBytes = 6 * 1024 * 1024, limitFiles = 256;
 export async function readUIAssets(directory) {
   const assets = {}, types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.woff': 'font/woff', '.woff2': 'font/woff2' };
   let bytes = 0;
@@ -14,9 +16,9 @@ export async function readUIAssets(directory) {
       if (stat.isDirectory()) await visit(name);
       else {
         const type = types[extname(name)];
-        if (!stat.isFile() || !type || stat.size + bytes > 4 * 1024 * 1024 || Object.keys(assets).length >= 192) throw Error('Unsupported native UI asset');
+        if (!stat.isFile() || !type || stat.size + bytes > limitBytes || Object.keys(assets).length >= limitFiles) throw Error('Unsupported native UI asset');
         const content = await readFile(file); bytes += content.length;
-        if (bytes > 4 * 1024 * 1024) throw Error('Native UI bundle exceeds 4 MiB');
+        if (bytes > limitBytes) throw Error('Native UI bundle exceeds 6 MiB');
         assets['/' + name] = { type, content: content.toString('base64') };
       }
     }
