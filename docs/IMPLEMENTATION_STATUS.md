@@ -1,5 +1,24 @@
 # Golf implementation status
 
+## 2026-10-14 — Maintenance no longer depends on Cron Trigger delivery
+
+The workspace Durable Object keeps a five-minute alarm and runs the scheduled
+maintenance stages and collectors itself whenever no Cron Trigger run has
+reported in for ten minutes. Reason: on the retained installation Cloudflare
+has delivered no scheduled event to the Worker since its first Alchemy deploy.
+Further evidence gathered since the earlier entry: replacing the trigger left
+the same `*/5` `internalError` records appearing while the script had no `*/5`
+trigger; a one-minute trigger on that Worker produced no record or event in 19
+minutes; and a minimal throwaway Worker uploaded straight through the API with
+its own one-minute trigger received no scheduled event in 25 minutes. That
+points at cron delivery for this account rather than at Golf's Worker; the
+cause is still not established and is Cloudflare's to diagnose.
+
+Evidence for the fallback: Worker tests (arming, standing down after a
+scheduled run, resuming after ten minutes) and the real-workerd runtime check,
+which still passes its scheduled-maintenance assertions through the shared
+function. Hosted result is recorded in the next entry after deploy.
+
 ## 2026-10-14 — Native merge accepted on the retained installation
 
 After `migrate` (applied `0024_pull_merges.sql`) and a deploy, `pull.merge`

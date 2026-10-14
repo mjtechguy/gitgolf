@@ -26,7 +26,7 @@ function fixture() {
   const env = { DB: { withSession: () => ({ prepare: () => ({ bind() { return this; }, all: async () => ({results:[]}) }) }) },
     background: async () => { events.push('background'); started.resolve(); await background.promise; return {}; },
     handle: async req => { const method = new URL(req.url).pathname.split('/').at(-1); events.push(method); if (method === 'RevokeRepositoryCollaborator') allowed = false; return new Response(allowed ? 'allowed' : 'denied'); } };
-  const workspace = new Workspace({ storage: { sql: { exec() {} } }, exports: {}, waitUntil() {} }, env);
+  const workspace = new Workspace({ storage: { sql: { exec() {} }, getAlarm: async () => 1, setAlarm: async () => {} }, exports: {}, waitUntil() {} }, env);
   return { workspace, env, background, started, events };
 }
 
@@ -111,10 +111,41 @@ test('both deployment paths pass the real workflow binding to evidence admission
   const exported = { create() {} }, bound = { create() {} };
   for (const [exports, binding, expected] of [[{ EvidenceWorkflow: exported }, undefined, exported], [{}, bound, bound], [{ EvidenceWorkflow: exported }, bound, bound]]) {
     let observed;
-    const workspace = new Workspace({ storage: { sql: { exec() {} } }, exports, waitUntil() {} }, {
+    const workspace = new Workspace({ storage: { sql: { exec() {} }, getAlarm: async () => 1, setAlarm: async () => {} }, exports, waitUntil() {} }, {
       EvidenceWorkflow: binding, background: async (id, phase, workflows) => { observed = workflows; return {}; },
     });
     await workspace.evidence('job', 'start');
     assert.equal(observed, expected);
   }
+});
+
+function heartbeatFixture(existingAlarm) {
+  const statements = [], alarms = [], kv = new Map(), waits = [];
+  const statement = sql => ({ bind(...values) { statements.push([sql, values]); return this; }, run: async () => ({ meta: { changes: 1 } }), first: async () => null, all: async () => ({ results: [] }) });
+  const db = { prepare: statement, batch: async () => [] };
+  const storage = { sql: { exec() {} }, kv: { get: key => kv.get(key), put: (key, value) => kv.set(key, value) }, getAlarm: async () => existingAlarm, setAlarm: async at => { alarms.push(at); } };
+  const workspace = new Workspace({ storage, exports: {}, waitUntil: promise => waits.push(promise) }, { DB: { ...db, withSession: () => db }, handle: async () => new Response('ok'), background: async () => ({}) });
+  const stages = () => statements.filter(([sql]) => sql.startsWith('INSERT INTO operations_maintenance')).map(([, values]) => values[0]);
+  return { workspace, alarms, waits, stages };
+}
+
+test('the workspace arms one maintenance alarm and keeps an existing one', async () => {
+  const fresh = heartbeatFixture(null); await Promise.all(fresh.waits);
+  assert.equal(fresh.alarms.length, 1); assert.ok(Math.abs(fresh.alarms[0] - Date.now() - 300000) < 5000);
+  const armed = heartbeatFixture(12345); await Promise.all(armed.waits);
+  assert.deepEqual(armed.alarms, []);
+});
+
+test('the alarm repeats maintenance only while no scheduled run has reported in', async () => {
+  const f = heartbeatFixture(1);
+  await f.workspace.alarm();
+  assert.deepEqual(f.stages(), ['ci', 'previews', 'evidence', 'indexes']);
+  assert.equal(f.alarms.length, 1); assert.ok(Math.abs(f.alarms[0] - Date.now() - 300000) < 5000);
+  f.workspace.scheduleRan();
+  await f.workspace.alarm();
+  assert.equal(f.stages().length, 4);
+  assert.equal(f.alarms.length, 2);
+  const realNow = Date.now;
+  try { Date.now = () => realNow() + 11 * 60_000; await f.workspace.alarm(); } finally { Date.now = realNow; }
+  assert.equal(f.stages().length, 8);
 });
