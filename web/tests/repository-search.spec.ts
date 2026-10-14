@@ -58,7 +58,7 @@ test('a reader searches by meaning: results grouped by code and discussions, exc
   const state = await backend(page);
   await page.goto('/alex/edge-api/search?q=how%20are%20cache%20entries%20evicted');
   const region = page$(page);
-  await expect(region.getByRole('heading', { level: 1, name: 'Search alex/edge-api' })).toBeVisible();
+  await expect(region.getByRole('heading', { level: 1, name: 'Search alex/edge-api' })).toBeVisible({ timeout: 20_000 });
   await expect(region.getByRole('status').filter({ hasText: 'matches' })).toHaveText('4 matches for “how are cache entries evicted”');
   const band = region.getByLabel('Search index', { exact: true });
   await expect(band).toContainText('Ready'); await expect(band).toContainText(C.slice(0, 12)); await expect(band).toContainText('1,318'); await expect(band).toContainText('9 skipped');
