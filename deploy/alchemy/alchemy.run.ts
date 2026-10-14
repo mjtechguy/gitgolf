@@ -92,7 +92,7 @@ export default Alchemy.Stack('GolfDemo', {
   const build = yield* Command.Build('NativeBuild', {
     command: 'python3 scripts/cloudflare_alchemy_demo.py build', cwd: root, outdir: resolve(directory, '.cloudflare'),
     env: { GOLF_ALCHEMY_DIRECTORY: directory, GOLF_ALCHEMY_SETTINGS: settings.pipe(Output.map(JSON.stringify)) },
-    memo: { include: ['cloudflare/forge/**', 'web/src/**', 'web/public/**', 'web/*.html', 'web/vite*.ts', 'web/tsconfig*.json', 'web/package*.json', 'scripts/cloudflare_alchemy_demo.py', 'deploy/alchemy/**'], exclude: ['**/node_modules/**'] },
+    memo: { include: ['cloudflare/forge/**', 'cloudflare/agents/src/**', 'web/src/**', 'web/public/**', 'web/*.html', 'web/vite*.ts', 'web/tsconfig*.json', 'web/package*.json', 'scripts/cloudflare_alchemy_demo.py', 'deploy/alchemy/**'], exclude: ['**/node_modules/**'] },
     timeout: '5 minutes',
   });
   const config = (part = '') => build.outdir.pipe(Output.map(dir => readConfig(resolve(dir, '..', part))));
