@@ -81,16 +81,22 @@ if (mode === 'retire') {
       config.exports.AiWorkflow = { type: 'workflow', name: e.workflow + '-ai', concurrency: { limit: 4 }, limits: { steps: 4 }, defaultRetention: { successRetention: '1 day', errorRetention: '1 day' } };
       config.env.AI_WORKFLOW_NAME = { type: 'text', value: e.workflow + '-ai' };
       config.env.AI_DAILY_LIMIT = { type: 'text', value: String(limit) };
+      // The deploy model list is the ceiling for every AI use case; administrators choose inside it (src/ai-models.mjs).
+      const { validModels, builtInModels } = await import('./src/ai-models.mjs');
+      const models = e.ai_models === undefined ? builtInModels : validModels(e.ai_models);
+      if (!models) throw Error('Invalid Workers AI model list');
+      config.env.AI_MODELS = { type: 'text', value: JSON.stringify(models) };
+      // The gateway's own caps as deployed by alchemy.run.ts, shown read-only in AI usage; the gateway enforces them, not Golf.
+      config.env.AI_GATEWAY_LIMITS = { type: 'text', value: JSON.stringify({ requestsPerMinute: 60, spendCentsPerDay: 500 }) };
     }
   }
-  // Semantic search: the Vectorize index created at deploy (enable-search), its fixed dimension and the embedding model. Embeddings use the AI gateway above.
+  // Semantic search: the Vectorize index created at deploy (enable-search) and its fixed dimension. Model selection (AI_MODELS) picks the embedding model.
   if (settings.search !== undefined) {
     const q = settings.search;
-    if (!settings.evidence?.allow_ai || !q || Object.keys(q).some(key => !['index', 'dimensions', 'model'].includes(key)) || typeof q.index !== 'string' || !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(q.index) ||
-        !Number.isInteger(q.dimensions) || q.dimensions < 32 || q.dimensions > 4096 || typeof q.model !== 'string' || !/^@cf\/[a-z0-9-]+\/[a-z0-9._-]+$/.test(q.model)) throw Error('Invalid semantic search allocation');
+    if (!settings.evidence?.allow_ai || !q || Object.keys(q).some(key => !['index', 'dimensions'].includes(key)) || typeof q.index !== 'string' || !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(q.index) ||
+        !Number.isInteger(q.dimensions) || q.dimensions < 32 || q.dimensions > 4096) throw Error('Invalid semantic search allocation');
     config.env.SEARCH_INDEX = { type: 'vectorize', name: q.index };
     config.env.SEARCH_DIMENSIONS = { type: 'text', value: String(q.dimensions) };
-    config.env.SEARCH_MODEL = { type: 'text', value: q.model };
   }
   if (settings.evidence && !settings.previews && !settings.automatic_ci) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '*/5 * * * *' }];
   if (settings.tests) {
@@ -127,7 +133,7 @@ if (mode === 'retire') {
         settings.agent_path === settings.tests.module.replaceAll('.', '/') + '.py') throw Error('Invalid approved native agent allocation');
     config.env.AGENT_EXECUTION_ENABLED = { type: 'text', value: 'true' };
     config.env.AGENT_PATH = { type: 'text', value: settings.agent_path };
-    config.env.AGENT_POLICY_SHA256 = { type: 'text', value: createHash('sha256').update(JSON.stringify([config.env.TEST_POLICY_SHA256.value, filePolicy(settings.agent_path)])).digest('hex') };
+    config.env.AGENT_POLICY_SHA256 = { type: 'text', value: createHash('sha256').update(JSON.stringify([config.env.TEST_POLICY_SHA256.value, filePolicy(settings.agent_path, null)])).digest('hex') };
     config.exports.PRAgentTask = { type: 'durable-object', storage: 'sqlite', container: settings.worker + '-agents' };
     config.exports.AgentOutbound = { type: 'worker' };
     await u.writeContainerConfig({ root, directoryName: 'pr-agents', config: { name: settings.worker + '-agents', schedulingPolicy: 'durable-object',

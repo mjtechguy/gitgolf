@@ -295,17 +295,12 @@ def enable_email(directory, value, limit):
         +' Deployment registers the sending subdomain. The capability stays degraded until Cloudflare accepts a first message.')
 
 
-SEARCH_MODELS = {'@cf/qwen/qwen3-embedding-0.6b', '@cf/baai/bge-m3', '@cf/google/embeddinggemma-300m'}
-
-
-def enable_search(directory, value, dimensions, model):
+def enable_search(directory, value, dimensions):
     # Embeddings go through the installation's private AI Gateway, so search needs enable-ai first.
     if not value['settings'].get('evidence', {}).get('allow_ai'):
         raise ValueError('Run enable-ai before enabling semantic search')
     if type(dimensions) is not int or not 32 <= dimensions <= 4096:
         raise ValueError('Use a Vectorize dimension between 32 and 4096')
-    if model not in SEARCH_MODELS:
-        raise ValueError('Use one of the qualified embedding models: '+', '.join(sorted(SEARCH_MODELS)))
     if len(value['name']+'-search') > 63:
         raise ValueError('The installation name cannot name a Vectorize index')
     # The search tables arrive with the current schema; the migrate action applies whatever the installation is missing.
@@ -313,10 +308,10 @@ def enable_search(directory, value, dimensions, model):
     if json.loads(private_read(directory/'schema-receipt.json'))['sha256'] != current:
         raise ValueError('Run the migrate action before enabling semantic search')
     previous = value['settings'].get('search')
-    value['settings']['search'] = {'index': value['name']+'-search', 'dimensions': dimensions, 'model': model}
+    value['settings']['search'] = {'index': value['name']+'-search', 'dimensions': dimensions}
     replace_private_json(directory/'alchemy-input.json', value)
     changed = previous is not None and previous.get('dimensions') != dimensions
-    print('Semantic search prepared with '+model+' into a '+str(dimensions)+'-dimension Vectorize index; run renew-deploy for the Vectorize permission, then deploy.'
+    print('Semantic search prepared with a '+str(dimensions)+'-dimension Vectorize index (the embedding model comes from AI model selection and must produce this dimension); run renew-deploy for the Vectorize permission, then deploy.'
         +(' The dimension changed: deploy replaces the index and every repository index is rebuilt.' if changed else '')
         +' Repository administrators start indexing per repository; embedding calls are billed by Cloudflare.')
 
@@ -530,7 +525,6 @@ def main():
     parser.add_argument('--limit', type=int, default=300, help='approximate anonymous requests per period for enable-rate-limit, 10 to 10000')
     parser.add_argument('--period', type=int, default=60, choices=[10, 60], help='counting period in seconds for enable-rate-limit')
     parser.add_argument('--dimensions', type=int, default=1024, help='Vectorize index dimension for enable-search; must match the embedding model')
-    parser.add_argument('--model', default='@cf/qwen/qwen3-embedding-0.6b', help='embedding model for enable-search')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
     parser.add_argument('--workflow-path', help='the one approved Actions workflow path for enable-workflow, .github/workflows/NAME.yml')
     parser.add_argument('directory', nargs='?')
@@ -547,7 +541,7 @@ def main():
     if args.action == 'enable-analytics': return enable_analytics(directory, value)
     if args.action == 'enable-webhooks': return enable_webhooks(directory, value, args.origin)
     if args.action == 'enable-email': return enable_email(directory, value, args.email_limit)
-    if args.action == 'enable-search': return enable_search(directory, value, args.dimensions, args.model)
+    if args.action == 'enable-search': return enable_search(directory, value, args.dimensions)
     if args.action == 'enable-ai': return enable_ai(directory, value, args.agent_path)
     if args.action == 'enable-workflow': return enable_workflow(directory, value, args.workflow_path)
     if args.action == 'enable-dead-letter': return enable_dead_letter(directory, value)

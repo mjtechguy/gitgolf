@@ -1,7 +1,8 @@
 import { sha, validRef } from './git.mjs';
 import { uuidOK } from './common.mjs';
 import { testPolicy, testModuleOK } from './test-policy.mjs';
-import { filePolicy, model } from '../../agents/src/policy.mjs';
+import { filePolicy, model, policyIdentity } from '../../agents/src/policy.mjs';
+import { deployModels, modelOK } from './ai-models.mjs';
 
 export const agentTerminal = new Set(['succeeded', 'failed', 'cancelled', 'timed_out', 'lost']);
 export const agentPathOK = path => typeof path === 'string' && path.length <= 200 &&
@@ -13,20 +14,31 @@ export function agentPolicy(env) {
 export function agentInputOK(input) {
   return input && testModuleOK(input.module) && uuidOK(input.jobId) && sha(input.commitId) && sha(input.treeId) && validRef('refs/heads/' + input.branch) &&
     agentPathOK(input.allowedPath) && /^[a-f0-9]{64}$/.test(input.policySha256 || '') &&
+    (input.model === undefined || modelOK(input.model)) &&
     typeof input.prompt === 'string' && input.prompt.trim() && new TextEncoder().encode(input.prompt).length <= 16384 &&
     Number.isSafeInteger(input.deadline) && input.deadline > Date.now() && input.deadline <= Date.now() + 600000 &&
     /^https:\/\/[a-f0-9]{32}\.artifacts\.cloudflare\.net\/git\/[a-z0-9][a-z0-9-]{1,62}\/repo-[a-f0-9]{32}\.git$/.test(input.remote);
 }
-export function agentResult(value, jobId, source) {
+// The agents Worker recomputes the identity from its own deploy hash and checks the model against the deploy list (AI_MODELS).
+export async function agentAdmissionOK(env, input) {
+  // Jobs admitted before model selection carry no model and keep the deploy identity they were admitted with.
+  if (input.model === undefined) return true;
+  const allowed = deployModels(env).models.agents?.allowed || [];
+  return allowed.includes(input.model) && input.policySha256 === await policyIdentity(env.AGENT_POLICY_SHA256, input.model);
+}
+// expectedModel is the model the job was admitted with; the result must name the same one.
+export function agentResult(value, jobId, source, expectedModel) {
   if (!value || value.role !== jobId || value.base_commit !== source.commitId || value.base_tree !== source.treeId ||
       value.allowed_path !== source.allowedPath || value.policy_sha256 !== source.policySha256 || !agentTerminal.has(value.state) ||
       value.cleanup !== 'destroyed' || !Number.isSafeInteger(value.finished_at) ||
       !Number.isSafeInteger(value.calls) || value.calls < 0 || value.calls > 16 ||
       !Number.isSafeInteger(value.denied) || value.denied < 0 || value.denied > 1000000) throw Error('Invalid native agent result');
+  const used = value.model ?? model;
+  if (!modelOK(used) || expectedModel !== undefined && used !== expectedModel) throw Error('Native agent result names a different model');
   const result = { jobId, state: value.state, commitId: source.commitId, treeId: source.treeId,
     allowedPath: source.allowedPath, policySha256: source.policySha256, cleanup: value.cleanup,
     finishedAt: value.finished_at, calls: value.calls, deniedRequests: value.denied,
-    harness: 'opencode@1.18.34', model, proposalOnly: true };
+    harness: 'opencode@1.18.34', model: used, proposalOnly: true };
   if (value.state === 'succeeded') {
     if (!sha(value.proposal_commit) || !sha(value.proposal_tree) || value.proposal_commit === source.commitId ||
         typeof value.patch !== 'string' || !value.patch || !Array.isArray(value.events) ||

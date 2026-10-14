@@ -258,7 +258,8 @@ test('indexing is paced, incremental after a push, rebuilt for a new model and r
   assert.equal(f.index.deletes.flat().length, 1); assert.equal(f.state().chunks, 402);
   // A different model rebuilds; the old index keeps serving with the old model until the new one completes.
   f.index.flush();
-  f.env.SEARCH_MODEL = '@cf/baai/bge-m3';
+  const original = searchModels.resolve; t.after(() => { searchModels.resolve = original; });
+  searchModels.resolve = async () => '@cf/baai/bge-m3';
   await f.maintain();
   assert.equal(f.state().state, 'INDEXING'); assert.equal(f.state().target_model, '@cf/baai/bge-m3'); assert.equal(f.calls.at(-1).model, '@cf/baai/bge-m3'); assert.ok(f.calls.at(-1).input.text);
   const during = await f.search('module number seven');

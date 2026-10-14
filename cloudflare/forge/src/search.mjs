@@ -1,6 +1,7 @@
 import { Fault, deny, invalid, reply, digest } from './common.mjs';
 import { aiRun } from './ai.mjs';
 import { featureOff } from './feature-policy.mjs';
+import { aiModel } from './ai-models.mjs';
 
 // Semantic search over one repository. Vectorize keeps only vectors with repository and kind metadata; every excerpt is read live
 // from Artifacts or D1 after the reader's grant is checked, so revocations, deletions and edits apply to the next search.
@@ -8,30 +9,28 @@ export const searchFeature = 'semantic-search';
 export const searchLimits = { files: 2000, chunks: 5000, fileBytes: 64 * 1024, lines: 60, overlap: 10, fileChunks: 32, batch: 32, changed: 256,
   tickCalls: 10, indexerDaily: 1000, userDaily: 200, topK: 50, results: 20, query: 500, discussionBytes: 8 * 1024, discussionChunks: 4,
   discussions: 2000, chunkChars: 4000, excerptLines: 12, lineChars: 400 };
-export const searchDefaultModel = '@cf/qwen/qwen3-embedding-0.6b';
 export const searchNotice = 'Semantic matches by meaning; exact text search is not available.';
 const searchInstruction = 'Given a question about a software repository, find the source code, issues and pull requests that answer it';
 const capabilityReason = 'Signed-in readers can search one repository by meaning: default-branch code (up to 2,000 files) and issue and pull request titles and descriptions. Access is checked on every search; results show the indexed commit, and newer pushes appear after reindexing.';
 const now = () => new Date().toISOString();
 
-// The deploy decides the embedding model and the index dimension; a change to either rebuilds every index.
+// The deploy fixes the Vectorize index dimension; model selection picks the embedding model. A change to either rebuilds the index.
 export function searchConfiguration(env) {
-  const dimensions = Number(env.SEARCH_DIMENSIONS), model = env.SEARCH_MODEL || searchDefaultModel;
-  return { model: /^@cf\/[a-z0-9-]+\/[a-z0-9._-]+$/.test(model) ? model : '', dimensions: Number.isInteger(dimensions) && dimensions >= 32 && dimensions <= 4096 ? dimensions : 0 };
+  const dimensions = Number(env.SEARCH_DIMENSIONS);
+  return { dimensions: Number.isInteger(dimensions) && dimensions >= 32 && dimensions <= 4096 ? dimensions : 0 };
 }
 // '' when allocated, otherwise what the operator has not provided. The installation AI switch overlays EVIDENCE_ALLOW_AI.
 export function searchUnallocated(env) {
   if (!(env.EVIDENCE_ALLOW_AI === 'true' && env.AI && env.EVIDENCE_GATEWAY)) return 'Semantic search needs Workers AI through this installation\'s private AI Gateway, which the operator has not allocated or has turned off.';
   if (!env.SEARCH_INDEX) return 'Semantic search needs a Vectorize index, which the operator has not bound to this installation.';
-  const { model, dimensions } = searchConfiguration(env);
-  if (!dimensions || !model) return 'Semantic search needs the deployed embedding model and Vectorize index dimension.';
+  if (!searchConfiguration(env).dimensions) return 'Semantic search needs the deployed Vectorize index dimension.';
   return '';
 }
 export const searchAllocation = env => !searchUnallocated(env);
-// The embedding model for one repository's index. Model selection (src/ai-models.mjs) plugs in here as
-// `resolve: async (db, env, repositoryId) => (await aiModel(db, env, 'search', repositoryId)).model`; until then the deploy's SEARCH_MODEL.
-// An index whose stored search_state.model differs from this is stale and is rebuilt; the old one serves until the new one completes.
-export const searchModels = { resolve: async (_db, env, _repositoryId) => searchConfiguration(env).model };
+// The embedding model for one repository's index, from model selection (installation default, or the repository's allowed choice).
+// An index whose stored search_state.model differs from it is stale and is rebuilt; the old one serves until the new one completes.
+// `resolve` is replaceable only so tests can choose a model without installation settings.
+export const searchModels = { resolve: async (db, env, repositoryId) => (await aiModel(db, env, 'search', repositoryId)).model };
 export async function searchModel(db, env, repositoryId) {
   let model;
   try { model = await searchModels.resolve(db, env, repositoryId); } catch (error) { throw new SearchRefusal(error?.message || 'No embedding model is available for semantic search.'); }

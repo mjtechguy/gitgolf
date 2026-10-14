@@ -3,7 +3,7 @@ import { agentResult, agentTerminal } from './agent-policy.mjs';
 
 const time = () => new Date().toISOString();
 export async function saveAgent(db, env, job, snapshot, value) {
-  const result = agentResult(value, job.id, snapshot.agent);
+  const result = agentResult(value, job.id, snapshot.agent, env.AGENT_MODEL);
   if (result.state === 'succeeded' && (job.agent_publish !== 'APPLIED' || job.agent_proposal !== result.proposalCommitId)) throw Error('Agent publication unconfirmed');
   if (result.state === 'succeeded') {
     const repo = await env.ARTIFACTS.get(job.agent_fork);
@@ -62,7 +62,7 @@ export async function agentStep(db, env, job, snapshot, artifact, phase) {
     await db.prepare("UPDATE evidence_jobs SET agent_state='RUNNING',updated_at=? WHERE id=? AND agent_state='FORK_PENDING'").bind(time(), job.id).run();
     job.agent_state = 'RUNNING';
   }
-  await task.create({ jobId: job.id, ...snapshot.agent, remote: remote(env, job.agent_fork), deadline: Date.parse(job.expires_at) });
+  await task.create({ jobId: job.id, ...snapshot.agent, ...(env.AGENT_MODEL ? { model: env.AGENT_MODEL } : {}), remote: remote(env, job.agent_fork), deadline: Date.parse(job.expires_at) });
   const result = await task.status();
   if (['preparing', 'running', 'FINALIZING', 'CLEANUP_FAILED'].includes(result.state)) return { id: job.id, state: 'RUNNING' };
   return saveAgent(db, env, job, snapshot, result);

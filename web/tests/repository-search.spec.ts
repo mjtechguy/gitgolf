@@ -164,7 +164,8 @@ for (const [appearance, layout, theme] of [['flare', 'console', 'dark'], ['class
     await look(page, appearance, layout, theme, width);
     await backend(page, { canManage: true });
     await page.goto('/alex/edge-api/search?q=how%20are%20cache%20entries%20evicted');
-    await expect(page$(page).getByRole('region', { name: 'Code' })).toBeVisible();
+    // The first page of each look waits for the dev server's lazy chunks.
+    await expect(page$(page).getByRole('region', { name: 'Code' })).toBeVisible({ timeout: 20_000 });
     await shot(page, `${name}-results`);
     await page.unrouteAll();
     await backend(page, { canManage: true, index: ready({ state: 'INDEXING', targetCommitId: T, targetModel: '@cf/baai/bge-m3', pending: 120, total: 200, progress: 40 }) });

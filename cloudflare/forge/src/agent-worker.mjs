@@ -2,7 +2,7 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import { AgentTask } from '../../agents/src/worker.mjs';
 import { gitOperation, inference } from '../../agents/src/policy.mjs';
 import { digest, uuidOK } from './common.mjs';
-import { agentInputOK, agentTerminal } from './agent-policy.mjs';
+import { agentInputOK, agentAdmissionOK, agentTerminal } from './agent-policy.mjs';
 
 export class AgentOutbound extends WorkerEntrypoint {
   async fetch(request) {
@@ -21,7 +21,7 @@ export class PRAgentTask extends AgentTask {
   outboundService(jobId) { return this.ctx.exports.AgentOutbound({ props: { jobId } }); }
   cloneArgs(r) { return ['--single-branch', '--branch', r.branch]; }
   async create(input) {
-    if (!agentInputOK(input)) throw Error('Invalid native agent admission');
+    if (!agentInputOK(input) || !await agentAdmissionOK(this.env, input)) throw Error('Invalid native agent admission');
     const hash = await digest(JSON.stringify(input));
     if (this.record) {
       if (this.record.input_hash !== hash) throw Error('Native agent admission changed');
@@ -30,7 +30,7 @@ export class PRAgentTask extends AgentTask {
     this.record = { schema_version: 'golf.native.pr-agent.v1', role: input.jobId, state: 'preparing', stage: 'admitted',
       input_hash: hash, prompt: input.prompt, prompt_sha256: await digest(input.prompt),
       base_commit: input.commitId, base_tree: input.treeId, branch: input.branch, remote: input.remote,
-      allowed_path: input.allowedPath, policy_sha256: input.policySha256, module: input.module,
+      allowed_path: input.allowedPath, policy_sha256: input.policySha256, module: input.module, ...(input.model ? { model: input.model } : {}),
       timeout_ms: 120000, expires_at: input.deadline, created_at: Date.now(), calls: 0, denied: 0, events: [] };
     await this.ctx.storage.setAlarm(Date.now() + 1);
     return this.status();
