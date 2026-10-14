@@ -1,6 +1,7 @@
 import { digest, uuidOK, Fault, deny, invalid, reply } from './common.mjs';
 import { aiAllocation, aiDailyLimit, aiLimits, aiRun, aiUsage } from './ai.mjs';
 import { featureOff } from './feature-policy.mjs';
+import { reviewDraft } from './ai-review.mjs';
 import { triage } from './ai-triage.mjs';
 import { releaseNotes } from './ai-release-notes.mjs';
 import { aiModel, aiModelStillAllowed } from './ai-models.mjs';
@@ -14,6 +15,7 @@ import { aiModel, aiModelStillAllowed } from './ai-models.mjs';
 export const aiKinds = {
   triage,
   'release-notes': releaseNotes,
+  'review-draft': reviewDraft,
 };
 
 const time = () => new Date().toISOString();

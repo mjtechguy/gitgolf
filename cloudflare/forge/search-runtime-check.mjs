@@ -71,7 +71,7 @@ try {
       body: JSON.stringify({ repository: { owner: 'alice', name: 'project' }, repositoryId: '1', ...body }) });
     return { status: response.status, value: await response.json() };
   };
-  assert.equal((await call('/native/diagnostics', {})).value.schema, 34);
+  assert.equal((await call('/native/diagnostics', {})).value.schema, 35);
   const capability = async () => (await call('/rpc/golf.v1.CapabilityService/ListCapabilities', {})).value.capabilities.find(item => item.id === 'repository.semantic-search');
   assert.equal((await capability()).state, 'CAPABILITY_STATE_DEGRADED');
   assert.equal((await call('/native/search', { action: 'index' }, 1)).status, 403);
