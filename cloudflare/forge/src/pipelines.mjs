@@ -468,6 +468,8 @@ export async function advanceRunNow(env, runId) {
     for (const other of next) env.waitUntil ? env.waitUntil(advancePipelineRun(env, other.id)) : await advancePipelineRun(env, other.id);
   }
   if (env.notifyPipeline) env.notifyPipeline(run.repository_id);
+  // Agentic mode (land-queue.mjs): a finished run can decide a landing or the checks of a landed change. Never awaited here.
+  if (finished && env.pipelineFinished) env.pipelineFinished({ ...run, state });
   return { state, nextCheck: finished ? null : Date.now() + 60_000 };
 }
 

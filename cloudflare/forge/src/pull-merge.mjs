@@ -122,7 +122,10 @@ function intent(body, target, key) {
   return { title, message, original, fingerprint: JSON.stringify(['native.standard-merge.v1', original, title, message]) };
 }
 
-export async function standardPullMerge(db, env, person, row, method, body, artifact, providerFetch) {
+// options (land-queue.mjs only): guard(idle) replaces the writer authority with the agentic mode policy's ({sql, values}), and author
+// replaces the commit identity ({name, email}). Everything else, the journal, the reservation and the readback, is this same path.
+export async function standardPullMerge(db, env, person, row, method, body, artifact, providerFetch, options = {}) {
+  const authorize = idle => options.guard ? options.guard(idle) : authority(person, row, idle);
   const submit = method === 'SubmitStandardPullMerge', target = submit ? body.selection : body, key = { owner: ownerSlug(row, env), name: row.name };
   if (!target || !uuidOK(body.operationId) || !idOK(target.repositoryId) || !idOK(target.pullRequestId) || !idOK(body.ownerId) ||
       !Number.isInteger(target.number) || target.number < 1 || target.number > 4294967295) invalid('Select the original merge operation and exact pull request.');
@@ -141,7 +144,7 @@ export async function standardPullMerge(db, env, person, row, method, body, arti
     if (await db.prepare(`SELECT 1 FROM pull_merge_operations WHERE pull_request_id=? AND ${unresolved}`).bind(d.pull_id).first())
       throw new Fault('failed_precondition', 412, 'Inspect the original merge operation; an unresolved operation cannot be retried or replaced.');
     if (row.write_pending) conflict();
-    const { original, title, message } = requested, ref = 'refs/heads/' + d.base_branch, time = new Date().toISOString(), guard = authority(person, row);
+    const { original, title, message } = requested, ref = 'refs/heads/' + d.base_branch, time = new Date().toISOString(), guard = authorize(true);
     const journal = (evidence = {}) => [person.id, body.operationId, row.id, d.pull_id, hash, JSON.stringify({ ...original, ...evidence })];
     await artifact(async repo => {
       let plan, refusal = original.sourceRepository ? 'fork_source_unsupported'
@@ -161,8 +164,8 @@ export async function standardPullMerge(db, env, person, row, method, body, arti
       const subject = String(d.title || '').replace(/\p{Cc}+/gu, ' ').trim();
       const fallback = original.method !== 'squash' ? `Merge pull request #${d.number} from ${d.head_branch} into ${d.base_branch}`
         : subject ? `${subject} (#${d.number})` : `Squash pull request #${d.number} from ${d.head_branch} into ${d.base_branch}`;
-      const commit = await mergeCommit({ tree: plan.tree, parents: plan.parents, name: clean(person.full_name) || login,
-        email: `${login}@users.noreply.${new URL(env.PUBLIC_ORIGIN).hostname}`, time: Math.floor(Date.parse(time) / 1000),
+      const commit = await mergeCommit({ tree: plan.tree, parents: plan.parents, name: options.author?.name || clean(person.full_name) || login,
+        email: options.author?.email || `${login}@users.noreply.${new URL(env.PUBLIC_ORIGIN).hostname}`, time: Math.floor(Date.parse(time) / 1000),
         message: ((title || fallback) + (message ? '\n\n' + message : '')).replace(/\n+$/, '') + '\n' });
       // The commit plus the tree objects only a three-way merge creates; every blob and other tree already exists in the repository.
       const request = receiveRequest(current.base.commitId, commit.id, ref, await packObjects([commit, ...plan.objects]));
@@ -189,7 +192,7 @@ export async function standardPullMerge(db, env, person, row, method, body, arti
     });
   }
   saved = await find();
-  const current = authority(person, row, false);
+  const current = authorize(false);
   if (!saved || !await db.prepare(`SELECT 1 AS allowed WHERE ${current.sql}`).bind(...current.values).first()) deny();
   return { operation: wire(saved) };
 }

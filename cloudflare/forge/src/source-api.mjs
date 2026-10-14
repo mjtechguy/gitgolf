@@ -156,9 +156,9 @@ function authority(person, row, rulesVersion) {
 
 // One fenced ref update. 'applied' (read back), 'refused' (the provider kept the ref: a lost race) or 'busy' (another write to this ref is
 // unsettled); an unknown outcome stays fenced for maintenance and is reported as unavailable.
-async function write(db, env, person, row, repo, command, pack, rulesVersion, ctx, record) {
+async function write(db, env, person, row, repo, command, pack, rulesVersion, ctx, record, guard) {
   const id = crypto.randomUUID();
-  if (!await reserveRefWrite(db, { id, repositoryId: row.id, userId: person.id, command, guard: authority(person, row, rulesVersion) })) {
+  if (!await reserveRefWrite(db, { id, repositoryId: row.id, userId: person.id, command, guard: guard || authority(person, row, rulesVersion) })) {
     const state = await db.prepare('SELECT write_pending,EXISTS(SELECT 1 FROM git_ref_writes WHERE repository_id=r.id AND ref=? AND outcome IS NULL) AS busy FROM repositories r WHERE id=?').bind(command.ref, row.id).first();
     if (state?.write_pending) conflict();
     if (state?.busy) return { outcome: 'busy' };
@@ -182,6 +182,17 @@ async function write(db, env, person, row, repo, command, pack, rulesVersion, ct
     catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
   }
   return { outcome: 'applied', id };
+}
+
+// A server-side commit of a prepared tree onto one branch, for Golf's own writes (agentic mode reverts, land-queue.mjs): the same exact
+// objects, branch fence, provider readback and pipeline intake as a commit request. guard ({sql, values}) is the caller's authority,
+// evaluated with the reservation; author is the commit identity ({name, email, time}); record(operationId) runs before anything is sent.
+// Returns { outcome: 'applied' | 'refused' | 'busy', commitId }; an unknown outcome throws like a commit request (503).
+export async function commitTree(db, env, person, row, repo, { ref, parent, treeId, objects = [], message, author, guard, record }, ctx) {
+  const object = await commitObject({ tree: treeId, parents: [parent], author: { tz: '+0000', ...author }, message: message.replace(/\s+$/, '') + '\n' });
+  const sent = await write(db, env, person, row, repo, { ref, old: parent, next: object.id }, await packObjects([...reachable(objects, treeId), object]), null, ctx,
+    record && (id => record(id, object.id)), guard);
+  return { ...sent, commitId: object.id };
 }
 
 function decodeBase64(value, path) {
