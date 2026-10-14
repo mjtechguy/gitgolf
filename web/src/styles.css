@@ -788,6 +788,12 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .pull-landing-decision.blocked { color:var(--error); }
 .pull-landing-reasons,.pull-landing-paths { margin:6px 0; padding-left:18px; color:var(--muted); }
 .pull-landing-reasons li,.pull-landing-paths li { margin:2px 0; overflow-wrap:anywhere; }
+.pull-landing-latest { margin:8px 0; padding-top:8px; border-top:1px solid var(--line); }
+.pull-landing-latest>p { margin:4px 0; overflow-wrap:anywhere; }
+.pull-landing-state.landed { color:var(--accent); }
+.pull-landing-state.queued,.pull-landing-state.landing,.pull-landing-state.needs_rebase { color:var(--warning); }
+.pull-landing-state.blocked,.pull-landing-state.failed,.pull-landing-state.reverted { color:var(--error); }
+.pull-landing>.button { margin-top:8px; }
 @media(min-width:721px) { .repository-browser .ref-picker>summary { padding-block:6px; min-height:32px; } }
 @media(min-width:901px) {
  .discussion-summary.pull-detail { display:grid; grid-template-columns:minmax(0,1fr) auto; column-gap:16px; }

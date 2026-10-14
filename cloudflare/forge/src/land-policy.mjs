@@ -114,3 +114,11 @@ export function evaluateLanding({ settings, changedPaths = [], authorKind = 'per
     ? [`approved by a writer who is not the author and not an agent${required.length ? '; every required check passed' : '; no checks reported'}`]
     : [`every changed path is low-risk, landing without a person is on and every required check passed${authorKind === 'agent' ? ' (opened by an agent)' : ''}`]);
 }
+
+// A needs_person result whose every reason is a missing qualifying approval: a writer who is not the author (and, signed in as a
+// person, not an agent) landing it is that approval (land-queue.mjs). Pending checks, drafts and change requests are not.
+const approvalReasons = ['changes outside the low-risk paths need approval from a writer who is not the author and not an agent', 'landing without a person is off for this repository'];
+export function onlyApprovalNeeded(result) {
+  return result?.decision === 'needs_person' && result.reasons.length > 0 &&
+    result.reasons.every(reason => approvalReasons.includes(reason) || reason.startsWith('sensitive paths need approval from a writer who is not the author and not an agent: '));
+}

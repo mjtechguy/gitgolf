@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { RefreshCw } from 'lucide-react';
 import { repositoryClient } from './api';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { DateLabel, Loading, PanelError, privateQuery } from './RepositoryUI';
-import { agenticKey, readAgentic, saveAgentic, type AgenticSettings, type AgenticState } from './agenticMode';
+import { agenticKey, landKey, landStateLabels, landSummary, listLands, readAgentic, saveAgentic, type AgenticSettings, type AgenticState, type LandOperation } from './agenticMode';
+import { repositoryOptions } from './navigation';
+import { settingAvailable } from './runtimeCapabilities';
+import { useRuntimeCapabilities } from './useRuntimeCapabilities';
 
 // Agentic mode (docs/AGENTIC_MODE.md): one repository setting, shown as its current values first; Edit opens the form.
 const message = (error: unknown) => error instanceof Error ? error.message : 'The agentic mode change could not be confirmed.';
@@ -44,16 +48,17 @@ export function AgenticModeSettings({ userId, owner, name }: { userId: string; o
             <div><dt>Agentic mode</dt><dd>{onOff(settings.enabled && data.feature.allowed)}{settings.enabled && !data.feature.allowed ? ' (turned on here, off by policy)' : ''}</dd></div>
             <div><dt>Land without a person</dt><dd>{onOff(settings.landWithoutPerson)}{settings.landWithoutPerson ? ' — changes that touch only low-risk paths and pass every required check need no reviewer.' : ' — every change needs approval from a writer.'}</dd></div>
             <div><dt>Required checks</dt><dd>{settings.requiredChecks.length ? settings.requiredChecks.map((check, index) => <span key={check}>{index ? ', ' : ''}<code>{check}</code></span>) : 'Every pipeline that runs on the head commit'}</dd></div>
-            <div><dt>Revert on failure</dt><dd>{onOff(settings.revertOnFailure)} — stored for automatic reverts of landed changes, which Golf does not perform yet.</dd></div>
+            <div><dt>Revert on failure</dt><dd>{onOff(settings.revertOnFailure)}{settings.revertOnFailure ? ' — a change Golf landed on its own is reverted when its required checks fail on the base branch.' : ' — failed checks after landing are only reported.'}</dd></div>
             <div><dt>Last changed</dt><dd>{settings.version ? <>{settings.updatedBy || 'Unknown account'}, <DateLabel value={settings.updatedAt} relative /></> : 'Never: these are the defaults'}</dd></div>
           </dl>
-          <p className="field-help">Golf shows on each open pull request what this policy would decide. It does not land pull requests on its own yet.</p></div>}
+          <p className="field-help">Each open pull request shows what this policy decides, and writers it allows can land it. {settings.landWithoutPerson ? 'Low-risk changes land on their own once their required checks pass.' : 'Golf lands nothing on its own while landing without a person is off.'}</p></div>}
       </>}
     </section>
     {settings && !editing ? <section className="browser-panel" aria-labelledby="agentic-paths-title"><div className="browser-panel-heading"><h2 id="agentic-paths-title">Path rules</h2></div>
       <p className="field-help">Patterns match whole paths from the repository root: <code>*</code> and <code>?</code> stay within one folder, <code>**</code> spans any number of folders. Sensitive wins over low-risk. All {rules.length} rules are listed; search and sorting cover this list.</p>
       <DataTable data={rules} columns={columns} getRowId={rule => rule.kind + ':' + rule.pattern} label="Agentic mode path rules" emptyMessage="No path rules. Every change needs a person." pagination={false} />
     </section> : null}
+    {settings && !editing && target ? <RecentLandings userId={userId} owner={owner} name={name} target={target} /> : null}
   </section>;
 }
 
@@ -84,9 +89,31 @@ function AgenticModeEditor({ state, target, done }: { state: AgenticState; targe
       <p className="field-help">One check name per line: a workflow name, <code>workflow / job</code>, or a reported check context. Empty means every pipeline that runs on the head commit must pass.</p>
       {field.state.meta.errors.length ? <p className="error" role="alert">{field.state.meta.errors.join(' ')}</p> : null}</>}</form.Field>
     <form.Field name="revertOnFailure">{field => <label className="policy-choice"><input type="checkbox" checked={field.state.value} onChange={e => field.handleChange(e.target.checked)} />
-      <span><strong>Revert on failure</strong><small>Stored now; automatic reverts of landed changes are not available yet.</small></span></label>}</form.Field>
+      <span><strong>Revert on failure</strong><small>Revert a change Golf landed on its own when its checks then fail on the base branch.</small></span></label>}</form.Field>
     {error ? <p className="error" role="alert">{message(error)}</p> : null}
     <form.Subscribe selector={formState => [formState.isSubmitting, formState.canSubmit] as const}>{([submitting, canSubmit]) => <div className="credential-actions">
       <button className="button primary" disabled={submitting || !canSubmit}>{submitting ? 'Saving…' : 'Save agentic mode'}</button><button type="button" className="button secondary" disabled={submitting} onClick={() => done(false)}>Cancel</button></div>}</form.Subscribe>
   </form>;
+}
+
+const recentLimit = 50;
+// The latest land operations of this repository (POST /native/land/read list): people's and the policy's, with what each came to.
+function RecentLandings({ userId, owner, name, target }: { userId: string; owner: string; name: string; target: { repository: { owner: string; name: string }; repositoryId: string } }) {
+  const runtime = useRuntimeCapabilities(), ready = settingAvailable(runtime.data, 'repository.agentic-landing');
+  const lands = useQuery({ ...privateQuery, queryKey: [...landKey(userId, owner, name), 'recent'], enabled: ready, queryFn: ({ signal }) => listLands(target, { limit: recentLimit }, signal) });
+  if (!ready) return null;
+  const columns: DataTableColumn<LandOperation>[] = [
+    { accessorKey: 'number', header: 'Pull request', cell: ({ row: { original: op } }) => <Link {...repositoryOptions({ owner, name }, { view: 'pulls', pull: op.number })}>#{op.number}</Link> },
+    { id: 'state', header: 'State', accessorFn: op => landStateLabels[op.state], cell: ({ row: { original: op } }) => <span className={`pull-landing-state ${op.state.toLowerCase()}`}>{landStateLabels[op.state]}</span> },
+    { id: 'by', header: 'Landed by', accessorFn: op => op.trigger === 'policy' ? 'Golf (agentic mode)' : op.actor || 'a person' },
+    { id: 'outcome', header: 'Outcome', enableSorting: false, accessorFn: op => landSummary(op) },
+    { accessorKey: 'updatedAt', header: 'Updated', enableGlobalFilter: false, cell: ({ row: { original: op } }) => <DateLabel value={op.updatedAt} relative /> },
+  ];
+  return <section className="browser-panel" aria-labelledby="agentic-landings-title"><div className="browser-panel-heading"><h2 id="agentic-landings-title">Recent landings</h2>
+    <button className="button secondary" aria-label="Refresh recent landings" disabled={lands.isFetching} onClick={() => void lands.refetch()}><RefreshCw size={15} className={lands.isFetching ? 'spin' : ''} />Refresh</button></div>
+    {lands.error ? <PanelError error={lands.error} retry={() => void lands.refetch()} /> : !lands.data ? <Loading label="Reading recent landings…" /> : <>
+      <p className="field-help">The {recentLimit} most recent land operations are loaded; search and sorting cover only those.</p>
+      <DataTable data={lands.data.operations} columns={columns} getRowId={op => op.id} label="Recent landings" emptyMessage="Nothing has been landed through agentic mode yet." />
+    </>}
+  </section>;
 }

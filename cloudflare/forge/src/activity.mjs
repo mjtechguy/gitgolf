@@ -145,7 +145,7 @@ export async function activitySelection(event) {
   if (event.method !== 'POST') return;
   if (path === '/mcp') { try { return mcpActivity(new TextDecoder().decode(await bounded(event.clone().body, mcpBodyLimit))); } catch { return; } }
   if (git) return { name: git[1], topics: ['source', 'pulls', 'actions'] };
-  const source = path === '/native/source/commit' || path === '/native/source/branch';
+  const source = path === '/native/source/commit' || path === '/native/source/branch' || path === '/native/land';
   if (!/\/(?:CreateRepository|SetRepositoryStar|SetRepositoryCollaborator|RemoveRepositoryCollaborator|CreateRepositoryInvitation|RevokeRepositoryInvitation|RespondRepositoryInvitation|UpdateRepositorySettings|UpdateRepositoryTopics|SubmitDiscussionResourceOperation|CreateIssue|UpdateIssue|CreateIssueComment|CreatePullRequest|UpdatePullRequest|CreatePullRequestReview|SubmitPullReviewRequest|SubmitPullReviewLifecycle|SubmitPullReviewAuthoringOperation|SubmitStandardPullMerge|ReportCheck|(?:Save|Delete)RepositoryExecution(?:Value|Binding))$/.test(path) &&
       !source && !['/native/repository-visibility', '/native/repository-grant', '/native/repository-check', '/native/pr-evidence', '/native/pr-preview'].includes(path)) return;
   let body;

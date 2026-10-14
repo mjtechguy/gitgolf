@@ -10,7 +10,7 @@ import { mergeBlocker } from './pull-merge.mjs';
 import { comparison } from './repository-diff.mjs';
 import { changedPaths } from './tree-merge.mjs';
 import { inventory } from './collaboration.mjs';
-import { defaultAgenticSettings, evaluateLanding, globError, limits } from './land-policy.mjs';
+import { defaultAgenticSettings, evaluateLanding, globError, limits, onlyApprovalNeeded } from './land-policy.mjs';
 
 const refuse = message => { throw new Fault('failed_precondition', 412, message); };
 const forbidden = message => { throw new Fault('permission_denied', 403, message); };
@@ -22,10 +22,18 @@ export async function agenticSchema(db) {
   if (!migrated) { try { migrated = Boolean((await db.prepare('PRAGMA table_info(repository_agentic_settings)').all()).results.length); } catch { migrated = false; } }
   return migrated;
 }
+// Landing (land-queue.mjs, schema 42): POST /native/land and /native/land/read, policy landing and automatic reverts.
+export async function landingCapability(db) {
+  let ready = false;
+  try { ready = Boolean((await db.prepare('PRAGMA table_info(land_operations)').all()).results.length); } catch { ready = false; }
+  return { id: 'repository.agentic-landing', label: 'Agentic landing', state: ready ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED',
+    reason: ready ? 'Writers land pull requests the agentic mode policy allows (POST /native/land) onto the current base without a global lock; low-risk changes land on their own when the repository allows it, and a policy landing whose required checks fail on the base branch is reverted.'
+      : 'Apply the schema 42 migration to land pull requests through agentic mode.' };
+}
 export async function agenticCapability(db) {
   const ready = await agenticSchema(db);
   return { id: 'repository.agentic-mode', label: 'Agentic mode', state: ready ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED',
-    reason: ready ? 'Repository administrators can turn on agentic mode: low-risk and sensitive path patterns, required checks and whether low-risk changes may land without a person. Pull requests show what the landing policy would decide; landing itself is not automated yet.'
+    reason: ready ? 'Repository administrators can turn on agentic mode: low-risk and sensitive path patterns, required checks and whether low-risk changes may land without a person. Pull requests show what the landing policy would decide. At schema 42 writers can land a pull request the policy allows, low-risk changes can land on their own, and a policy landing whose required checks fail on the base branch is reverted.'
       : 'Apply the schema 41 migration to use agentic mode.' };
 }
 
@@ -50,6 +58,8 @@ function wire(stored, login) {
     landWithoutPerson: stored.land_without_person === 1, requiredChecks: parse(stored.required_checks, []), revertOnFailure: stored.revert_on_failure === 1,
     version: stored.version, updatedBy: login || '', updatedAt: stored.updated_at };
 }
+export async function agenticSettings(db, row) { return current(db, row); }
+export async function agenticFeature(db, env, row) { return featureState(db, env, row); }
 async function current(db, row) {
   const stored = await db.prepare('SELECT s.*,u.login FROM repository_agentic_settings s LEFT JOIN users u ON u.id=s.updated_by WHERE s.repository_id=?').bind(row.id).first();
   return wire(stored, stored?.login);
@@ -110,11 +120,20 @@ export async function currentReviews(db, row, d, headCommitId) {
 }
 
 async function evaluate(db, env, person, row, body, artifact, settings, feature) {
-  if (!Number.isSafeInteger(body.number) || body.number < 1) invalid('Choose a pull request by its number.');
+  const { d, ifMergeable, ...value } = await landingEvaluation(db, env, row, body.number, artifact, settings, feature);
+  // Whether this caller may land it now (land-queue.mjs decides again when asked): a writer, with the policy saying land, or saying only
+  // that a writer who is not the author must approve and the caller is not the author.
+  const result = value.evaluation;
+  return { ...value, canLand: value.enabled && ['write', 'admin'].includes(row.role) && (result.decision === 'land' || onlyApprovalNeeded(result) && d.author_id !== person.id) };
+}
+
+// The evaluation of one open pull request now, with its discussion row (d) for callers that act on it (land-queue.mjs).
+export async function landingEvaluation(db, env, row, number, artifact, settings, feature) {
+  if (!Number.isSafeInteger(number) || number < 1) invalid('Choose a pull request by its number.');
   await requireFeature(db, env, row, 'pull-requests');
   const d = await db.prepare(`SELECT d.*,p.id AS pull_id,p.base_branch,p.head_branch,p.draft,
     (SELECT 1 FROM pull_merge_operations m WHERE m.pull_request_id=p.id AND m.phase='SUCCEEDED') AS merged
-    FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE d.repository_id=? AND d.number=? AND d.kind='pull'`).bind(row.id, body.number).first();
+    FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE d.repository_id=? AND d.number=? AND d.kind='pull'`).bind(row.id, number).first();
   if (!d) deny();
   if (d.state !== 'OPEN' || d.merged) refuse('Only open pull requests are evaluated for landing.');
   const observed = await artifact(async repo => {
@@ -128,15 +147,17 @@ async function evaluate(db, env, person, row, body, artifact, settings, feature)
     // mergeBlocker plans the native merge (three-way for diverged branches) and names what would refuse it, with conflicting paths.
     const plan = await mergeBlocker(db, row, d, current, repo), blocker = plan.blocker, rule = await branchLockObservation(db, row, d.base_branch);
     const reason = blocker === 'pull_request_draft' ? '' : blocker || (rule.locked ? 'base_branch_locked' : '');
-    return { baseCommitId, headCommitId, mergeBase, paths, mergeable: { ok: !reason, reason, ...(plan.conflicts ? { conflicts: plan.conflicts.slice(0, 50) } : {}) } };
+    return { baseCommitId, headCommitId, mergeBase, paths, mergeable: { ok: !reason, reason, ...(plan.conflicts ? { conflicts: plan.conflicts.slice(0, 50), conflictCount: plan.conflictCount } : {}) } };
   });
   const [checks, reviews, origin] = await Promise.all([headChecks(db, row, observed.headCommitId), currentReviews(db, row, d, observed.headCommitId),
     db.prepare('SELECT kind FROM pull_request_origins WHERE pull_request_id=?').bind(d.pull_id).first()]);
   const kind = origin?.kind || 'person', enabled = settings.enabled && feature.allowed;
-  const evaluation = evaluateLanding({ settings: { ...settings, enabled }, changedPaths: observed.paths, authorKind: kind === 'person' ? 'person' : 'agent',
-    checks, reviews, draft: Boolean(d.draft), mergeable: observed.mergeable });
+  const inputs = { settings: { ...settings, enabled }, changedPaths: observed.paths, authorKind: kind === 'person' ? 'person' : 'agent', checks, reviews, draft: Boolean(d.draft) };
+  const evaluation = evaluateLanding({ ...inputs, mergeable: observed.mergeable });
   if (settings.enabled && !feature.allowed) evaluation.reasons.push(feature.reason);
-  return { repositoryId: String(row.id), number: d.number, pullRequestId: String(d.pull_id), baseCommitId: observed.baseCommitId, headCommitId: observed.headCommitId, mergeBaseCommitId: observed.mergeBase,
+  // For land-queue.mjs: what the policy would decide without the conflict, so a conflicting change it would land is recorded as needing a rebase.
+  const ifMergeable = observed.mergeable.reason === 'merge_conflict' ? evaluateLanding({ ...inputs, mergeable: { ok: true } }) : evaluation;
+  return { d, ifMergeable, repositoryId: String(row.id), number: d.number, pullRequestId: String(d.pull_id), baseCommitId: observed.baseCommitId, headCommitId: observed.headCommitId, mergeBaseCommitId: observed.mergeBase,
     enabled, origin: kind, evaluation, changedPathCount: observed.paths.length, checks: checks.map(({ name, kind: source, state }) => ({ name, kind: source, state })), mergeable: observed.mergeable, evaluatedAt: new Date().toISOString() };
 }
 

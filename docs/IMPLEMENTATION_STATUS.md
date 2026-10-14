@@ -1,5 +1,104 @@
 # Golf implementation status
 
+## 2026-10-14 — Landing without a global lock and automatic revert (agentic mode AM-4 items 4 and 5, schema 42)
+
+See `docs/AGENTIC_MODE.md` → Landing. This adds:
+- Migration `0042_land_operations.sql`, table `land_operations`. It has one row per
+  attempt to land a pull request:
+  - `trigger`: `person` or `policy` (actor 0);
+  - `state`: `QUEUED`, `LANDING`, `LANDED`, `NEEDS_REBASE`, `BLOCKED`, `FAILED` or
+    `REVERTED`;
+  - the head, base, landed and revert commits;
+  - `attempts` and a JSON `detail`;
+  - an optional per-account idempotency key.
+
+  At most one land per pull request is in flight. Capability
+  `repository.agentic-landing`.
+- `land-queue.mjs`. A land is the existing native merge (`standardPullMerge`, with
+  its journal, three-way plan, reservation and readback) onto the current base tip.
+  - `pull-merge.mjs` only gained an optional authority and commit identity for the
+    policy.
+  - `POST /native/land` is a transfer: lands of different pull requests overlap.
+  - A moved base or a busy repository is re-planned and retried up to 5 times, with
+    jittered backoff from 200 ms to 2 s.
+  - Overlapping paths end in `NEEDS_REBASE` with the paths. An agent-task pull
+    request gets a comment offering a follow-up task; Golf never starts one.
+  - A landed base push records a pipeline push intake.
+- `POST /native/land` (`land`: `headCommitId` or `expectedHeadCommitId`, `method`,
+  `idempotencyKey`) and `/native/land/read` (`list`, `get`), for browser sessions.
+  - A writer may land when the policy says `land`, or only asks for a qualifying
+    approval and the writer is not the author. Everything else is refused with the
+    policy's reasons.
+  - `evaluate` now also returns `canLand`.
+  - Audited as `agentic_mode.land`.
+- Landing without a person. A finished pipeline run (`PipelineRun` →
+  `afterPipelineRun`) and the maintenance `indexes` stage (`sweepLanding`, at most 20
+  evaluations) land pull requests whose evaluation is `land`.
+  - The commits are by `Golf (agentic mode) <agentic@golf.invalid>`.
+  - The accountable account is the administrator who saved the setting. The policy's
+    authority (grant, setting version, Land without a person) is rechecked with each
+    reservation.
+  - Audited as `agentic_mode.auto_land`.
+- Checks after landing. The required checks of the landed commit (the named ones, or
+  every pipeline for that commit) are evaluated when its runs finish and during
+  maintenance.
+  - A failure on a policy landing with Revert on failure on is reverted: an inverse
+    three-way merge onto the current tip, committed through `source-api.mjs`
+    `commitTree` (the branch fence, readback and pipeline intake).
+  - Then Golf comments on the pull request and opens "Automatic revert of #N: checks
+    failed", assigned to the requester.
+  - A revert conflict keeps the land `LANDED` with `detail.revertConflict` and opens
+    the issue instead.
+  - People's landings get a comment only.
+  - One verdict and one revert per land, by a conditional claim.
+  - Audited as `agentic_mode.revert`.
+- Web:
+  - the pull request **Landing** panel has **Land** (a TanStack Form confirmation with
+    merge or squash) and the latest land operation;
+  - **Settings → Agentic mode** has **Recent landings** in the shared DataTable (50
+    loaded, labeled).
+
+Verified locally:
+- `node --test cloudflare/forge/*.test.mjs`: 630 tests, 629 pass, 1 skipped. Before
+  this change: 621, 620, 1 skipped. `land-queue.test.mjs` adds 9 tests, over node:sqlite
+  and a real bare repository through `git receive-pack`. They cover:
+  - refusals, idempotent replay, reads and audit;
+  - two concurrent lands, the second retried onto the moved base;
+  - a base moving between read and merge (re-planned);
+  - a moved head;
+  - conflicts found by evaluation and during the merge, with the agent comment;
+  - policy gating (setting, feature policy, lost grant);
+  - a revert with the same tree as `git merge-tree` for `git revert -m 1`, run once;
+  - a revert conflict;
+  - a person's failed landing commented on;
+  - settling an interrupted land.
+- `land-runtime-check.mjs` passes on real workerd/D1 with `git receive-pack`:
+  - two concurrent lands, one retried onto the moved base, whose tree equals
+    `git merge-tree`;
+  - a policy land committed as Golf;
+  - an automatic revert after a failed push pipeline, whose tree equals a real
+    `git revert -m 1` in a clone. The issue is assigned and the revert runs once.
+- These pass with the schema 42 assertions: `merge-runtime-check`,
+  `source-api-runtime-check`, `environments-check`, `ai-runtime-check`,
+  `agent-hosts-runtime-check`, `search-runtime-check` and `ui-check` (after
+  `npm run build:native`).
+  - `runtime-check.mjs` fails to start, as on main: its explicit module list misses
+    `agent-hosts.mjs`.
+- `npx tsc --noEmit -p web` is clean.
+- Playwright `land.spec.ts` (5) and `agentic-mode.spec.ts` (6) pass. The
+  pull-request, merge-observation, native-merge and agent-host specs have no new
+  failures: 17 failed with this branch and 20 with main's web sources, and every
+  failure is also one on main.
+
+Not done:
+- No hosted evidence yet. The AM-4 exit criteria on the demo are open: ten concurrent
+  agent landings, a sensitive change waiting, a failing change reverted.
+- The policy always merges, never squashes. A `waiting_checks` pull request cannot be
+  queued by a person.
+- Merges still reserve the whole repository briefly, and conflicts are path-level.
+- Native Golf has no service account. Golf's comments and issues are recorded under
+  the administrator who saved the setting.
+
 ## 2026-10-14 — Agentic mode AM-0 to AM-3 measured and verified on the hosted demo
 
 `https://demo.gitgolf.mjtechguy.com`, measured with `scripts/agent_speed_bench.mjs` against eight repositories

@@ -117,6 +117,9 @@ const native = {
     before: async c => { const s = await one(c.db, 'SELECT * FROM repository_agentic_settings WHERE repository_id=?', c.repository.id); return s ? agenticSummary({ enabled: Boolean(s.enabled), landWithoutPerson: Boolean(s.land_without_person),
       revertOnFailure: Boolean(s.revert_on_failure), lowRiskPaths: JSON.parse(s.low_risk_paths), sensitivePaths: JSON.parse(s.sensitive_paths), requiredChecks: JSON.parse(s.required_checks) }) : null; },
     after: () => agenticSummary(body) },
+  // Landing a pull request (docs/AGENTIC_MODE.md). Lands and reverts by the policy itself are written by land-queue.mjs (actor 0).
+  land: body => body.action === 'land' && { action: 'agentic_mode.land', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => whole(body.number) && `#${whole(body.number)}`,
+    after: () => clean({ number: whole(body.number), method: clip(body.method, 10) || 'merge' }) },
   ai: body => body.action === 'create' && { action: 'ai.run_request', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => clip(body.kind, 40),
     after: () => clean({ kind: clip(body.kind, 40), number: whole(body.target?.number), tag: clip(body.target?.tagName, 100) }) },
   installation: body => ({ action: 'installation_policy.update', scope: 'installation', batch: true, subject: () => clip(body.key, 40) }),
@@ -370,6 +373,8 @@ const phrases = {
   'agent_task.create': ['assigned', 'assign', e => `${e.after?.kind === 'pull_request' ? 'pull request' : e.after?.kind === 'issue' ? 'issue' : ''} ${e.subject} to a coding agent${e.after?.tool ? ' (' + e.after.tool + ')' : ''}`.replace(/^ /, '')],
   'agent_task.cancel': ['cancelled', 'cancel', () => 'a coding agent task'],
   'agentic_mode.update': ['changed', 'change', e => `agentic mode${e.after?.enabled === true ? ' (on' + (e.after.landWithoutPerson ? ', landing low-risk changes without a person' : '') + ')' : e.after?.enabled === false ? ' (off)' : ''}`],
+  'agentic_mode.land': ['landed', 'land', e => named('pull request', e.subject)], 'agentic_mode.auto_land': ['landed', 'land', e => `pull request ${e.subject} without a person`],
+  'agentic_mode.revert': ['reverted', 'revert', e => `pull request ${e.subject} after its required checks failed`],
   'api_token.create': ['created', 'create', e => `${e.after?.permission ? e.after.permission + ' ' : ''}API token ${e.subject}`], 'api_token.revoke': ['revoked', 'revoke', e => named('API token', e.subject)],
   'api_token.use_denied': ['was refused with', 'use', e => `an API token (${e.after?.reason === 'branch' ? 'branch outside its pattern' : e.after?.reason === 'permission' ? 'read-only token' : 'repository outside its scope'})`],
   'environment.save': ['saved', 'save', e => named('environment', e.subject)], 'environment.save_value': ['saved', 'save', e => `${e.after?.kind || 'a value'} ${e.subject} of an environment`],

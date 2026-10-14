@@ -66,7 +66,7 @@ test('the setting leads with its current values and path rules; Edit opens the f
   await expect(current).toContainText('Land without a personOff');
   await expect(current).toContainText('Every pipeline that runs on the head commit');
   await expect(current).toContainText('Never: these are the defaults');
-  await expect(current).toContainText('does not land pull requests on its own yet');
+  await expect(current).toContainText('Golf lands nothing on its own while landing without a person is off.');
   const rules = page.getByRole('table', { name: 'Agentic mode path rules' });
   await expect(rules.getByRole('row').filter({ hasText: 'docs/**' })).toContainText('Low-risk');
   await expect(rules.getByRole('row').filter({ hasText: 'deploy/**' })).toContainText('Sensitive');

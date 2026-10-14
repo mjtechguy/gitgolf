@@ -29,7 +29,8 @@ import { mcpEndpoint, mcpClass, mcpBodyLimit } from './mcp.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { reserveRefWrite, finishRefWrite, sendRefUpdate, refWriteBlocker } from './ref-writes.mjs';
 import { sourceAPI, sourceCapability } from './source-api.mjs';
-import { agenticModeAPI, agenticCapability } from './agentic-mode.mjs';
+import { agenticModeAPI, agenticCapability, landingCapability } from './agentic-mode.mjs';
+import { landAPI } from './land-queue.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
@@ -97,6 +98,8 @@ export function admission(request) {
   const path = new URL(request.url).pathname, route = transferRoute.exec(path), source = sourceRoute.exec(path);
   if (route) return request.method === (route[1] === 'info/refs' ? 'GET' : 'POST') ? 'transfer' : 'exclusive';
   if (source) return request.method !== 'POST' ? 'exclusive' : ['files', 'tree'].includes(source[1]) ? 'read' : 'transfer';
+  // Landing (land-queue.mjs) is a transfer: different pull requests land side by side, ordered by the merge reservation in D1.
+  if (path === '/native/land') return request.method === 'POST' ? 'transfer' : 'exclusive';
   // MCP: admitMCP read the JSON-RPC body first; a read tool overlaps reads, anything else waits like any mutation.
   if (new URL(request.url).pathname === '/mcp') return mcpClasses.get(request) || 'exclusive';
   return concurrentRead(request) ? 'read' : 'exclusive';
@@ -115,7 +118,7 @@ export async function admitMCP(request) {
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
-  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/search/read', '/native/agentic-mode/read'].includes(new URL(request.url).pathname)) return true;
+  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/search/read', '/native/agentic-mode/read', '/native/land/read'].includes(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
   if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
   if (/^\/rpc\/golf\.v1\.(?:FeaturePolicyService\/GetFeaturePolicy|RepositoryFeatureService\/GetRepositoryFeatures)$/.test(new URL(request.url).pathname)) return true;
@@ -503,6 +506,13 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
       return reply(await agenticModeAPI(db, env, person, row, request, body, action => withArtifact(env, row, action)));
     }
+    if (url.pathname === '/native/land' || url.pathname === '/native/land/read') {
+      // Landing (docs/AGENTIC_MODE.md): land on the transfer route; list and get overlap as reads.
+      if (url.pathname.endsWith('/read') !== ['list', 'get'].includes(body.action)) invalid(url.pathname.endsWith('/read') ? 'This route only reads land operations.' : 'This route only lands pull requests.');
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
+      return reply(await landAPI(db, env, person, row, request, body, { artifact: action => withArtifact(env, row, action), withArtifact, providerFetch }));
+    }
     if (url.pathname === '/native/agent-tasks') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
@@ -656,6 +666,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       await sourceCapability(db),
       await apiTokenCapability(db),
       await agenticCapability(db),
+      await landingCapability(db),
       ...[
         ['settings.repository-teams', 'Repository team access', 'Team membership and inherited repository permissions are not implemented on Cloudflare native. Direct collaborators and invitations are available in Access.'],
         ['settings.repository-deploy-keys', 'SSH deploy keys', 'Cloudflare native serves Git over HTTPS. SSH transport and SSH deploy keys are not available.'],

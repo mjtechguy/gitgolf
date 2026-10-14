@@ -25,6 +25,7 @@ import { processPipelineIntake, sweepPipelines } from './actions-intake.mjs';
 import { reconcileAi, runAiWorkflow } from './ai-workflow.mjs';
 import { sweepAgentTasks } from './agent-hosts.mjs';
 import { settleRefWrites } from './ref-writes.mjs';
+import { afterPipelineRun, sweepLanding } from './land-queue.mjs';
 
 
 const heartbeat = 5 * 60_000;
@@ -201,8 +202,13 @@ export class PipelineRun extends DurableObject {
   }
   pipelineEnv() {
     const workspace = this.ctx.exports.Workspace, owner = workspace.get(workspace.idFromName(this.env.WORKSPACE_SLUG));
-    return { ...this.env, pipelineCoordinator: this.ctx.exports.PipelineRun, waitUntil: promise => this.ctx.waitUntil(promise),
-      notifyPipeline: id => this.ctx.waitUntil(owner.activityChanged(String(id), ['actions']).catch(() => {})) };
+    const env = { ...this.env, pipelineCoordinator: this.ctx.exports.PipelineRun, waitUntil: promise => this.ctx.waitUntil(promise),
+      notifyPipeline: id => this.ctx.waitUntil(owner.activityChanged(String(id), ['actions']).catch(() => {})),
+      notifyLanding: id => this.ctx.waitUntil(owner.activityChanged(String(id), ['source', 'pulls', 'issues']).catch(() => {})) };
+    // A finished run may land pull requests (agentic mode) or decide the checks of a landed change; after the run's own update.
+    env.pipelineFinished = run => this.ctx.waitUntil((async () => afterPipelineRun(env, run, (await import('./core.mjs')).withArtifact))()
+      .catch(error => console.log(JSON.stringify({ event: 'golf.land_after_run_failed', message: String(error?.message || error).slice(0, 160) }))));
+    return env;
   }
   advance(runId) {
     const next = this.chain.then(async () => {
@@ -302,11 +308,12 @@ async function maintain(env, exports, owner) {
           await exports.PRAgentTask.getByName(job.id).cancel();
         }
       }); if (env.EVIDENCE_ALLOW_AI === 'true') Object.assign(result, await reconcileAi(env.DB.withSession('first-primary'))); await owner.activityChanged(); return result; }],
-      // Semantic search, the Actions pipeline sweep, the agent task sweep and push settlement share the read-index stage: the maintenance journal only names the four original stages.
+      // Semantic search, the Actions pipeline sweep, the agent task sweep, push settlement and agentic landing share the read-index stage: the maintenance journal only names the four original stages.
       ['indexes', async () => { const pipelines = pipelinePolicy(env) ? { ...env, pipelineCoordinator: exports.PipelineRun } : null;
         const settled = await Promise.allSettled([reconcileIndexes(env), env.SEARCH_INDEX ? advanceSearch(env) : { processed: 0 },
           pipelines ? sweepPipelines(pipelines, (await import('./core.mjs')).withArtifact, id => advancePipelineRun(pipelines, id)).then(r => ({ processed: r.intakes + r.runs })) : { processed: 0 },
-          sweepAgentTasks(env.DB.withSession('first-primary')), settleRefWrites(pipelines || env, (await import('./core.mjs')).withArtifact)]);
+          sweepAgentTasks(env.DB.withSession('first-primary')), settleRefWrites(pipelines || env, (await import('./core.mjs')).withArtifact),
+          sweepLanding({ ...(pipelines || env), notifyLanding: id => owner.activityChanged(String(id), ['source', 'pulls', 'issues']).catch(() => {}) }, (await import('./core.mjs')).withArtifact)]);
         for (const result of settled) if (result.status === 'rejected') throw result.reason;
         return { ...settled[0].value, processed: settled.slice(1).reduce((sum, result) => sum + result.value.processed, 0) }; }],
 

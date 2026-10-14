@@ -1,11 +1,15 @@
 # Agentic mode
 
 Agentic mode is a per-repository setting on the Cloudflare-native runtime. It decides
-when a pull request may land without a person. It implements AM-4 items 2 and 3 of
-`docs/AGENTIC_MODE_PLAN.md`. Schema 41 adds it (migration `0041_agentic_mode.sql`).
+when a pull request may land without a person. It implements AM-4 items 2 to 5 of
+`docs/AGENTIC_MODE_PLAN.md`. Schema 41 adds the setting (migration
+`0041_agentic_mode.sql`); schema 42 adds landing (migration `0042_land_operations.sql`).
 
-Golf **evaluates** pull requests against the policy and shows the result. It does not
-land, queue or revert anything on its own yet. Those are AM-4 items 4 and 5.
+Golf **evaluates** pull requests against the policy and shows the result. Writers the
+policy allows can **land** a pull request. With **Land without a person** on, Golf lands
+low-risk changes on its own once their required checks pass. When the required checks
+of a change Golf landed then fail on the base branch, Golf **reverts** it. See
+[Landing](#landing-schema-42).
 
 ## The setting
 
@@ -19,7 +23,7 @@ current values first; **Edit agentic mode** opens the form.
 | `sensitivePaths` | `.github/**`, `.forgejo/**`, `.gitlab-ci.yml`, `deploy/**`, `**/CODEOWNERS` | Patterns for sensitive paths. These always need approval by a writer who is not the author and not an agent. |
 | `landWithoutPerson` | off | A change may land without a reviewer only if every changed path is low-risk and every required check passed. |
 | `requiredChecks` | `[]` | Names of checks that must pass. Empty means every pipeline that ran on the head commit. |
-| `revertOnFailure` | on | Stored for automatic reverts (AM-4 item 5). Golf does not revert anything yet. |
+| `revertOnFailure` | on | Revert a change Golf landed on its own when its required checks fail on the base branch. People's landings are only commented on. |
 
 Limits:
 - at most 50 patterns in each list, each up to 200 characters;
@@ -222,18 +226,249 @@ reads and evaluations are not recorded.
   cover that list.
   - **Edit agentic mode** opens a TanStack Form. The paths and checks are one per line.
   - Turning on **Land without a person** shows a warning about broad low-risk patterns.
-- **Pull request sidebar → Landing.** It is shown only while agentic mode is on for the
-  repository and the pull request is open. It is read-only and lists:
+  - **Recent landings** (schema 42): the 50 most recent land operations in the shared
+    DataTable (pull request, state, who landed it, outcome, time). The page says that
+    search and sorting cover only those 50.
+- **Pull request sidebar → Landing.** It is shown while agentic mode is on for the
+  repository. For an open pull request it lists:
   - the decision, the risk and the reasons;
   - the matched sensitive paths;
-  - the number of changed paths and how the pull request was opened.
+  - the number of changed paths and how the pull request was opened;
+  - whether low-risk changes land on their own.
 
-  It says that Golf does not land pull requests on its own yet.
+  When the caller may land it (`canLand` in the evaluation, capability
+  `repository.agentic-landing`), it shows **Land**. Land opens a TanStack Form
+  confirmation with **Merge** or **Squash**. Each confirmation sends its own
+  idempotency key. The panel also shows the latest land operation of the pull request,
+  also after it was merged.
+
+## Landing (schema 42)
+
+`land-queue.mjs`. Capability `repository.agentic-landing` is READY at schema ≥ 42.
+
+### What "land" does
+
+- Landing is the **native merge** (`pull-merge.mjs` `standardPullMerge`), onto the base
+  tip current at that moment. It uses the same journal (`pull_merge_operations`), merge
+  plan (three-way tree merge for diverged branches), reservation, branch rules and
+  readback as the Merge button. Golf has no second merge implementation.
+- There is **no global merge lock**. Every land is its own operation in
+  `land_operations`. `POST /native/land` is a transfer in the Workspace admission
+  queue, like a push: lands of different pull requests run side by side with pushes,
+  Source API commits and reads.
+- Only the base update is ordered. A merge still reserves the whole repository for its
+  few seconds (`repositories.write_pending`), as before.
+- **Retries.** A land re-reads the pull request on every attempt. It retries when:
+  - the base moved between its read and the merge (`pull_request_changed`);
+  - another write holds the repository (`write_unresolved`, or the fence).
+
+  It makes up to **5 attempts**. The waits between them are jittered: 200 ms first,
+  doubling up to 2 s, each between half and all of its cap.
+- **Other outcomes:**
+  - The head moved after the land was requested: `BLOCKED`. The new head needs a new
+    land.
+  - The merge would conflict (paths both sides changed differently): `NEEDS_REBASE`.
+    The conflicting paths (at most 50) and their count are in `detail`. For a pull
+    request opened from an agent task (`pull_request_origins.kind = 'agent-task'`),
+    Golf comments on the pull request. The comment names the paths and says a
+    follow-up agent task can resolve them. Golf never starts that task itself.
+  - Any other refusal of the merge path (a locked base branch, a draft, a branch that
+    no longer exists): `BLOCKED`, with the reason.
+  - After 5 attempts: `FAILED`.
+  - The merge was sent but not confirmed: the land stays `LANDING`. Maintenance
+    inspects the merge journal, which reads the branch back, and then records
+    `LANDED`, `FAILED` or `NEEDS_REBASE`.
+- **After landing,** the base push records a pipeline push intake once (key
+  `push:<git operation>`), so push pipelines run on the landed commit. These are the
+  checks after landing. A plain Merge button merge records none, as before.
+
+### `land_operations`
+
+| Column | Meaning |
+| --- | --- |
+| `id` | UUID |
+| `repository_id`, `pull_request_id`, `number` | The pull request |
+| `trigger` | `person` or `policy` |
+| `actor_id` | The person; `0` for the policy |
+| `state` | `QUEUED`, `LANDING`, `LANDED`, `NEEDS_REBASE`, `BLOCKED`, `FAILED` or `REVERTED` |
+| `method` | `merge` or `squash` (the policy always merges) |
+| `head_commit_id` | The head that was evaluated and landed |
+| `base_commit_id` | The base tip it landed on |
+| `landed_commit_id`, `revert_commit_id` | The merge commit and the revert commit |
+| `attempts` | Merge attempts made |
+| `detail` | JSON: `reasons`, `conflicts`, `conflictCount`, `merge` (the journal key), `postLand`, `revert`, `revertConflict`, `issue`, `commented` |
+| `idempotency_key` | A person's request key (UUID v4), unique per account |
+| `created_at`, `updated_at` | |
+
+At most one `QUEUED` or `LANDING` row exists per pull request (a unique partial index).
+
+### API
+
+Both routes need a signed-in browser session, as for `/native/agentic-mode`. A caller
+without access, or a public visitor, gets 404. Before schema 42 every action returns 412.
+
+`POST /native/land`, transfer admission:
+
+```text
+{ action: 'land', repository: { owner, name }, repositoryId, number, headCommitId, method?, idempotencyKey? }
+→ { operation: LandOperation, phase: 'LANDED' | 'LANDING' | 'LAND_REFUSED' }
+```
+
+- `headCommitId` is the head the caller reviewed. `expectedHeadCommitId` is accepted
+  with the same meaning. A head that moved is refused with 412.
+- `method` is `merge` (the default) or `squash`.
+- `idempotencyKey` is a UUID v4. A replay with the same key returns the original
+  operation and sends nothing. The same key with a different request gets 409.
+- The caller needs a write or admin grant (403 otherwise).
+- Agentic mode must be on and allowed by the feature policy (412 otherwise).
+- The policy is evaluated first, as `evaluate` does. A person may land when:
+  - the decision is `land`; or
+  - the decision is `needs_person` and every reason is a missing qualifying approval,
+    and the caller is not the pull request's author. The caller is then that approval.
+
+  Anything else is refused with 412 and the policy's reasons:
+  - `blocked` (a failed required check, a locked base);
+  - `waiting_checks`, or pending checks listed with `needs_person`;
+  - a draft;
+  - changes requested;
+  - the author landing their own change where approval is needed.
+
+  A pull request blocked only by a merge conflict, which the policy would otherwise
+  let land, is recorded as `NEEDS_REBASE` without a merge attempt.
+
+`POST /native/land/read`, a read that overlaps other requests:
+
+- `{ action: 'list', limit?, number? }` (`limit` 1 to 100, default 20) returns
+  `{ repositoryId, operations, limit }`, newest first.
+- `{ action: 'get', id }` returns `{ operation }`.
+
+`LandOperation` is:
+
+```text
+{ id, repositoryId, pullRequestId, number, trigger, actorId, actor, state, method, headCommitId, baseCommitId,
+  landedCommitId, revertCommitId, attempts, detail, createdAt, updatedAt }
+```
+
+`actor` is the login of the person; it is empty for the policy.
+
+The `evaluate` read also returns `canLand`: whether this caller may land the pull
+request now, by the rules above.
+
+### Landing without a person
+
+When agentic mode is on, **Land without a person** is on and the feature policy allows
+agentic mode, Golf lands open, non-draft pull requests whose evaluation is `land`. Two
+hooks evaluate them:
+- **A finished pipeline run** (`pipelines.mjs` `advanceRunNow` →
+  `env.pipelineFinished`, wired in the `PipelineRun` Durable Object). Golf evaluates
+  the open pull requests whose head is that run's commit. The same hook decides the
+  checks of landed changes at that commit (below).
+- **Maintenance** (the `indexes` stage, beside the agent task sweep and push
+  settlement). It evaluates at most 20 pull requests per sweep, across repositories,
+  in an order that rotates every 5 minutes. It also settles interrupted lands and
+  reverts, and checks recent landings.
+
+Other rules:
+- Each head is tried once. A head that ended `NEEDS_REBASE`, `BLOCKED` or `LANDED` waits
+  for a new push. A `FAILED` attempt is retried after 10 minutes.
+- **Accountable account.** Native Golf has no service account. The administrator who
+  last saved the agentic mode setting (`updated_by`) is the account that:
+  - the merge journal and the push journal name (`pull_merge_operations.actor_id`,
+    `git_operations.user_id`);
+  - authors Golf's comments and issues. Their text starts with "Golf agentic mode".
+
+  `land_operations.actor_id` is `0` and `detail.principal` names that administrator.
+- **The policy's authority** replaces the writer authority. It is checked in the same
+  statement as each reservation:
+  - that account still has an active write or admin grant;
+  - its identity version is unchanged;
+  - the setting is still on, at the version evaluated, with Land without a person on
+    (Revert on failure on, for reverts).
+
+  An administrator who loses write access, or any change to the setting, stops
+  landing until it is saved again.
+- **Commit identity.** Commits Golf writes on its own have author and committer
+  `Golf (agentic mode) <agentic@golf.invalid>`, never a person.
+- **Audit.** Each policy landing is recorded as `agentic_mode.auto_land` (actor 0,
+  via `agentic-mode`).
+
+### Checks after landing and automatic revert
+
+For a `LANDED` operation, Golf evaluates the required checks of the **landed commit**
+by the same rules as landing: the named `requiredChecks`, or every pipeline that ran
+on that commit. It does this when a pipeline run on that commit finishes, and during
+maintenance for 24 hours.
+
+- **All passed:** `detail.postLand = { verdict: 'passed' }`.
+- **No check reported after 6 hours:** `no_checks`.
+- **A required check failed:** the first caller claims `detail.postLand` with a
+  conditional update. So there is one verdict, and at most one revert, per land
+  operation.
+  - **Landed by a person,** or Revert on failure off: Golf only comments on the pull
+    request with the failed checks.
+  - **Landed by the policy,** with Revert on failure on: Golf reverts it.
+
+How the revert works:
+- It is a three-way merge onto the current base tip:
+  `mergeTrees(landedTree, currentTipTree, landedFirstParentTree)`. This gives the tree
+  that `git revert -m 1 <landed>` writes, also after later commits.
+- It is committed through the Source API internals (`source-api.mjs` `commitTree`):
+  - the same exact objects;
+  - the branch fence (`git_ref_writes`);
+  - the provider readback;
+  - the push pipeline intake.
+
+  The message is:
+
+  ```text
+  Revert "<title>" (#N)
+
+  Automatic revert: required checks failed after landing: <names>.
+
+  This reverts commit <landed>.
+  ```
+
+- A base that moves meanwhile is retried up to 3 times.
+- Branch rules apply: a locked base branch is not reverted.
+
+Then:
+- **Reverted:** the state becomes `REVERTED`, with `revert_commit_id`. Golf comments
+  on the pull request and opens an issue titled **"Automatic revert of #N: checks
+  failed"**.
+  - The issue mentions the original requester: the requester of the agent task that
+    opened the pull request, else its author.
+  - It is assigned to them when the accountable account is an administrator, as
+    assignment needs.
+  - The issue's number and assignee are kept in `detail.issue`.
+- **Conflicts:** later commits changed the same paths. The land stays `LANDED`, with
+  `detail.revertConflict` (the paths) and `detail.revert.state = 'conflict'`. Golf
+  comments and opens the same issue, which lists the paths, instead.
+- **Refused** (a locked branch, lost authority, a base that kept moving): the land stays
+  `LANDED` with the reason, and the comment and issue say so.
+- **Not confirmed:** `detail.revert.state = 'unknown'`. The branch fence is settled by
+  `settleRefWrites`, then maintenance reports the revert as applied or not.
+- **Audit:** each revert outcome is recorded as `agentic_mode.revert` (actor 0).
+  People's lands are recorded as `agentic_mode.land` (key: the idempotency key).
+
+### Limits and what is not done
+
+- The policy always lands with a merge commit.
+- A land of a pull request whose evaluation is `waiting_checks` is refused. A person
+  cannot queue it to land later; landing without a person does that for low-risk
+  changes.
+- Merges still reserve the whole repository briefly. Lands of different pull requests
+  overlap everywhere except that moment, and they retry it.
+- Text conflicts are path-level (AM-6 adds line-level merges). Two changes to
+  different lines of one file are a conflict.
+- Golf never starts the follow-up agent task for a conflict.
+- Comments and issues are recorded under the accountable administrator, because native
+  Golf has no service account.
+- No hosted evidence yet. The AM-4 exit criteria (ten concurrent agent landings, a
+  sensitive change waiting, a failing change reverted on the hosted demo) are still
+  open.
 
 ## Not yet implemented
 
-- The land queue: landing on decision `land` and compare-and-swap retries (AM-4 item 4).
-- Merging diverged branches (AM-4 item 1).
-- Reverting landed changes whose checks fail (AM-4 item 5, `revertOnFailure`).
 - The agentic inbox and batch approval (AM-5).
 - Organization-level agentic policies beyond on/off.
+- Line-level merges (AM-6).
