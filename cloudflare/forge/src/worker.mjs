@@ -17,10 +17,12 @@ import { nativeRunnerStop } from './native-runners.mjs';
 import { managedRegistry } from './managed-registry.mjs';
 
 
+const heartbeat = 5 * 60_000;
 export class Workspace extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.performance = new PerformanceHistory(ctx.storage.sql);
+    ctx.waitUntil(ctx.storage.getAlarm().then(at => at ?? ctx.storage.setAlarm(Date.now() + heartbeat)));
     const workflows = env.EvidenceWorkflow || ctx.exports.EvidenceWorkflow;
     this.activity = new RepositoryActivity(ctx.storage, (request, input) => this.authority({ activity: true, request, input }));
     const configured = this.configured = { ...env, previewChanged: id => this.activity.publish(String(id), ['actions', 'pulls']), performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask };
@@ -59,6 +61,13 @@ export class Workspace extends DurableObject {
     event => event?.activity || concurrentRead(event));
   }
   deliverWebhooks() { return drainWebhooks(this.configured); }
+  scheduleRan() { this.ctx.storage.kv.put('scheduled', Date.now()); }
+  // Cron Triggers are the schedule. The alarm repeats the same maintenance only while none has reported in for two periods.
+  async alarm() {
+    await this.ctx.storage.setAlarm(Date.now() + heartbeat);
+    if (Date.now() - (this.ctx.storage.kv.get('scheduled') || 0) < 2 * heartbeat) return;
+    try { await maintain(this.env, this.ctx.exports, this); } catch { /* Each stage's outcome is in the maintenance journal. */ }
+  }
   evidence(id, phase) { return this.dispatch({ id, phase }); }
   recordPerformance(sample) { this.performance.record(sample); }
   preview(input) { return this.dispatch({ preview: input }); }
@@ -198,10 +207,8 @@ export class EvidenceWorkflow extends WorkflowEntrypoint {
   }
 }
 
-export default {
-  async scheduled(event, env, ctx) {
-    const workspace = ctx.exports.Workspace;
-    const owner = workspace.get(workspace.idFromName(env.WORKSPACE_SLUG));
+// The same stages run from the Cron Trigger and, when that stops reporting in, from the workspace alarm.
+async function maintain(env, exports, owner) {
     try { await runMaintenance(env, [
       ['ci', () => owner.runCI()],
       ...(webhookPolicy(env) ? [['webhooks', () => owner.deliverWebhooks()]] : []),
@@ -210,18 +217,26 @@ export default {
         if (job.test_state === 'RUNNING') {
           if (JSON.parse(job.snapshot).execution?.runner) await nativeRunnerStop(env,job);
           else {
-            if (!ctx.exports.PRTestTask) throw Error('Test cleanup allocation is missing');
-            await ctx.exports.PRTestTask.getByName(job.id).cancel();
+            if (!exports.PRTestTask) throw Error('Test cleanup allocation is missing');
+            await exports.PRTestTask.getByName(job.id).cancel();
           }
         }
         if (['FORK_PENDING', 'RUNNING'].includes(job.agent_state)) {
-          if (!ctx.exports.PRAgentTask) throw Error('Agent cleanup allocation is missing');
-          await ctx.exports.PRAgentTask.getByName(job.id).cancel();
+          if (!exports.PRAgentTask) throw Error('Agent cleanup allocation is missing');
+          await exports.PRAgentTask.getByName(job.id).cancel();
         }
       }); await owner.activityChanged(); return result; }],
       ['indexes', () => reconcileIndexes(env)],
 
     ]); } finally { try { await collectWorkerMetrics(env); } finally { await collectServiceHealth(env); } }
+}
+
+export default {
+  async scheduled(event, env, ctx) {
+    const workspace = ctx.exports.Workspace;
+    const owner = workspace.get(workspace.idFromName(env.WORKSPACE_SLUG));
+    await owner.scheduleRan();
+    await maintain(env, ctx.exports, owner);
   },
   async queue(batch, env, ctx) {
     const workspace = ctx.exports.Workspace;
