@@ -1,6 +1,6 @@
 import { digest } from './common.mjs';
 import { featureOff } from './feature-policy.mjs';
-import { searchLimits as limits, searchConfiguration, searchUnallocated, searchFeature, embed, spend, SearchRefusal, sourceLines, chunkRanges, discussionText } from './search.mjs';
+import { searchLimits as limits, searchConfiguration, searchModel, searchUnallocated, searchFeature, embed, spend, SearchRefusal, sourceLines, chunkRanges, discussionText } from './search.mjs';
 
 // Background indexing from the maintenance schedule, outside the workspace write queue: at most 10 embedding calls of up to 32 chunks
 // per run (one run every few minutes), at most 1,000 calls a day. Vectorize receives ids, vectors and { repository, kind } only.
@@ -181,7 +181,7 @@ async function remove(db, env, id) {
 }
 
 async function advance(db, env, state, open, readTree, budget) {
-  const wanted = searchConfiguration(env), row = { id: state.repository_id, artifact_name: state.artifact_name, default_branch: state.default_branch };
+  const wanted = { model: await searchModel(db, env, state.repository_id), dimensions: searchConfiguration(env).dimensions }, row = { id: state.repository_id, artifact_name: state.artifact_name, default_branch: state.default_branch };
   return open(row, async (repo, _info, log) => {
     const head = log?.[0]?.hash || '';
     let current = state;

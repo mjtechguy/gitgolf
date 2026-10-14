@@ -115,6 +115,13 @@ const canonicalRepositoryWorkflowsRoute = createRoute({
   beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
   staticData: { golfLocation: (match) => { const { owner, name } = match.params; return { kind: 'repository-workflows', owner, name }; } },
 });
+// Semantic search: the repository key is nested so the page is not wrapped in the repository settings layout.
+const repositorySearchRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/$owner/$name/search',
+  beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
+  validateSearch: (search: Record<string, unknown>): { q?: string } => ({ q: typeof search.q === 'string' && search.q.trim() ? search.q.slice(0, 500) : undefined }),
+  staticData: { golfLocation: (match) => ({ kind: 'repository-search', repository: { owner: match.params.owner, name: match.params.name }, q: match.search.q }) },
+});
 // Old links normalize without probing repository data or changing page authority.
 const repositorySettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/repositories/$owner/$name/settings',
@@ -341,7 +348,7 @@ function OrganizationPage(match: LocationMatch): Location {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, publicProfileRoute, exploreRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOperationsRoute, instanceCapabilitiesRoute, instanceAuditRoute, instanceFeaturesRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountConnectionsRoute,accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, publicProfileRoute, exploreRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositorySearchRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOperationsRoute, instanceCapabilitiesRoute, instanceAuditRoute, instanceFeaturesRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountConnectionsRoute,accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => {

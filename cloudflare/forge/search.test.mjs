@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { digest, handle, advanceSearch, concurrentRead } from './src/core.mjs';
-import { chunkRanges, excerpt, sourceLines } from './src/search.mjs';
+import { chunkRanges, excerpt, sourceLines, searchModels } from './src/search.mjs';
 import { indexablePath } from './src/search-index.mjs';
 
 const tokens = { alice: 'golf_native_' + 'a'.repeat(43), bob: 'golf_native_' + 'b'.repeat(43), carol: 'golf_native_' + 'c'.repeat(43) };
@@ -299,4 +299,20 @@ test('each reader has a daily search allowance', async t => {
   f.sql.prepare('INSERT INTO search_usage VALUES(?,2,200)').run(new Date().toISOString().slice(0, 10));
   assert.equal((await f.search('cache')).status, 429);
   assert.equal((await f.search('cache', 'alice')).status, 200);
+});
+
+test('the per-repository model comes from model selection; a different stored model rebuilds, and no usable model fails the build', async t => {
+  const f = await fixture(t), original = searchModels.resolve;
+  t.after(() => { searchModels.resolve = original; });
+  f.git.commit(sources);
+  await f.call('/native/search', { action: 'index' }, 'alice'); await f.maintain();
+  assert.equal(f.state().model, '@cf/qwen/qwen3-embedding-0.6b');
+  searchModels.resolve = async (_db, _env, repositoryId) => { assert.equal(repositoryId, 1); return '@cf/baai/bge-m3'; };
+  await f.maintain();
+  assert.equal(f.state().model, '@cf/baai/bge-m3'); assert.equal(f.calls.at(-1).model, '@cf/baai/bge-m3');
+  searchModels.resolve = async () => { throw Error('Search embeddings: no allowed Workers AI model is available.'); };
+  assert.equal((await f.call('/native/search', { action: 'index' }, 'alice')).status, 412);
+  f.sql.exec("UPDATE search_state SET state='PENDING'");
+  await f.maintain();
+  assert.equal(f.state().state, 'FAILED'); assert.match(f.state().error, /no allowed Workers AI model/);
 });

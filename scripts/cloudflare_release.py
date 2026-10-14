@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32, 34) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32, 35) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -139,7 +139,7 @@ class Release:
             self.check_installation_schema()
         if self.manifest['schema'] >= 32:
             self.check_ai_schema()
-        if self.manifest['schema'] >= 34:
+        if self.manifest['schema'] >= 35:
             self.check_search_schema()
         deployments =self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
@@ -235,7 +235,7 @@ class Release:
             self.migrate_feature_policy_schema(applied)
         if self.manifest['schema'] >= 32:
             self.migrate_ai_schema(applied)
-        if self.manifest['schema'] >= 34:
+        if self.manifest['schema'] >= 35:
             self.migrate_search_schema(applied)
         return applied or 'already-applied'
 
@@ -251,15 +251,15 @@ class Release:
         for table, expected in self.SEARCH_COLUMNS.items():
             columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
             if {row['name'] for row in columns} != expected:
-                raise ValueError('Apply reviewed 0034 semantic search migration before releasing')
+                raise ValueError('Apply reviewed 0035 semantic search migration before releasing')
         triggers = self.command('d1', 'query', self.manifest['database'], '--sql', "SELECT name FROM sqlite_master WHERE type='trigger' AND name IN ('search_discussion_insert','search_discussion_update')")[0]['results']
         if {row['name'] for row in triggers} != {'search_discussion_insert', 'search_discussion_update'}:
-            raise ValueError('Apply reviewed 0034 semantic search migration before releasing')
+            raise ValueError('Apply reviewed 0035 semantic search migration before releasing')
 
     def migrate_search_schema(self, applied):
-        sql = (ROOT/'cloudflare/forge/migrations/0034_semantic_search.sql').read_text()
+        sql = (ROOT/'cloudflare/forge/migrations/0035_semantic_search.sql').read_text()
         digest = hashlib.sha256(sql.encode()).hexdigest()
-        if self.state.get('migration0034') not in (None, digest):
+        if self.state.get('migration0035') not in (None, digest):
             raise ValueError('Recorded semantic search migration differs from reviewed source')
         statements = [s.strip() for s in re.split(r';\s*(?=CREATE\b)', re.sub(r'--[^\n]*', '', sql)) if s.strip()]
         prefixes = ['CREATE TABLE IF NOT EXISTS search_state (', 'CREATE TABLE IF NOT EXISTS search_files (', 'CREATE TABLE IF NOT EXISTS search_chunks (',
@@ -273,10 +273,10 @@ class Release:
             self.check_search_schema(); ready = True
         except ValueError:
             pass
-        if self.state.get('migration0034') != digest or not ready:
+        if self.state.get('migration0035') != digest or not ready:
             self.command('d1', 'query', self.manifest['database'], '--sql', sql)
             self.check_search_schema()
-            self.state['migration0034'] = digest; self.save(); applied.append('0034')
+            self.state['migration0035'] = digest; self.save(); applied.append('0035')
 
     def check_ai_schema(self):
         columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info(ai_runs)')[0]['results']

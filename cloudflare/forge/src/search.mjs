@@ -28,6 +28,16 @@ export function searchUnallocated(env) {
   return '';
 }
 export const searchAllocation = env => !searchUnallocated(env);
+// The embedding model for one repository's index. Model selection (src/ai-models.mjs) plugs in here as
+// `resolve: async (db, env, repositoryId) => (await aiModel(db, env, 'search', repositoryId)).model`; until then the deploy's SEARCH_MODEL.
+// An index whose stored search_state.model differs from this is stale and is rebuilt; the old one serves until the new one completes.
+export const searchModels = { resolve: async (_db, env, _repositoryId) => searchConfiguration(env).model };
+export async function searchModel(db, env, repositoryId) {
+  let model;
+  try { model = await searchModels.resolve(db, env, repositoryId); } catch (error) { throw new SearchRefusal(error?.message || 'No embedding model is available for semantic search.'); }
+  if (typeof model !== 'string' || !/^@(?:cf|hf)\/[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,95}$/i.test(model)) throw new SearchRefusal('No embedding model is available for semantic search.');
+  return model;
+}
 
 // A reason that stops this index, as opposed to a transient failure that the next maintenance run retries.
 export class SearchRefusal extends Error {}
@@ -100,7 +110,7 @@ export async function searchCapability(db, env) {
   try {
     verified = await db.prepare('SELECT 1 AS ok FROM search_state WHERE verified_at IS NOT NULL LIMIT 1').first();
     failure = await db.prepare("SELECT error FROM search_state WHERE state='FAILED' AND error IS NOT NULL ORDER BY updated_at DESC LIMIT 1").first();
-  } catch { return { ...capability, state: 'CAPABILITY_STATE_DEGRADED', reason: 'Apply the schema 34 migration to keep search indexes. ' + capabilityReason }; }
+  } catch { return { ...capability, state: 'CAPABILITY_STATE_DEGRADED', reason: 'Apply the schema 35 migration to keep search indexes. ' + capabilityReason }; }
   if (verified) return { ...capability, state: 'CAPABILITY_STATE_READY', reason: capabilityReason };
   return { ...capability, state: 'CAPABILITY_STATE_DEGRADED', reason: capabilityReason + ' Degraded until a first index completes and its vectors read back from Vectorize.' + (failure ? ' Last failure: ' + failure.error : '') };
 }
@@ -195,7 +205,9 @@ export async function searchAPI(db, env, person, row, artifact, body, readTree) 
   if (body.action === 'index') {
     const unavailable = searchUnallocated(env);
     if (unavailable) throw new Fault('failed_precondition', 412, unavailable);
-    const { model, dimensions } = searchConfiguration(env), existing = await db.prepare('SELECT state FROM search_state WHERE repository_id=?').bind(row.id).first();
+    let model;
+    try { model = await searchModel(db, env, row.id); } catch (error) { throw new Fault('failed_precondition', 412, error.message); }
+    const { dimensions } = searchConfiguration(env), existing = await db.prepare('SELECT state FROM search_state WHERE repository_id=?').bind(row.id).first();
     if (existing?.state === 'REMOVING') throw new Fault('failed_precondition', 412, 'This index is still being removed. Build it again once removal completes.');
     // A first build, a retry after a failure or a full rebuild; a build already queued or running is left as it is.
     if (!existing || ['READY', 'FAILED'].includes(existing.state))
