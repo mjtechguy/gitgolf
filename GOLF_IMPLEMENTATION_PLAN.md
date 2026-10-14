@@ -1,5 +1,11 @@
 # Golf implementation plan
 
+Cloudflare-native roadmap (2026-10-14): the agreed plan for GitHub-style
+administration (installation → organization → repository feature policies,
+editable operator approvals with an audit log), the Workers AI feature set and
+the remaining native capability work is in
+[docs/NATIVE_ADMIN_AND_AI_ROADMAP.md](docs/NATIVE_ADMIN_AND_AI_ROADMAP.md).
+
 Native Environments (2026-10-14): initial slice implemented — one `preview`
 environment enforced on protected-preview publication and renewal. Remaining
 acceptance: hosted browser acceptance with real Access, and revocation of
