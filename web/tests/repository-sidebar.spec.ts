@@ -71,6 +71,17 @@ test('index progress refresh retains the displayed sidebar and clears it on deni
   await expect(sidebar(page)).toContainText('Details unavailable.');
 });
 
+test('a transient refresh failure keeps the shown details, says so, and recovers on its own', async ({ page }) => {
+  const state = await fixture(page); state.data.languagesState = State.INDEXING; state.data.languages = [];
+  await page.goto('/alex/sidebar'); await expect(sidebar(page)).toContainText('PRIVATE current description');
+  state.overviewError = 'unavailable';
+  await expect(sidebar(page)).toContainText('Showing the last details read', { timeout: 15000 });
+  await expect(sidebar(page)).toContainText('PRIVATE current description');
+  await expect(sidebar(page)).not.toContainText('Details unavailable.');
+  state.overviewError = '';
+  await expect(sidebar(page)).not.toContainText('Showing the last details read', { timeout: 15000 });
+  await expect(sidebar(page)).toContainText('PRIVATE current description');
+});
 test('root About contains bounded real topics, licenses, totals and explicitly indexed languages', async ({ page }) => {
   const state = await fixture(page); await page.goto('/alex/sidebar'); const rail = sidebar(page);
   await expect(rail.getByText('PRIVATE current description', { exact: true })).toBeVisible();
