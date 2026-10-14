@@ -3077,3 +3077,195 @@ test('public Git preserves v2 fetch negotiation and remaps ls-refs HEAD to the c
   assert.deepEqual(Buffer.from(await (await send(packets(['command=fetch\n']))).arrayBuffer()),fetchBytes);
   assert.equal(forwards,3);assert.equal(f.tokens.size,0);
 });
+
+async function environmentFixture(t) {
+  const f = await deliveryFixture(t);
+  Object.assign(f.env, { ACCESS_AUD: 'access-aud', EVIDENCE_DAILY_LIMIT: '40' });
+  const human = (method, body, email = 'alice@example.com', headers = {}) => f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/rpc/golf.v1.RepositoryEnvironmentService/' + method, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...(email ? { 'X-Golf-Native-Access-Email': email } : {}), ...headers }, body: JSON.stringify(body) }));
+  const target = async (token = ownerToken) => ({ repository: key, repositoryId: '1', ownerId: '1',
+    accessRevision: (await value(await f.call('', { repository: key }, token, '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess'))).access.revision });
+  const policy = (fields = {}) => ({ allowAllSources: true, preventSelfApproval: true, protectedPreviews: true, maxConcurrency: 2, previewTtlSeconds: 600, ...fields });
+  const intent = async (fields = {}, extra = {}) => ({ target: await target(), environmentId: nonce(), expectedVersion: '0', operationId: nonce(), name: 'preview', policy: policy(fields), ...extra });
+  const save = async (fields, extra) => value(await human('SaveRepositoryEnvironment', await intent(fields, extra)));
+  const edit = async (saved, fields) => save(fields, { environmentId: saved.environment.id, expectedVersion: saved.environment.version });
+  const rows = () => ['repository_environments', 'repository_environment_versions', 'repository_environment_operations'].map(table => f.sql.prepare(`SELECT count(*) AS n FROM ${table}`).get().n);
+  const branch = name => ({ kind: 'REPOSITORY_SOURCE_REF_KIND_BRANCH', name });
+  return { ...f, human, target, policy, intent, save, edit, rows, branch };
+}
+const environmentReady = 'One environment named preview governs protected pull-request previews: allowed head branches, preview lifetime within the operator limit and concurrent previews. Required reviewers, wait timers, environment secrets and production deployment are not available. Changes need a verified Access sign-in.';
+
+test('native environments are ready only with previews and Access; bearer, service-token and non-admin callers are denied', async t => {
+  const capability = async f => (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c => c.id === 'settings.repository-environments');
+  const bare = await capability(await fixture(t));
+  assert.equal(bare.length, 1); assert.equal(bare[0].state, 'CAPABILITY_STATE_DISABLED');
+  assert.equal(bare[0].reason, 'Repository environments need an operator-approved protected preview allocation and Cloudflare Access sign-in on this installation.');
+  const f = await environmentFixture(t); delete f.env.ACCESS_AUD;
+  const partial = await capability(f);
+  assert.equal(partial[0].state, 'CAPABILITY_STATE_DISABLED'); assert.equal(partial[0].reason, 'Repository environments need Cloudflare Access sign-in on this installation.');
+  const refused = await f.human('ListRepositoryEnvironments', { target: await f.target() }); assert.equal(refused.status, 412);
+  f.env.ACCESS_AUD = 'access-aud';
+  assert.deepEqual(await capability(f), [{ id: 'settings.repository-environments', label: 'Environments', state: 'CAPABILITY_STATE_READY', reason: environmentReady }]);
+  const listed = await value(await f.human('ListRepositoryEnvironments', { target: await f.target(), page: { page: 1, limit: 20 } }));
+  assert.deepEqual(listed, { target: await f.target(), environments: [], page: { nextPage: 0 }, totalCount: '0', capability: 'REPOSITORY_ENVIRONMENT_CAPABILITY_PREVIEW_POLICY', deploymentAvailable: false });
+  assert.equal((await f.human('ListRepositoryEnvironments', { target: await f.target(), page: { limit: 21 } })).status, 400);
+  assert.equal((await f.human('ListRepositoryEnvironments', { target: { ...await f.target(), accessRevision: '0'.repeat(64) } })).status, 412);
+  assert.equal((await f.human('PromoteRepositoryEnvironment', { target: await f.target() })).status, 501);
+  const body = await f.intent();
+  // API bearer tokens, Access service tokens and a missing Access identity never administer environments.
+  for (const method of ['ListRepositoryEnvironments', 'SaveRepositoryEnvironment', 'DeleteRepositoryEnvironment', 'GetRepositoryEnvironmentOperation'])
+    assert.equal((await f.call('', body, ownerToken, '/rpc/golf.v1.RepositoryEnvironmentService/' + method)).status, 404, method);
+  assert.equal((await f.human('SaveRepositoryEnvironment', body, 'alice@example.com', { 'CF-Access-Client-Id': 'service.access' })).status, 404);
+  assert.equal((await f.human('SaveRepositoryEnvironment', body, 'alice@example.com', { 'CF-Access-Client-Secret': 'secret' })).status, 404);
+  assert.equal((await f.human('SaveRepositoryEnvironment', body, '')).status, 401);
+  // Readers and writers are not administrators, even with a verified sign-in and their own current revision.
+  for (const role of ['read', 'write']) {
+    await value(await f.call('', { ...f.grant, role }, ownerToken, '/native/repository-grant'));
+    const own = { ...await f.intent(), target: await f.target(readerToken) };
+    assert.equal((await f.human('SaveRepositoryEnvironment', own, 'bob@example.com')).status, 404, role);
+    assert.equal((await f.human('ListRepositoryEnvironments', { target: own.target }, 'bob@example.com')).status, 404, role);
+  }
+  assert.deepEqual(f.rows(), [0, 0, 0]);
+});
+
+test('native environment saves are version-fenced and replay the original receipt without repeating the change', async t => {
+  const f = await environmentFixture(t), body = await f.intent({ allowAllSources: false, sources: [f.branch('release/next'), f.branch('feature')], maxConcurrency: 2, previewTtlSeconds: 300 });
+  const saved = await value(await f.human('SaveRepositoryEnvironment', body));
+  assert.deepEqual(saved.operation, { operationId: body.operationId, environmentId: body.environmentId, target: body.target, actorId: '1', action: 'REPOSITORY_ENVIRONMENT_ACTION_SAVE', expectedVersion: '0', version: '1', state: 'SUCCEEDED', createdAt: saved.environment.updatedAt });
+  assert.deepEqual(saved.environment, { id: body.environmentId, target: body.target, name: 'preview', version: '1', creatorId: '1', updaterId: '1', createdAt: saved.environment.updatedAt, updatedAt: saved.environment.updatedAt, deleted: false,
+    capability: 'REPOSITORY_ENVIRONMENT_CAPABILITY_PREVIEW_POLICY', deploymentAvailable: false,
+    policy: { allowAllSources: false, sources: [f.branch('release/next'), f.branch('feature')], reviewers: [], requiredApprovals: 0, preventSelfApproval: true, allowAdminBypass: false, waitSeconds: 0, maxConcurrency: 2, protectedPreviews: true, previewTtlSeconds: 300 } });
+  assert.match(saved.environment.updatedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+  assert.deepEqual((await value(await f.human('ListRepositoryEnvironments', { target: await f.target() }))).environments, [saved.environment]);
+  // Replay returns the stored receipt; the same key with another intent is refused; neither writes.
+  assert.deepEqual(await value(await f.human('SaveRepositoryEnvironment', body)), saved);
+  assert.equal((await f.human('SaveRepositoryEnvironment', { ...body, policy: f.policy({ maxConcurrency: 1 }) })).status, 412);
+  assert.deepEqual(await value(await f.human('GetRepositoryEnvironmentOperation', { target: await f.target(), operationId: body.operationId })), saved);
+  assert.equal((await f.human('GetRepositoryEnvironmentOperation', { target: await f.target(), operationId: nonce() })).status, 404);
+  assert.deepEqual(f.rows(), [1, 1, 1]);
+  // A stale version, a second live environment and a reused identity are refused before any write.
+  for (const stale of [{ environmentId: body.environmentId, expectedVersion: '2' }, { environmentId: body.environmentId, expectedVersion: '0' }, {}]) {
+    const response = await f.human('SaveRepositoryEnvironment', await f.intent({}, stale));
+    assert.equal(response.status, 409); assert.equal((await response.json()).code, 'aborted');
+  }
+  assert.equal((await f.human('SaveRepositoryEnvironment', await f.intent({}, { expectedVersion: '1' }))).status, 404);
+  assert.deepEqual(f.rows(), [1, 1, 1]);
+  const edited = await f.edit(saved, { maxConcurrency: 1 });
+  assert.equal(edited.environment.version, '2'); assert.equal(edited.environment.createdAt, saved.environment.createdAt); assert.equal(edited.environment.policy.allowAllSources, true);
+  assert.ok(edited.environment.updatedAt >= saved.environment.updatedAt);
+  // The first receipt stays the first accepted version, not the current configuration.
+  assert.deepEqual(await value(await f.human('SaveRepositoryEnvironment', body)), saved);
+  // A changed access revision refuses new changes, while the original operation remains inspectable under its original target.
+  const before = await f.intent({}, { environmentId: saved.environment.id, expectedVersion: '2' });
+  await value(await f.call('', { ...f.grant, role: 'write' }, ownerToken, '/native/repository-grant'));
+  assert.notEqual((await f.target()).accessRevision, before.target.accessRevision);
+  const refused = await f.human('SaveRepositoryEnvironment', before); assert.equal(refused.status, 409); assert.equal((await refused.json()).code, 'aborted');
+  assert.deepEqual(await value(await f.human('SaveRepositoryEnvironment', body)), saved);
+  assert.deepEqual(f.rows(), [1, 2, 2]);
+  // Another administrator cannot read this actor's receipt.
+  f.sql.exec("UPDATE grants SET role='admin' WHERE user_id=2");
+  assert.equal((await f.human('GetRepositoryEnvironmentOperation', { target: await f.target(readerToken), operationId: body.operationId }, 'bob@example.com')).status, 404);
+  assert.equal((await value(await f.human('ListRepositoryEnvironments', { target: await f.target(readerToken) }, 'bob@example.com'))).environments[0].version, '2');
+  // Authority lost between the checks and the D1 transaction commits nothing.
+  const racing = await f.intent({}, { environmentId: saved.environment.id, expectedVersion: '2' }), db = f.env.DB.withSession('first-primary');
+  f.env.DB.withSession = () => ({ ...db, batch: async statements => { f.sql.exec("UPDATE grants SET role='write' WHERE repository_id=1 AND user_id=1"); return db.batch(statements); } });
+  assert.equal((await f.human('SaveRepositoryEnvironment', racing)).status, 404);
+  f.env.DB.withSession = () => db; f.sql.exec("UPDATE grants SET role='admin' WHERE repository_id=1 AND user_id=1");
+  assert.deepEqual(f.rows(), [1, 2, 2]);
+  assert.equal((await f.human('GetRepositoryEnvironmentOperation', { target: await f.target(), operationId: racing.operationId })).status, 404);
+  // Deletion keeps history, frees the name and never revives the tombstone.
+  const removal = { target: await f.target(), environmentId: saved.environment.id, expectedVersion: '2', operationId: nonce() };
+  assert.equal((await f.human('DeleteRepositoryEnvironment', { ...removal, expectedVersion: '0' })).status, 400);
+  assert.equal((await f.human('DeleteRepositoryEnvironment', { ...removal, expectedVersion: '1' })).status, 409);
+  const removed = await value(await f.human('DeleteRepositoryEnvironment', removal));
+  assert.equal(removed.operation.action, 'REPOSITORY_ENVIRONMENT_ACTION_DELETE'); assert.equal(removed.environment.deleted, true); assert.equal(removed.environment.version, '3');
+  assert.deepEqual(removed.environment.policy, edited.environment.policy);
+  assert.deepEqual(await value(await f.human('DeleteRepositoryEnvironment', removal)), removed);
+  assert.deepEqual((await value(await f.human('ListRepositoryEnvironments', { target: await f.target() }))).environments, []);
+  assert.equal((await f.human('SaveRepositoryEnvironment', await f.intent({}, { environmentId: saved.environment.id, expectedVersion: '3' }))).status, 409);
+  assert.equal((await f.human('SaveRepositoryEnvironment', await f.intent({}, { environmentId: saved.environment.id }))).status, 409);
+  assert.equal((await f.save()).environment.version, '1');
+  assert.deepEqual(f.rows(), [2, 4, 4]);
+});
+
+test('native environments refuse every setting without a consumer', async t => {
+  const f = await environmentFixture(t);
+  const refusals = [
+    [{}, { name: 'production' }, /one environment named preview/], [{}, { name: 'Preview' }, /one environment named preview/],
+    [{ reviewers: [{ id: '2', login: 'bob' }], requiredApprovals: 1 }, {}, /reviewers/], [{ requiredApprovals: 1 }, {}, /reviewers/], [{ waitSeconds: 60 }, {}, /wait timers/], [{ allowAdminBypass: true }, {}, /administrator bypass/],
+    [{ allowAllSources: false, sources: [{ kind: 'REPOSITORY_SOURCE_REF_KIND_TAG', name: 'v1' }] }, {}, /tag, commit/], [{ allowAllSources: false, sources: [{ kind: 3, name: 'v1' }] }, {}, /tag, commit/],
+    [{ allowAllSources: false, sources: [{ kind: 'REPOSITORY_SOURCE_REF_KIND_COMMIT', name: commit }] }, {}, /tag, commit/], [{ allowAllSources: false, sources: [{ kind: 'REPOSITORY_SOURCE_REF_KIND_DEFAULT_BRANCH', name: '' }] }, {}, /tag, commit/],
+    [{ allowAllSources: false, sources: [f.branch('release/*')] }, {}, /without wildcards/], [{ allowAllSources: false, sources: [f.branch('main'), f.branch('main')] }, {}, /unique/],
+    [{ allowAllSources: false }, {}, /exact branch names/], [{ sources: [f.branch('main')] }, {}, /exact branch names/],
+    [{ protectedPreviews: false }, {}, /protected previews only/], [{ preventSelfApproval: false }, {}, /protected previews only/],
+    [{ maxConcurrency: 5 }, {}, /between 1 and 4/], [{ maxConcurrency: 0 }, {}, /between 1 and 4/],
+    [{ previewTtlSeconds: 901 }, {}, /between 60 and 900 seconds on this installation/], [{ previewTtlSeconds: 59 }, {}, /between 60 and 14400/], [{ previewTtlSeconds: 14401 }, {}, /between 60 and 14400/],
+    [{ environmentSecrets: true }, {}, /Provide the preview environment policy/], [{}, { currentPassword: 'not checked here' }, /no account passwords/], [{}, { deploymentAvailable: true }, /canonical/],
+    [{}, { environmentId: 'not-a-uuid' }, /canonical/], [{}, { expectedVersion: '01' }, /canonical/],
+  ];
+  for (const [fields, extra, message] of refusals) {
+    const response = await f.human('SaveRepositoryEnvironment', await f.intent(fields, extra)), body = await response.json();
+    assert.equal(response.status, 400, JSON.stringify([fields, extra])); assert.equal(body.code, 'invalid_argument'); assert.match(body.message, message);
+  }
+  assert.deepEqual(f.rows(), [0, 0, 0]);
+  // The ceiling is the operator's current value: the same lifetime is accepted at the limit.
+  assert.equal((await f.save({ previewTtlSeconds: 900 })).environment.policy.previewTtlSeconds, 900);
+});
+
+test('the stored preview environment governs publication: head branch, lifetime under the operator ceiling and concurrent previews', async t => {
+  const f = await environmentFixture(t), previews = () => f.sql.prepare('SELECT count(*) AS n FROM previews').get().n;
+  const publish = () => f.preview({ ...f.publication, idempotencyKey: nonce() });
+  const remaining = preview => (Date.parse(preview.expiresAt) - Date.now()) / 1000;
+  const latest = async () => ({ environment: (await value(await f.human('ListRepositoryEnvironments', { target: await f.target() }))).environments[0] });
+  // The proposal's head branch is feature; an environment limited to other branches refuses it before any allocation.
+  let saved = await f.save({ allowAllSources: false, sources: [f.branch('main'), f.branch('release/next')] });
+  let response = await f.preview(f.publication), body = await response.json();
+  assert.equal(response.status, 412); assert.match(body.message, /does not allow this pull request head branch/); assert.equal(previews(), 0);
+  assert.equal([...f.objects.keys()].filter(k => k.startsWith('native-previews/')).length, 0);
+  // Allowing the branch applies the stored 120 second lifetime instead of the operator's 900 second ceiling.
+  saved = await f.edit(saved, { allowAllSources: false, sources: [f.branch('feature')], maxConcurrency: 1, previewTtlSeconds: 120 });
+  const first = (await value(await f.preview(f.publication))).preview;
+  assert.equal(first.state, 'READY'); assert.ok(remaining(first) <= 120 && remaining(first) > 110, String(remaining(first)));
+  // One slot: another publication is refused, while the original key still returns the original preview.
+  response = await publish(); body = await response.json();
+  assert.equal(response.status, 429); assert.match(body.message, /allows 1 concurrent preview for this repository/); assert.equal(previews(), 1);
+  assert.equal((await value(await f.preview(f.publication))).preview.id, first.id);
+  // The insert itself is fenced: a preview that takes the last slot after the first check leaves nothing behind.
+  saved = await f.edit(saved, { maxConcurrency: 2, previewTtlSeconds: 120 });
+  const get = f.env.EVIDENCE_BUCKET.get; let raced = false;
+  const during = effect => { f.env.EVIDENCE_BUCKET.get = async key => { if (!raced) { raced = true; effect(); } return get(key); }; };
+  during(() => f.sql.exec(`INSERT INTO previews(id,repository_id,user_id,job_id,operation_key,input_hash,selection,pr_revision,commit_id,tree_id,source_path,bundle_key,bundle_hash,bundle_bytes,state,created_at,expires_at)
+    SELECT '${nonce()}',repository_id,user_id,job_id,'${nonce()}',input_hash,selection,pr_revision,commit_id,tree_id,source_path,bundle_key,bundle_hash,bundle_bytes,'PUBLISHING',created_at,expires_at FROM previews`));
+  response = await publish(); body = await response.json();
+  assert.equal(raced, true); assert.equal(response.status, 412); assert.match(body.message, /environment changed or its concurrent preview limit was reached/); assert.equal(previews(), 2);
+  // So is the policy revision: an edit that lands during publication refuses the publication it was not checked against.
+  f.sql.exec("DELETE FROM previews WHERE state='PUBLISHING'"); raced = false;
+  during(() => f.sql.exec(`INSERT INTO repository_environment_versions SELECT environment_id,version+1,repository_id,name,deleted,policy,target,creator_id,actor_id,environment_created_at,created_at FROM repository_environment_versions WHERE version=${saved.environment.version};
+    UPDATE repository_environments SET version=version+1`));
+  response = await publish(); assert.equal(raced, true); assert.equal(response.status, 412); assert.equal(previews(), 1);
+  f.env.EVIDENCE_BUCKET.get = get;
+  const second = (await value(await publish())).preview; assert.equal(second.state, 'READY'); assert.equal(previews(), 2);
+  assert.equal((await publish()).status, 429);
+  // Revoking releases a slot.
+  await value(await f.preview({ action: 'revoke', previewId: second.id }));
+  assert.equal((await value(await publish())).preview.state, 'READY');
+  // Renewal follows the current environment as well: a branch no longer allowed is not extended.
+  await f.edit(await latest(), { allowAllSources: false, sources: [f.branch('main')] });
+  response = await f.preview({ action: 'renew', previewId: first.id, expectedExpiresAt: first.expiresAt }); body = await response.json();
+  assert.equal(response.status, 412); assert.match(body.message, /does not allow this pull request head branch/);
+  assert.equal(f.sql.prepare('SELECT expires_at FROM previews WHERE id=?').get(first.id).expires_at, first.expiresAt);
+  // More live previews than a lowered limit are not extended either.
+  await f.edit(await latest(), { maxConcurrency: 1 });
+  response = await f.preview({ action: 'renew', previewId: first.id, expectedExpiresAt: first.expiresAt }); assert.equal(response.status, 429);
+  const relaxed = await f.edit(await latest(), { previewTtlSeconds: 300 });
+  const renewed = (await value(await f.preview({ action: 'renew', previewId: first.id, expectedExpiresAt: first.expiresAt }))).preview;
+  assert.ok(remaining(renewed) <= 300 && remaining(renewed) > 290, String(remaining(renewed)));
+  // An operator ceiling lowered below a stored lifetime still wins.
+  f.env.PREVIEW_TTL = '60';
+  const capped = (await value(await f.preview({ action: 'renew', previewId: first.id, expectedExpiresAt: renewed.expiresAt }))).preview;
+  assert.ok(remaining(capped) <= 60 && remaining(capped) > 50, String(remaining(capped)));
+  f.env.PREVIEW_TTL = '900';
+  // Without an environment only the operator allocation applies.
+  await value(await f.human('DeleteRepositoryEnvironment', { target: await f.target(), environmentId: relaxed.environment.id, expectedVersion: relaxed.environment.version, operationId: nonce() }));
+  const ungoverned = (await value(await publish())).preview; assert.ok(remaining(ungoverned) <= 900 && remaining(ungoverned) > 890, String(remaining(ungoverned)));
+});
