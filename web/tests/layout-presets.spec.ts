@@ -349,3 +349,30 @@ test('shortcuts stay off outside the Fewer strokes layout', async ({ page }) => 
   await expect(page).toHaveURL(/\/alex\/demo$/);
   await expect(page.getByRole('contentinfo', { name: 'Keyboard shortcuts' })).toHaveCount(0);
 });
+
+test('icon-only rail items name themselves on hover and keyboard focus, and labelled rails show no extra tooltip', async ({ page }) => {
+  await fixture(page); await choose(page, 'flare', 'console');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const tip = page.locator('.rail-tooltip');
+  const organizations = page.locator('.appearance-sidebar nav[aria-label="Workspace"]').getByRole('link', { name: 'Organizations' });
+  await expect(organizations).toBeVisible();
+  await expect(tip).toBeHidden();
+  await organizations.hover();
+  await expect(tip).toBeVisible(); await expect(tip).toHaveText('Organizations');
+  const link = await organizations.boundingBox(), shown = await tip.boundingBox();
+  expect(shown!.x).toBeGreaterThan(link!.x + link!.width);
+  await page.locator('.appearance-sidebar nav[aria-label="Workspace"]').getByRole('link', { name: 'Notifications' }).focus();
+  await expect(tip).toHaveText('Notifications');
+  await page.locator('main').hover();
+  await expect(tip).toBeHidden();
+  expect(await tip.getAttribute('aria-hidden')).toBe('true');
+});
+
+test('the golf tiles rail keeps its visible labels without a tooltip', async ({ page }) => {
+  await fixture(page); await choose(page, 'golf', 'tiles');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.locator('.appearance-sidebar nav[aria-label="Workspace"]').getByRole('link', { name: 'Organizations' }).hover();
+  await expect(page.locator('.rail-tooltip')).toBeHidden();
+});
