@@ -961,7 +961,7 @@ CREATE TABLE IF NOT EXISTS ai_runs (
 );
 CREATE INDEX IF NOT EXISTS ai_runs_created ON ai_runs(created_at);
 
--- Model selection per AI use case (schema 35). Installation choices live in installation_settings under ai.model.<use>;
+-- Model selection per AI use case (schema 33). Installation choices live in installation_settings under ai.model.<use>;
 -- with no rows the deploy list (AI_MODELS) applies, so this migration changes nothing.
 -- The account's Workers AI catalog, cached for six hours. A model that disappears or passes its deprecation date is marked retired.
 CREATE TABLE IF NOT EXISTS ai_model_catalog (

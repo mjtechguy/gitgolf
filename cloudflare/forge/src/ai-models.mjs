@@ -198,7 +198,7 @@ async function reindex(db, model) {
 }
 
 const human = request => !request.headers.has('Authorization') && !request.headers.has('CF-Access-Client-Id') && !request.headers.has('CF-Access-Client-Secret') && Boolean(request.headers.get('X-Golf-Native-Access-Email'));
-const editing = (env, schema) => !schema ? { enabled: false, reason: 'Apply the schema 35 migration to choose models. Deploy defaults apply.' }
+const editing = (env, schema) => !schema ? { enabled: false, reason: 'Apply the schema 33 migration to choose models. Deploy defaults apply.' }
   : locked(env) ? { enabled: false, reason: 'Installation policy is locked at deploy (policy_editing: false). Deploy defaults apply and every change needs a deploy.' }
   : { enabled: true, reason: 'Operations administrators signed in through Access choose within the deploy list. Allowing another model or letting repositories choose needs typed confirmation and an Access sign-in from the last 10 minutes.' };
 const stale = () => { throw new Fault('failed_precondition', 412, 'This model setting changed since you read it. Refresh before editing.'); };
@@ -266,7 +266,7 @@ export async function aiModelsAPI(db, env, person, request, body, read, reposito
   if (read || !['refresh-catalog', 'update', 'repository-update'].includes(body.action)) invalid('Use installation or repository on the read route, and refresh-catalog, update or repository-update on the write route.');
   if (body.action === 'refresh-catalog') {
     await requireAdmin();
-    try { await refreshCatalog(db, env, body.force === true); } catch { throw new Fault('failed_precondition', 412, 'Apply the schema 35 migration to keep a model catalog.'); }
+    try { await refreshCatalog(db, env, body.force === true); } catch { throw new Fault('failed_precondition', 412, 'Apply the schema 33 migration to keep a model catalog.'); }
     return reply(await installationView(db, env));
   }
   if (body.action === 'repository-update') return reply(await repositoryUpdate(db, env, person, request, body, await repository()));
@@ -277,7 +277,7 @@ export async function aiModelsAPI(db, env, person, request, body, read, reposito
   if (def.fixed) throw new Fault('failed_precondition', 412, `${def.label} always uses Clef; it cannot be changed.`);
   if (!uuidOK(body.operationId) || typeof body.expectedVersion !== 'string' || !/^(0|[1-9][0-9]{0,14})$/.test(body.expectedVersion)) invalid('Provide an operation ID and the version you read.');
   const rows = await settingRows(db), list = await catalog(db);
-  if (!rows || !list.schema) throw new Fault('failed_precondition', 412, 'Apply the schema 35 migration to choose models.');
+  if (!rows || !list.schema) throw new Fault('failed_precondition', 412, 'Apply the schema 33 migration to choose models.');
   const key = settingKey(use), row = rows.get(key), setting = settingValue(env, use, row);
   if (!setting) throw new Fault('failed_precondition', 412, `${def.label}: this deploy lists no model; allowing one needs a deploy.`);
   const value = body.value;
@@ -338,7 +338,7 @@ async function repositoryUpdate(db, env, person, request, body, row) {
   if (body.model && (!setting.value.allowed.includes(body.model) || (await retiredModels(db)).has(body.model))) throw new Fault('failed_precondition', 412, `${body.model} is not allowed for ${def.label.toLowerCase()} on this installation.`);
   let current;
   try { current = await db.prepare('SELECT model,version FROM repository_ai_models WHERE repository_id=? AND use=?').bind(row.id, use).first(); }
-  catch { throw new Fault('failed_precondition', 412, 'Apply the schema 35 migration to choose repository models.'); }
+  catch { throw new Fault('failed_precondition', 412, 'Apply the schema 33 migration to choose repository models.'); }
   const version = Number(body.expectedVersion);
   if ((current?.version || 0) !== version) throw new Fault('failed_precondition', 412, 'This repository’s model choice changed since you read it. Refresh before editing.');
   if ((current?.model || '') === body.model) invalid('Choose a different model before saving.');
