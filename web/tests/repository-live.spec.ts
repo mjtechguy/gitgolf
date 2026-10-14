@@ -107,7 +107,8 @@ test('returning to a PR check tab resumes authorized live updates without moving
  await expect(page.getByRole('cell',{name:'Pending',exact:true})).toBeVisible();
  await expect(page.getByText('Live',{exact:true})).toBeVisible();
  await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});document.dispatchEvent(new Event('visibilitychange'));});
- await expect(page.getByText('Reconnecting…',{exact:true})).toBeVisible();
+ // A short hidden period keeps the Live label; the stream itself stops at once.
+ await expect(page.getByText('Live',{exact:true})).toBeVisible();await page.waitForTimeout(300);
  const reads=state.pullReads,cursors=state.cursors.length;
  state.pullHead='c'.repeat(40);
  await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'));});
@@ -204,14 +205,15 @@ test('live cursor cannot regress a positive observation to zero',async({page})=>
  const state=await fixture(page);await page.goto('/alex/demo');
  await expect(page.getByText('Live',{exact:true})).toBeVisible();
  await expect.poll(()=>state.cursors).toContain('1');state.eventCursor='0';
- await expect(page.getByRole('button',{name:'Reconnect live updates',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Reconnect live updates',exact:true})).toBeVisible({timeout:10000});
  expect(state.cursors.slice(1).every(value=>value==='1')).toBe(true);
 });
 
 test('hidden tabs stop live requests and resume their last authorized cursor without moving source',async({page})=>{
  const state=await fixture(page);await page.goto('/alex/demo');await expect(page.getByText('Live',{exact:true})).toBeVisible();await expect(page.locator('.source-tree')).toBeVisible();
  await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});document.dispatchEvent(new Event('visibilitychange'));});
- await expect(page.getByText('Reconnecting…',{exact:true})).toBeVisible();
+ // A short hidden period keeps the Live label; the stream itself stops at once.
+ await expect(page.getByText('Live',{exact:true})).toBeVisible();await page.waitForTimeout(300);
  const paused=state.cursors.length;await page.waitForTimeout(500);expect(state.cursors).toHaveLength(paused);
  state.cursor=2;state.topics=['source'];
  await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'));});

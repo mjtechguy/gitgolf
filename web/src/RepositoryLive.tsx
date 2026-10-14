@@ -13,7 +13,15 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
  const visible=usePageVisible();
  const observation=useRef({identity:'',cursor:''});
  const pin=useRef(pinComparison);pin.current=pinComparison;
- const client=useQueryClient();const [status,setStatus]=useState<'connecting'|'live'|'offline'|'unavailable'>('connecting');const [newSource,setNewSource]=useState(false);const [attempt,setAttempt]=useState(0);
+ const client=useQueryClient();const [status,setShown]=useState<'connecting'|'live'|'offline'|'unavailable'>('connecting');
+ // A rotation, a short hidden period or one failed attempt is not news: Live is only replaced after the connection stays down for 4 s.
+ const shown=useRef(status),demote=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+ const setStatus=useRef((next:'connecting'|'live'|'offline'|'unavailable')=>{
+  clearTimeout(demote.current);
+  if(shown.current==='live'&&(next==='connecting'||next==='offline')){demote.current=setTimeout(()=>{shown.current=next;setShown(next);},4000);return;}
+  shown.current=next;setShown(next);
+ }).current;
+ useEffect(()=>()=>clearTimeout(demote.current),[]);const [newSource,setNewSource]=useState(false);const [attempt,setAttempt]=useState(0);
  useEffect(()=>setNewSource(false),[owner,name,ref]);
  useEffect(()=>{
   if(!available){setStatus('unavailable');return;}
