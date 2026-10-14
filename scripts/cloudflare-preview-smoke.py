@@ -10,7 +10,7 @@ ROOT=Path(__file__).resolve().parent.parent
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--account-id',required=True);parser.add_argument('--zone-id',required=True);parser.add_argument('--base-hostname',required=True);parser.add_argument('--profile',default='golf');parser.add_argument('--reviewer-email',help='Use an existing Google Access seat, explicitly bound to the fixture native reader');parser.add_argument('--reviewer-login',choices=['google','onetimepin'],default='google',help='Existing Google provider or a temporary owned email-code provider; email sending requires explicit authorization');args=parser.parse_args()
     if args.reviewer_login=='onetimepin' and not args.reviewer_email:parser.error('Email-code login requires the selected existing reviewer email')
-    if not re.fullmatch('[a-f0-9]{32}',args.account_id) or not re.fullmatch('[a-f0-9]{32}',args.zone_id) or args.base_hostname!='previews.mjtechguy.com':raise SystemExit('Use the explicitly approved account/zone/preview hostname')
+    if not re.fullmatch('[a-f0-9]{32}',args.account_id) or not re.fullmatch('[a-f0-9]{32}',args.zone_id) or not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)+',args.base_hostname):raise SystemExit('Use the explicitly approved account/zone/preview hostname')
     if any(os.environ.get(k) for k in ('CLOUDFLARE_API_TOKEN','CLOUDFLARE_API_KEY','CF_API_TOKEN')):raise SystemExit('Use native selected-profile OAuth')
     name='golf-cf-preview-'+dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d')+'-'+uuid.uuid4().hex[:8];deployment=str(uuid.uuid4());hostname=deployment+'.'+args.base_hostname
     root=ROOT/'.tmp/cloudflare-previews'/name;root.mkdir(parents=True,mode=0o700)
@@ -63,7 +63,7 @@ def main():
         who=cf('selected native OAuth account','auth','whoami')
         if not who.get('authenticated') or not who.get('tokenValid') or not who.get('authSource','').endswith('/'+args.profile+'.json') or args.account_id not in [a['id'] for a in who.get('accounts',[])]:raise RuntimeError('selected account unavailable')
         zone=cf('approved zone','zones','get','--zone',args.zone_id)
-        if zone.get('account',{}).get('id')!=args.account_id or zone.get('name')!='mjtechguy.com' or zone.get('status')!='active':raise RuntimeError('approved zone mismatch')
+        if zone.get('account',{}).get('id')!=args.account_id or not args.base_hostname.endswith('.'+zone.get('name','')) or zone.get('status')!='active':raise RuntimeError('approved zone mismatch')
         if cf('destination collision check','dns','records','list','--zone',args.zone_id,'--name',hostname):raise RuntimeError('preview hostname already exists')
         organization=cf('existing Access organization','zero-trust','organization','get');team=organization['auth_domain']
         external_provider=None

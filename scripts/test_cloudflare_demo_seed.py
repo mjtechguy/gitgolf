@@ -12,7 +12,7 @@ spec.loader.exec_module(seed)
 
 class DemoSeedTests(unittest.TestCase):
     def test_repeatable_manifest_pins_three_owner_inventories(self):
-        path=Path(__file__).resolve().parents[1]/'deploy/demo/demo.json'
+        path=Path(__file__).resolve().parents[1]/'deploy/demo/mj.json'
         manifest=read_manifest(path)
         self.assertEqual({owner:sum(r['owner']==owner for r in manifest['repositories']) for owner in ['mj','mj-platform','mj-labs']},{'mj':10,'mj-platform':3,'mj-labs':3})
         for field,value in [('upstream','https://user:secret@github.com/org/repo'),('commit','main'),('owner','unknown')]:

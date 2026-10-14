@@ -107,6 +107,25 @@ class NativeSetup(unittest.TestCase):
             initialize(*args, access_aud='c'*64, owner_email='owner@example.com', email=policy)
             self.assertEqual(json.loads((root/'forge.json').read_text())['email'], policy)
 
+    def test_access_team_domain_is_written_only_beside_the_access_audience(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)/'native'
+            args = (root, 'a'*32, 'golf.example.com', 'golf-native', 'team', 'golf-native',
+                    '12345678-1234-4234-8234-123456789012', 'golf-native', 'owner')
+            for team, aud in [('https://team.cloudflareaccess.com', None), ('team.cloudflareaccess.com', 'c'*64),
+                              ('https://team.example.com', 'c'*64), ('https://-team.cloudflareaccess.com', 'c'*64)]:
+                with self.assertRaises(ValueError):
+                    initialize(*args, access_aud=aud, owner_email='owner@example.com', access_team_domain=team)
+                self.assertFalse(root.exists())
+            initialize(*args, access_aud='c'*64, owner_email='owner@example.com', access_team_domain='https://team.cloudflareaccess.com')
+            self.assertEqual(json.loads((root/'forge.json').read_text())['access_team_domain'], 'https://team.cloudflareaccess.com')
+
+    def test_hostname_has_no_owner_default(self):
+        result = subprocess.run(['python3', str(ROOT/'scripts/cloudflare_forge.py'), '--account-id', 'a'*32, '--workspace', 'team',
+            '--namespace', 'n', '--database-id', 'd', '--database-name', 'n', '--owner', 'owner'], capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('--hostname', result.stderr)
+
     def test_operations_setup_validates_before_writing_and_enrolls_only_the_owner(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)/'native'

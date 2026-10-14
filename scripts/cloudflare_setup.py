@@ -171,8 +171,8 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     init = commands.add_parser('init', help='Write private configuration only; provision nothing')
     init.add_argument('--account-id', required=True)
-    init.add_argument('--hostname', default='gitgolf.mjtechguy.com')
-    init.add_argument('--bridge-hostname', default='origin.gitgolf.mjtechguy.com')
+    init.add_argument('--hostname', required=True, help='public control hostname, such as golf.example.com')
+    init.add_argument('--bridge-hostname', required=True, help='separate service-only origin hostname, such as origin.golf.example.com')
     init.add_argument('--bucket', required=True)
     init.add_argument('--with', dest='components', action='append', choices=OPTIONAL, default=[])
     for name in ('check', 'up', 'stop', 'status'):

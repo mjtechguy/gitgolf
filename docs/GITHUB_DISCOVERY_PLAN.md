@@ -58,7 +58,7 @@ The imported repositories retain shallow snapshots, not full upstream history.
 Modern Git clones use protocol v2 so Artifacts can negotiate those shallow
 boundaries correctly. Legacy v0 shallow clones are not qualified.
 Both organization workspaces retain their three private repositories; a visitor
-sees no private inventory. The explicit fixture is `deploy/demo/public.json` and
+sees no private inventory. The explicit fixture is `deploy/demo/mj-public.json` (passed as `seed-public --manifest`) and
 `seed-public` is separate from ordinary infrastructure deployment.
 
 ## Next increments, in order

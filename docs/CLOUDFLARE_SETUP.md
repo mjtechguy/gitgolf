@@ -19,12 +19,12 @@ Prerequisites: Docker with Compose supporting `!reset`, Python 3, OpenSSL, the q
 ```sh
 python3 scripts/cloudflare_setup.py init \
   --account-id YOUR_ACCOUNT_ID \
-  --hostname gitgolf.mjtechguy.com \
-  --bridge-hostname origin.gitgolf.mjtechguy.com \
+  --hostname golf.example.com \
+  --bridge-hostname origin.golf.example.com \
   --bucket YOUR_PRIVATE_R2_BUCKET
 ```
 
-`origin.gitgolf.mjtechguy.com` is the proposed service-only bridge hostname, distinct from the selected public control hostname. Create it only as part of the protected origin procedure below. The initializer creates no Cloudflare resources and starts no containers. An existing installation directory is refused; credentials are never rotated on retry.
+Both hostnames are required. The bridge hostname (here `origin.golf.example.com`) is a service-only origin, distinct from the public control hostname. Create it only as part of the protected origin procedure below. The initializer creates no Cloudflare resources and starts no containers. An existing installation directory is refused; credentials are never rotated on retry.
 
 Private configuration lives in `.cloudflare/install` (0700, Git-ignored), separate from every local `.env*` file. The Compose project is always `golf-cloudflare`; database, native forge and runner volumes have that project prefix. Inherited Golf/Forgejo/Compose/storage variables are stripped before invoking Compose. No host ports are published, and no local RustFS service is included.
 

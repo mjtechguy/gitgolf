@@ -63,6 +63,37 @@ class DeploymentAuthorityTest(unittest.TestCase):
                     self.assertEqual((root/'retained-auth.json').stat().st_mode & 0o077,0)
                     self.assertEqual(saved['token']==auth['token'],failure=='enrollment')
 
+    def test_create_needs_explicit_content_and_derives_the_admin_login_from_the_email(self):
+        base=['create','--account-id','a'*32,'--profile','golf','--workers-subdomain','team','--zone-id','b'*32,
+              '--hostname','golf.example.com','--preview-hostname','golf-previews.example.com','--email','Jane.Doe@example.com']
+        parser=deploy.build_parser()
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):parser.parse_args(base)
+            with self.assertRaises(SystemExit):parser.parse_args(base+['--no-seed','--manifest','deploy/demo/example.json'])
+            with self.assertRaises(SystemExit):parser.parse_args(['apply','ownership.json'])
+        argv=deploy.create_argv(parser.parse_args(base+['--no-seed']))
+        self.assertEqual(argv[argv.index('--admin-login')+1],'jane-doe')
+        self.assertEqual(argv[argv.index('--demo-email')+1],'Jane.Doe@example.com')
+        self.assertNotIn('--secrets-store-id',argv)
+        argv=deploy.create_argv(parser.parse_args(base+['--manifest',str(deploy.ROOT/'deploy/demo/mj.json'),'--admin-login','mike','--secrets-store-id','c'*32]))
+        self.assertEqual(argv[argv.index('--admin-login')+1],'mike')
+        self.assertEqual(argv[argv.index('--secrets-store-id')+1],'c'*32)
+        for login in ['Mike','-mike','m'*40,'a_b']:
+            with self.assertRaises(ValueError):deploy.create_argv(parser.parse_args(base+['--no-seed','--admin-login='+login]))
+
+    def test_example_manifest_is_neutral_and_the_hosted_demo_is_explicit(self):
+        from cloudflare_demo_manifest import read_manifest
+        example=read_manifest(deploy.ROOT/'deploy/demo/example.json')
+        self.assertNotIn('personal',example)
+        self.assertEqual({r['owner'] for r in example['repositories']},{'example-org'})
+        hosted=read_manifest(deploy.ROOT/'deploy/demo/mj.json')
+        self.assertEqual(hosted['personal']['login'],'mj')
+        self.assertFalse((deploy.ROOT/'deploy/demo/demo.json').exists())
+        public=json.loads((deploy.ROOT/'deploy/demo/example-public.json').read_text())
+        self.assertNotIn('login',public)
+        self.assertTrue(set(public['profiles'])<={o['slug'] for o in example['organizations']})
+        self.assertTrue(set(public['repositories'])<={r['owner']+'/'+r['name'] for r in example['repositories']})
+
     def test_metadata_retries_only_provider_reads(self):
         metadata=object.__new__(Metadata)
         metadata.deadline=None;metadata.profile='golf';metadata.root=Path('.');metadata.env={}

@@ -2,7 +2,7 @@
 
 This parallel deployment path keeps the Python/`cf` installer available. Alchemy
 owns the Cloudflare infrastructure; it uses the same native Worker build, Flare
-UI, approved Python CI image and pinned [demo content](../demo/README.md).
+UI, approved Python CI image and explicit [content manifests](../demo/README.md#content-manifests).
 It does not add Alchemy or Effect to the application bundle.
 
 The stack provisions Workers and custom domains, Durable Objects, D1, R2, a queue
@@ -12,30 +12,87 @@ managed registry runner image. Artifacts creates the namespace through its Worke
 binding. Application preview resources and per-job OCI artifacts remain owned by
 Golf's existing runtime and cleanup journal.
 
-## Replace a retained demo
+## What you provide
 
-Use Node 24, Docker, Python 3, the authenticated `cf` profile and the qualified
-`cf` 1.0.0-beta.13 CLI. Install the existing web/agent build dependencies, then:
+| Value | Flag (`init`) | How to obtain |
+| --- | --- | --- |
+| Account ID | `--account-id` | Dashboard account home, or the `accounts` list in `cf --profile golf auth whoami` (32 hex). Workers Paid and Artifacts must be enabled. |
+| `cf` CLI profile | `--profile` | `cf auth create golf` (OAuth login into a named profile). It must be able to create API tokens; `init` mints an eight-hour, account- and zone-scoped deployment token from it. Do not export `CLOUDFLARE_API_TOKEN`/`CF_API_TOKEN`. |
+| Zone ID | `--zone-id` | The zone's Overview page (32 hex). Both hostnames must be in this zone. |
+| Control hostname | `--hostname` | An unused name in that zone, such as `golf.example.com`. |
+| Preview hostname | `--preview-hostname` | A second unused name, such as `golf-previews.example.com`; previews use it and its children. |
+| Administrator email | `--email` | An email that can sign in through Cloudflare Access (an available Zero Trust seat). |
+| Secrets Store ID | `--secrets-store-id` (optional) | Required if the account already has a store (one per account): its ID on the dashboard's Secrets Store page. Omit it on an account without one and the stack creates it. |
+| Access team domain | `--access-team-domain` (optional) | `https://TEAM.cloudflareaccess.com`. Default: read from the account's Access organization during `init`. |
+| Admin login | `--admin-login` (optional) | Default: derived from the email's local part (`jane.doe@...` becomes `jane-doe`). |
+| Git author | `--git-author-name`, `--git-author-email` (optional) | Author of the playground commits. Default: the admin login and the administrator email. |
+| CI admissions | `--evidence-daily-limit` (optional) | Default 40 a day, 1 to 50. |
+| Content | `seed --manifest PATH` or `seed --no-seed` | `deploy/demo/example.json` is a neutral sample; see [content manifests](../demo/README.md#content-manifests). |
+
+The administrator identity is saved in the private `alchemy-input.json`; later
+`build` and `seed` runs reuse it. A Workers subdomain is not needed: the stack uses
+custom domains only.
+
+Tools: Node 24, Docker, Python 3, Git and the qualified `cf` 1.0.0-beta.13 CLI.
+Install the locked build dependencies once: `npm --prefix web ci`,
+`npm --prefix cloudflare/agents ci` and `npm --prefix deploy/alchemy ci`.
+
+## Fresh install
+
+On an account with no previous Golf installation:
 
 ```sh
-npm --prefix deploy/alchemy ci
+python3 scripts/cloudflare-demo-deploy.py build-image
+python3 scripts/cloudflare_alchemy_demo.py init \
+  --account-id ACCOUNT_ID --profile golf --zone-id ZONE_ID \
+  --hostname golf.example.com --preview-hostname golf-previews.example.com \
+  --email you@example.com
+# prints NEW_DIRECTORY (.tmp/cloudflare-forge/golf-alchemy-*); add --secrets-store-id STORE_ID
+# if the account already has a Secrets Store, --admin-login LOGIN to choose the login
+python3 scripts/cloudflare_alchemy_demo.py plan NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py seed NEW_DIRECTORY --manifest deploy/demo/example.json
+```
+
+`init` reads nothing from a previous installation. It checks the inputs, records
+the approved local runner image, reads the Access team domain unless given, and
+writes the private input in a new mode-0700 directory with fresh signing and
+bootstrap secrets; then it mints the deployment token. `deploy` creates every
+resource, bootstraps the schema, enrolls the administrator and records
+`ownership.json`. Sign in at `https://golf.example.com` with the administrator
+email. Continue with any optional service below (`enable-ai`, `enable-search`,
+`enable-pipelines`, `enable-email`...), and renew the seven-day provider tokens
+with `renew-credentials` before they expire.
+
+`seed --no-seed` creates only the two CI/preview playgrounds and claims the
+administrator's personal owner. The maintainer's hosted demo is
+`init ... --admin-login mike` and `seed NEW_DIRECTORY --manifest deploy/demo/mj.json`.
+
+## Replace a retained demo (existing installation handoff)
+
+`prepare` builds a new Alchemy installation from the receipt of a running retained
+installation, either an earlier Alchemy one or one made by
+`cloudflare-demo-deploy.py create`:
+
+```sh
 python3 scripts/cloudflare-demo-deploy.py build-image
 python3 scripts/cloudflare_alchemy_demo.py prepare /PATH/TO/OLD/ownership.json
 ```
 
-`prepare` reads the current retained installation's configuration and administrator
-email. It allocates a fresh private directory and an eight-hour deployment token
-scoped to that account and zone. It does not replace the running installation.
-Use the printed directory as `NEW_DIRECTORY` below. Back up the old D1 database
-before destruction if its contents need retaining; this procedure reseeds reviewed
-content, not user-created history.
+`prepare` reads the current retained installation's configuration, administrator
+email and current login (pass `--admin-login`, `--git-author-name` or
+`--git-author-email` to change them). It allocates a fresh private directory and
+an eight-hour deployment token scoped to that account and zone. It does not
+replace the running installation. Use the printed directory as `NEW_DIRECTORY`
+below. Back up the old D1 database before destruction if its contents need
+retaining; this procedure reseeds reviewed content, not user-created history.
 
 ```sh
 python3 scripts/cloudflare_alchemy_demo.py plan NEW_DIRECTORY
 python3 scripts/cloudflare-demo-deploy.py renew-authority /PATH/TO/OLD/ownership.json
 python3 scripts/cloudflare_demo.py stop /PATH/TO/OLD/ownership.json
 python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
-python3 scripts/cloudflare_alchemy_demo.py seed NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py seed NEW_DIRECTORY --manifest deploy/demo/example.json
 ```
 
 For a previous Alchemy installation, use its `destroy` command below instead of
@@ -48,21 +105,23 @@ The fresh Access applications require a fresh human login.
 The supplied administrator retains instance administration; ordinary machine Git
 credentials intentionally cannot acquire that authority.
 
-`seed` creates the two Git/PR/preview playgrounds, ten pinned personal GitHub
-imports under `mj`, and three imports each under `mj-platform` and `mj-labs`.
-It executes the same reviewed CI profile, publishes artifacts to Cloudflare's
+`seed` creates the two Git/PR/preview playgrounds, then imports the manifest's
+pinned GitHub snapshots under its owners (with `deploy/demo/mj.json`: ten under
+`mj` and three each under `mj-platform` and `mj-labs`). It executes the same
+reviewed CI profile, publishes artifacts to Cloudflare's
 managed registry, and builds metadata indexes. Playground source and operation
 identities are journaled before provider writes; rerunning resumes the same jobs.
 A failed terminal job is retained and requires inspection before explicitly
 admitting a replacement. The imported repository seeder has its existing resume
-journal. Neither path runs arbitrary upstream workflow matrices.
+journal. Neither path runs arbitrary upstream workflow matrices. Rerun `seed` with
+the same manifest: a changed manifest is refused.
 
 ## Update and inspect
 
 ```sh
 python3 scripts/cloudflare_alchemy_demo.py plan NEW_DIRECTORY
 python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
-python3 scripts/cloudflare_alchemy_demo.py seed NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py seed NEW_DIRECTORY --manifest SAME_MANIFEST   # or --no-seed
 npm --prefix deploy/alchemy run check
 python3 -m unittest discover -s scripts -p 'test_cloudflare_alchemy_demo.py'
 python3 -m unittest discover -s scripts -p 'test_cloudflare_retained_demo.py'
@@ -132,13 +191,13 @@ reviewed discovery fixture:
 python3 scripts/cloudflare_alchemy_demo.py migrate NEW_DIRECTORY
 python3 scripts/cloudflare_alchemy_demo.py enable-public NEW_DIRECTORY
 python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
-python3 scripts/cloudflare_alchemy_demo.py seed-public NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py seed-public NEW_DIRECTORY --manifest deploy/demo/example-public.json
 ```
 
 `enable-public` requires the current schema (`migrate` adds what is missing) and
-reads the public tables back. It does not publish repositories. `seed-public` uses
-[`deploy/demo/public.json`](../demo/public.json) to publish only `mj/fastapi` and
-the public profiles for `mj`, `mj-platform`, and `mj-labs`. Other repositories,
+reads the public tables back. It does not publish repositories. `seed-public` publishes
+exactly what its `--manifest` names: [`example-public.json`](../demo/example-public.json) publishes `example-org/click` and the `example-org` profile; the hosted demo uses [`mj-public.json`](../demo/mj-public.json) (`mj/fastapi` and
+the public profiles for `mj`, `mj-platform`, and `mj-labs`). Other repositories,
 organization membership and account emails remain private. A private seed receipt
 prevents silently republishing a repository made private later; customized public
 profiles are never overwritten. Ordinary redeployment does not rerun this seed. Before publishing, the command
@@ -246,7 +305,7 @@ the zone's subdomain endpoint, DNS validation of the subdomain, and whether an
 upload is refused while the subdomain is unverified.
 
 The stack's own API tokens (management, registry and, when enabled, analytics)
-expire seven days after `prepare`. When they lapse, app previews, registry
+expire seven days after `init` or `prepare`. When they lapse, app previews, registry
 publishing and the analytics feed stop. Extend them before that:
 
 ```sh

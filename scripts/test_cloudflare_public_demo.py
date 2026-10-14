@@ -15,10 +15,10 @@ class PublicSeed(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root/'deploy/demo').mkdir(parents=True)
-            (root/'deploy/demo/public.json').write_text('{}')
+            (root/'deploy/demo/example-public.json').write_text('{}')
             with patch('cloudflare_public_demo.private_read', side_effect=[json.dumps({'public_repositories':True,'origin':'https://golf.test'}),json.dumps({'origin':'https://golf.test','token':'test'})]), patch('cloudflare_public_demo.urllib.request.build_opener') as opener, patch('cloudflare_public_demo.time.sleep') as sleep, patch('cloudflare_public_demo.seed') as seed_call:
                 opener.return_value.open.side_effect = [response('old','current'),response('new','old'),response('new','current')]
-                publish(root,root)
+                publish(root,root,Path('deploy/demo/example-public.json'))
                 self.assertEqual(opener.return_value.open.call_count,3)
                 self.assertEqual(sleep.call_count,2)
                 seed_call.assert_called_once()
