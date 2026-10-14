@@ -99,6 +99,10 @@ test('write tools comment and open pull requests as the token’s account, cappe
   assert.deepEqual([opened.number, opened.head.ref, opened.head.commitId, opened.base.commitId], [15, 'agent/demo', feature, base]);
   assert.deepEqual({ ...f.sql.prepare("SELECT d.author_id,d.title,p.head_branch FROM pull_requests p JOIN discussions d ON d.id=p.discussion_id WHERE d.number=15").get() }, { author_id: 2, title: 'Agent change', head_branch: 'agent/demo' });
   assert.match(text(await f.tool(secret, 'open_pull_request', { head: 'agent/demo', base: 'main', title: 'Again' })), /already exists/);
+  // An administrator's write token opens one too: authority re-checks compare the owner's actual grant, not the token's permission.
+  const admin = (await f.create({ repositories: ['1'], branchPattern: 'agent/*' }, 'alice')).secret;
+  assert.equal(data(await f.tool(admin, 'create_branch', { branch: 'agent/admin', from: 'feature' })).commitId, feature);
+  assert.equal(data(await f.tool(admin, 'open_pull_request', { head: 'agent/admin', base: 'main', title: 'Administrator via MCP' })).number, 16);
   // carol reads repository 1: her write token cannot open a pull request there.
   const capped = (await f.create({ repositories: ['1'] }, 'carol')).secret;
   assert.equal((await f.tool(capped, 'open_pull_request', { head: 'feature', base: 'main', title: 'No' })).isError, true);

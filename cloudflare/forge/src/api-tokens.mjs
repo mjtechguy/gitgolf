@@ -84,11 +84,12 @@ async function refused(db, env, person, row, reason, message) {
   } catch { console.log(JSON.stringify({ event: 'golf.audit_write_failed', action: 'api_token.use_denied' })); }
   forbidden(message);
 }
-// The repository row a token may use: in scope, with the role capped at the token's permission (and never administration).
+// The repository row a token may use: in scope. row.role stays the owner's actual grant, because authority re-checks compare it with
+// the stored grant (g.role=?); the token's permission is enforced where writes enter (scopePush, the Source API's requireScope and the
+// MCP write tools), and a token never reaches an administration route at all.
 export async function scopeRepository(db, env, person, row) {
   const scope = person.token_scope;
   if (scope.repositories && !scope.repositories.includes(String(row.id))) await refused(db, env, person, row, 'repository', 'This API token does not cover this repository.');
-  if (['write', 'admin'].includes(row.role)) row.role = scope.permission === 'write' ? 'write' : 'read';
 }
 // A push: the token must be a write token and the ref must match its branch pattern.
 export async function scopePush(db, env, person, row, ref) {
