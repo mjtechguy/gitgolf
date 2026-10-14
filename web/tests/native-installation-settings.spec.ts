@@ -42,6 +42,8 @@ export const recentEntries = () => [
   { id: '2', at: new Date(Date.now() - 3_600_000).toISOString(), actor: 'mj', actorEmail: 'mj@example.com', scope: 'installation', scopeId: 'mj', subject: 'webhooks', action: 'update', before: { origins: hooks.slice(0, 3), dailyLimit: 300 }, after: { origins: hooks, dailyLimit: 300 }, widening: true, client: { colo: 'LHR', country: 'GB' } },
   { id: '1', at: new Date(Date.now() - 86_400_000).toISOString(), actor: 'ops', actorEmail: 'ops@example.com', scope: 'installation', scopeId: 'mj', subject: 'rate-limit', action: 'update', before: { enabled: true }, after: { enabled: true }, widening: false, client: {} },
 ];
+// The same changes as /native/audit/read reports them for the installation audit log.
+const auditEvents = () => recentEntries().map(entry => ({ ...entry, category: 'installation_policy', categoryLabel: 'Installation policy', description: `${entry.widening ? 'widened' : 'changed'} installation policy ${entry.subject}`, actorKind: 'person', repository: '', organization: '', outcome: 'success', code: '' }));
 export function overview(locked = false) {
   const data = baseOverview() as ReturnType<typeof baseOverview> & { editing: object; recent: object[] };
   const policies: Record<string, object> = {
@@ -62,7 +64,7 @@ export function overview(locked = false) {
 
 const capabilities = [
   ['settings.native', 'Cloudflare allocation settings', 3, 'Operations administrators signed in through Access see every installation setting the Worker holds.'],
-  ['settings.installation-audit', 'Installation audit log', 3, 'Append-only record of installation policy changes, readable by operations administrators signed in through Access.'],
+  ['settings.installation-audit', 'Installation audit log', 3, 'Append-only record of privileged and state-changing actions at installation, organization and repository scope. Operations administrators read all of it through Access; organization owners and repository administrators read their own scope.'],
   ['operations.dashboard', 'Operations dashboard', 3, 'Current workspace administrators; durable inventories and maintenance observations.'],
   ['settings.native-runners', 'Customer-hosted native runners', 3, 'Workspace administrators can enroll outbound machines and manage native pools.'],
   ['settings.execution', 'Installation execution policy', 1, 'Cloudflare native has no installation-wide execution policy service. Repository administrators switch pull-request runs per repository; the approved workflow is fixed at deploy.'],
@@ -91,6 +93,8 @@ export async function nativeAdmin(page: Page, options: { admin?: boolean; refuse
     return route.fulfill({ status: result.status, contentType: 'application/json', json: result.json }); });
   await page.route('**/native/config', route => route.fulfill({ status: 200, contentType: 'application/json', json: { runtimeProfile: 'cloudflare-native', workspace: 'mj', accessLogin: true } }));
   await page.route('**/native/installation/read', route => { s.reads.push('installation'); return options.admin === false || options.refuse ? route.fulfill({ status: 403, contentType: 'application/json', json: { code: 'permission_denied', message: 'Current workspace operations administrator sign-in required.' } }) : route.fulfill({ status: 200, contentType: 'application/json', json: route.request().postDataJSON().action === 'audit' ? { entries: recentEntries(), page: { nextPage: 0 } } : s.installation() }); });
+  await page.route('**/native/audit/read', route => { s.reads.push('audit'); return options.admin === false || options.refuse ? route.fulfill({ status: 403, contentType: 'application/json', json: { code: 'permission_denied', message: 'Current workspace operations administrator sign-in required.' } })
+    : route.fulfill({ status: 200, contentType: 'application/json', json: { entries: auditEvents(), page: { nextPage: 0 }, categories: [{ id: 'installation_policy', label: 'Installation policy' }], recording: { failures: 0, lastFailureAt: '' }, scope: { kind: 'installation', id: 'mj', label: 'mj' } } }); });
   await page.route('**/rpc/**', async route => {
     const method = route.request().url().split('/').at(-1)!; s.reads.push(method);
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '1', login: 'mj', isInstanceAdmin: options.admin !== false } });
@@ -204,7 +208,8 @@ test('a deploy lock shows its reason and offers no edits; recent changes link to
   await recentChanges.getByRole('link', { name: 'Open the audit log' }).click(); await expect(page).toHaveURL(/\/admin\/audit$/);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Audit log');
   const table = page.getByRole('table', { name: 'Installation audit log' });
-  await expect(table.locator('tbody tr')).toHaveCount(3); await expect(table).toContainText('Widening'); await expect(table).toContainText('LHR, GB');
+  await expect(table.locator('tbody tr')).toHaveCount(3); await expect(table).toContainText('Widening'); await expect(table).toContainText('GB · LHR');
+  await expect(table).toContainText('mj widened installation policy webhooks'); await expect(table).toContainText('Succeeded');
   await expect(page.getByRole('navigation', { name: 'Instance administration' }).getByRole('link', { name: 'Audit log' })).toHaveAttribute('aria-current', 'page');
 });
 
