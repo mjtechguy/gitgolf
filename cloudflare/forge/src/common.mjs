@@ -10,8 +10,9 @@ export const deny = () => { throw new Fault('not_found', 404, 'Repository unavai
 export const invalid = message => { throw new Fault('invalid_argument', 400, message); };
 export const unsupported = () => { throw new Fault('unimplemented', 501, 'This capability is not implemented on the native forge.'); };
 export const conflict = () => { throw new Fault('failed_precondition', 412, 'An unresolved operation fences further changes.'); };
-// Uploads carry at most 256 KiB of content, about 350 KiB as Connect JSON base64. Every other request keeps 96 KiB.
-export const bodyLimit = path => /^\/rpc\/golf\.v1\.(?:RepositoryReleaseManagementService\/SubmitRepositoryReleaseOperation|DiscussionAttachmentUploadService\/SubmitDiscussionAttachmentUpload|RepositoryFileMutationService\/SubmitRepositoryFileMutation|RepositoryFileBatchService\/SubmitRepositoryFileBatch)$/.test(path) ? 400 * 1024 : 96 * 1024;
+// Uploads carry at most 256 KiB of content, about 350 KiB as Connect JSON base64. A Source API commit carries up to 8 MiB of content
+// (12 MiB as JSON with base64) and a files read up to 100 paths. Every other request keeps 96 KiB.
+export const bodyLimit = path => path === '/native/source/commit' ? 12 * 1024 * 1024 : path === '/native/source/files' ? 128 * 1024 : /^\/rpc\/golf\.v1\.(?:RepositoryReleaseManagementService\/SubmitRepositoryReleaseOperation|DiscussionAttachmentUploadService\/SubmitDiscussionAttachmentUpload|RepositoryFileMutationService\/SubmitRepositoryFileMutation|RepositoryFileBatchService\/SubmitRepositoryFileBatch)$/.test(path) ? 400 * 1024 : 96 * 1024;
 
 export function page(body) {
   const number = body.page?.page || 1, limit = body.page?.limit || 20;

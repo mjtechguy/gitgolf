@@ -26,6 +26,7 @@ import { agentHostsAPI, agentTasksAPI, agentHostCapability } from './agent-hosts
 import { agentHostMachine } from './agent-host-protocol.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { reserveRefWrite, finishRefWrite } from './ref-writes.mjs';
+import { sourceAPI, sourceCapability } from './source-api.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
@@ -86,11 +87,13 @@ export function serialize(handler, classify = () => 'exclusive') {
   });
 }
 const transferRoute = /^\/(?:git\/[^/]+\/[^/]+\.git|native\/agent-host\/tasks\/[0-9a-f-]{36}\/git)\/(info\/refs|git-upload-pack|git-receive-pack)$/;
-// Smart HTTP Git is a transfer: pushes to one ref are ordered by the D1 ref fence, not by this queue.
+const sourceRoute = /^\/native\/source\/(commit|branch|files|tree)$/;
+// Smart HTTP Git and Source API writes are transfers: writes to one ref are ordered by the D1 ref fence, not by this queue.
 export function admission(request) {
   if (!(request instanceof Request)) return 'exclusive';
-  const route = transferRoute.exec(new URL(request.url).pathname);
+  const path = new URL(request.url).pathname, route = transferRoute.exec(path), source = sourceRoute.exec(path);
   if (route) return request.method === (route[1] === 'info/refs' ? 'GET' : 'POST') ? 'transfer' : 'exclusive';
+  if (source) return request.method !== 'POST' ? 'exclusive' : ['files', 'tree'].includes(source[1]) ? 'read' : 'transfer';
   return concurrentRead(request) ? 'read' : 'exclusive';
 }
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
@@ -442,6 +445,15 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       return row;
     }));
     if (url.pathname === '/native/agent-hosts') return reply(await agentHostsAPI(db, env, person, request, body));
+    const source = sourceRoute.exec(url.pathname);
+    if (source) {
+      // Source API (docs/SOURCE_API.md): grant, token scope, rules and the branch fence are checked inside; public visitors have none.
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (row.role === 'public') deny();
+      const result = await sourceAPI(db, env, person, row, source[1], body, { withArtifact, providerFetch, literalPath,
+        ciState: env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE' });
+      return result instanceof Response ? result : reply(result);
+    }
     if (url.pathname === '/native/agent-tasks') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
@@ -592,6 +604,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       executionValueCapability(env),
       await searchCapability(db, env),
       await agentHostCapability(db),
+      await sourceCapability(db),
       ...[
         ['settings.repository-teams', 'Repository team access', 'Team membership and inherited repository permissions are not implemented on Cloudflare native. Direct collaborators and invitations are available in Access.'],
         ['settings.repository-deploy-keys', 'SSH deploy keys', 'Cloudflare native serves Git over HTTPS. SSH transport and SSH deploy keys are not available.'],

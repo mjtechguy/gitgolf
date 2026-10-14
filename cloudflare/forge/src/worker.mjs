@@ -121,7 +121,7 @@ export class Workspace extends DurableObject {
     }
     const response = path === activityPath ? handle(request, this.configured)
       : path === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' || path.startsWith('/native/') || !concurrentRead(request) ? this.authority(request) : this.dispatch(request);
-    if (this.env.CI_AUTO === 'true' && request.method === 'POST' && new URL(request.url).pathname.endsWith('/git-receive-pack')) this.ctx.waitUntil(response.then(() => this.runCI()));
+    if (this.env.CI_AUTO === 'true' && request.method === 'POST' && (path.endsWith('/git-receive-pack') || path === '/native/source/commit' || path === '/native/source/branch')) this.ctx.waitUntil(response.then(() => this.runCI()));
     return response;
   }
 }
