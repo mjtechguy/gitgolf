@@ -33,6 +33,7 @@ import { comparison, diff } from './repository-diff.mjs';
 import { organizations, profile, stars } from './workspace-ui.mjs';
 import { collaboration, collaborationMethods, operationRepository } from './collaboration.mjs';
 import { evidenceAPI, evidenceStep, evidencePolicy } from './evidence.mjs';
+import { aiAPI, aiStep, aiKinds } from './ai-workflow.mjs';
 import { agentPolicy } from './agent-policy.mjs';
 import { executionDiagnostic, testPolicy } from './test-policy.mjs';
 import { appPolicy } from './app-policy.mjs';
@@ -72,7 +73,7 @@ export function serialize(handler, isRead = () => false) {
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
-  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read'].includes(new URL(request.url).pathname)) return true;
+  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read'].includes(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
   if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
   if (/^\/rpc\/golf\.v1\.(?:FeaturePolicyService\/GetFeaturePolicy|RepositoryFeatureService\/GetRepositoryFeatures)$/.test(new URL(request.url).pathname)) return true;
@@ -81,7 +82,7 @@ export function concurrentRead(request) {
   if (/^\/rpc\/golf\.v1\.(?:DiscussionAttachmentService\/(?:ListDiscussionAttachments|DownloadDiscussionAttachment)|DiscussionAttachmentUploadService\/GetDiscussionAttachmentUploadState)$/.test(new URL(request.url).pathname)) return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
-const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
+const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume|ai)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
 async function input(request) {
   if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') invalid('Use JSON.');
@@ -429,6 +430,13 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const row = await authorizedRepository(db, person, key, env, id, 'pull-requests');
       if (id !== String(row.id)) deny();
       return await evidenceAPI(db, env, person, row, action => withArtifact(env, row, action), body);
+    }
+    if (url.pathname === '/native/ai' || url.pathname === '/native/ai/read') {
+      if (url.pathname.endsWith('/read') !== ['status', 'list'].includes(body.action)) invalid(url.pathname.endsWith('/read') ? 'This route only reads AI runs.' : 'This route only creates AI runs.');
+      // A create names its kind, whose feature policy decides before anything is admitted.
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, body.action === 'create' && Object.hasOwn(aiKinds, body.kind) ? aiKinds[body.kind].feature : undefined);
+      if (body.repositoryId !== String(row.id)) deny();
+      return await aiAPI(db, env, person, row, action => withArtifact(env, row, action), body);
     }
     if (url.pathname === '/rpc/golf.v1.WorkflowService/InspectWorkflows') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
@@ -841,6 +849,22 @@ export async function advanceEvidence(env, id, phase, workflows) {
       error.message === 'Application bindings differ' ? 'bindings_readback' : error.message === 'Application script readback differs' ? 'script_readback' : 'unavailable' }; }
   }
   return result;
+}
+
+// Workspace-side AI steps: the run's requester must still hold a current grant; the kind re-checks its own roles.
+export async function advanceAi(env, id, phase, result) {
+  if (!uuidOK(id) || !['prepare', 'settle'].includes(phase)) throw Error('Invalid internal AI dispatch');
+  const db = env.DB.withSession('first-primary');
+  // The installation's AI advice switch in force now: turned off after admission, prepare refuses before anything is read.
+  env = await withInstallationPolicy(env, db);
+  const run = await db.prepare('SELECT * FROM ai_runs WHERE id=?').bind(id).first();
+  let context;
+  if (run && phase === 'prepare') {
+    const person = await db.prepare('SELECT * FROM users WHERE id=? AND active=1').bind(run.user_id).first();
+    const row = person && await withOwner(db, await db.prepare("SELECT r.*,g.role FROM repositories r JOIN grants g ON g.repository_id=r.id WHERE r.id=? AND r.state='ACTIVE' AND g.user_id=?").bind(run.repository_id, run.user_id).first());
+    if (person && row) context = { person, row, artifact: action => withArtifact(env, row, action) };
+  }
+  return aiStep(db, env, run, context, phase, result);
 }
 
 export async function testGit(env, id, request, workflows, providerFetch = fetch) {

@@ -80,14 +80,15 @@ above and the editable "AI on/off" approval.
 | Feature | Cloudflare product | State on 2026-10-14 |
 | --- | --- | --- |
 | Agent proposals: OpenCode in a container edits the approved file and runs its tests | Workers AI `@cf/zai-org/glm-5.3-flash`, Containers, Artifacts forks | shipped (moved from `glm-4.7-flash` to `glm-5.3`, then `glm-5.3-flash`, on 2026-10-14) |
-| Review advice: one constrained question about the next review step | Workers AI `@cf/cloudflare/clef` | shipped, but only visible inside a run report |
-| Clef recommendation card on the pull request page | existing stored advice | planned |
+| Review advice: one constrained question about the next review step | Workers AI `@cf/cloudflare/clef` | shipped |
+| Clef recommendation card on the pull request page | existing stored advice | shipped (hosted acceptance pending) |
 | Pull request summary and review draft from the bounded diff, edited and published by a person through the existing review contracts | Workers AI text generation | planned |
 | Issue triage: label suggestions from the repository's own labels | Workers AI `@cf/cloudflare/clef` | planned |
 | Release notes draft from merged pull requests since the previous tag | Workers AI text generation | planned |
 | Semantic search over code and issues, filtered by the reader's current access | Workers AI embeddings, Vectorize | planned |
 | AI Gateway usage in the admin portal: requests, tokens, cost against the daily limit | AI Gateway analytics | planned |
 | Model selection per AI use case: an administrator picks the default and the allowed models for agents, advice, summaries, triage, release notes and search embeddings from a dropdown fed by the account's Workers AI catalog; repositories choose from the allowed list only where the administrator allows overrides; every report records the model used | Workers AI model catalog | planned (asked for on 2026-10-14) |
+| AI run foundation (`ai_runs`, `AiWorkflow`, `/native/ai`): one gateway call per run, gated and rate-limited, shared by the features below | Workers AI, AI Gateway, Workflows | shipped (no feature uses it yet) |
 | Further candidates to evaluate: test failure explanation from the masked log, merge commit message suggestion, documentation Q&A | Workers AI, AI Search | candidates |
 
 ## 3. Remaining capability work

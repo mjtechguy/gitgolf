@@ -19,6 +19,8 @@ const name = input.name;
 const evidence = input.settings.evidence;
 // Agent proposals add their own steps to the evidence workflow.
 const agents = input.settings.agent_path !== undefined, steps = agents ? 100 : 87;
+// prepare, infer and settle; the same values are in prepare.mjs.
+const aiSteps = 4, aiConcurrency = 4;
 
 export default Alchemy.Stack('GolfDemo', {
   providers: Layer.mergeAll(Cloudflare.providers(), Command.providers(), workflowSettingsProvider(), previewDomainProvider()),
@@ -119,6 +121,8 @@ export default Alchemy.Stack('GolfDemo', {
       // Both task classes start the image under the key `agent`, so they share one container definition.
       ...(agents ? { PRAgentTask: Cloudflare.DurableObject('PRAgentTask', { containers: [agent] }) } : {}),
       EvidenceWorkflow: Cloudflare.Workflow('EvidenceWorkflow', { workflowName: name, limits: { steps } }),
+      // Workers AI runs: prepare and settle in the workspace, inference in this Workflow (see cloudflare/forge/prepare.mjs).
+      ...(evidence.allow_ai ? { AiWorkflow: Cloudflare.Workflow('AiWorkflow', { workflowName: name + '-ai', limits: { steps: aiSteps } }) } : {}),
       ALCHEMY_OUTBOUND_DEPENDENCY: outbound.workerName,
       // The sender-restricted binding is uploaded only after its sending subdomain exists.
       ...(mail ? { ALCHEMY_MAIL_DEPENDENCY: mail.subdomainId } : {}),
@@ -144,6 +148,8 @@ export default Alchemy.Stack('GolfDemo', {
   });
   const workflow = yield* WorkflowSettings('WorkflowLimits', { accountId: input.account,
     workflowName: control.env.EvidenceWorkflow.workflowName, scriptName: control.workerName, steps });
+  if (evidence.allow_ai) yield* WorkflowSettings('AiWorkflowLimits', { accountId: input.account, className: 'AiWorkflow',
+    workflowName: name + '-ai', scriptName: control.workerName, steps: aiSteps, concurrency: aiConcurrency });
   yield* Command.Exec('Receipt', {
     command: 'python3 scripts/cloudflare_alchemy_demo.py receipt', cwd: root, memo: false,
     env: { GOLF_ALCHEMY_DIRECTORY: directory,

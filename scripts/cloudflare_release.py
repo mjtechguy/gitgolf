@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -137,6 +137,8 @@ class Release:
             self.check_attachment_schema()
         if self.manifest['schema'] >= 30:
             self.check_installation_schema()
+        if self.manifest['schema'] >= 32:
+            self.check_ai_schema()
         deployments =self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -229,7 +231,34 @@ class Release:
             self.migrate_installation_schema(applied)
         if self.manifest['schema'] >= 31:
             self.migrate_feature_policy_schema(applied)
+        if self.manifest['schema'] >= 32:
+            self.migrate_ai_schema(applied)
         return applied or 'already-applied'
+
+    def check_ai_schema(self):
+        columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info(ai_runs)')[0]['results']
+        if {row['name'] for row in columns} != {'id', 'kind', 'repository_id', 'user_id', 'operation_key', 'input_hash', 'target', 'input_snapshot', 'snapshot_hash', 'model',
+                                                 'state', 'infer_started_at', 'output', 'usage', 'refusal', 'created_at', 'updated_at', 'expires_at'}:
+            raise ValueError('Apply reviewed 0032 Workers AI run migration before releasing')
+
+    def migrate_ai_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0032_ai_runs.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0032') not in (None, digest):
+            raise ValueError('Recorded Workers AI run migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        prefixes = ['CREATE TABLE IF NOT EXISTS ai_runs (', 'CREATE INDEX IF NOT EXISTS ai_runs_created ON ai_runs(']
+        if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement, prefix in zip(statements, prefixes)):
+            raise ValueError('Workers AI run migration must only add the reviewed table and index')
+        ready = False
+        try:
+            self.check_ai_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0032') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_ai_schema()
+            self.state['migration0032'] = digest; self.save(); applied.append('0032')
 
     def check_installation_schema(self):
         required = {'installation_settings': {'key', 'value', 'version', 'updated_by', 'updated_at'},
