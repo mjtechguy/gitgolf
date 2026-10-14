@@ -83,8 +83,8 @@ above and the editable "AI on/off" approval.
 | Review advice: one constrained question about the next review step | Workers AI `@cf/cloudflare/clef` | shipped |
 | Clef recommendation card on the pull request page | existing stored advice | shipped (hosted acceptance pending) |
 | Pull request summary and review draft from the bounded diff, edited and published by a person through the existing review contracts | Workers AI text generation | planned |
-| Issue triage: label suggestions from the repository's own labels | Workers AI `@cf/cloudflare/clef` | planned |
-| Release notes draft from merged pull requests since the previous tag | Workers AI text generation | planned |
+| Issue triage: label suggestions from the repository's own labels | Workers AI `@cf/cloudflare/clef` | shipped (hosted acceptance pending) |
+| Release notes draft from merged pull requests since the previous tag | Workers AI text generation | shipped (hosted acceptance pending) |
 | Semantic search over code and issues, filtered by the reader's current access | Workers AI embeddings, Vectorize | planned |
 | AI usage in the admin portal (`/admin/ai-usage`): Golf's own run ledger by feature, model and day against the daily AI limit; AI Gateway analytics (requests, tokens, cost estimate, last 24 h) as a separate panel that stays degraded, with its reason, until a live read succeeds; no claim about remaining allowance | Golf ledger in D1, AI Gateway analytics (GraphQL) | shipped (gateway dataset unverified live; hosted acceptance pending) |
 | Model selection per AI use case (`/admin/ai`, repository settings): an administrator picks the default and the allowed models for agents, summaries and review drafts, release notes and search embeddings from a dropdown fed by the account's Workers AI catalog, inside the deploy list `AI_MODELS`; advice and triage keep Clef; repositories choose from the allowed list only where the administrator allows overrides; every AI run and agent proposal records the model used | Workers AI model catalog | shipped (catalog property ids unverified live; hosted acceptance pending) |

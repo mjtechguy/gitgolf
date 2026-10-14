@@ -1,5 +1,25 @@
 # Golf implementation status
 
+## 2026-10-14 — Clef label suggestions and Workers AI release notes drafts (AI-C, AI-D)
+
+Repository administrators can ask Clef (`@cf/cloudflare/clef`, fixed) which of up
+to 20 of the repository's labels fit an issue, from its title and description.
+Suggestions are ranked probabilities (at most three at 15% or more) and apply only
+when a person saves them in the labels editor; a suggestion is marked out of date
+when the title, description or labels change. Administrators can also draft
+release notes for an existing tag from its first-parent history back to the
+previous tag (at most 500 commits): Golf merges count as merged pull requests,
+other commits are listed by subject, every item must cite its input, and the
+Worker writes the links. The draft fills the release form; nothing is published.
+Release notes use the installation's chosen model for that use case (default
+`@cf/zai-org/glm-5.3`). Both are under feature policies `ai-triage` and
+`ai-release-notes`.
+
+Verified locally with Worker tests (462, 461 pass, 1 skipped), a workerd run with
+stub models (`ai-kinds-runtime-check.mjs`) and mocked Playwright specs (17).
+Unverified live: Clef with more than three options, and GLM `json_schema`
+adherence and latency.
+
 ## 2026-10-14 — AI model selection per use case and AI usage (AI-G, AI-F)
 
 Administrators choose the default and allowed Workers AI models for agents,
