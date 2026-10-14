@@ -212,3 +212,79 @@ test('background paths: evidence steps, push intake and delivery outboxes stop w
   await f.set('webhooks', 'ALLOWED');
   assert.equal(await deliveryCancelled(db, f.env, 1, 'webhooks', 'queued'), false);
 });
+
+test('repository administrators toggle within the policy; Actions writes through the execution switch', async t => {
+  const f = await fixture(t), target = { repository, repositoryId: '1' };
+  const read = async () => f.signed('RepositoryFeatureService/GetRepositoryFeatures', target);
+  const update = (changes, revision, headers) => f.signed('RepositoryFeatureService/UpdateRepositoryFeatures', { ...target, expectedRevision: revision, changes }, headers);
+  const current = await f.signed('RepositoryFeatureService/GetRepositoryFeatures', target);
+  assert.equal(current.canEdit, true); assert.equal((await f.value('RepositoryFeatureService/GetRepositoryFeatures', target)).canEdit, false);
+  // Bearer, service-token and non-administrator callers never change features.
+  assert.equal((await f.value('RepositoryFeatureService/UpdateRepositoryFeatures', { ...target, expectedRevision: current.revision, changes: [{ feature: 'releases' }] })).status, 403);
+  assert.equal((await update([{ feature: 'releases' }], current.revision, { 'X-Golf-Native-Access-Email': email, 'CF-Access-Client-Id': 'service' })).status, 403);
+  assert.equal((await update([{ feature: 'releases' }], current.revision, { 'X-Golf-Native-Access-Email': 'bob@example.invalid' })).status, 403);
+  assert.equal((await update([{ feature: 'nonsense' }], current.revision)).status, 400);
+  assert.equal((await update([{ feature: 'releases', enabled: true }], current.revision)).status, 400);
+  assert.equal((await update([{ feature: 'public-repositories' }], current.revision)).status, 412);
+  const off = await update([{ feature: 'releases' }, { feature: 'actions' }], current.revision);
+  const state = Object.fromEntries(off.features.map(feature => [feature.feature, feature]));
+  assert.deepEqual([state.releases.effective, state.releases.decidedBy, state.releases.repositoryEnabled], [false, 'FEATURE_DECIDER_REPOSITORY', false]);
+  assert.deepEqual([state.actions.effective, state.secrets.decidedBy], [false, 'FEATURE_DECIDER_DEPENDENCY']);
+  assert.deepEqual({ ...f.sql.prepare('SELECT manual,push,version FROM repository_execution_policy').get() }, { manual: 0, push: 0, version: 1 });
+  assert.deepEqual(f.sql.prepare('SELECT feature,enabled FROM repository_features').all().map(row => [row.feature, row.enabled]), [['releases', 0]]);
+  assert.deepEqual(f.sql.prepare("SELECT scope,scope_id,subject,after FROM installation_audit WHERE scope='repository' ORDER BY id").all().map(row => Object.values(row)), [['repository', '1', 'feature:releases', 'false'], ['repository', '1', 'feature:actions', 'false']]);
+  assert.equal((await f.signed('ExecutionPolicyService/GetExecutionPolicy', { scope: 'EXECUTION_SCOPE_REPOSITORY', repository })).policy.mode, 'EXECUTION_MODE_DISABLED');
+  const refused = await f.signed('RepositoryService/ListRepositoryReleases', target);
+  assert.equal(refused.message, 'Releases are turned off for this repository by the repository policy.');
+  // The observed revision is fenced.
+  assert.equal((await update([{ feature: 'releases', enabled: true }], current.revision)).status, 412);
+  assert.equal((await read()).revision, off.revision);
+  // An installation requirement overrides the repository's recorded choice, which it cannot change meanwhile.
+  await f.set('releases', 'ENFORCED');
+  const enforced = Object.fromEntries((await read()).features.map(feature => [feature.feature, feature]));
+  assert.deepEqual([enforced.releases.effective, enforced.releases.repositoryEnabled, enforced.releases.canChange], [true, false, false]);
+  assert.equal((await update([{ feature: 'releases', enabled: true }], off.revision)).status, 412);
+  await f.set('releases', 'DISABLED');
+  assert.equal((await update([{ feature: 'releases', enabled: true }], off.revision)).message, 'Releases are turned off for this repository by the installation policy.');
+  await f.set('releases', 'ALLOWED');
+  const on = await update([{ feature: 'releases', enabled: true }, { feature: 'actions', enabled: true }], off.revision);
+  assert.equal(on.features.find(feature => feature.feature === 'releases').effective, true);
+  assert.deepEqual({ ...f.sql.prepare('SELECT manual,push,version FROM repository_execution_policy').get() }, { manual: 1, push: 1, version: 2 });
+  // A change through the execution switch also moves the revision.
+  const switched = await f.signed('ExecutionPolicyService/UpdateExecutionPolicy', { scope: 'EXECUTION_SCOPE_REPOSITORY', repository, scopeId: '1', expectedRevision: '2', expectedAuthorityRevision: (await f.access()).revision, mode: 'EXECUTION_MODE_ALL', manualDispatchEnabled: true, pushAllowed: false, allowAllWorkflows: true });
+  assert.equal(switched.policy.revision, '3');
+  assert.equal((await update([{ feature: 'releases', enabled: false }], on.revision)).status, 412);
+});
+
+test('issues, pull requests and merge are gated after the discussion kind is settled', async t => {
+  const f = await fixture(t), target = { repository, repositoryId: '1' }, time = new Date().toISOString();
+  f.sql.exec(`INSERT INTO discussions(id,repository_id,number,kind,author_id,title,body,state,created_at,updated_at) VALUES(1,1,1,'issue',1,'Issue','','OPEN','t','t'),(2,1,2,'pull',1,'Pull','','OPEN','t','t');
+    INSERT INTO pull_requests(id,discussion_id,base_branch,head_branch,base_commit,head_commit,draft) VALUES(1,2,'main','feature','a','b',0);
+    INSERT INTO discussion_comments(id,discussion_id,author_id,body,created_at,updated_at) VALUES(5,2,1,'On the pull request','t','t');
+    INSERT INTO collaboration_operations VALUES('op',1,1,'0b6f1f3e-2a4c-4d5e-8f60-7a8b9c0d1e2f','CreateIssueComment','h','comment',5,'${time}')`);
+  const listed = async () => (await f.value('RepositoryService/ListRepositories', { metadataOnly: true })).repositories[0];
+  const revision = async () => (await f.signed('RepositoryFeatureService/GetRepositoryFeatures', target)).revision;
+  const toggle = async (feature, enabled) => f.signed('RepositoryFeatureService/UpdateRepositoryFeatures', { ...target, expectedRevision: await revision(), changes: [{ feature, enabled }] });
+  const comments = pullRequest => f.signed('RepositoryService/ListIssueComments', { ...target, number: pullRequest ? 2 : 1, issueId: pullRequest ? '2' : '1', pullRequest });
+  await toggle('issues', false);
+  assert.deepEqual([(await listed()).issuesEnabled, (await listed()).pullRequestsEnabled], [false, true]);
+  assert.equal((await f.signed('RepositoryService/ListIssues', target)).message, 'Issues are turned off for this repository by the repository policy.');
+  assert.equal((await comments(false)).status, 412);
+  assert.deepEqual((await comments(true)).comments.map(comment => comment.body), ['On the pull request']);
+  // Claiming the other kind does not get past the gate, and the module's own lookup refuses a mismatched kind.
+  assert.equal((await f.signed('RepositoryService/ListIssueComments', { ...target, number: 2, issueId: '2', pullRequest: false })).status, 412);
+  assert.equal((await f.signed('RepositoryService/ListIssueComments', { ...target, number: 1, issueId: '1', pullRequest: true })).status, 404);
+  assert.equal((await f.signed('RepositoryService/GetIssueMutation', { ...target, idempotencyKey: '0b6f1f3e-2a4c-4d5e-8f60-7a8b9c0d1e2f' })).mutation.number, 2);
+  await toggle('issues', true); await toggle('merge', false);
+  const merge = await f.signed('StandardPullMergeService/GetStandardPullMergeOperation', { ...target, operationId: uuid() });
+  assert.equal(merge.message, 'Merge is turned off for this repository by the repository policy.');
+  assert.notEqual((await f.signed('RepositoryService/ListPullRequests', target)).status, 412);
+  await toggle('merge', true); await toggle('pull-requests', false);
+  assert.equal((await listed()).pullRequestsEnabled, false);
+  for (const [path, body] of [['RepositoryService/ListPullRequests', target], ['RepositoryService/GetIssueMutation', { ...target, idempotencyKey: '0b6f1f3e-2a4c-4d5e-8f60-7a8b9c0d1e2f' }], ['PullMergeObservationService/GetPullRequestMergeObservation', target], ['/native/repository-check', target]])
+    assert.equal((await f.signed(path, body)).status, 412, path);
+  assert.equal((await f.signed('StandardPullMergeService/GetStandardPullMergeOperation', { ...target, operationId: uuid() })).message, 'Merge is turned off for this repository because Pull requests are off (repository policy).');
+  const features = await f.features();
+  assert.deepEqual([features.actions.decidedBy, features.advice.decidedBy], ['FEATURE_DECIDER_DEPENDENCY', 'FEATURE_DECIDER_OPERATOR']);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM discussions').get().n, 2);
+});

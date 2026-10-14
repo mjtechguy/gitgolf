@@ -40,7 +40,7 @@ import { previewAPI, previewPolicy, environmentPolicy, previewRequest, cleanupPr
 import { repositoryEnvironments, environmentMethods } from './environments.mjs';
 import { releases, releaseMethods, releaseReadMethods, releaseAssetGrant } from './releases.mjs';
 import { discussionAttachments, attachmentMethods } from './attachments.mjs';
-import { featureColumns, publicAllowed, requireFeature, featureOff, policyCapabilities, featurePolicyService, repositoryFeatureService } from './feature-policy.mjs';
+import { featureColumns, publicAllowed, requireFeature, featureOff, policyCapabilities, featurePolicyService, repositoryFeatureService, effectiveFeatures, discussionFeatures } from './feature-policy.mjs';
 import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user, bodyLimit } from './common.mjs';
 export { digest } from './common.mjs';
 import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, remote, sha, validRef, GitProviderError } from './git.mjs';
@@ -156,7 +156,8 @@ function wireRepository(row, env, empty) {
   return { id: String(row.id), name: row.name, fullName, description: row.description, private: !row.is_public,
     htmlUrl: `${env.PUBLIC_ORIGIN}/${fullName}`, cloneUrl: `${env.PUBLIC_ORIGIN}/git/${fullName}.git`,
     defaultBranch: row.default_branch, updatedAt: row.created_at, empty,
-    issuesEnabled: true, pullRequestsEnabled: true, wikiEnabled: false };
+    // Rows read with the policy columns report the effective state; a repository created a moment ago has no policy rows.
+    ...(row.feature_policy === undefined ? { issuesEnabled: true, pullRequestsEnabled: true } : (features => ({ issuesEnabled: features.get('issues').effective, pullRequestsEnabled: features.get('pull-requests').effective }))(effectiveFeatures(env, row))), wikiEnabled: false };
 }
 
 async function repository(row, env) {
@@ -425,7 +426,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (url.pathname.endsWith('/read') && !['list', 'status', 'report', 'compare'].includes(body.action)) invalid('This route only reads evidence.');
       const key = body.action === 'create' ? body.selection?.repository : body.repository;
       const id = body.action === 'create' ? body.selection?.repositoryId : body.repositoryId;
-      const row = await authorizedRepository(db, person, key, env, id);
+      const row = await authorizedRepository(db, person, key, env, id, 'pull-requests');
       if (id !== String(row.id)) deny();
       return await evidenceAPI(db, env, person, row, action => withArtifact(env, row, action), body);
     }
@@ -440,7 +441,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       return reply(await executionPolicy(db, env, person, row, request, url.pathname.split('/').at(-1), body));
     }
     if (url.pathname === '/native/repository-check') {
-      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'pull-requests');
       return reply(await collaboration(db, env, person, 'ReportCheck', body, row, action => withArtifact(env, row, action)));
     }
     if (url.pathname === '/native/repository-grant') return reply(await grants(db, env, person, request, body));
@@ -475,6 +476,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (!attachmentMethods[attachmentRoute[1]].has(attachmentRoute[2])) unsupported();
       // Existing files stay readable when attachments are off; new uploads are refused.
       const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId, attachmentRoute[2] === 'SubmitDiscussionAttachmentUpload' ? 'attachments' : undefined);
+      await requireFeature(db, env, row, body.target?.pullRequest ? 'pull-requests' : 'issues');
       return reply(await discussionAttachments(db, env, person, row, attachmentRoute[2], body));
     }
     const featureRoute = /^\/rpc\/golf\.v1\.RepositoryFeatureService\/([A-Za-z]+)$/.exec(url.pathname);
@@ -566,7 +568,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (method === 'ListRepositories') {
       const paging = page(body);
       const visible = env.PUBLIC_REPOSITORIES === 'true';
-      const { results } = await db.prepare(`SELECT r.*,${ownerColumns},COALESCE(s.description,r.description) AS description${visible ? `,COALESCE(p.is_public AND ${publicAllowed},0) AS is_public` : ''} FROM repositories r LEFT JOIN grants g ON g.repository_id=r.id AND g.user_id=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
+      const { results } = await db.prepare(`SELECT r.*,${ownerColumns},COALESCE(s.description,r.description) AS description,${featureColumns}${visible ? `,COALESCE(p.is_public AND ${publicAllowed},0) AS is_public` : ''} FROM repositories r LEFT JOIN grants g ON g.repository_id=r.id AND g.user_id=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
         ${visible ? 'LEFT JOIN repository_visibility p ON p.repository_id=r.id' : ''}
         WHERE (g.user_id IS NOT NULL ${visible ? `OR p.is_public=1 AND ${publicAllowed}` : ''}) AND r.state='ACTIVE' AND (?='' OR COALESCE(o.slug,?)=?) ORDER BY r.id LIMIT ? OFFSET ?`).bind(person.id, body.owner || '', env.WORKSPACE_SLUG, body.owner || '', paging.limit + 1, paging.offset).all();
       const selected = results.slice(0, paging.limit);
@@ -581,6 +583,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       ? await withOwner(db,await operationRepository(db, person, body.idempotencyKey))
       : await env.timings.measure('grant', () => authorizedRepository(db, person, body.repository || body.selection?.repository || body.target?.repository, env, body.repositoryId || body.selection?.repositoryId || body.target?.repositoryId));
     env.readAuthority = { repository: { owner: ownerSlug(row,env), name: row.name }, repositoryId: String(row.id), role: row.role };
+    for (const feature of await discussionFeatures(db, person, row, service, method, body)) await requireFeature(db, env, row, feature);
     if (service === 'DiscussionCollaborationService' && method === 'ListIssueTemplates') return reply(await issueTemplates(row, body, action => withArtifact(env, row, action, true), readTree));
     if (service === 'DiscussionCollaborationService' && engagementMethods.has(method)) return reply(await engagement(db, env, person, row, method, body));
     if (service === 'RepositorySettingsService') return reply(await repositorySettings(db, env, person, row, method, body, action=>withArtifact(env,row,action)));

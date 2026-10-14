@@ -629,8 +629,10 @@ type RepositoryFeature struct {
 	Label             string   `protobuf:"bytes,8,opt,name=label,proto3" json:"label,omitempty"`
 	Group             string   `protobuf:"bytes,9,opt,name=group,proto3" json:"group,omitempty"`
 	Requires          []string `protobuf:"bytes,10,rep,name=requires,proto3" json:"requires,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// On for every repository in scope by an installation or organization requirement.
+	Required      bool `protobuf:"varint,11,opt,name=required,proto3" json:"required,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RepositoryFeature) Reset() {
@@ -731,6 +733,13 @@ func (x *RepositoryFeature) GetRequires() []string {
 		return x.Requires
 	}
 	return nil
+}
+
+func (x *RepositoryFeature) GetRequired() bool {
+	if x != nil {
+		return x.Required
+	}
+	return false
 }
 
 type GetRepositoryFeaturesRequest struct {
@@ -1084,7 +1093,7 @@ const file_golf_v1_feature_policy_proto_rawDesc = "" +
 	"\foperation_id\x18\a \x01(\tR\voperationId\"i\n" +
 	"\x1bUpdateFeaturePolicyResponse\x12.\n" +
 	"\x06policy\x18\x01 \x01(\v2\x16.golf.v1.FeaturePolicyR\x06policy\x12\x1a\n" +
-	"\brevision\x18\x02 \x01(\tR\brevision\"\xcd\x02\n" +
+	"\brevision\x18\x02 \x01(\tR\brevision\"\xe9\x02\n" +
 	"\x11RepositoryFeature\x12\x18\n" +
 	"\afeature\x18\x01 \x01(\tR\afeature\x12\x1c\n" +
 	"\teffective\x18\x02 \x01(\bR\teffective\x126\n" +
@@ -1098,7 +1107,8 @@ const file_golf_v1_feature_policy_proto_rawDesc = "" +
 	"\x05label\x18\b \x01(\tR\x05label\x12\x14\n" +
 	"\x05group\x18\t \x01(\tR\x05group\x12\x1a\n" +
 	"\brequires\x18\n" +
-	" \x03(\tR\brequires\"{\n" +
+	" \x03(\tR\brequires\x12\x1a\n" +
+	"\brequired\x18\v \x01(\bR\brequired\"{\n" +
 	"\x1cGetRepositoryFeaturesRequest\x126\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +

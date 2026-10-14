@@ -79,8 +79,13 @@ try {
   const governedRead = (await (await rpc('/rpc/golf.v1.RepositoryFeatureService/GetRepositoryFeatures', { repository: { owner: 'local-access-proof', name: 'rules-proof' }, repositoryId: '1' })).json()).features.find(f => f.feature === governed.feature);
   assert.deepEqual([governedRead.effective, governedRead.decidedBy], [false, 'FEATURE_DECIDER_INSTALLATION']);
   assert.equal((await rpc('/rpc/golf.v1.FeaturePolicyService/UpdateFeaturePolicy', { scope: 'FEATURE_POLICY_SCOPE_INSTALLATION', feature: governed.feature, mode: 'FEATURE_POLICY_MODE_ALLOWED', expectedVersion: '0', confirmation: governed.feature, operationId: crypto.randomUUID() })).status, 412);
-  assert.equal((await changePolicy('FEATURE_POLICY_MODE_ALLOWED', '1')).policy.version, '2');
-  console.log(`Real Access/workerd/D1 feature policy: ${governed.feature} off and back on, repository read names the installation, stale version refused`);
+  // Turning it back on is widening: the public Worker sets the sign-in time only from the verified Access token, so a client-supplied value is ignored.
+  const forged = await runtime.dispatchFetch(origin + '/rpc/golf.v1.FeaturePolicyService/UpdateFeaturePolicy', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Origin: origin, 'X-Golf-Native-Access-Issued-At': String(Math.floor(Date.now() / 1000)) },
+    body: JSON.stringify({ scope: 'FEATURE_POLICY_SCOPE_INSTALLATION', feature: governed.feature, mode: 'FEATURE_POLICY_MODE_ALLOWED', expectedVersion: '1', confirmation: governed.feature, operationId: crypto.randomUUID() }) });
+  if (forged.status !== 200) assert.match((await forged.json()).message, /last 10 minutes/);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM installation_audit WHERE subject=?").bind('feature:' + governed.feature).first()).n, forged.status === 200 ? 2 : 1);
+  await db.prepare('DELETE FROM feature_policies').run();
+  console.log(`Real Access/workerd/D1 feature policy: ${governed.feature} off with its audit row, repository read names the installation, stale version refused, widening ${forged.status === 200 ? 'accepted with a verified recent sign-in' : 'refused without a verified recent sign-in'}`);
   const target={repository:{owner:'local-access-proof',name:'rules-proof'},repositoryId:'1',ownerId:'1'};
   const read = async (service, method, body) => {
     const response=await rpc('/rpc/golf.v1.'+service+'/'+method,body);

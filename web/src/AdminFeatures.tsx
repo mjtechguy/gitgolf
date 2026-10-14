@@ -49,6 +49,7 @@ function PolicyEditor({ policy, dependents, pending, onSave, onCancel }: { polic
     </fieldset>
     <p className="field-help">{mode === policy.mode ? 'Choose a different mode to change the policy.' : effect(policy, mode, mode === Mode.DISABLED ? dependents : [])}</p>
     {widening ? <form.Field name="confirmation">{field => <label className="policy-confirm">Type <code>{policy.feature}</code> to confirm turning it on<input autoComplete="off" spellCheck={false} value={field.state.value} disabled={pending} onBlur={field.handleBlur} onChange={event => field.handleChange(event.target.value)} /></label>}</form.Field> : null}
+    {widening ? <p className="field-help">Turning a feature on also needs an Access sign-in from the last 10 minutes; the change is recorded in the audit log.</p> : null}
     <div className="credential-actions"><button className="button primary" disabled={pending || mode === policy.mode || widening && confirmation !== policy.feature}>{pending ? 'Saving…' : 'Save policy'}</button><button type="button" className="button secondary" disabled={pending} onClick={onCancel}>Cancel</button></div>
   </form>;
 }
@@ -94,7 +95,7 @@ export function AdminFeatures({ userId, signingOut }: { userId: string; signingO
           </li>)}</ul>
         </section> : null;
       })}</div>
-      <p className="panel-footnote">Off removes a feature from every repository and refuses its requests and queued work; its data is kept. Allowed lets each repository administrator decide. On everywhere keeps it on even where an administrator turned it off. Organization policies are not available yet, so only this installation policy and each repository’s own choice apply. Unavailable features are not part of this deployment; the operator adds them at deploy time. Policy changes need an Access sign-in as an operations administrator; bearer and service tokens cannot change them.</p>
+      <p className="panel-footnote">Off removes a feature from every repository and refuses its requests and queued work; its data is kept. Allowed lets each repository administrator decide. On everywhere keeps it on even where an administrator turned it off. Organization policies are not available yet, so only this installation policy and each repository’s own choice apply. Unavailable features are not part of this deployment; the operator adds them at deploy time. Policy changes need an Access sign-in as an operations administrator, from the last 10 minutes when they turn a feature on, and every change is recorded in the audit log; bearer and service tokens cannot change them.</p>
     </>}
   </div>;
 }

@@ -68,6 +68,10 @@ message RepositoryFeature {
  // The repository's own choice, kept while a higher level overrides it.
  bool repository_enabled = 5; bool can_change = 6; string revision = 7;
  string label = 8; string group = 9; repeated string requires = 10;
+ // On for every repository in scope by an installation or organization requirement.
+ bool required = 11;
+ // Settings beyond on/off for one feature (for example an AI model choice where the installation allows a
+ // repository override) are added as fields here and on FeaturePolicy; the web shows them under the feature.
 }
 message GetRepositoryFeaturesRequest { RepositoryKey repository = 1; string repository_id = 2; }
 message GetRepositoryFeaturesResponse {

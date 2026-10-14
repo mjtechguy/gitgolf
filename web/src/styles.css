@@ -1485,7 +1485,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 :root[data-appearance=golf] .workspace-breadcrumbs [aria-current=page] { color:var(--accent); }
 :root[data-appearance=golf] .repository-context { font-size:1.375rem; font-weight:700; }
 :root[data-appearance=golf] .repository-context > span:first-child { color:var(--muted); }
-:root[data-appearance=golf] .visibility:not(.available,.configured) { font-size:.6875rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+:root[data-appearance=golf] .visibility { font-size:.6875rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
 
 /* Classic and Flare share system type and softer headings. */
 :root:is([data-appearance=classic],[data-appearance=flare]) { --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
@@ -2060,3 +2060,14 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .feature-policy-blocked .feature-unavailable-state { margin:0; }
 @media(max-width:720px) { .policy-row { grid-template-columns:minmax(0,1fr); } .policy-edit { justify-self:start; min-height:44px; } .policy-card .browser-panel-heading { align-items:flex-start; flex-direction:column; gap:2px; padding-block:8px; } }
 .visibility.unallocated { border-style:dashed; }
+.policy-feature-group + .policy-feature-group { border-top:1px solid var(--line); }
+.policy-feature-group > h3 { margin:0; padding:10px var(--panel-padding) 0; color:var(--muted); font-size:.6875rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+.policy-row-title h4 { font-size:.875rem; letter-spacing:-.01em; margin:0; }
+.policy-decider { color:var(--muted); font-size:.75rem; }
+.policy-decider::before { content:"·"; margin-right:8px; }
+.policy-toggles { grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); }
+.policy-groups > .browser-panel { margin:0; }
+.policy-refresh { flex-shrink:0; white-space:nowrap; }
+.feature-policy-blocked h2 { margin:0; padding:0; border:0; background:none; color:var(--text); font-size:1.0625rem; min-height:0; }
+.feature-policy-blocked .credential-actions { justify-content:center; }
+.policy-choices > .policy-choice,.credential-form-content .policy-choices > label.policy-choice { display:flex; margin:0; }

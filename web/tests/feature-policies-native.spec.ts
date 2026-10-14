@@ -76,3 +76,35 @@ test('the portable server answers Unimplemented and the repository keeps its cur
   await expect(page.getByRole('link', { name: /^Actions/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /^Releases/ })).toHaveCount(0);
 });
+
+test('repository Features lead with effective state and who decided, and edit only allowed features', async ({ page }) => {
+  const state = await featureBackend(page);
+  state.modes.email = 'ENFORCED';
+  await page.goto('/alex/demo/settings');
+  const panel = page.getByRole('region', { name: 'Features' });
+  await expect(panel.getByRole('heading', { level: 3, name: 'Collaboration' })).toBeVisible();
+  const row = (label: string) => panel.getByRole('listitem').filter({ has: page.getByRole('heading', { level: 4, name: label, exact: true }) });
+  await expect(row('Releases')).toContainText('Off'); await expect(row('Releases')).toContainText('Installation policy');
+  await expect(row('Webhooks')).toContainText('This repository'); await expect(row('Webhooks')).toContainText('turned off for this repository by the repository policy');
+  await expect(row('Email notifications')).toContainText('Required');
+  await expect(row('Packages')).toContainText('Unavailable');
+  await expect(page.getByRole('form', { name: 'Repository features editor' })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Edit features' }).click();
+  const editor = page.getByRole('form', { name: 'Repository features editor' });
+  await expect(editor.getByRole('checkbox', { name: /Releases/ })).toHaveCount(0);
+  await expect(editor.getByRole('checkbox', { name: /Email notifications/ })).toHaveCount(0);
+  await expect(editor).toContainText('Releases (off, installation policy)'); await expect(editor).toContainText('Email notifications (required, installation policy)');
+  await expect(editor.getByRole('checkbox', { name: /Packages/ })).toHaveCount(0);
+  await editor.getByRole('checkbox', { name: /^Issues/ }).uncheck();
+  await editor.getByRole('checkbox', { name: /Webhooks/ }).check();
+  await editor.getByRole('button', { name: 'Save features' }).click();
+  await expect(panel.getByRole('status')).toHaveText('Saved: Issues off, Webhooks on.');
+  expect(state.repositoryUpdates).toEqual([expect.objectContaining({ changes: [expect.objectContaining({ feature: 'issues', enabled: false }), expect.objectContaining({ feature: 'webhooks', enabled: true })] })]);
+  await expect(row('Issues')).toContainText('This repository');
+  // The Issues tab is gone and its page names the level that decided.
+  await page.goto('/alex/demo/issues');
+  await expect(page.getByRole('heading', { name: 'Issues turned off' })).toBeVisible();
+  await expect(page.getByText('Issues are turned off for this repository by the repository policy.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^Issues/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /^Pull requests/ })).toBeVisible();
+});
