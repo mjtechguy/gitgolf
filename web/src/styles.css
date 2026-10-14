@@ -1958,3 +1958,16 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
   :root[data-appearance=flare] .login-card { border-top-width:1px; border-top-color:var(--line); box-shadow:0 1px 2px #0000000d; }
   :root:is([data-appearance=classic],[data-appearance=flare]) .login-footer { justify-content:center; gap:24px; }
 }
+
+/* Settings a given installation does not provide sit together, closed, at the foot of the navigation. */
+.settings-navigation-unavailable > summary { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:32px; padding:0 10px; border-radius:var(--radius); color:var(--muted); font-size:.75rem; font-weight:600; cursor:pointer; list-style:none; }
+.settings-navigation-unavailable > summary::-webkit-details-marker { display:none; }
+.settings-navigation-unavailable > summary:hover { background:var(--hover); color:var(--text); }
+.settings-navigation-unavailable > summary > span { min-width:20px; padding:0 6px; border-radius:var(--radius-badge); background:var(--raised); text-align:center; font-weight:500; }
+.settings-navigation-unavailable > a { color:var(--muted); }
+.feature-unavailable-state { display:inline-flex; align-items:center; width:fit-content; margin:6px 0 2px; padding:2px 10px; border:1px solid var(--line-strong); border-radius:var(--radius-badge); color:var(--muted); font-size:.75rem; font-weight:600; }
+.feature-unavailable .repository-intro p:last-child { max-width:72ch; }
+/* A clone address is something to copy, so it is a field with its own button. */
+.clone-address { flex-wrap:wrap; max-width:640px; }
+.clone-address > label { flex-basis:100%; margin:0 0 2px; color:var(--text); font-size:.8125rem; font-weight:600; }
+.clone-address > input { min-height:var(--control-h); background:var(--panel); color:var(--text); }

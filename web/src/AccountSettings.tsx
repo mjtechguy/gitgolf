@@ -22,16 +22,18 @@ const RepositoryAccessObservation = lazy(() => import('./RepositoryAccessObserva
 
 export function AccountLayout({ children }: { children: ReactNode }) {
   const runtime = useRuntimeCapabilities(), localAuth = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.local-auth');
+  // The native runtime has no provider connection, agent account, API credential or account activity service.
+  const portable = runtime.data?.runtimeProfile !== 'cloudflare-native';
   return <div className="account-layout"><nav className="account-navigation" aria-label="Account settings"><span className="eyebrow">PERSONAL SETTINGS</span>
     <Link to="/account/settings" activeOptions={{ exact:true }}><UserRound size={18} />Profile</Link>
     {localAuth && <Link to="/account/security" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sign-in and security</Link>}
     <Link to="/account/invitations" activeOptions={{ exact:true }}><MailPlus size={18} />Invitations</Link>
-    <Link to="/account/connections" activeOptions={{exact:true}}><Plug size={18}/>Provider connections</Link>
-    <Link to="/account/agents" activeOptions={{ exact:true }}><KeyRound size={18} />Coding agents</Link>
+    {portable && <Link to="/account/connections" activeOptions={{exact:true}}><Plug size={18}/>Provider connections</Link>}
+    {portable && <Link to="/account/agents" activeOptions={{ exact:true }}><KeyRound size={18} />Coding agents</Link>}
     {localAuth && <Link to="/account/sessions" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sessions</Link>}
     {localAuth && <Link to="/account/ssh-keys" activeOptions={{ exact:true }}><KeyRound size={18} />SSH keys</Link>}
-    <Link to="/account/api-credentials" activeOptions={{ exact:true }}><KeyRound size={18} />API credentials</Link>
-    <Link to="/audit" activeOptions={{ exact:true }}><History size={18} />Account activity</Link>
+    {portable && <Link to="/account/api-credentials" activeOptions={{ exact:true }}><KeyRound size={18} />API credentials</Link>}
+    {portable && <Link to="/audit" activeOptions={{ exact:true }}><History size={18} />Account activity</Link>}
   </nav><div className="account-content">{children}</div></div>;
 }
 
@@ -54,20 +56,23 @@ export function RepositorySettingsLayout({ children, owner, name }: { children: 
     { label: 'Git credentials', group: 'Access and security', suffix: '/git', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-git'), to: '/$owner/$name/settings/git' },
     { label: 'Rules and merge policy', group: 'Access and security', suffix: '/rules', icon: ShieldCheck, enabled: runtimeFeature(manifest, 'settings.repository-rules'), to: '/$owner/$name/settings/rules' },
     { label: 'Workflows', group: 'Automation', suffix: '/workflows', icon: History, enabled: runtimeFeature(manifest, 'settings.repository-workflows'), to: '/$owner/$name/settings/workflows' },
-    { label: 'Runners', group: 'Automation', suffix: '/runners', icon: Server, enabled: settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.runners'), to: '/$owner/$name/settings/runners' },
+    { label: 'Runners', group: 'Automation', suffix: '/runners', icon: Server, enabled: settingAvailable(runtime.isError ? undefined : runtime.data, runtime.data?.runtimeProfile === 'cloudflare-native' ? 'settings.native-runners' : 'settings.runners'), to: '/$owner/$name/settings/runners' },
     { label: 'Secrets and variables', group: 'Automation', suffix: '/secrets', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-secrets'), to: '/$owner/$name/settings/secrets' },
     { label: 'Environments', group: 'Automation', suffix: '/environments', icon: Rocket, enabled: runtimeFeature(manifest, 'settings.repository-environments'), to: '/$owner/$name/settings/environments' },
     { label: 'Webhooks', group: 'Integrations', suffix: '/webhooks', icon: Webhook, enabled: runtimeFeature(manifest, 'settings.repository-webhooks'), to: '/$owner/$name/settings/webhooks' },
   ] as const;
   const availability = (enabled: boolean) => enabled ? '' : runtime.isPending ? 'Checking…' : runtime.isError ? 'Status unknown' : 'Unavailable';
   const current = entries.find(entry => pathname.endsWith('/settings'+entry.suffix));
+  // Once the installation has reported, sections it does not provide move to one group at the foot.
+  const settled = runtime.isSuccess, missing = settled ? entries.filter(entry => !entry.enabled) : [];
   return <div className="account-layout repository-settings-layout">
     <label className="settings-section-picker">Settings section<select aria-label="Settings section" value={current?.to || ''} onChange={event=>{const entry=entries.find(item=>item.to===event.target.value);if(entry)void navigate({to:entry.to,params:{owner,name}});}}>
       {!current ? <option value="" disabled>Current settings page</option> : null}
       {entries.map(entry=><option key={entry.to} value={entry.to}>{entry.label}{availability(entry.enabled) ? ` — ${availability(entry.enabled)}` : ''}</option>)}
     </select></label>
     <nav className="account-navigation" aria-label="Repository settings">
-      {['', 'Access and security', 'Automation', 'Integrations'].map(group => {const items=entries.filter(entry=>entry.group===group);return items.length ? <div className="settings-navigation-group" key={group}>{group?<h2>{group}</h2>:null}{items.map(entry=><Link key={entry.to} to={entry.to} params={{owner,name}} activeOptions={{exact:true}}><entry.icon size={18} aria-hidden="true"/><span className="settings-navigation-label">{entry.label}{availability(entry.enabled) ? <small>{availability(entry.enabled)}</small> : null}</span></Link>)}</div>:null;})}
+      {['', 'Access and security', 'Automation', 'Integrations'].map(group => {const items=entries.filter(entry=>entry.group===group&&(entry.enabled||!settled));return items.length ? <div className="settings-navigation-group" key={group}>{group?<h2>{group}</h2>:null}{items.map(entry=><Link key={entry.to} to={entry.to} params={{owner,name}} activeOptions={{exact:true}}><entry.icon size={18} aria-hidden="true"/><span className="settings-navigation-label">{entry.label}{availability(entry.enabled) ? <small>{availability(entry.enabled)}</small> : null}</span></Link>)}</div>:null;})}
+      {missing.length ? <details className="settings-navigation-group settings-navigation-unavailable" open={missing.some(entry => entry === current) || undefined}><summary>Not on this installation<span>{missing.length}</span></summary>{missing.map(entry=><Link key={entry.to} to={entry.to} params={{owner,name}} activeOptions={{exact:true}}><entry.icon size={18} aria-hidden="true"/><span className="settings-navigation-label">{entry.label}</span></Link>)}</details> : null}
     </nav><div className="account-content">{children}</div>
   </div>;
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useQuery } from '@tanstack/react-query';
-import { CopyButton, privateQuery } from './RepositoryUI';
+import { CopyButton, Loading, PanelError, privateQuery } from './RepositoryUI';
+import { useRepositorySettingsAccess } from './useRepositorySettingsAccess';
 import { DataTable } from './DataTable';
 import type { DataTableColumn } from './DataTable';
 import { nativeAPI } from './NativeForge';
@@ -79,6 +80,14 @@ export function NativeRunnerAdmin() {
     {enrollment && <MachineEditor key={newMachineId} pool={enrollment} busy={busy} close={() => setEnrollment(undefined)} enroll={async (name, ttlHours, protocol) => { if (await mutate<{ credential: string }>({ action: protocol === 'gitlab' ? 'enrollGitLab' : 'enroll', id: newMachineId, poolId: enrollment.id, poolVersion: enrollment.version, name, ttlHours, trustExecution: true }, value => setCredential({ machine: name, value: value.credential }))) setEnrollment(undefined); }} />}
     <section className="browser-panel"><div className="browser-panel-heading"><h3>Machines</h3></div>{inventory.isSuccess && <DataTable data={inventory.data.machines} columns={machines} getRowId={m => m.id} label="native runner machines" />}{inventory.data?.truncated && <p className="field-help">Inventory limit reached. Inspect the full inventory through the API before adding hosts.</p>}</section>
     {reconcile && <form className="credential-form-content" onSubmit={event => { event.preventDefault(); void mutate({ action: 'reconcile', id: reconcile.id, expectedVersion: reconcile.version, jobId: reconcile.active_job_id, cleanupConfirmed: true }).then(ok => { if (ok) setReconcile(undefined); }); }}><h3>Confirm physical cleanup of {reconcile.name}</h3><p>Verify all containers, volumes and local source files for job <code>{reconcile.active_job_id}</code> are gone before clearing quarantine.</p><label><input type="checkbox" required disabled={busy} /> I inspected the exact host and confirmed cleanup.</label><div className="credential-actions"><button className="button primary" disabled={busy}>Confirm cleanup</button><button type="button" className="button secondary" disabled={busy} onClick={() => setReconcile(undefined)}>Cancel</button></div></form>}
+  </section>;
+}
+
+// Settings → Runners on the native runtime: the repository chooses one of the workspace's runner pools.
+export function NativeRepositoryRunners({ userId, owner, name, signingOut }: { userId: string; owner: string; name: string; signingOut: boolean }) {
+  const { access, revalidating, error, refresh } = useRepositorySettingsAccess(userId, owner, name, signingOut);
+  return <section className="page-stack"><header className="repository-intro"><div><h1>Runners</h1><p>Choose the runner pool that runs this repository's approved pull request jobs. Workspace administrators enroll machines and manage pools.</p></div></header>
+    {error ? <PanelError error={error} retry={refresh} /> : !access || revalidating ? <Loading label="Verifying repository access…" /> : signingOut ? null : <NativeRunnerPlacement key={access.repositoryId} context={{ repository: { owner, name }, repositoryId: access.repositoryId }} />}
   </section>;
 }
 
