@@ -109,7 +109,8 @@ test('duplicate settings submissions dispatch once and navigation discards a lat
   });
   await expect.poll(() => state.writes.length).toBe(1);
   await expect(page.getByRole('button', { name: 'Saving…', exact: true })).toBeDisabled();
-  await page.getByRole('complementary', { name: 'Workspace shortcuts', exact: true }).getByRole('link', { name: 'Repositories', exact: true }).click();
+  await page.getByLabel('Open workspace navigation', {exact:true}).click();
+  await page.getByRole('navigation', { name: 'Workspace menu', exact: true }).getByRole('link', { name: 'Repositories', exact: false }).click();
   release();
   await page.goto('/repositories/alex/demo/settings');
   await expect(page.getByText('One dispatch', { exact: true })).toBeVisible();

@@ -549,8 +549,6 @@ test('invalid line fragments and empty/large preview limits',async({page})=>{
 });
 
 for (const width of [320, 1280, 1920]) for (const theme of ['dark', 'light']) test(`Code latest commit and native tags fit bounded workspace at ${width}px ${theme}`, async ({ page }) => {
-  // This measures the standard arrangement; layout-presets.spec.ts covers panes.
-  await page.addInitScript(() => localStorage.setItem('golf.layout.golf', 'refined'));
   await backend(page);
   const tagReads: ReturnType<typeof request<typeof ListTagsRequestSchema>>[] = [];
   await page.route('**/rpc/golf.v1.RepositoryService/ListTags', async route => {

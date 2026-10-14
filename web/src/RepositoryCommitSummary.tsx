@@ -25,7 +25,7 @@ export function RepositoryCommitSummary({ location, repositoryId, commitId, user
   const commit = query.isSuccess && !query.isFetching ? query.data : undefined;
   return <div className="repository-latest-commit" aria-label="Latest commit">
     {commit ? <>
-      <span className="latest-commit-author" title={commit.authorName}>{commit.authorName || 'Unknown author'}</span>
+      <span className="latest-commit-author" data-initial={(commit.authorName || '?').slice(0, 2).toLowerCase()} title={commit.authorName}>{commit.authorName || 'Unknown author'}</span>
       <Link className="latest-commit-message" title={commit.message} {...repositoryOptions(location, { view: 'commits', ref:commitId, refKind:undefined,refName:undefined, commit: commit.sha, historyPath: undefined })}>{commit.message.split('\n')[0] || 'Untitled commit'}</Link>
       <Link className="latest-commit-sha" title={commit.sha} {...repositoryOptions(location, { view: 'commits', ref:commitId, refKind:undefined,refName:undefined, commit: commit.sha, historyPath: undefined })}><code>{shortSHA(commit.sha)}</code></Link>
       <DateLabel relative value={commit.authoredAt}/>

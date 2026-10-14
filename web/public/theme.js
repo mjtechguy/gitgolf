@@ -1,9 +1,9 @@
 const root = document.documentElement;
 // Each appearance offers three layouts. A layout names its navigation, its content arrangement and optional features.
 const layouts = {
-  classic: { primer: 'top standard', workbench: 'top panes', reader: 'top standard reader' },
-  golf: { refined: 'top standard', strokes: 'top standard keys band', tiles: 'rail panes contextnav' },
-  flare: { kumo: 'sidebar standard contextnav', overview: 'sidebar standard band', console: 'rail standard' },
+  classic: { primer: 'top standard crumb headertabs finder create counts', workbench: 'top panes tree', reader: 'top standard reader' },
+  golf: { refined: 'top standard', strokes: 'top standard keys band', tiles: 'rail panes contextnav split toptools counts' },
+  flare: { kumo: 'sidebar standard contextnav', overview: 'sidebar standard band', console: 'rail standard crumb pagehead finder counts' },
 };
 const preferred = { classic: 'primer', golf: 'tiles', flare: 'console' };
 const saved = key => { try { return localStorage.getItem(key); } catch { return null; } };

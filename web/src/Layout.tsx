@@ -3,11 +3,11 @@ import type { ReactNode } from 'react';
 
 // Rail and sidebar layouts lift the repository heading into the top bar and, where the layout asks, its sections into the side navigation.
 // The shell's slots live outside React state, so mounting them never re-renders the workspace or its open page.
-type Slot = 'heading' | 'navigation';
-const slots: Record<Slot, HTMLElement | null> = { heading: null, navigation: null };
+type Slot = 'heading' | 'navigation' | 'tabs' | 'tools' | 'finder';
+const slots: Record<Slot, HTMLElement | null> = { heading: null, navigation: null, tabs: null, tools: null, finder: null };
 const slotListeners = new Set<() => void>();
 const slotRef = (name: Slot) => (element: HTMLElement | null) => { slots[name] = element; slotListeners.forEach(listener => listener()); };
-export const headingSlot = slotRef('heading'), navigationSlot = slotRef('navigation');
+export const headingSlot = slotRef('heading'), navigationSlot = slotRef('navigation'), tabsSlot = slotRef('tabs'), toolsSlot = slotRef('tools'), finderSlot = slotRef('finder');
 export const useShellSlot = (name: Slot) => useSyncExternalStore(callback => { slotListeners.add(callback); return () => slotListeners.delete(callback); }, () => slots[name]);
 
 // Side navigation exists only where the shell shows its rail or sidebar.
