@@ -1,5 +1,35 @@
 # Golf implementation status
 
+## 2026-10-14 — Agent hosts verified on the hosted demo (phase 1a end to end)
+
+On `https://demo.gitgolf.mjtechguy.com` (schema 36, with #67 Worker, #68 host binary, #70 UI):
+
+- Settings > Agent hosts (`/account/agents`) issued a personal registration token and showed the exact
+  `register` and `run` commands once. `golf-agent-host` on the owner's Linux workstation registered and
+  reported Claude Code 2.1.299 and OpenCode 1.18.35 signed in and Grok 1.0.46 sign-in unknown; Codex was
+  withheld because its sandbox cannot start under Ubuntu's AppArmor user-namespace restriction.
+- Issue #1 in `mj/actions-demo` ("Add a multiply function with tests") was assigned to Claude Code from the
+  issue page's Assign to agent dialog. The task panel streamed the log; the host claimed, cloned, ran
+  Claude Code headless, committed and pushed `golf-agent/171fd924` in 23 s, and Golf verified the branch and
+  marked the task SUCCEEDED. The panel showed the commit, the two changed files, the tool's own summary and
+  its reported usage (84,988 input / 999 output tokens, $0.13, labelled as reported).
+- Claude Code reported that it could not run `npm test`: the host runs it without approval for shell
+  commands. Fetched and run separately, the branch's tests pass (4/4). A host owner can allow test
+  commands with `tools.claude.extraArgs` (for example `--allowedTools "Bash(npm test*)"`).
+- Open pull request on the task created PR #2 from `golf-agent/171fd924` into `main`, prefilled with the
+  issue title and the tool's summary. The commit is authored `Golf agent (claude)` with a
+  `Golf-Agent-Task` trailer.
+
+Found and fixed while verifying: the Worker returns `hostId` as a string and the binary expected a number,
+so the first registration consumed its token but saved no credential; the binary now accepts both. After a
+deploy the Workspace Durable Object kept serving the old bundle while runners and tabs kept it busy (new
+routes answered 501); #69 and #71 make an older instance retire itself, and a deploy now takes effect
+within seconds.
+
+Not yet verified on hosted: organization and installation hosts, sharing a host with other users, pull
+request tasks, cancel and the lost-host sweep (all covered by the local runtime check), OpenCode and Grok
+through Golf (each ran once against a fake server), SSH hosts (phase 1b).
+
 ## 2026-10-14 — Agent hosts, Worker side (agents plan phase 1a, schema 36)
 
 The Cloudflare-native Worker half of `docs/AGENT_HOSTS.md`: migration

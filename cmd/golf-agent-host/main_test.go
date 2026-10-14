@@ -168,7 +168,7 @@ func (f *fakeGolf) serve(w http.ResponseWriter, r *http.Request, backend http.Ha
 			writeJSON(w, 401, map[string]string{"code": "bad_token", "message": "registration token"})
 			return
 		}
-		writeJSON(w, 200, map[string]any{"hostId": 7, "uuid": f.hostUUID, "credential": f.credential})
+		writeJSON(w, 200, map[string]any{"hostId": "7", "uuid": f.hostUUID, "credential": f.credential}) // the Worker sends ids as strings
 		return
 	}
 	if r.Header.Get("Authorization") != "Bearer "+f.credential {
