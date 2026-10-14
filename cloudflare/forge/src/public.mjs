@@ -75,10 +75,11 @@ async function dispatch(request, env, ctx, clock) {
       if (url.pathname === '/native/installation' && headers.has('X-Golf-Native-Access-Email')) {
         const issued = await accessIssuedAt(request, env, access);
         if (issued) headers.set('X-Golf-Native-Access-Issued-At', String(issued));
-        if (/^[A-Z]{3}$/.test(request.cf?.colo || '')) headers.set('X-Golf-Native-Access-Colo', request.cf.colo);
-        if (/^[A-Z]{2}$/.test(request.cf?.country || '')) headers.set('X-Golf-Native-Access-Country', request.cf.country);
       }
     }
+    // Where a request came from, for audit rows (installation.mjs and audit.mjs). Removed above, so only Cloudflare's own values arrive.
+    if (/^[A-Z]{3}$/.test(request.cf?.colo || '')) headers.set('X-Golf-Native-Access-Colo', request.cf.colo);
+    if (/^[A-Z]{2}$/.test(request.cf?.country || '')) headers.set('X-Golf-Native-Access-Country', request.cf.country);
     const workspace = ctx.exports.Workspace;
     const owner = workspace.get(workspace.idFromName(env.WORKSPACE_SLUG));
     if (url.pathname.startsWith('/api/repositories/')) return releaseAssetDownload(request, env, owner, headers);
