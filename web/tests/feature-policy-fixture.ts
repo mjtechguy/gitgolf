@@ -21,6 +21,7 @@ export const catalogue: Feature[] = [
   { feature: 'email', label: 'Email notifications', plural: true, group: 'Integrations', requires: [], choice: true, reach: 14 },
   { feature: 'releases', label: 'Releases', plural: true, group: 'Distribution', requires: [], choice: true, reach: 10 },
   { feature: 'packages', label: 'Packages', plural: true, group: 'Distribution', requires: [], choice: true, reach: 0, unavailable: 'The operator has not connected an OCI registry to this installation.' },
+  { feature: 'semantic-search', label: 'Semantic search', group: 'Automation', requires: [], choice: true, reach: 5 },
   { feature: 'public-repositories', label: 'Public repositories', plural: true, group: 'Distribution', requires: [], choice: false, reach: 3 },
 ];
 const capabilities = ['settings.repository-general', 'settings.repository-access', 'settings.repository-git', 'settings.repository-rules', 'settings.repository-workflows', 'settings.native-runners', 'settings.repository-secrets', 'settings.repository-environments', 'settings.repository-webhooks', 'repository.releases', 'repository.public-source', 'settings.feature-policy', 'operations.dashboard', 'settings.native', 'pull.merge'];

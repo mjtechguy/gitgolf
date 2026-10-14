@@ -90,6 +90,14 @@ if (mode === 'retire') {
       config.env.AI_GATEWAY_LIMITS = { type: 'text', value: JSON.stringify({ requestsPerMinute: 60, spendCentsPerDay: 500 }) };
     }
   }
+  // Semantic search: the Vectorize index created at deploy (enable-search) and its fixed dimension. Model selection (AI_MODELS) picks the embedding model.
+  if (settings.search !== undefined) {
+    const q = settings.search;
+    if (!settings.evidence?.allow_ai || !q || Object.keys(q).some(key => !['index', 'dimensions'].includes(key)) || typeof q.index !== 'string' || !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(q.index) ||
+        !Number.isInteger(q.dimensions) || q.dimensions < 32 || q.dimensions > 4096) throw Error('Invalid semantic search allocation');
+    config.env.SEARCH_INDEX = { type: 'vectorize', name: q.index };
+    config.env.SEARCH_DIMENSIONS = { type: 'text', value: String(q.dimensions) };
+  }
   if (settings.evidence && !settings.previews && !settings.automatic_ci) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '*/5 * * * *' }];
   if (settings.tests) {
     const { testProfile } = await import('./src/test-policy.mjs');

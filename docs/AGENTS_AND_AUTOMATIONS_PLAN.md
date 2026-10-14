@@ -164,3 +164,66 @@ and limits, or create a custom automation from scratch.
   whether Tunnel or Tailscale inside the container is needed.
 - Cron Triggers do not fire on this account, so schedules use Durable Object alarms,
   as maintenance already does.
+
+## Contribution graphs and AI impact
+
+Asked for on 2026-10-14: GitHub-style contribution graphs for people, and the same for
+agents overall and for each individual agent, to show how much AI helps.
+
+### Rules
+
+- **Counts, not claims.** Show what happened (commits, pull requests merged, reviews,
+  proposals accepted) and what it cost. Do not show "hours saved" or productivity
+  multiples; any comparison (for example time to merge) is labelled as a comparison,
+  not as an effect.
+- **Attribution has tiers, and each is labelled:**
+  1. *Golf agent* — Golf itself created the commit or branch (an agent proposal or an
+     automation pull request). Verified from Golf's own records.
+  2. *AI-assisted* — a person assigned or ran an agent and then merged the result.
+     The person is the contributor; the AI is shown as assisting.
+  3. *Declared* — the commit carries a `Co-Authored-By` trailer naming a known AI
+     tool. Declared by the author, so shown separately and never counted as verified.
+  4. *Unlabelled* — everything else. Never asserted to be human-written.
+- **Access first.** A viewer sees counts only for repositories they can read. A person
+  may choose to show private-repository activity on their profile as anonymous counts,
+  as on GitHub. Feature policy id `contribution-graphs` (installation, organization,
+  repository).
+
+### Data
+
+- A daily rollup table in D1, `contribution_days`, keyed by (day, actor, repository,
+  kind, ai_tier) with a count. D1 stays authoritative because every read needs an
+  access check; Analytics Engine can hold anonymous installation-wide aggregates only.
+- Kinds: commit, pull request opened, pull request merged, review, issue opened, issue
+  closed, comment, agent proposal created, agent proposal accepted.
+- Written when the event happens (merge, issue, review, proposal) and backfilled from
+  first-parent Git history by the existing `indexes` maintenance stage, in paced
+  batches, so a new installation fills in over a few cycles.
+- Agent identity is recorded on each task (tool, model, place, credential label, cost
+  from `ai_runs` and gateway analytics), so per-agent pages are queries, not guesses.
+
+### Views
+
+- **Person (profile page and "Your activity"):** a 12-month heatmap, year picker,
+  streaks, a per-day panel naming repositories and events, and a toggle that overlays
+  AI involvement (a second hue for AI-assisted days, never replacing the human count).
+- **Agents overall (installation and organization admin):** share of merged pull
+  requests with AI involvement over time, proposals created and accepted (acceptance
+  rate), reviews with findings that were acted on, CI pass rate of proposals, cost per
+  accepted proposal, and an AI activity heatmap.
+- **One agent, tool or automation:** its own page with the same graph for what it
+  landed, runs and outcomes, tokens and cost, models used, per-repository breakdown and
+  the most common failure reasons.
+- **Repository pulse:** AI share and acceptance rate for that repository.
+
+### Slices
+
+| # | Slice | Depends on |
+| --- | --- | --- |
+| CG-1 | `contribution_days`, writers, Git backfill, person heatmap (human activity only, GitHub parity), profile privacy choice | — |
+| CG-2 | AI attribution tiers (Golf-agent commits, trailers), AI overlay, installation "AI impact" page from today's agent proposals, review advice and AI runs | CG-1 |
+| CG-3 | Per-agent, tool and automation pages with cost and outcomes | Agents plan phases 1–2 |
+| CG-4 | Repository and organization rollups, CSV export | CG-2 |
+
+Charts follow the dataviz guidance (one palette, accessible in light and dark, a
+data table behind every chart).

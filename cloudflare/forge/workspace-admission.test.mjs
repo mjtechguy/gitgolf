@@ -12,6 +12,7 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
     export const handle=(request,env)=>env.handle(request);
     export const advanceEvidence=(env,id,phase,workflows)=>env.background(id,phase,workflows);
     export const advanceAi=()=>{};
+    export const advanceSearch=()=>{};
     export const activityAuthority=(request,env,input)=>env.handle(request);
     export const testGit=()=>{},testRegistry=()=>{},registryExecution=()=>{},agentGit=()=>{},servePreview=()=>{},cleanupPreviews=()=>{},runCI=()=>{};`;
   return source ? { url: 'data:text/javascript,' + encodeURIComponent(source), shortCircuit: true } : next(specifier, context);
