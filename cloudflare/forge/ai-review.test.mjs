@@ -238,3 +238,11 @@ test('the patch reader follows the native generator: quoted and spaced paths, bi
   assert.throws(() => parseDiff('diff --git a/x b/y\n'), /Invalid diff header/);
   assert.equal(reviewMarkdown('S', [{ path: 'a b.txt', line: 2, severity: 'low', title: 'Odd', evidence: 'Evidence here.', suggestion: '' }]), 'S\n\n**Findings**\n\n- **Low** a b.txt:2: Odd\n  Evidence here.\n');
 });
+
+test('the run records the model chosen for the review-drafts use and calls exactly that one', async t => {
+  const f = await fixture(t);
+  f.env.AI_MODELS = JSON.stringify({ 'review-drafts': { default: '@cf/zai-org/glm-5.3-flash', allowed: ['@cf/zai-org/glm-5.3-flash', '@cf/zai-org/glm-5.3'] } });
+  const { run } = await f.draft();
+  assert.equal(run.state, 'SUCCEEDED', JSON.stringify(run));
+  assert.equal(run.model, '@cf/zai-org/glm-5.3-flash'); assert.equal(f.calls[0].model, '@cf/zai-org/glm-5.3-flash');
+});
