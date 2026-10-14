@@ -1,13 +1,16 @@
 import { digest, uuidOK, Fault, deny, invalid, reply } from './common.mjs';
 import { aiAllocation, aiDailyLimit, aiLimits, aiRun, aiUsage } from './ai.mjs';
 import { featureOff } from './feature-policy.mjs';
+import { reviewDraft } from './ai-review.mjs';
 
 // One entry per kind; each AI track adds one line here. A kind is
 // { feature (a feature-policy id, such as 'advice'), model, roles, target(value, row) → bounded JSON target or invalid(),
 //   prepare({ db, env, person, row, artifact, target }) → JSON input (in the workspace write queue: authority and exact bounded input only),
 //   infer({ env, input, model, run }) → JSON output (in the Workflow; `run(input, options)` makes the one gateway call),
 //   stale?({ db, env, person, row, artifact, target, input }) → boolean on status reads }.
-export const aiKinds = {};
+export const aiKinds = {
+  'review-draft': reviewDraft,
+};
 
 const time = () => new Date().toISOString();
 const bytes = value => new TextEncoder().encode(value).length;

@@ -10,6 +10,7 @@ import { executionValueState } from './execution-values.mjs';
 import { operationsAdmin } from './operations.mjs';
 import { auditStatement, clientHeaders, locked } from './installation.mjs';
 import { settingsAuthority } from './repository-settings.mjs';
+import { aiAllocation } from './ai.mjs';
 
 // GitHub-style features: operator allocation ∩ installation ∩ organization ∩ repository choice ∩ dependencies.
 // Missing rows mean ALLOWED and enabled, so the migration alone changes nothing. Turning a feature off never deletes data.
@@ -23,6 +24,7 @@ const catalogue = [
   { id: 'previews', label: 'Previews and environments', plural: true, group: 'Automation', requires: ['actions'], choice: true, allocated: env => previewPolicy(env) || 'The operator has not allocated protected previews (preview Worker, origin and Access application) on this installation.' },
   { id: 'agents', label: 'Agent proposals', plural: true, group: 'Automation', requires: ['actions', 'pull-requests'], choice: true, allocated: env => evidencePolicy(env) && agentPolicy(env) || 'The operator has not allocated native agent proposals on this installation.' },
   { id: 'advice', label: 'AI review advice', group: 'Automation', requires: ['pull-requests'], choice: true, allocated: env => evidencePolicy(env) && env.EVIDENCE_ALLOW_AI === 'true' && Boolean(env.AI && env.EVIDENCE_GATEWAY) || 'The operator has not approved Workers AI advice for pull-request evidence on this installation.' },
+  { id: 'ai-review-drafts', label: 'AI review drafts', plural: true, group: 'Automation', requires: ['pull-requests'], choice: true, allocated: env => aiAllocation(env) || 'The operator has not approved Workers AI runs (Workers AI, the private AI Gateway and the AI workflow) on this installation.' },
   { id: 'merge', label: 'Merge', group: 'Collaboration', requires: ['pull-requests'], choice: true, allocated: () => true },
   { id: 'attachments', label: 'Discussion attachments', plural: true, group: 'Collaboration', requires: [], choice: true, allocated: env => Boolean(env.EVIDENCE_BUCKET) || 'Discussion attachments need the private R2 bucket binding on this installation.' },
   { id: 'wiki', label: 'Wiki', group: 'Collaboration', requires: [], choice: false, allocated: () => 'Cloudflare native has no wiki service yet.' },
@@ -142,7 +144,7 @@ export async function discussionFeatures(db, person, row, service, method, body)
 const capabilityFeatures = { 'native-pr-tests': 'actions', 'native-ci-automatic': 'actions', 'settings.repository-execution-policy': 'actions', 'settings.repository-secrets': 'secrets',
   'native-pr-previews': 'previews', 'native-preview-browser': 'previews', 'native-pr-apps': 'previews', 'settings.repository-environments': 'previews', 'native-pr-agents': 'agents',
   'discussion.attachments': 'attachments', 'settings.repository-webhooks': 'webhooks', 'repository.email-notifications': 'email', 'repository.releases': 'releases',
-  'repository.packages': 'packages', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues',
+  'repository.packages': 'packages', 'pull.ai-review-drafts': 'ai-review-drafts', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues',
   ...Object.fromEntries(['pull.merge-observation', 'pull.review-requests', 'pull.review-lifecycle', 'pull.pending-reviews', 'pull.codeowners'].map(id => [id, 'pull-requests'])) };
 export async function policyCapabilities(db, env, capabilities) {
   const { results } = await db.prepare("SELECT scope,feature,mode FROM feature_policies WHERE scope='installation' AND scope_id=''").all();
