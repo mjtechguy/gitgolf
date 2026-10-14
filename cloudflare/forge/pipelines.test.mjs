@@ -117,3 +117,16 @@ test('environments: auto-created unprotected, protected ones wait for a reviewer
   assert.deepEqual(f.sql.prepare('SELECT d.url,d.state,e.name FROM pipeline_deployments d JOIN pipeline_environments e ON e.id=d.environment_id ORDER BY d.id').all().map(row => ({ ...row })),
     [{ url: '', state: 'SUCCESS', name: 'staging' }, { url: 'https://x.example', state: 'SUCCESS', name: 'prod' }]);
 });
+
+test('playing a manual job to a protected environment waits for approval, then queues', async t => {
+  const f = await pipelineFixture(t);
+  f.sql.exec("INSERT INTO pipeline_environments(repository_id,artifact_name,name,reviewers,created_by,created_at,updated_at) VALUES(1,'repo-" + 'b'.repeat(32) + "','production','[2]',1,'t','t')");
+  const created = await p.createPipelineRun(f.db, f.env, run({ engine: 'gitlab-ci', workflowPath: '.gitlab-ci.yml' }), [job('deploy', [], { when: 'manual', allowFailure: true, environment: { name: 'production' } })]);
+  const state = () => f.sql.prepare('SELECT state,when_mode FROM pipeline_jobs WHERE run_id=?').get(created.runId);
+  assert.equal(state().state, 'MANUAL');
+  const id = f.sql.prepare('SELECT id FROM pipeline_jobs WHERE run_id=?').get(created.runId).id;
+  await p.playManualJob(f.db, f.env, { id: 1 }, id);
+  assert.deepEqual({ ...state() }, { state: 'APPROVAL', when_mode: 'on_success' });
+  await p.approveEnvironmentJob(f.db, f.env, { id: 2 }, id, { approve: true });
+  assert.equal(state().state, 'QUEUED');
+});

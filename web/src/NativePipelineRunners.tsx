@@ -40,7 +40,7 @@ export function NativePipelineRunners({ target, userId }: { target: Scope; userI
       <p className="field-help">Stock Forgejo Runner and GitLab Runner machines you operate. They run {target.scope === 'installation' ? 'jobs of every repository' : target.scope === 'organization' ? 'jobs of this organization’s repositories' : 'this repository’s jobs'} whose <code>runs-on</code> labels or tags they all carry. Docker, images and network belong to the runner host.</p>
       {error ? <p className="error" role="alert">{message(error)}</p> : null}
       {inventory.isError ? <p className="error" role="alert">{message(inventory.error)}</p> : !data ? <Loading label="Reading runners…" /> :
-        <DataTable data={data.runners} columns={columns(true)} getRowId={r => r.id} label="runners" emptyMessage="No runners are registered at this scope yet. Choose New runner to register one." />}
+        <DataTable data={data.runners} columns={columns(true)} getRowId={r => r.id} label="registered runners" emptyMessage="No runners are registered at this scope yet. Choose New runner to register one." />}
     </section>
     {creating && data ? <NewRunner target={target} inventory={data} close={() => setCreating(false)} done={value => { setCreated(value); setCreating(false); void inventory.refetch(); }} /> : null}
     {created ? <section className="browser-panel credential-form-content pipeline-runner-command" aria-label="Register the runner"><h3>Register the runner</h3>

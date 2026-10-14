@@ -2128,3 +2128,10 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
  .pipeline-log-lines>li { grid-template-columns:40px minmax(0,1fr); gap:8px; }
  .pipeline-filters select { flex:1 1 140px; }
 }
+.pipeline-run .workflow-run-summary { flex-wrap:wrap; }
+.pipeline-run .workflow-run-summary>div:first-child { flex:1 1 320px; }
+.pipeline-run h2 { flex-wrap:wrap; min-width:0; }
+.pipeline-run-subtitle { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; margin-top:2px; font-size:.8125rem; color:var(--muted); }
+.pipeline-run-subtitle>strong { color:var(--text); font-weight:600; }
+.pipeline-log-group { font-weight:700; }
+.pipeline-log-command { color:color-mix(in srgb,var(--terminal-fg) 55%,transparent); }

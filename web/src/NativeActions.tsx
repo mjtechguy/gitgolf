@@ -57,7 +57,7 @@ function NativeRunList({ context, userId, workflowPath, evidence }: { context: C
   const columns: DataTableColumn<PipelineRun>[] = [
     { id: 'run', header: 'Run', accessorFn: run => `${run.title} ${run.workflowName} ${run.number} ${run.actor}`, cell: ({ row: { original: run } }) => <div className="workflow-run-row"><StateIcon state={run.state} size={18} /><div>
       <Link {...repositoryOptions({ ...context.repository, view: 'actions', run: run.id })}>{run.title || run.workflowName}</Link>
-      <div className="workflow-run-commit"><strong>{run.workflowName}</strong> #{run.number}: {run.event === 'pull_request' ? <>Pull request #{run.pullNumber} {run.attempt > 1 ? `re-run ${run.attempt}` : 'synchronized'}</> : <>{eventLabels[run.event] || run.event}</>}{run.actor ? <> by {run.actor}</> : null}</div>
+      <div className="pipeline-run-subtitle"><strong>{run.workflowName}</strong> #{run.number}: {run.event === 'pull_request' ? <>Pull request #{run.pullNumber} {run.attempt > 1 ? `re-run ${run.attempt}` : 'synchronized'}</> : <>{eventLabels[run.event] || run.event}</>}{run.actor ? <> by {run.actor}</> : null}</div>
       {run.state === 'REFUSED' && run.reason ? <p className="pipeline-reason">{run.reason}</p> : null}</div></div> },
     { id: 'branch', header: 'Branch', accessorFn: run => run.headRef || run.branch, cell: ({ row: { original: run } }) => <span className="pipeline-ref"><GitBranch size={13} aria-hidden="true" />{run.headRef || run.branch}</span> },
     { id: 'when', header: 'When', accessorFn: run => run.createdAt, cell: ({ row: { original: run } }) => <span className="pipeline-when"><DateLabel value={run.createdAt} relative /><span><Clock size={13} aria-hidden="true" />{duration(run.startedAt, run.finishedAt) || stateLabels[run.state]}</span></span> },
@@ -83,7 +83,7 @@ function NativeRunList({ context, userId, workflowPath, evidence }: { context: C
             <select aria-label="Status" value={filters.status} onChange={e => set('status', e.target.value)}>{statusOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
             <select aria-label="Branch" value={filters.branch} onChange={e => set('branch', e.target.value)}><option value="">All branches</option>{(workflows.data?.branches || []).map(b => <option key={b} value={b}>{b}</option>)}</select>
           </div></div>
-        {runs.isError ? <p className="error" role="alert">{message(runs.error)}</p> : runs.data ? <DataTable data={runs.data.runs} columns={columns} getRowId={run => run.id} label="workflow runs" emptyMessage={workflowPath ? 'This workflow has no runs yet.' : 'No workflow runs yet. Push a workflow file under .github/workflows or .forgejo/workflows to start one.'} pagination={false} /> : <Loading label="Reading workflow runs…" />}
+        {runs.isError ? <p className="error" role="alert">{message(runs.error)}</p> : runs.data ? <DataTable data={runs.data.runs} columns={columns} getRowId={run => run.id} label="workflow runs" emptyMessage={workflowPath ? 'This workflow has no runs yet.' : 'No workflow runs yet. Push a workflow file under .github/workflows or .forgejo/workflows to start one.'} /> : <Loading label="Reading workflow runs…" />}
         <div className="pipeline-pages">{page > 1 ? <button className="button secondary" onClick={() => setPage(page - 1)}>Newer</button> : null}{runs.data?.nextPage ? <button className="button secondary" onClick={() => setPage(runs.data!.nextPage)}>Older</button> : null}</div>
         <p className="panel-footnote">Filters are applied by the server across every run; search and sorting apply to the 25 runs on this page.</p>
       </section></>}
@@ -270,6 +270,13 @@ function JobLog({ context, job, run, canWrite, act, busy }: { context: Context; 
   </section>;
 }
 function LogLines({ lines, first }: { lines: string[]; first: number }) {
-  return <ol className="pipeline-log-lines" start={first}>{lines.map((line, index) => <li key={index}><span className="pipeline-log-number" aria-hidden="true">{first + index}</span><code>{line.replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z /, '')}</code></li>)}</ol>;
+  // Workflow commands (::group::, ##[group], [command]) render as headings and dim lines rather than raw markers.
+  const render = (raw: string) => {
+    const line = raw.replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z /, ''), group = /^(?:::group::|##\[group\])(.*)$/.exec(line);
+    if (group) return <code className="pipeline-log-group">{group[1]}</code>;
+    if (/^(?:::endgroup::|##\[endgroup\])$/.test(line)) return <code className="pipeline-log-command" />;
+    return <code className={/^\[command\]|^::[a-z-]+(?: [^:]*)?::/.test(line) ? 'pipeline-log-command' : undefined}>{line.replace(/^\[command\]/, '')}</code>;
+  };
+  return <ol className="pipeline-log-lines" start={first}>{lines.map((line, index) => <li key={index}><span className="pipeline-log-number" aria-hidden="true">{first + index}</span>{render(line)}</li>)}</ol>;
 }
 const failureText = (reason: string) => ({ timeout: 'Timed out', runner_lost: 'The runner stopped reporting', no_runner: 'No runner picked it up within 24 hours', environment_branch: 'This ref may not deploy to the environment', environment_rejected: 'Deployment rejected by a reviewer', actions_disabled: 'Actions were turned off', job_failed: 'Failed' } as Record<string, string>)[reason] || reason;

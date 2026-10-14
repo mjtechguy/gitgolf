@@ -73,7 +73,8 @@ const defaultOf = type => typeof type === 'object' ? {} : type === 'string' ? ''
 export function decode(schema, bytes) {
   const byNumber = new Map(Object.entries(schema).map(([name, spec]) => [spec[0], [name, spec]]));
   const reader = new Reader(bytes), message = {};
-  for (const [name, [, type, repeated]] of Object.entries(schema)) if (Array.isArray(type) && type[0] === 'map') message[name] = {}; else if (repeated) message[name] = [];
+  // proto3: absent scalars read as their defaults; absent messages stay undefined.
+  for (const [name, [, type, repeated, oneof]] of Object.entries(schema)) if (Array.isArray(type) && type[0] === 'map') message[name] = {}; else if (repeated) message[name] = []; else if (typeof type !== 'object' && !oneof) message[name] = defaultOf(type);
   while (reader.at < bytes.length) {
     const key = Number(reader.varint()), number = key >>> 3, wire = key & 7, known = byNumber.get(number);
     if (!known) { readValue(reader, wire, 'bytes'); continue; }
