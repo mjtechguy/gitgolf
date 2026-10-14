@@ -5,7 +5,8 @@ import { inventory, pullReviewContext } from './collaboration.mjs';
 import { comparison } from './repository-diff.mjs';
 import { discussionEvent } from './discussion-engagement.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
-import { commitObject, packObjects, join } from './git-objects.mjs';
+import { commitObject, packObjects, join, GitTreeError } from './git-objects.mjs';
+import { mergeTrees } from './tree-merge.mjs';
 
 export const pullMergeMethods = new Set(['SubmitStandardPullMerge', 'GetStandardPullMergeOperation']);
 const encoder = new TextEncoder();
@@ -32,21 +33,46 @@ function authority(person, row, idle = true) {
     values: [row.id, row.artifact_name, person.id, row.access_version || 0, person.identity_version || 0, person.credential_digest || '', person.credential_digest || ''] };
 }
 
-// First slice: the base tip must already be contained in the head, so the merge tree is exactly the head tree.
-export async function mergeBlocker(db, row, d, current, repo) {
-  if (d.state !== 'OPEN') return 'pull_request_not_open';
-  if (d.draft) return 'pull_request_draft';
-  if (current.base.retainedSnapshot || current.head.retainedSnapshot) return 'branch_unavailable';
-  if (row.write_pending || await db.prepare(`SELECT 1 FROM pull_merge_operations WHERE pull_request_id=? AND ${unresolved}`).bind(d.pull_id).first()) return 'write_unresolved';
-  if (current.base.commitId === current.head.commitId) return 'base_not_ancestor';
-  try { return (await comparison(repo, current.base.commitId, current.head.commitId)).mergeBase === current.base.commitId ? '' : 'base_not_ancestor'; }
-  catch (error) { if (!(error instanceof Fault)) throw error; return 'ancestry_unproven'; }
+// Responses and the journal list at most this many conflicting paths, with the full count beside them.
+export const conflictLimit = 50;
+
+// The commit a merge of head into base would write: its tree, the new tree objects and its parents, or why not.
+// A head that already contains the base keeps the head tree. Diverged branches get a path-level three-way merge
+// against their single merge base (bounded ancestry read); a path both sides changed differently is a conflict.
+// A squash has the same tree and the base as its only parent.
+export async function mergePlan(repo, base, head, method = 'merge') {
+  if (base === head) return { blocker: 'nothing_to_merge' };
+  let mergeBase;
+  try { mergeBase = (await comparison(repo, base, head)).mergeBase; }
+  catch (error) { if (!(error instanceof Fault)) throw error; return { blocker: 'ancestry_unproven' }; }
+  if (mergeBase === head) return { blocker: 'nothing_to_merge' };
+  const parents = method === 'squash' ? [base] : [base, head];
+  const commits = await Promise.all([...new Set([mergeBase, base, head])].map(hash => repo.readCommit(hash)));
+  const trees = new Map(commits.map(commit => [commit?.hash, commit?.treeHash]));
+  if ([mergeBase, base, head].some(hash => !sha(trees.get(hash)))) throw Error('Invalid merge commit graph');
+  if (mergeBase === base) return { blocker: '', mergeBase, tree: trees.get(head), objects: [], parents };
+  let merged;
+  try { merged = await mergeTrees(repo, trees.get(mergeBase), trees.get(base), trees.get(head)); }
+  catch (error) { if (!(error instanceof GitTreeError)) throw error; merged = { treeId: null, conflicts: [{ path: error.path, reason: error.code }] }; }
+  if (!merged.treeId) return { blocker: 'merge_conflict', conflicts: merged.conflicts.slice(0, conflictLimit).map(({ path, reason }) => ({ path, reason })), conflictCount: merged.conflicts.length };
+  return { blocker: '', mergeBase, tree: merged.treeId, objects: merged.objects, parents };
+}
+
+// Everything a native merge request would currently refuse, then the merge itself; `blocker` is '' when it may proceed.
+export async function mergeBlocker(db, row, d, current, repo, method) {
+  if (d.state !== 'OPEN') return { blocker: 'pull_request_not_open' };
+  if (d.draft) return { blocker: 'pull_request_draft' };
+  if (current.base.retainedSnapshot || current.head.retainedSnapshot) return { blocker: 'branch_unavailable' };
+  if (row.write_pending || await db.prepare(`SELECT 1 FROM pull_merge_operations WHERE pull_request_id=? AND ${unresolved}`).bind(d.pull_id).first()) return { blocker: 'write_unresolved' };
+  return mergePlan(repo, current.base.commitId, current.head.commitId, method);
 }
 
 function wire(saved) {
-  const original = JSON.parse(saved.original);
+  // The expected tree and the conflict list are journal evidence, not part of the original request.
+  const { expectedTreeId, conflicts, conflictCount, ...original } = JSON.parse(saved.original), rejected = saved.phase === 'REJECTED';
   return { operationId: saved.operation_id, actorId: String(saved.actor_id), ...original, phase: 'STANDARD_PULL_MERGE_PHASE_' + saved.phase,
-    mergeCommitId: saved.merge_commit_id, actualBaseCommitId: saved.actual_base_commit_id, failureCode: saved.phase === 'REJECTED' ? 'preflight_refused' : '',
+    mergeCommitId: saved.merge_commit_id, actualBaseCommitId: saved.actual_base_commit_id, failureCode: rejected ? 'preflight_refused' : '',
+    ...(rejected ? { refusalCode: saved.detail, ...(conflicts ? { conflicts, conflictCount } : {}) } : {}),
     createdAt: saved.created_at, updatedAt: saved.updated_at, contract: 'golf.pull.standard-native-merge.v' + (original.sourceRepository ? 2 : 1) };
 }
 
@@ -54,8 +80,12 @@ function wire(saved) {
 async function settle(db, env, person, row, saved, repo, providerFetch) {
   const git = await db.prepare('SELECT * FROM git_operations WHERE id=? AND repository_id=?').bind(saved.git_operation_id, row.id).first();
   if (!git || (await inventory(env, row, repo, providerFetch)).get(git.ref) !== git.new_sha) return;
-  const commit = await repo.readCommit(git.new_sha), head = JSON.parse(saved.original).headCommitId;
-  if (commit?.hash !== git.new_sha || commit.parents?.length !== 2 || commit.parents[0] !== git.old_sha || commit.parents[1] !== head) return;
+  const commit = await repo.readCommit(git.new_sha), original = JSON.parse(saved.original), head = original.headCommitId;
+  // A squash has the base as its only parent; a merge has base then head. Operations journaled with an expected tree
+  // (every squash, and every merge since tree merges) must read back with exactly that tree.
+  const parents = original.method === 'squash' ? [git.old_sha] : [git.old_sha, head];
+  if (commit?.hash !== git.new_sha || commit.parents?.length !== parents.length || parents.some((parent, index) => commit.parents[index] !== parent) ||
+      (original.expectedTreeId || original.method === 'squash') && commit.treeHash !== original.expectedTreeId) return;
   const pull = await db.prepare('SELECT discussion_id FROM pull_requests WHERE id=?').bind(saved.pull_request_id).first();
   const time = new Date().toISOString(), values = [saved.actor_id, saved.operation_id, time];
   const done = "EXISTS(SELECT 1 FROM pull_merge_operations WHERE actor_id=? AND operation_id=? AND phase='SUCCEEDED' AND updated_at=?)";
@@ -112,26 +142,30 @@ export async function standardPullMerge(db, env, person, row, method, body, arti
       throw new Fault('failed_precondition', 412, 'Inspect the original merge operation; an unresolved operation cannot be retried or replaced.');
     if (row.write_pending) conflict();
     const { original, title, message } = requested, ref = 'refs/heads/' + d.base_branch, time = new Date().toISOString(), guard = authority(person, row);
-    const journal = [person.id, body.operationId, row.id, d.pull_id, hash, JSON.stringify(original)];
+    const journal = (evidence = {}) => [person.id, body.operationId, row.id, d.pull_id, hash, JSON.stringify({ ...original, ...evidence })];
     await artifact(async repo => {
-      let refusal = original.method === 'squash' ? 'squash_unsupported' : original.sourceRepository ? 'fork_source_unsupported'
+      let plan, refusal = original.sourceRepository ? 'fork_source_unsupported'
         : body.expectedPullRevision !== current.revision || target.headCommitId !== current.head.commitId || target.baseCommitId !== current.base.commitId ||
-          body.sourceRef !== d.head_branch || body.targetRef !== d.base_branch ? 'pull_request_changed' : await mergeBlocker(db, row, d, current, repo);
+          body.sourceRef !== d.head_branch || body.targetRef !== d.base_branch ? 'pull_request_changed' : '';
+      if (!refusal) { plan = await mergeBlocker(db, row, d, current, repo, original.method); refusal = plan.blocker; }
       let rules;
       if (!refusal) try { rules = await enforceGitRules(db, row, person, ref); } catch (error) { if (error?.code !== 'permission_denied') throw error; refusal = 'target_locked'; }
       if (refusal) {
         // Nothing was sent. The refusal is a durable receipt under the same current writer authority.
-        const refused = await db.prepare(`INSERT INTO pull_merge_operations(${columns}) SELECT ?,?,?,?,?,?,'REJECTED',?,NULL,?,? WHERE ${guard.sql}`).bind(...journal, refusal, time, time, ...guard.values).run();
+        const evidence = plan?.conflicts ? { conflicts: plan.conflicts, conflictCount: plan.conflictCount } : {};
+        const refused = await db.prepare(`INSERT INTO pull_merge_operations(${columns}) SELECT ?,?,?,?,?,?,'REJECTED',?,NULL,?,? WHERE ${guard.sql}`).bind(...journal(evidence), refusal, time, time, ...guard.values).run();
         if (refused.meta.changes !== 1) deny();
         return;
       }
-      const head = await repo.readCommit(current.head.commitId);
-      if (head?.hash !== current.head.commitId || !sha(head.treeHash)) throw Error('Invalid head commit');
       const clean = value => String(value || '').replace(/[<>\p{Cc}]/gu, '').trim(), login = clean(person.login).replace(/[\s@]/g, '');
-      const commit = await mergeCommit({ tree: head.treeHash, parents: [current.base.commitId, current.head.commitId], name: clean(person.full_name) || login,
+      const subject = String(d.title || '').replace(/\p{Cc}+/gu, ' ').trim();
+      const fallback = original.method !== 'squash' ? `Merge pull request #${d.number} from ${d.head_branch} into ${d.base_branch}`
+        : subject ? `${subject} (#${d.number})` : `Squash pull request #${d.number} from ${d.head_branch} into ${d.base_branch}`;
+      const commit = await mergeCommit({ tree: plan.tree, parents: plan.parents, name: clean(person.full_name) || login,
         email: `${login}@users.noreply.${new URL(env.PUBLIC_ORIGIN).hostname}`, time: Math.floor(Date.parse(time) / 1000),
-        message: ((title || `Merge pull request #${d.number} from ${d.head_branch} into ${d.base_branch}`) + (message ? '\n\n' + message : '')).replace(/\n+$/, '') + '\n' });
-      const request = receiveRequest(current.base.commitId, commit.id, ref, await commitPack(commit.body));
+        message: ((title || fallback) + (message ? '\n\n' + message : '')).replace(/\n+$/, '') + '\n' });
+      // The commit plus the tree objects only a three-way merge creates; every blob and other tree already exists in the repository.
+      const request = receiveRequest(current.base.commitId, commit.id, ref, await packObjects([commit, ...plan.objects]));
       // The same single-ref grammar, reservation and journal as a brokered push, plus the exact pull request revision.
       const command = receiveCommand(request), operation = crypto.randomUUID();
       const reserved = await db.batch([
@@ -142,7 +176,7 @@ export async function standardPullMerge(db, env, person, row, method, body, arti
           .bind(operation, row.id, person.id, command.ref, command.old, command.next, time, ...guard.values, row.id, rules, d.id, row.id, d.revision, d.pull_id),
         db.prepare('UPDATE repositories SET write_pending=? WHERE id=? AND write_pending IS NULL AND changes()=1 AND EXISTS(SELECT 1 FROM git_operations WHERE id=?)').bind(operation, row.id, operation),
         db.prepare(`INSERT INTO pull_merge_operations(${columns}) SELECT ?,?,?,?,?,?,'DISPATCH_UNKNOWN','',?,?,? WHERE EXISTS(SELECT 1 FROM repositories WHERE id=? AND write_pending=?)`)
-          .bind(...journal, operation, time, time, row.id, operation),
+          .bind(...journal({ expectedTreeId: plan.tree }), operation, time, time, row.id, operation),
       ]);
       if (reserved[2].meta.changes !== 1) conflict();
       // From here every failure is an unknown outcome: journaled, fenced like an unconfirmed push and never resent.

@@ -297,6 +297,10 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .pull-observation { display:inline-block; font-size:.8125rem; color:var(--muted); margin-top:14px; }
 .pull-merge-record { margin:0 var(--panel-padding) 16px; border-top:1px solid var(--line); padding-top:18px; font-size:.8125rem; line-height:1.8; overflow-wrap:anywhere; }
 .pull-merge-record p { margin:5px 0; color:var(--muted); }
+.merge-conflict-list { margin:8px 0; padding:0; list-style:none; border:1px solid var(--line); border-radius:var(--radius-panel); max-height:16rem; overflow:auto; }
+.merge-conflict-list>li { padding:6px 10px; border-bottom:1px solid var(--line); font-size:.8125rem; overflow-wrap:anywhere; }
+.merge-conflict-list>li:last-child { border-bottom:0; }
+.merge-conflict-list>li>span { color:var(--muted); }
 .pull-reviews { margin-top:22px; }
 .pull-review-list { margin:0; padding:0; list-style:none; }
 .pull-review-list>li { padding:var(--panel-padding); border-bottom:1px solid var(--line); }

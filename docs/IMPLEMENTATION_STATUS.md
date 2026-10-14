@@ -1,5 +1,64 @@
 # Golf implementation status
 
+## 2026-10-14 — Native merges of diverged branches and squash (agentic mode AM-4 item 1)
+
+Cloudflare-native pull request merges (`pull-merge.mjs`) now use the AM-2
+`tree-merge.mjs` three-way tree merge. This lifts the `base_not_ancestor` and
+`squash_unsupported` refusals:
+- **Diverged branches** merge from their single merge base (the bounded
+  500-commit ancestry read of `comparison()`). The merge commit has parents
+  `[base, head]` and the merged tree; the pack carries the commit and only the
+  new tree objects.
+- **Squash** writes one commit with the base as its only parent and the head tree
+  (head contains the base) or the merged tree. With no title it uses the pull
+  request title and `(#N)`; the author is the merging account, as for merges.
+- **Conflicts** are refused before any write as `merge_conflict`: paths both
+  sides changed differently (content, mode, delete, file versus directory). Up to
+  50 paths with reasons, plus the full count, are kept in the journal row and
+  returned in the receipt (`refusalCode`, `conflicts`, `conflictCount`) and in
+  the merge observation (`mergeConflicts`, `mergeConflictCount`). Lines inside a
+  file are never merged (diff3 stays AM-6).
+- Other new refusal codes: `nothing_to_merge` (base already contains the head)
+  and `ancestry_unproven`, now also for several merge bases (criss-cross) and
+  unrelated histories.
+- **Unknown outcomes** settle only by readback: the branch must name the
+  dispatched commit, with parents `[base, head]` (merge) or `[base]` (squash) and
+  the tree recorded at reservation (`expectedTreeId` inside the row's `original`
+  JSON; no migration). The pack is never resent; merges keep reserving the whole
+  repository through `write_pending`.
+- The observation reports a cleanly merging diverged pull request as mergeable,
+  with both merge commits and squash allowed. The web merge panel lists
+  conflicting paths and the refusal reason of a rejected receipt; squash was
+  already selectable when allowed.
+- Proto: `PullMergeConflict`, observation fields 18–19, receipt fields 24–26.
+  Capability text (`pull.merge`, `pull.merge-observation`), the capability
+  inventory and `docs/CLOUDFLARE_NATIVE_SETUP.md` are updated.
+
+Verified locally:
+- `node --test cloudflare/forge/*.test.mjs`: 576 tests (including subtests), 575 pass, 1 skipped
+  (main: 567, 566 pass, 1 skipped). New core tests cover a diverged merge, squash
+  with and without divergence, the 50-path conflict cap, criss-cross and
+  nothing-to-merge refusals, replay, and unknown outcomes settled only with the
+  expected tree. `pull-merge.test.mjs` compares merged trees and conflicting
+  paths with `git merge-tree --write-tree` and feeds the packs to
+  `git index-pack --strict` and `git receive-pack`.
+- `node cloudflare/forge/merge-runtime-check.mjs "$(command -v cf)"` (real
+  workerd/D1 and real `git receive-pack`): head-contains-base merge, diverged
+  merge and diverged squash equal to Git's merged tree with the expected parents,
+  conflict refusal with paths, replay of each, and held pushes for a merge and a
+  squash settled by readback.
+- `tsc --noEmit -p web`; Playwright `pull-native-merge.spec.ts` and
+  `pull-merge-observation.spec.ts`: 130 passed and 15 failed (main: 116 passed,
+  14 failed). Every new conflict, refusal and squash case passes. The failures
+  are the same on `main` in this worktree: font loading through a symlinked
+  `node_modules` (8), observation-page image, preview and receipt cases (5), and
+  the intermittent "Fixture procedure not supplied" alert in the masked 403/404
+  cases (also seen on `main` when repeated).
+
+Not yet done: a hosted merge of a diverged branch or squash on Cloudflare
+Artifacts; line-level merging; rebase; the AM-4 land queue, agentic-mode policy
+and revert-on-failure.
+
 ## 2026-10-14 — First real one-command Cloudflare install
 
 `python3 scripts/golf_cloudflare.py install --yes` ran against a real account that already hosts a Golf installation,
