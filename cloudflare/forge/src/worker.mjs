@@ -72,6 +72,8 @@ export class Workspace extends DurableObject {
   scheduleRan() { this.ctx.storage.kv.put('scheduled', Date.now()); }
   // Cron Triggers are the schedule. The alarm repeats the same maintenance only while none has reported in for two periods.
   async alarm() {
+    // A workspace renamed by its operator leaves its old object behind; that one stops its own heartbeat.
+    if (this.ctx.id?.name && this.ctx.id.name !== this.env.WORKSPACE_SLUG) { await this.ctx.storage.deleteAlarm(); return; }
     await this.ctx.storage.setAlarm(Date.now() + heartbeat);
     if (Date.now() - (this.ctx.storage.kv.get('scheduled') || 0) < 2 * heartbeat) return;
     try { await maintain(this.env, this.ctx.exports, this); } catch { /* Each stage's outcome is in the maintenance journal. */ }

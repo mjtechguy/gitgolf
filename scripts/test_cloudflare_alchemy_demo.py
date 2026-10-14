@@ -43,7 +43,7 @@ class SchemaBootstrap(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             value = {'account': 'a'*32, 'name': 'example', 'email': 'demo@example.com', 'nativeToken': 'test-only'}
-            settings = {'account': value['account'], 'worker': value['name'], 'database': {'uuid': 'database'}}
+            settings = {'account': value['account'], 'worker': value['name'], 'workspace': 'mj', 'database': {'uuid': 'database'}}
             with patch.dict(os.environ, GOLF_ALCHEMY_SETTINGS=json.dumps(settings)), patch.object(demo, 'cf') as cf, patch.object(demo.subprocess, 'run'):
                 cf.return_value = [{'results': []}]
                 demo.build(directory, value)
@@ -282,6 +282,26 @@ class GuardedMigration(unittest.TestCase):
                 demo.migrate(directory,{'name':'example'})
             self.assertEqual(db.execute('SELECT count(*) FROM repository_visibility').fetchone()[0],0)
             self.assertEqual(json.loads((directory/'schema-receipt.json').read_text())['sha256'],hashlib.sha256(schema.encode()).hexdigest())
+
+
+class WorkspaceRename(unittest.TestCase):
+    def test_rename_updates_the_namespace_row_and_the_deploy_setting(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as temporary, sqlite3.connect(':memory:') as db:
+            directory=Path(temporary); db.row_factory=sqlite3.Row
+            db.executescript("CREATE TABLE workspaces(id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, artifact_namespace TEXT NOT NULL UNIQUE); INSERT INTO workspaces(slug,artifact_namespace) VALUES('alice','example')")
+            replace_private_json(directory/'forge.json',{'database':{'uuid':'database'}})
+            value={'name':'example','settings':{'workspace':'alice'}}
+            def cf(config,*args):
+                if args[:2]==('d1','get'): return {'name':'example','uuid':'database'}
+                body=json.loads(args[-1]); return [{'results':[dict(r) for r in db.execute(body['sql'],body['params'])]}]
+            with patch.object(demo,'cf',side_effect=cf):
+                for bad in ('', 'Mj', 'mj_labs', '-mj', 'x'*40):
+                    with self.assertRaises(ValueError): demo.rename_workspace(directory,value,bad)
+                demo.rename_workspace(directory,value,'mj')
+                demo.rename_workspace(directory,value,'mj')
+            self.assertEqual(db.execute('SELECT slug FROM workspaces').fetchone()[0],'mj')
+            self.assertEqual(json.loads((directory/'alchemy-input.json').read_text())['settings']['workspace'],'mj')
 
 
 class PublicMigration(unittest.TestCase):

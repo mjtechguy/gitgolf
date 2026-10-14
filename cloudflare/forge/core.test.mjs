@@ -4314,3 +4314,9 @@ test('only the four upload procedures accept a 300 KiB JSON body; every other re
   }
   assert.equal((await f.call('GetRepository', body(90 * 1024))).status, 200);
 });
+
+test('a renamed workspace row keeps serving while the Worker still carries the earlier name', async t => {
+  const f = await fixture(t); await f.create();
+  f.sql.exec("UPDATE workspaces SET slug='renamed'");
+  assert.equal((await f.call('GetRepository', { repository: { owner: 'alice', name: 'project' } })).status, 200);
+});
