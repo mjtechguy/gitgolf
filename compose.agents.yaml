@@ -17,7 +17,7 @@ services:
       GOLF_AGENT_IMAGE: ${GOLF_AGENT_IMAGE:?Run scripts/init-agent-env.py}
       GOLF_AGENT_WORKER_ID: local-agents
       GOLF_AGENT_SECCOMP: /app/seccomp.json
-      GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:-http://localhost:8080}
+      GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:-http://localhost:${GOLF_HTTP_PORT:-8080}}
       GOLF_ALLOW_INSECURE_COOKIES: ${GOLF_ALLOW_INSECURE_COOKIES:-true}
       GOLF_ENCRYPTION_KEY: ${GOLF_ENCRYPTION_KEY:-}
       GOLF_ENCRYPTION_KEYS: ${GOLF_ENCRYPTION_KEYS:-}

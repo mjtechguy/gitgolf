@@ -79,19 +79,17 @@ Requires Git, Python 3, curl and Docker with Compose v2 and BuildKit, on an amd6
 ```sh
 git clone git@github.com:mjtechguy/golf-git.git
 cd golf-git
-./scripts/init-env.sh        # writes a private .env with generated secrets; never overwrites one
-docker compose up -d --build
-curl --fail --retry 30 --retry-delay 2 --retry-connrefused http://localhost:8080/readyz
+./scripts/install.sh         # or: make install
 ```
 
-Open **http://localhost:8080** for Golf and **http://localhost:3001** for Forgejo. Use `localhost` throughout so request origins match the configuration. The readiness check retries while PostgreSQL and Forgejo start; the first build takes a few minutes.
+The installer checks prerequisites and free ports, writes a private `.env` (never overwriting one), builds and starts the stack, waits for readiness, then creates your first administrator: a Forgejo admin user, a scoped Forgejo token and a Golf account mapped to it. It asks for a username and email (`--username`, `--email`, or `--yes` to accept the defaults), generates a Golf password and saves it to a mode-0600 file under `.tmp/local-account/`; move it to a password manager and delete the file. Re-running is safe. `./scripts/install.sh --help` lists options such as `--dry-run`, `--prompt-password` and custom ports.
 
-Registration is disabled, so create your first account next: a Forgejo user, a scoped Forgejo token and a Golf account mapped to it. Follow **[your first local installation](https://docs.gitgolf.app/docs/installation/)** for the exact commands.
+Open **http://localhost:8080** for Golf and **http://localhost:3001** for Forgejo. Use `localhost` throughout so request origins match the configuration. The first build takes a few minutes. To run each step yourself, follow **[your first local installation](https://docs.gitgolf.app/docs/installation/)**.
 
 ```sh
 docker compose stop    # pause
 docker compose start   # resume with the same data
-docker compose down    # remove containers; named volumes are kept
+docker compose down    # remove containers; named volumes are kept (also: make uninstall)
 docker compose up -d   # recreate after down, or apply .env changes
 ```
 
