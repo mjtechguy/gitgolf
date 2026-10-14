@@ -19,6 +19,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from cloudflare_demo_manifest import admin_identity
 from cloudflare_setup import replace_private_json
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,6 +77,7 @@ def main():
     parser.add_argument('--app-host')
     parser.add_argument('--demo-host', help='Prepare a four-hour human Access demo after successful seeding; use cloudflare_demo.py to begin or stop it')
     parser.add_argument('--demo-email', help='Existing Access seat to map to the native demo owner')
+    parser.add_argument('--admin-login', help='Golf login of the human demo owner; default derived from --demo-email')
     parser.add_argument('--unattended', action='store_true', help='Service-auth only; run all checks then tear down within 45 minutes, without email or login')
     parser.add_argument('--operations-rehearsal', action='store_true', help='Qualify guarded release/rollback and read-only Operations collectors in the disposable demo')
     parser.add_argument('--registry-host', help='Fresh dedicated CFCR hostname in the selected app zone; requires --apps')
@@ -118,6 +120,14 @@ def main():
         parser.error('--operations-rehearsal requires an explicitly owned demo')
     if demo and (not args.apps or not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)+', args.demo_host or '') or (not args.unattended and not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', args.demo_email or '')) or args.demo_host == args.app_host):
         parser.error('Demo requires --apps, a separate canonical --demo-host, and either --demo-email or --unattended')
+    if args.admin_login and not args.demo_email:
+        parser.error('--admin-login requires --demo-email')
+    try:
+        admin_login = admin_identity(args.demo_email, args.admin_login)['login'] if args.demo_email else None
+    except ValueError as error:
+        parser.error(str(error))
+    if admin_login == 'bob':
+        parser.error('The login bob belongs to the qualification reader; pass a different --admin-login')
     if not re.fullmatch('[a-f0-9]{32}', args.account_id) or not re.fullmatch('[a-zA-Z0-9_-]{1,63}', args.profile):
         parser.error('Canonical account and named profile required')
     if not re.fullmatch('[a-z0-9-]{1,63}', args.workers_subdomain):
@@ -129,6 +139,8 @@ def main():
     directory.mkdir(mode=0o700, parents=True)
     state = {'schema': 'golf.cloudflare.native-repositories.v1', 'name': name, 'account': args.account_id,
              'profile': args.profile, 'state': 'running', 'resources': {}, 'events': [], 'checks': {}, 'cleanup': {}}
+    if admin_login:
+        state['admin_login'] = admin_login
     if demo:
         state['demo_process'] = {'pid': os.getpid(), 'start_ticks': Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19]}
     if args.evidence:
@@ -353,7 +365,7 @@ def main():
         query('INSERT INTO workspaces(slug,artifact_namespace) VALUES(?,?)', ['alice', name])
         query("INSERT INTO users(id,login,can_create) VALUES(1,'alice',1),(2,'bob',0)")
         if args.retain_demo:
-            query('UPDATE users SET email=?,login=? WHERE id=1', [args.demo_email, 'mike'])
+            query('UPDATE users SET email=?,login=? WHERE id=1', [args.demo_email, admin_login])
             query('INSERT INTO operations_admins(user_id) VALUES(1) ON CONFLICT(user_id) DO UPDATE SET active=1')
         for token, user in [(owner, 1), (reader, 2)]:
             query('INSERT INTO credentials(digest,user_id,expires_at) VALUES(?,?,?)', [hashlib.sha256(token.encode()).hexdigest(), user, int(time.time()) + (3600 if args.unattended or args.registry_scanner_image else 18000 if demo else 900)])
@@ -625,7 +637,7 @@ def main():
                 save()
                 print(json.dumps({'stage': label, 'repository': value.get('repository'), 'jobId': value.get('jobId')}), flush=True)
             populated = seed(directory, ROOT, settings['workspace'], rpc, http, git, record)
-            query('UPDATE users SET email=?,login=? WHERE id=1', [args.demo_email, 'mike'])
+            query('UPDATE users SET email=?,login=? WHERE id=1', [args.demo_email, admin_login])
             query('INSERT INTO operations_admins(user_id) VALUES(1) ON CONFLICT(user_id) DO UPDATE SET active=1')
             build()
             command('production preview gateway deployment', ['cf', '--profile', args.profile, 'deploy', '--prebuilt', '--provision', 'false'], cwd=directory/'preview-worker', timeout=120)
@@ -1127,14 +1139,14 @@ def main():
                 if (directory/'unattended.continue').exists(): break
                 time.sleep(1)
         if demo and not args.unattended:
-            query('UPDATE users SET email=?,login=? WHERE id=1', [args.demo_email, 'mike'])
+            query('UPDATE users SET email=?,login=? WHERE id=1', [args.demo_email, admin_login])
             query('INSERT INTO operations_admins(user_id) VALUES(1) ON CONFLICT(user_id) DO UPDATE SET active=1')
             # Rebuild only the gateway; changing the control origin during a live DO deployment is refused.
             build()
             command('production preview gateway deployment', ['cf', '--profile', args.profile, 'deploy', '--prebuilt', '--provision', 'false'], cwd=directory/'preview-worker', timeout=120)
             for attempt in range(60):
                 try:
-                    if http('/rpc/golf.v1.SessionService/GetSession')['user']['login'] == 'mike':
+                    if http('/rpc/golf.v1.SessionService/GetSession')['user']['login'] == admin_login:
                         break
                 except RuntimeError:
                     if attempt == 59:

@@ -1,0 +1,24 @@
+{
+  "schema": "golf.demo.deployment.v1",
+  "organizations": [
+    {
+      "slug": "example-org",
+      "fullName": "Example Org",
+      "description": "A sample organization with two small, pinned open source imports."
+    }
+  ],
+  "repositories": [
+    {
+      "owner": "example-org",
+      "name": "click",
+      "upstream": "https://github.com/pallets/click",
+      "commit": "2247b35ea1c47c727d7a06e51fa280e12a863ff6"
+    },
+    {
+      "owner": "example-org",
+      "name": "itsdangerous",
+      "upstream": "https://github.com/pallets/itsdangerous",
+      "commit": "672971d66a2ef9f85151e53283113f33d642dabd"
+    }
+  ]
+}

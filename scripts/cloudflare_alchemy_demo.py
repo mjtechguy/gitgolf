@@ -16,10 +16,13 @@ import time
 import urllib.error
 import urllib.request
 
-from cloudflare_setup import replace_private_json, private_read
+from cloudflare_demo_manifest import admin_identity, read_manifest
+from cloudflare_setup import hostname, replace_private_json, private_read
 
 ROOT = Path(__file__).resolve().parents[1]
 STACK = ROOT/'deploy/alchemy/alchemy.run.ts'
+IMAGE = 'golf-native-demo-python:repeatable'
+TEAM_DOMAIN = r'https://[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com'
 
 
 def cf(config, *args):
@@ -40,42 +43,129 @@ def load(directory):
     return directory, value
 
 
-def prepare(receipt):
+def administrator(value):
+    """The administrator login and Git author saved in the private input; older inputs derive them from the email."""
+    return admin_identity(value['email'], value.get('adminLogin'), value.get('gitAuthorName'), value.get('gitAuthorEmail'))
+
+
+def new_name():
+    return 'golf-alchemy-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d') + '-' + secrets.token_hex(4)
+
+
+def approved_image(image=IMAGE):
+    metadata = json.loads(subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .}}']))
+    if metadata['Architecture'] != 'amd64' or metadata['Os'] != 'linux':
+        raise ValueError('The demo image must be linux/amd64; run python3 scripts/cloudflare-demo-deploy.py build-image')
+    return metadata['Id']
+
+
+def credentials(value, who):
+    """Fresh installation secrets and the seven-day provider token lifetime."""
+    value.update(expiresAt=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        signingKey=secrets.token_urlsafe(48), nativeToken='golf_native_'+secrets.token_urlsafe(32),
+        adminLogin=who['login'], gitAuthorName=who['gitAuthorName'], gitAuthorEmail=who['gitAuthorEmail'])
+    return value
+
+
+def install(value, image, image_id):
+    directory = ROOT/'.tmp/cloudflare-forge'/value['name']
+    directory.parent.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(mode=0o700)
+    replace_private_json(directory/'alchemy-input.json', value)
+    (directory/'image').mkdir(mode=0o700)
+    (directory/'image/Dockerfile').write_text('FROM '+image+'\n# Approved image: '+image_id+'\n')
+    renew_deploy(directory, value)
+    print(directory)
+
+
+def init_input(name, account, profile, zone, host, preview_host, email, team_domain, image_id, who,
+               secret_store=None, image=IMAGE, daily_limit=40):
+    """The private Alchemy input for a fresh installation, without a previous receipt. Pure: contacts nothing."""
+    if not re.fullmatch('golf-alchemy-[0-9]{8}-[a-f0-9]{8}', name):
+        raise ValueError('Installation name differs')
+    if not re.fullmatch('[a-f0-9]{32}', account or '') or not re.fullmatch('[a-f0-9]{32}', zone or ''):
+        raise ValueError('Use the 32-character hexadecimal account and zone IDs')
+    if not re.fullmatch('[a-zA-Z0-9_-]{1,63}', profile or ''):
+        raise ValueError('Use the named cf CLI profile')
+    hostname(host or ''), hostname(preview_host or '')
+    if host == preview_host:
+        raise ValueError('Use separate control and preview hostnames')
+    if secret_store is not None and not re.fullmatch('[a-f0-9]{32}', secret_store):
+        raise ValueError('Use the 32-character hexadecimal Secrets Store ID')
+    if not re.fullmatch(TEAM_DOMAIN, team_domain or ''):
+        raise ValueError('Use the Access team origin, https://TEAM.cloudflareaccess.com')
+    if not re.fullmatch('sha256:[a-f0-9]{64}', image_id or ''):
+        raise ValueError('Approved local Docker image ID required')
+    if type(daily_limit) is not int or not 1 <= daily_limit <= 50:
+        raise ValueError('Use a daily CI admission limit between 1 and 50')
+    admin_identity(email, who['login'], who['gitAuthorName'], who['gitAuthorEmail'])
+    preview = name + '-preview'
+    # The same shape the Python installer records for a retained demo; the stack fills in database,
+    # Access audiences and Secrets Store references when it creates them.
+    settings = {'account': account, 'worker': name, 'namespace': name, 'workspace': who['login'],
+        'database': {'name': name, 'uuid': '00000000-0000-4000-8000-000000000000'},
+        'origin': 'https://'+host, 'hostname': host, 'workers_dev': False, 'ui': True,
+        'web_assets': str(ROOT/'web/dist-native'), 'access_team_domain': team_domain, 'automatic_ci': True,
+        'evidence': {'bucket': name, 'queue': name, 'workflow': name, 'daily_limit': daily_limit, 'allow_ai': False},
+        'tests': {'image': image, 'image_id': image_id, 'module': 'test_calc'},
+        'previews': {'worker': preview, 'origin': 'https://'+preview_host, 'path': 'public', 'ttl': 14400,
+            'automatic': True, 'browser': True, 'workers_dev': False},
+        'registry': {'provider': 'cloudflare', 'ci': True},
+        'apps': {'policy': {'namespace': name, 'entry': 'worker.mjs', 'migration': 'schema.sql', 'ttl': 14400, 'zone': zone,
+            'gateway': preview, 'outbound': name+'-outbound'}, 'automatic': True}}
+    value = {'name': name, 'account': account, 'profile': profile, 'zone': zone, 'hostname': host,
+        'previewHostname': preview_host, 'email': email, 'settings': settings}
+    if secret_store:
+        value['secretStoreId'] = secret_store
+    return credentials(value, who)
+
+
+def init(args):
+    """Prepare a fresh installation on an account with no previous Golf receipt."""
+    if any(os.environ.get(k) for k in ['CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'CLOUDFLARE_API_KEY', 'CF_API_KEY']):
+        raise ValueError('Remove ambient Cloudflare credential overrides; init uses the named cf profile')
+    missing = [flag for flag in ['account_id', 'profile', 'zone_id', 'hostname', 'preview_hostname', 'email'] if not getattr(args, flag)]
+    if missing:
+        raise ValueError('init needs ' + ', '.join('--'+flag.replace('_', '-') for flag in missing))
+    who = admin_identity(args.email, args.admin_login, args.git_author_name, args.git_author_email)
+    team = args.access_team_domain
+    if not team:
+        # Read-only: the Access organization's issuer, which signs the login cookie the Worker verifies.
+        organization = cf({'profile': args.profile, 'account': args.account_id}, 'zero-trust', 'organization', 'get')
+        team = 'https://' + organization['auth_domain'] if organization and organization.get('auth_domain') else ''
+    value = init_input(new_name(), args.account_id, args.profile, args.zone_id, args.hostname, args.preview_hostname,
+        args.email, team, approved_image(), who, args.secrets_store_id, daily_limit=args.evidence_daily_limit)
+    install(value, IMAGE, value['settings']['tests']['image_id'])
+
+
+def prepare(receipt, admin_login=None, author_name=None, author_email=None):
+    """Copy a retained installation's public configuration into a fresh Alchemy installation (handoff)."""
     from cloudflare_demo import load_receipt
     receipt, original = load_receipt(receipt)
     if original['state'] != 'retained':
         raise ValueError('Use the current retained demo as the configuration source')
     old = json.loads(private_read(receipt.parent/'forge.json'))
-    name = 'golf-alchemy-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d') + '-' + secrets.token_hex(4)
-    directory = ROOT/'.tmp/cloudflare-forge'/name
-    directory.mkdir(mode=0o700)
+    name = new_name()
     # Public configuration only: fresh resource IDs and authority are allocated below.
     settings = json.loads(json.dumps(old).replace(original['name'], name))
-    image = 'golf-native-demo-python:repeatable'
-    metadata = json.loads(subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{json .}}']))
-    if metadata['Architecture'] != 'amd64' or metadata['Os'] != 'linux':
-        raise ValueError('The demo image must be linux/amd64')
-    settings['tests'].update(image=image, image_id=metadata['Id'])
+    image_id = approved_image()
+    settings['tests'].update(image=IMAGE, image_id=image_id)
     settings['web_assets'] = str(ROOT/'web/dist-native')
     settings['database'] = {'name': name, 'uuid': '00000000-0000-4000-8000-000000000000'}
     user = cf({'profile': original['profile'], 'account': old['account']}, 'd1', 'query', old['database']['uuid'],
-        '--body', json.dumps({'sql': 'SELECT email FROM users WHERE id=1 AND active=1', 'params': []}))[0]['results']
+        '--body', json.dumps({'sql': 'SELECT email,login FROM users WHERE id=1 AND active=1', 'params': []}))[0]['results']
     if len(user) != 1 or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', user[0]['email']):
         raise ValueError('The retained administrator email is unavailable')
+    # The administrator keeps their current login unless another is given.
+    who = admin_identity(user[0]['email'], admin_login or user[0]['login'], author_name, author_email)
     value = {'name': name, 'account': old['account'], 'profile': original['profile'],
         'zone': old['apps']['policy']['zone'], 'hostname': old['hostname'],
         'previewHostname': old['previews']['origin'].removeprefix('https://'),
-        'email': user[0]['email'],
-        'expiresAt': (dt.datetime.now(dt.timezone.utc)+dt.timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'signingKey': secrets.token_urlsafe(48), 'nativeToken': 'golf_native_'+secrets.token_urlsafe(32),
-        'settings': settings, 'previousReceipt': str(receipt)}
+        'email': user[0]['email'], 'settings': settings, 'previousReceipt': str(receipt)}
+    credentials(value, who)
     if original.get('deployment') == 'alchemy' or original.get('resources', {}).get('secret_store', {}).get('shared'):
         value['secretStoreId'] = old['registry']['apiToken']['store']
-    replace_private_json(directory/'alchemy-input.json', value)
-    (directory/'image').mkdir(mode=0o700)
-    (directory/'image/Dockerfile').write_text('FROM '+image+'\n# Approved image: '+metadata['Id']+'\n')
-    renew_deploy(directory, value)
-    print(directory)
+    install(value, IMAGE, image_id)
 
 
 def renew_deploy(directory, value):
@@ -138,7 +228,7 @@ def build(directory, value):
         query(schema, [])
         replace_private_json(schema_path, identity)
     query('INSERT INTO workspaces(slug,artifact_namespace) SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM workspaces)', [settings['workspace'], value['name']])
-    query("INSERT INTO users(id,login,email,can_create) VALUES(1,'mike',?,1) ON CONFLICT(id) DO NOTHING", [value['email']])
+    query('INSERT INTO users(id,login,email,can_create) VALUES(1,?,?,1) ON CONFLICT(id) DO NOTHING', [administrator(value)['login'], value['email']])
     query('INSERT INTO operations_admins(user_id) VALUES(1) ON CONFLICT(user_id) DO NOTHING', [])
     query('INSERT INTO credentials(digest,user_id,expires_at) VALUES(?,1,?) ON CONFLICT(digest) DO NOTHING',
         [hashlib.sha256(value['nativeToken'].encode()).hexdigest(), int(dt.datetime.now(dt.timezone.utc).timestamp())+18000])
@@ -423,8 +513,11 @@ def receipt(directory, value):
     print('Alchemy installation receipt saved')
 
 
-def seed(directory, value):
+def seed(directory, value, manifest=None):
+    """Create the CI/preview playgrounds, then claim the administrator's owner and import the manifest (None: no content)."""
     from cloudflare_retained_demo import seed as seed_playgrounds
+    if manifest: read_manifest(manifest)
+    who = administrator(value)
     auth = json.loads(private_read(directory/'retained-auth.json'))
     path = directory/'ownership.json'
     state = json.loads(private_read(path))
@@ -448,7 +541,7 @@ def seed(directory, value):
             time.sleep(2)
     if not state['demo'].get('repository_ids'):
         config = [('credential.helper', ''), ('core.hooksPath', os.devnull), ('http.followRedirects', 'false'),
-            ('user.name', 'Mike Johnson'), ('user.email', value['email'])]
+            ('user.name', who['gitAuthorName']), ('user.email', who['gitAuthorEmail'])]
         config.extend(('http.extraHeader', key+': '+headers[key]) for key in ['Authorization', 'CF-Access-Client-Id', 'CF-Access-Client-Secret'])
         env = {'PATH': os.environ['PATH'], 'LANG': 'C', 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull,
             'GIT_TERMINAL_PROMPT': '0', 'GIT_CONFIG_COUNT': str(len(config))}
@@ -466,7 +559,8 @@ def seed(directory, value):
             lambda method, body: http('/rpc/golf.v1.RepositoryService/'+method, body), http, git, record)
         state['demo'].update(populated)
         replace_private_json(path, state)
-    subprocess.run([sys.executable, 'scripts/cloudflare-demo-deploy.py', 'apply', str(path)], cwd=ROOT, check=True, timeout=3000, umask=0o022)
+    content = ['--manifest', str(Path(manifest).resolve())] if manifest else ['--no-seed']
+    subprocess.run([sys.executable, 'scripts/cloudflare-demo-deploy.py', 'apply', str(path), *content], cwd=ROOT, check=True, timeout=3000, umask=0o022)
 
 
 def run(directory, value, action):
@@ -529,9 +623,10 @@ def destroy(directory, value):
     replace_private_json(directory/'ownership.json', state)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email', 'enable-search', 'enable-pipelines', 'rename-workspace'])
+def build_parser():
+    parser = argparse.ArgumentParser(description=__doc__, epilog='Fresh install: init --account-id ... (no directory), then plan/deploy/seed DIRECTORY. '
+        'Existing installation handoff: prepare /PATH/TO/ownership.json. See deploy/alchemy/README.md.')
+    parser.add_argument('action', choices=['init', 'prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email', 'enable-search', 'enable-pipelines', 'rename-workspace'])
     parser.add_argument('--slug', help='new workspace name for rename-workspace')
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--days', type=int, default=7, help='lifetime for renew-credentials, 1 to 30 days')
@@ -542,16 +637,48 @@ def main():
     parser.add_argument('--actions-url', help='HTTPS origin that resolves unqualified marketplace actions for enable-pipelines, such as https://code.forgejo.org')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
     parser.add_argument('--workflow-path', help='the one approved Actions workflow path for enable-workflow, .github/workflows/NAME.yml')
-    parser.add_argument('directory', nargs='?')
+    parser.add_argument('directory', nargs='?', help='the installation directory printed by init or prepare; for prepare, the old ownership.json')
+    fresh = parser.add_argument_group('init (fresh installation; nothing is read from a previous installation)')
+    fresh.add_argument('--account-id', help='Cloudflare account ID (32 hex)')
+    fresh.add_argument('--profile', help='authenticated cf CLI profile name')
+    fresh.add_argument('--zone-id', help='zone ID (32 hex) holding both hostnames')
+    fresh.add_argument('--hostname', help='unused control hostname, such as golf.example.com')
+    fresh.add_argument('--preview-hostname', help='unused preview hostname, such as golf-previews.example.com')
+    fresh.add_argument('--email', help='existing Cloudflare Access email of the administrator')
+    fresh.add_argument('--secrets-store-id', help='existing Secrets Store ID; required when the account already has a store (one per account), otherwise the stack creates one')
+    fresh.add_argument('--access-team-domain', help='https://TEAM.cloudflareaccess.com; default read from the account\'s Access organization')
+    fresh.add_argument('--evidence-daily-limit', type=int, default=40, help='CI admissions per day, 1 to 50')
+    who = parser.add_argument_group('administrator identity (init and prepare; saved in the private input for later actions)')
+    who.add_argument('--admin-login', help='Golf login of the administrator; init derives it from --email, prepare keeps the current login')
+    who.add_argument('--git-author-name', help='author of the playground commits; default the admin login')
+    who.add_argument('--git-author-email', help='author email of the playground commits; default the administrator email')
+    content = parser.add_argument_group('content (seed needs --manifest or --no-seed; seed-public needs --manifest)')
+    content.add_argument('--manifest', type=Path, help='seed: deploy/demo/example.json, deploy/demo/mj.json or your own; seed-public: deploy/demo/example-public.json or deploy/demo/mj-public.json')
+    content.add_argument('--no-seed', action='store_true', help='seed: create only the CI/preview playgrounds and the administrator\'s personal owner')
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
     os.umask(0o077)
-    if args.action == 'prepare': return prepare(args.directory)
+    try:
+        if args.action == 'init':
+            if args.directory: parser.error('init takes no directory; it prints the new one')
+            return init(args)
+        if args.action == 'prepare': return prepare(args.directory, args.admin_login, args.git_author_name, args.git_author_email)
+    except ValueError as error:
+        parser.error(str(error))
+    if args.action == 'seed' and bool(args.manifest) == args.no_seed:
+        parser.error('seed needs exactly one of --manifest PATH or --no-seed')
+    if args.action == 'seed-public' and (not args.manifest or args.no_seed):
+        parser.error('seed-public needs --manifest PATH, such as deploy/demo/example-public.json')
     directory, value = load(args.directory or os.environ['GOLF_ALCHEMY_DIRECTORY'])
     if args.action == 'renew-deploy': return renew_deploy(directory, value)
     if args.action == 'renew-credentials': return renew_credentials(directory, value, args.days)
     if args.action == 'seed-public':
         from cloudflare_public_demo import publish
-        return publish(directory, ROOT)
+        return publish(directory, ROOT, args.manifest)
     if args.action == 'enable-observability': return enable_observability(directory, value)
     if args.action == 'enable-analytics': return enable_analytics(directory, value)
     if args.action == 'enable-webhooks': return enable_webhooks(directory, value, args.origin)
@@ -569,7 +696,7 @@ def main():
     if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)
     if args.action == 'receipt': return receipt(directory, value)
-    if args.action == 'seed': return seed(directory, value)
+    if args.action == 'seed': return seed(directory, value, args.manifest)
     if args.action == 'destroy': return destroy(directory, value)
     run(directory, value, args.action)
 

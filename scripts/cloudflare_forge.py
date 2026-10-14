@@ -15,7 +15,7 @@ from cloudflare_setup import ROOT, hostname, private_write
 ACTIONS_WORKFLOW_PATH = r'\.github/workflows/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml'
 
 
-def initialize(directory, account, host, worker, workspace, namespace, database_id, database_name, login, evidence=None, tests=None, analytics=None, agent_path=None, access_aud=None, owner_email=None, web_assets=None, previews=None, apps=None, automatic_ci=False, operations=None, webhooks=None, anonymous_rate_limit=None, execution_values=None, email=None):
+def initialize(directory, account, host, worker, workspace, namespace, database_id, database_name, login, evidence=None, tests=None, analytics=None, agent_path=None, access_aud=None, owner_email=None, web_assets=None, previews=None, apps=None, automatic_ci=False, operations=None, webhooks=None, anonymous_rate_limit=None, execution_values=None, email=None, access_team_domain=None):
     if operations is not None:
         if not isinstance(operations, dict) or set(operations) - {'analytics_secret', 'observability', 'service_health'}:
             raise ValueError('Invalid operations configuration')
@@ -75,6 +75,10 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
         raise ValueError('Agent execution requires approved source path, container tests and private AI allocation')
     if access_aud is not None and (not re.fullmatch('[a-f0-9]{64}', access_aud) or not isinstance(owner_email, str) or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', owner_email) or len(owner_email) > 254):
         raise ValueError('Access requires its exact application audience and a mapped owner email')
+    # The same team origin pattern cloudflare/forge/src/access.mjs accepts.
+    if access_team_domain is not None and (access_aud is None or not isinstance(access_team_domain, str) or
+            not re.fullmatch(r'https://[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com', access_team_domain)):
+        raise ValueError('Access team domain must be https://TEAM.cloudflareaccess.com and requires the Access audience')
     if owner_email is not None and (not isinstance(owner_email, str) or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', owner_email) or len(owner_email) > 254):
         raise ValueError('Canonical owner email required')
     if web_assets is not None and (access_aud is None or not (Path(web_assets)/'native.html').is_file()):
@@ -155,6 +159,8 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
         settings['analytics_dataset'] = analytics
     if access_aud is not None:
         settings['access_aud'] = access_aud
+    if access_team_domain is not None:
+        settings['access_team_domain'] = access_team_domain
     if web_assets is not None:
         settings['ui'] = True
         settings['web_assets'] = str(Path(web_assets).resolve())
@@ -193,7 +199,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--directory', type=Path, default=ROOT/'.cloudflare/native')
     parser.add_argument('--account-id', required=True)
-    parser.add_argument('--hostname', default='gitgolf.mjtechguy.com')
+    parser.add_argument('--hostname', required=True, help='Control hostname in a zone of this account, such as golf.example.com')
     parser.add_argument('--worker', default='gitgolf-native')
     parser.add_argument('--workspace', required=True)
     parser.add_argument('--namespace', required=True)
@@ -216,6 +222,7 @@ def main():
     parser.add_argument('--analytics-dataset', help='Optional Analytics Engine completion metrics; creates data on first event')
     parser.add_argument('--agent-path', help='Optional single approved source file; enables isolated native agent proposals')
     parser.add_argument('--access-aud', help='Existing control Access application audience; enables fail-closed Zero Trust login')
+    parser.add_argument('--access-team-domain', help='Access team origin https://TEAM.cloudflareaccess.com (the Zero Trust team domain; `cf zero-trust organization get` shows it as auth_domain); lets the Worker verify signed Access JWTs; requires --access-aud')
     parser.add_argument('--owner-email', help='Verified Access email mapped to the bootstrap Golf owner')
     parser.add_argument('--web-assets', type=Path, help='Built web/dist-native directory; requires Access')
     parser.add_argument('--preview-hostname', help='Dedicated preview hostname, separate from the control origin')
@@ -283,7 +290,7 @@ def main():
                    args.namespace, args.database_id, args.database_name, args.owner, evidence, tests, args.analytics_dataset, args.agent_path,
                    args.access_aud, args.owner_email, args.web_assets, previews, apps, args.automatic_ci, operations or None, json.loads(args.webhooks_config.read_text()) if args.webhooks_config else None, rate_limit,
                    {'key': {'store': args.execution_value_key_store, 'name': args.execution_value_key_name}} if args.execution_value_key_store or args.execution_value_key_name else None,
-                   json.loads(args.email_config.read_text()) if args.email_config else None)
+                   json.loads(args.email_config.read_text()) if args.email_config else None, args.access_team_domain)
     except (ValueError, OSError) as error:
         parser.exit(1, str(error) + '\n')
     print('Private native configuration prepared; no resources provisioned. Bootstrap credential expires in one hour.')

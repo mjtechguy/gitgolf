@@ -5,7 +5,9 @@ import time
 from cloudflare_setup import private_read, replace_private_json
 
 
-def publish(directory, root):
+def publish(directory, root, manifest_path):
+    """Publish exactly what the explicit public manifest names, such as deploy/demo/example-public.json."""
+    manifest = json.loads((root/manifest_path).read_text())
     settings = json.loads(private_read(directory/'forge.json'))
     auth = json.loads(private_read(directory/'retained-auth.json'))
     if settings.get('public_repositories') is not True or auth['origin'] != settings['origin']:
@@ -29,12 +31,13 @@ def publish(directory, root):
                 break
         if time.monotonic() >= deadline: raise RuntimeError('Worker and workspace rollout did not converge; no content was published')
         time.sleep(5)
-    seed(http, json.loads((root/'deploy/demo/public.json').read_text()), directory/'public-seed.json')
+    seed(http, manifest, directory/'public-seed.json')
 
 
 def seed(http, manifest, journal_path):
     session = http('/rpc/golf.v1.SessionService/GetSession', {})
-    if session.get('user', {}).get('login') != manifest['login']:
+    # A manifest that publishes the administrator's personal profile names that login; organization-only manifests need not.
+    if 'login' in manifest and session.get('user', {}).get('login') != manifest['login']:
         raise ValueError('Public demo owner differs')
     journal = json.loads(private_read(journal_path)) if journal_path.exists() else {}
     ids = {}

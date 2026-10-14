@@ -57,6 +57,97 @@ class SchemaBootstrap(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'Schema changed'): demo.build(directory, value)
 
 
+class FreshInstall(unittest.TestCase):
+    who = {'login': 'jane-doe', 'gitAuthorName': 'Jane Doe', 'gitAuthorEmail': 'jane@example.com'}
+    args = ('golf-alchemy-20261014-0f2087f8', 'a'*32, 'golf', 'b'*32, 'golf.example.com', 'golf-previews.example.com',
+            'jane@example.com', 'https://team.cloudflareaccess.com', 'sha256:'+'c'*64)
+
+    def test_init_builds_the_input_without_a_previous_receipt(self):
+        value = demo.init_input(*self.args, self.who)
+        name = self.args[0]
+        self.assertNotIn('previousReceipt', value)
+        self.assertNotIn('secretStoreId', value)
+        self.assertEqual({k: value[k] for k in ['name', 'account', 'profile', 'zone', 'hostname', 'previewHostname', 'email', 'adminLogin', 'gitAuthorName', 'gitAuthorEmail']},
+            {'name': name, 'account': 'a'*32, 'profile': 'golf', 'zone': 'b'*32, 'hostname': 'golf.example.com', 'previewHostname': 'golf-previews.example.com',
+             'email': 'jane@example.com', 'adminLogin': 'jane-doe', 'gitAuthorName': 'Jane Doe', 'gitAuthorEmail': 'jane@example.com'})
+        self.assertTrue(value['nativeToken'].startswith('golf_native_'))
+        self.assertRegex(value['expiresAt'], r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$')
+        settings = value['settings']
+        self.assertEqual(settings['workspace'], 'jane-doe')
+        self.assertEqual(settings['origin'], 'https://golf.example.com')
+        self.assertEqual(settings['access_team_domain'], 'https://team.cloudflareaccess.com')
+        self.assertEqual(settings['previews']['origin'], 'https://golf-previews.example.com')
+        self.assertEqual(settings['apps']['policy']['zone'], 'b'*32)
+        self.assertEqual(settings['apps']['policy']['gateway'], settings['previews']['worker'])
+        self.assertEqual(settings['tests'], {'image': demo.IMAGE, 'image_id': 'sha256:'+'c'*64, 'module': 'test_calc'})
+        self.assertEqual(settings['evidence'], {'bucket': name, 'queue': name, 'workflow': name, 'daily_limit': 40, 'allow_ai': False})
+        # The stack derives the Access audiences and secret references; init never invents them.
+        self.assertNotIn('access_aud', settings)
+        self.assertNotIn('apiToken', settings['registry'])
+        self.assertEqual(demo.init_input(*self.args, self.who, 'd'*32)['secretStoreId'], 'd'*32)
+        # Every enable-* action accepts the fresh input.
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            for enable in [demo.enable_observability, demo.enable_analytics, demo.enable_dead_letter, demo.enable_operations, demo.enable_pipelines]:
+                enable(directory, value)
+            demo.enable_ai(directory, value, None)
+            self.assertTrue(value['settings']['evidence']['allow_ai'])
+
+    def test_init_refuses_incomplete_or_ambiguous_inputs(self):
+        changes = {1: 'A'*32, 2: 'bad profile', 3: 'b'*31, 4: 'https://golf.example.com', 5: 'golf.example.com',
+                   6: 'not-an-email', 7: 'https://team.example.com', 8: 'latest'}
+        for index, bad in changes.items():
+            args = list(self.args); args[index] = bad
+            with self.subTest(index=index), self.assertRaises(ValueError):
+                demo.init_input(*args, self.who)
+        with self.assertRaises(ValueError): demo.init_input(*self.args, self.who, 'store')
+        with self.assertRaises(ValueError): demo.init_input(*self.args, self.who, daily_limit=0)
+        with self.assertRaises(ValueError): demo.init_input(*self.args, {**self.who, 'gitAuthorName': 'Jane <x>'})
+
+    def test_identity_is_derived_from_the_email_and_never_a_fixed_owner(self):
+        self.assertEqual(demo.admin_identity('Jane.Doe+golf@example.com'),
+            {'login': 'jane-doe-golf', 'gitAuthorName': 'jane-doe-golf', 'gitAuthorEmail': 'Jane.Doe+golf@example.com'})
+        with self.assertRaises(ValueError): demo.admin_identity('...@example.com')
+        self.assertEqual(demo.admin_identity('...@example.com', 'owner')['login'], 'owner')
+        # Inputs written before the identity was saved derive it; saved values win.
+        self.assertEqual(demo.administrator({'email': 'ops@example.com'})['login'], 'ops')
+        self.assertEqual(demo.administrator({'email': 'ops@example.com', 'adminLogin': 'mike', 'gitAuthorName': 'Mike'})['gitAuthorName'], 'Mike')
+
+    def test_build_enrolls_the_saved_admin_login(self):
+        import os
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            value = {'account': 'a'*32, 'name': 'example', 'email': 'jane@example.com', 'adminLogin': 'jane', 'nativeToken': 'test-only'}
+            settings = {'account': value['account'], 'worker': value['name'], 'workspace': 'jane', 'database': {'uuid': 'database'}}
+            with patch.dict(os.environ, GOLF_ALCHEMY_SETTINGS=json.dumps(settings)), patch.object(demo, 'cf') as cf, patch.object(demo.subprocess, 'run'):
+                cf.return_value = [{'results': []}]
+                demo.build(directory, value)
+            users = [json.loads(call.args[-1]) for call in cf.call_args_list if 'INSERT INTO users' in call.args[-1]]
+            self.assertEqual(users[0]['params'], ['jane', 'jane@example.com'])
+
+    def test_seed_content_is_explicit(self):
+        parser = demo.build_parser()
+        for argv in [['seed', 'DIR'], ['seed', 'DIR', '--manifest', 'x.json', '--no-seed'], ['seed-public', 'DIR'], ['seed-public', 'DIR', '--no-seed']]:
+            with self.subTest(argv=argv), patch('sys.argv', ['cloudflare_alchemy_demo.py', *argv]), patch.object(demo, 'load') as load, \
+                    patch('sys.stderr'), self.assertRaises(SystemExit):
+                demo.main()
+            load.assert_not_called()
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            replace_private_json(directory/'retained-auth.json', {'origin': 'https://golf.example.com', 'token': 't', 'access_client_id': 'i', 'access_client_secret': 's'})
+            replace_private_json(directory/'ownership.json', {'demo': {'repository_ids': ['1']}})
+            value = {'email': 'jane@example.com', 'settings': {'workspace': 'jane'}}
+            session = json.dumps({'user': {'id': '1'}}).encode()
+            with patch.object(demo.urllib.request, 'build_opener') as opener, patch.object(demo.subprocess, 'run') as run:
+                opener.return_value.open.return_value.__enter__.return_value.read.return_value = session
+                with patch.object(demo.json, 'load', return_value={'user': {'id': '1'}}):
+                    demo.seed(directory, value)
+                    self.assertEqual(run.call_args.args[0][-1], '--no-seed')
+                    manifest = demo.ROOT/'deploy/demo/example.json'
+                    demo.seed(directory, value, manifest)
+                    self.assertEqual(run.call_args.args[0][-2:], ['--manifest', str(manifest)])
+
+
 class Observability(unittest.TestCase):
     def test_enabling_observability_preserves_existing_operations_and_is_repeatable(self):
         with tempfile.TemporaryDirectory() as temporary:

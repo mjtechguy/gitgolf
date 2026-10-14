@@ -1,0 +1,24 @@
+{
+  "repositories": [
+    "example-org/click"
+  ],
+  "profiles": {
+    "example-org": {
+      "enabled": true,
+      "displayName": "Example Org",
+      "bio": "A sample organization with small, pinned open source imports.",
+      "location": "",
+      "website": "",
+      "readme": "## Example Org\n\nA sample organization for this Golf installation. The public repository below is an imported snapshot; original authorship and Git history are preserved.",
+      "pinned": [
+        "example-org/click"
+      ]
+    }
+  },
+  "topics": {
+    "example-org/click": [
+      "python",
+      "cli"
+    ]
+  }
+}
