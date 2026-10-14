@@ -1,5 +1,28 @@
 # Golf implementation status
 
+## 2026-10-14 — Native installation overview and editable installation policy
+
+Operations administrators signed in through Access see every installation setting
+the Worker holds at `/admin` (allocations, approved origins, sender, limits and
+today's use; secret bindings only as present), and can change policy inside the
+deploy allocation (schema 30): webhook origins and daily limit, email on/off and
+limit, AI advice and agent proposals on/off, preview lifetime and slots, anonymous
+rate limiting and daily evidence admissions. The deploy value is the default and
+the ceiling. Writes are revision-fenced with receipts and an append-only audit row
+in one D1 batch (`/admin/audit`). Widening needs the typed setting name and an
+Access sign-in from the last 10 minutes. Policy is read where it is used:
+capabilities, admissions, each evidence step, the webhook and email drains,
+preview publication and the anonymous limiter. `policy_editing: false` returns
+authority to deploy only. The Operations page now leads with summaries and a
+"Needs attention" list, and the three admin links with no native service are
+grouped under "Not on this installation".
+
+Verified locally by Worker tests (414, 413 pass, 1 skipped), real workerd/D1
+runtime, UI, environments and rate-limit checks, release-script tests and native
+Playwright specs. Remaining: hosted acceptance, live confirmation of the forwarded
+Access sign-in time, and emailing operations administrators about widening
+changes.
+
 ## 2026-10-14 — Agent proposals on GLM 5.3 Flash
 
 Agent proposals now run on `@cf/zai-org/glm-5.3-flash` (briefly `@cf/zai-org/glm-5.3`;
