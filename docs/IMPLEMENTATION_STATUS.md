@@ -1,5 +1,21 @@
 # Golf implementation status
 
+## 2026-10-14 — Semantic search with Workers AI embeddings and Vectorize (AI-E)
+
+Repository administrators build a per-repository index that the maintenance
+schedule fills with Workers AI embeddings (model from AI model selection) of
+default-branch code and issue/PR titles and descriptions, in paced batches
+(schema 34). Vectorize holds only ids, vectors and repository/kind metadata.
+Every search re-checks the reader's grant in D1 and reads excerpts live, so
+revocations, deletions and edits apply immediately; results name the indexed
+commit. A changed embedding model rebuilds the index while the old one keeps
+serving; the feature sits under the `semantic-search` policy.
+
+Verified locally with Worker tests (468), a workerd check against stub
+AI/Vectorize/Artifacts, script and deploy-config tests and Playwright specs.
+Still unverified live: the embedding dimension, Vectorize filtering and upsert
+visibility, gateway limits during indexing, and CPU per maintenance run.
+
 ## 2026-10-14 — Analytics reads failed because Workers reject `redirect: 'error'`
 
 The Operations analytics feed (failing inside the Worker since 2026-10-13 although
