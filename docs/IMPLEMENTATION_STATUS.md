@@ -53,6 +53,15 @@ probe), an oversized push returned 503 instead of 413, and the page printed
 registration tokens (needs `--registration-token`). Runner token and pipeline
 action audit rows were missing.
 
+After the merge and a deploy (Worker version 58, 15:11Z) the three fixes were
+confirmed on hosted: a 2.9 MiB push with git's default settings succeeded and its
+branch could be deleted, an oversize push answered 413 with the message, the GitLab
+registration command showed `--registration-token`, and runner token create and
+revoke rows appeared in the audit log. The first probes right after the deploy still
+showed the old behaviour: the `Workspace` Durable Object kept its running instance
+while a signed-in tab held live streams, and answered with new code only after the
+tab was closed and the object idled about two minutes (see deploy/alchemy/README.md).
+
 Findings left open:
 
 - The installation's default actions host is `code.forgejo.org`, which has

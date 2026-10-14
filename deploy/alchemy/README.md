@@ -383,3 +383,16 @@ register from Settings > Runners; the page shows the exact `forgejo-runner` or
 that retries lost intakes runs in maintenance, driven by the Durable Object alarm, so
 it does not depend on Cron Triggers.
 
+
+## Verifying a deploy
+
+The edge Worker serves a new version as soon as `deploy` finishes
+(`X-Golf-Worker-Release` changes), but the `Workspace` Durable Object, where every
+`/native/*` and `/git/*` handler runs, keeps its running instance until it is
+evicted. An open signed-in tab holds long-lived `WatchRepository` streams, and
+frequent requests keep the object warm, so a probe sent right after `deploy` can
+still reach the old code for many minutes. Close or navigate away from hosted tabs,
+leave the installation idle for about two minutes (the maintenance alarm then
+starts a fresh instance), and probe once. `X-Golf-Release` comes from the edge
+Worker and does not prove the object's code. This also explains why capability
+states can lag a deploy.
