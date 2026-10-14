@@ -92,6 +92,35 @@ A load tool that runs the same scenarios against the hosted demo or a local
 - Writes JSON to `docs/compatibility/evidence/agent-speed-<date>-<label>.json`.
 - **Exit:** a baseline for S1–S5 on hosted is checked in.
 
+#### Running the bench
+
+The bench uses repositories you create first. It never creates or deletes
+repositories. It pushes only to branches under `bench/<run id>/` and deletes them at
+the end; the evidence file reports any it could not delete.
+
+```sh
+export GOLF_BENCH_ORIGIN=https://demo.gitgolf.mjtechguy.com
+export GOLF_BENCH_REPOS=owner/bench-a,owner/bench-b   # small, pre-existing repositories
+export GOLF_BENCH_GIT_TOKEN=...      # golf_git_ credential (Basic user "golf"), or
+export GOLF_BENCH_GIT_TOKENS='owner/bench-a=...,owner/bench-b=...'   # one per repository
+export GOLF_BENCH_API_TOKEN=...      # golf_pat_ (Bearer): S5 reads, S6, and Git if no Git token
+export GOLF_BENCH_ACCESS_ID=... GOLF_BENCH_ACCESS_SECRET=...   # optional Access service token
+node scripts/agent_speed_bench.mjs --dry-run --scenarios S1,S2,S3,S4,S5 --concurrency 1,4,16,64
+node scripts/agent_speed_bench.mjs --scenarios S1,S2,S3,S4,S5 --concurrency 1,4,16,64 \
+  --duration 30 --label baseline   # or --out path
+```
+
+- `--dry-run` checks the environment and prints the plan without network calls.
+- Git receives the headers through `GIT_CONFIG_*` environment variables, so
+  credentials never appear in process arguments, output or evidence.
+- Latency is per attempt of the network operation (push, clone, `ls-remote`, RPC or
+  Source API call). Local commit plumbing is reported separately as `localGitMs`.
+- S5 reports `skipped: no read identity` if the RPC answers 401 or 403. S6 reports
+  `unavailable` without an API token, or if `/native/source/commit` answers 404.
+- Local check, with no deployment needed:
+  `node --test scripts/agent_speed_bench.test.mjs`. It serves bare repositories
+  through `git http-backend` with fake RPC and Source API endpoints.
+
 ### AM-1 Concurrent Git traffic
 
 1. **Admission classes** (`core.mjs` `serialize`):
