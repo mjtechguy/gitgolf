@@ -19,6 +19,7 @@ export async function nativeAPI<T>(path: string, body: object = {}, signal?: Abo
 // A busy or restarting Worker (429, 5xx, a dropped connection) is retried briefly; anything that is an answer is not.
 // The JSON an error answer carried, for routes whose refusals include data (for example a log offset to resync to).
 export const errorBody = (error: unknown) => error instanceof NativeError && error.body && typeof error.body === 'object' ? error.body as Record<string, unknown> : undefined;
+// ConnectError's instanceof is structural, so `instanceof NativeError` holds for every RPC error too: tell them apart by the status field.
 export const transientError = (error: unknown) => error instanceof ConnectError && [Code.Unavailable, Code.ResourceExhausted, Code.DeadlineExceeded].includes(error.code) &&
-  (!(error instanceof NativeError) || error.httpStatus === 0 || error.httpStatus === 408 || error.httpStatus === 429 || error.httpStatus >= 500 && error.httpStatus !== 501);
+  (typeof (error as Partial<NativeError>).httpStatus !== 'number' || [0, 408, 429].includes((error as NativeError).httpStatus) || (error as NativeError).httpStatus >= 500 && (error as NativeError).httpStatus !== 501);
 export const transientRetry = { retry: (failures: number, error: Error) => failures < 2 && transientError(error), retryDelay: (attempt: number) => 600 * 2 ** attempt };
