@@ -1,5 +1,31 @@
 # Golf implementation status
 
+## 2026-10-14 — Workers AI, agent proposals and failure retention on the Alchemy path
+
+The Alchemy deployment path can now enable three more Cloudflare services:
+`enable-ai` admits inference through one private AI Gateway (authentication
+required, no prompt logging or cache, 60 requests a minute, 500 cents a day)
+and, with `--agent-path`, provisions agent proposals (a second container
+application on the same image, the `PRAgentTask` Durable Object, a 100-step
+evidence workflow); `enable-dead-letter` adds the evidence dead-letter queue.
+The deployment token gains `AI Gateway Write` only when AI is enabled.
+
+Evidence on the retained installation (2026-10-14), on `mj/review-playground`
+pull request 1: review advice ran on Workers AI (`@cf/cloudflare/clef`) and
+reported `SUCCEEDED`; an agent proposal with OpenCode 1.18.34 and
+`@cf/zai-org/glm-4.7-flash` reported `succeeded` after 4 inference calls and 0
+denied outbound requests in 37 seconds, published a proposal commit that adds a
+docstring to `calc.py`, and its approved test module passed. The gateway read
+back with the settings above. The first two agent attempts ended `lost` at
+`container_ready`: the stack had defined the second container under another
+image key, which is fixed. Alchemy beta.83 needed two deploy runs to create the
+new class and then its container application.
+
+Not exercised: the daily spend limit, rate limiting, a dead-lettered evidence
+message, cancellation of a running agent, and two concurrent agents completing.
+Agent proposals can change only `calc.py`, so they apply to the two playground
+repositories and to no imported repository.
+
 ## 2026-10-14 — Native webhooks on the Alchemy path; Slack message shape
 
 `cloudflare_alchemy_demo.py enable-webhooks DIRECTORY --origin ORIGIN` prepares
