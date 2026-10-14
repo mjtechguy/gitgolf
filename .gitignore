@@ -5,7 +5,7 @@
 !.env.*.example
 *.pem
 *.key
-node_modules/
+node_modules
 dist/
 /web/dist-native/
 bin/
@@ -16,6 +16,8 @@ coverage/
 .tmp/
 tmp/
 data/
+# Vendored GitHub Linguist language map imported by repository-metadata.mjs; MIT licensed, with its license.
+!cloudflare/forge/data/
 playwright-report/
 test-results/
 cloudflare/**/wrangler.jsonc
