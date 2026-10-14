@@ -17,9 +17,9 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DIRECTORY = ROOT / '.cloudflare/install'
 IMAGE = 'alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0'
-OPTIONAL = {'agents': 'compose.agents.yaml', 'email': 'compose.email.yaml',
-            'webhooks': 'compose.webhooks.yaml', 'remote-actions': 'compose.actions-remote.yaml',
-            'managed-git': 'compose.managed-git.yaml'}
+OPTIONAL = {'agents': 'deploy/compose/compose.agents.yaml', 'email': 'deploy/compose/compose.email.yaml',
+            'webhooks': 'deploy/compose/compose.webhooks.yaml', 'remote-actions': 'deploy/compose/compose.actions-remote.yaml',
+            'managed-git': 'deploy/compose/compose.managed-git.yaml'}
 
 
 def stop_owned_image_uploads(account, tags, proc=Path('/proc')):
@@ -155,8 +155,8 @@ def compose_command(directory, arguments):
         raise ValueError('Invalid component selection')
     command = ['docker', 'compose', '--project-name', 'golf-cloudflare', '--project-directory', str(ROOT),
                '--env-file', str(directory / 'bridge.env')]
-    for file in ['compose.yaml', 'compose.ci.yaml', 'compose.actions-engine.yaml'] + [OPTIONAL[c] for c in components] + [
-            'compose.runner-tls.yaml', 'compose.cloudflare.yaml']:
+    for file in ['compose.yaml', 'deploy/compose/compose.ci.yaml', 'deploy/compose/compose.actions-engine.yaml'] + [OPTIONAL[c] for c in components] + [
+            'deploy/compose/compose.runner-tls.yaml', 'deploy/compose/compose.cloudflare.yaml']:
         command += ['-f', str(ROOT / file)]
     return command + arguments
 

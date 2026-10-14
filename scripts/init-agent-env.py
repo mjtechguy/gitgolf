@@ -3,7 +3,7 @@
 import os,pathlib,re,subprocess,sys
 root=pathlib.Path(__file__).resolve().parents[1]
 image=subprocess.check_output(['docker','image','inspect','golf-codex-task:0.160.0','--format','{{.Id}}'],text=True).strip()
-if not re.fullmatch(r'sha256:[a-f0-9]{64}',image):raise SystemExit('Build Dockerfile.codex first')
+if not re.fullmatch(r'sha256:[a-f0-9]{64}',image):raise SystemExit('Build deploy/docker/Dockerfile.codex first')
 # No environment, credentials or repository data is serialized into this image.
 save=subprocess.Popen(['docker','image','save',image],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
 load=subprocess.run(['docker','exec','-i','golf-runner-1','docker','image','load'],stdin=save.stdout,capture_output=True,timeout=120)

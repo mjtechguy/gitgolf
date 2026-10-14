@@ -419,7 +419,7 @@ def main():
     command: []
     pull_policy: never
 ''')
-        compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(stack/'compose.yaml'),'-f',str(stack/'compose.ci.yaml'),'-f',str(override)]
+        compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(stack/'compose.yaml'),'-f',str(stack/'deploy/compose/compose.ci.yaml'),'-f',str(override)]
         def command(*argv,**kw):
             try: return run(*compose,*argv,**kw)
             except PrivateSubprocessFailure as error:

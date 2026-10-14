@@ -227,7 +227,7 @@ def main():
     tmpfs: ["/var/lib/postgresql:size=1073741824,mode=0700,uid=70,gid=70"]
 ''')
         compose=['docker','compose','--project-directory',str(stack),'-p',project,'--env-file',str(directory/'proof.env')]
-        for file in ('compose.yaml','compose.ci.yaml','compose.actions-engine.yaml','compose.runner-tls.yaml'):compose+=['-f',str(stack/file)]
+        for file in ('compose.yaml','deploy/compose/compose.ci.yaml','deploy/compose/compose.actions-engine.yaml','deploy/compose/compose.runner-tls.yaml'):compose+=['-f',str(stack/file)]
         compose+=['-f',str(directory/'services.json'),'-f',str(directory/'ports.yaml')]
         def command(*argv,**kw):return execute(*compose,*argv,**kw)
         def admin(*argv):return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*argv)

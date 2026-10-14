@@ -165,7 +165,7 @@ def main():
     ports: !override ["127.0.0.1:{grafana_port}:3000"]
 ''')
         compose = ['docker', 'compose', '-p', project, '--env-file', str(env_file), '--env-file', str(secret_dir / 'monitoring.env'),
-                   '-f', str(ROOT / 'compose.yaml'), '-f', str(ROOT / 'compose.observability.yaml'), '-f', str(override)]
+                   '-f', str(ROOT / 'compose.yaml'), '-f', str(ROOT / 'deploy/compose/compose.observability.yaml'), '-f', str(override)]
 
         def command(*arguments, timeout=60):
             return run([*compose, *arguments], environment, timeout)

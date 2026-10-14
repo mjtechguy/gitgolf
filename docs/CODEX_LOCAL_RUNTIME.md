@@ -5,7 +5,7 @@ from the network-disabled CI executor and is not yet Golf's managed connection,
 task, repository permission, or browser setup service. The coding-agent capability
 must remain unavailable until those consumers are implemented and qualified.
 
-Build `docker build -t golf-codex:development -f Dockerfile.codex .`, then obtain
+Build `docker build -t golf-codex:development -f deploy/docker/Dockerfile.codex .`, then obtain
 its actual local ID with `docker image inspect golf-codex:development --format
 '{{.Id}}'`. The image installs Codex CLI0.160.0 and Git on a digest-pinned Node
 base. Every connection pins that actual ID; a mutable tag or a different image is

@@ -293,7 +293,7 @@ def main():
   runner:
     depends_on: !override {{golf: {{condition: service_started}}, runner-daemon: {{condition: service_healthy}}}}
 ''')
-        env.update(proxy.environment());compose=['docker','compose','--project-directory',str(stack),'-p',project,'--env-file',str(directory/'proof.env'),'-f',str(stack/'compose.yaml'),'-f',str(stack/'compose.ci.yaml'),'-f',str(directory/'services.json'),'-f',str(directory/'ports.yaml')]
+        env.update(proxy.environment());compose=['docker','compose','--project-directory',str(stack),'-p',project,'--env-file',str(directory/'proof.env'),'-f',str(stack/'compose.yaml'),'-f',str(stack/'deploy/compose/compose.ci.yaml'),'-f',str(directory/'services.json'),'-f',str(directory/'ports.yaml')]
         def command(*arguments,_execute=subprocess_run,**kw):return _execute(*compose,*arguments,**kw)
         admin=lambda *arguments:command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*arguments)
         native=rules.native

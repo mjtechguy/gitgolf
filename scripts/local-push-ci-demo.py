@@ -24,7 +24,7 @@ import smoke
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = ['docker', 'compose', '--env-file', '.env', '--env-file', '.env.ci', '--env-file', '.env.storage',
-           '-f', 'compose.yaml', '-f', 'compose.ci.yaml', '-f', 'compose.storage.yaml']
+           '-f', 'compose.yaml', '-f', 'deploy/compose/compose.ci.yaml', '-f', 'deploy/compose/compose.storage.yaml']
 
 
 def command(*args, **kwargs):

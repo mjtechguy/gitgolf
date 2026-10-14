@@ -201,7 +201,7 @@ def main():
     command: []
     pull_policy: never
 ''')
-        compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(stack/'compose.yaml'),'-f',str(stack/'compose.ci.yaml'),'-f',str(override)]
+        compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(stack/'compose.yaml'),'-f',str(stack/'deploy/compose/compose.ci.yaml'),'-f',str(override)]
         def command(*argv,**kw): return run(*compose,*argv,**kw)
         def admin(*argv): return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*argv)
         def rpc(actor,procedure,payload=None,**kw):return checked_rpc(actor['session'],procedure,payload,**kw)

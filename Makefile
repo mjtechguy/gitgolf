@@ -1,10 +1,10 @@
 .PHONY: setup dev build cli test test-integration check helm-check fmt vet web-check generate generate-check qualify-git qualify-settings qualify-organization-admin qualify-public-repositories qualify-repository-access qualify-workflow-inspection qualify-instance-admin qualify-account-security qualify-repository-events qualify-automation-grants up down local-up local-stop local-status
 REVIEW_ENV = $(if $(wildcard .env.review),--env-file .env.review,)
-AGENT_COMPOSE = $(if $(wildcard .env.agents),--env-file .env.agents -f compose.agents.yaml,)
+AGENT_COMPOSE = $(if $(wildcard .env.agents),--env-file .env.agents -f deploy/compose/compose.agents.yaml,)
 AGENT_SERVICE = $(if $(wildcard .env.agents),agent-worker,)
-LOCAL_COMPOSE = docker compose --env-file .env --env-file .env.ci --env-file .env.storage -f compose.yaml -f compose.ci.yaml -f compose.storage.yaml $(AGENT_COMPOSE) $(REVIEW_ENV)
+LOCAL_COMPOSE = docker compose --env-file .env --env-file .env.ci --env-file .env.storage -f compose.yaml -f deploy/compose/compose.ci.yaml -f deploy/compose/compose.storage.yaml $(AGENT_COMPOSE) $(REVIEW_ENV)
 .DEFAULT_GOAL := setup
-HTTPS_COMPOSE = $(LOCAL_COMPOSE) --env-file .env.https -f compose.https.yaml
+HTTPS_COMPOSE = $(LOCAL_COMPOSE) --env-file .env.https -f deploy/compose/compose.https.yaml
 ACTIVE_LOCAL_COMPOSE = $(LOCAL_COMPOSE)
 HTTPS_IMAGE ?= $(shell docker inspect $$($(LOCAL_COMPOSE) ps -q golf) --format '{{.Image}}')
 .PHONY: local-https-up local-https-stop local-https-status local-https-certificate qualify-https
@@ -187,7 +187,7 @@ local-status:
 
 .PHONY: local-agents-up
 local-agents-up: local-up
-	docker build -f Dockerfile.codex -t golf-codex-task:0.160.0 .
+	docker build -f deploy/docker/Dockerfile.codex -t golf-codex-task:0.160.0 .
 	python3 scripts/init-agent-env.py
 	$(MAKE) local-up
 

@@ -28,7 +28,7 @@ Telemetry is best effort. Export failures produce a fixed diagnostic and a bound
 
 ## Optional local stack
 
-The separate `compose.observability.yaml` overlay adds Jaeger, Prometheus and Grafana to the development installation. Its provisioned Grafana metrics dashboard shows request/provider/database rates and latencies, response statuses and trace-export failures. Inspect traces in the separate Jaeger UI; the latest pinned Grafana/Jaeger pair did not qualify a Jaeger datasource, so that unsupported integration is omitted. Use the overlay's operator instructions for secrets, ports and lifecycle.
+The separate `deploy/compose/compose.observability.yaml` overlay adds Jaeger, Prometheus and Grafana to the development installation. Its provisioned Grafana metrics dashboard shows request/provider/database rates and latencies, response statuses and trace-export failures. Inspect traces in the separate Jaeger UI; the latest pinned Grafana/Jaeger pair did not qualify a Jaeger datasource, so that unsupported integration is omitted. Use the overlay's operator instructions for secrets, ports and lifecycle.
 
 The ordinary three-service Docker profile remains unchanged. The offline recovery operator qualifies only that canonical profile; adding monitoring services does not establish backup/restore coverage for the expanded topology. Collector/dashboard data is disposable development data, not durable recovery evidence.
 

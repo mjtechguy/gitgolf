@@ -51,7 +51,7 @@ Before deployment qualification: run those PostgreSQL and browser cases, qualify
 - [Pinned OAuth authentication](https://github.com/go-gitea/gitea/blob/v1.27.3/services/auth/oauth2.go)
 - [Pinned paginated push-mirror inventory and conversion](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/mirror.go)
 
-The private-native deployment overlay is a reversible topology configuration, not a certificate of production quiescence. Default Compose/Helm native ports are untouched until explicitly selected; the existing `compose.https.yaml` reverse proxy does not prove `r.TLS` at the Golf listener and is not sufficient for these Git routes by itself.
+The private-native deployment overlay is a reversible topology configuration, not a certificate of production quiescence. Default Compose/Helm native ports are untouched until explicitly selected; the existing `deploy/compose/compose.https.yaml` reverse proxy does not prove `r.TLS` at the Golf listener and is not sufficient for these Git routes by itself.
 
 ## Integrated source mount
 

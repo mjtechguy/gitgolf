@@ -255,11 +255,11 @@ Backups with local RustFS retain the v1 envelope plus `storage_profile=local_rus
 
 Remote environment S3, any profile-backed source or active object profile is rejected by this local-only tool. Dormant encrypted connection profiles are configuration history, not proof that their external resource data is backed up. External databases/storage, TLS edge volumes, live/orphan executable processes, Kubernetes, HA and production multi-tenant recovery remain separate gates.
 
-Repeat `--compose-file` for the selected base/overlays. Containers created before an overlay was selected may legitimately retain an ordered subset of those file labels; foreign/reordered/duplicate paths are rejected. Structural image, entrypoint, local volume, security, service and storage-binding checks remain mandatory.
+Repeat `--compose-file` for the selected base/overlays. Containers created before an overlay was selected may legitimately retain an ordered subset of those file labels; foreign/reordered/duplicate paths are rejected. Overlays now live under `deploy/compose/`; containers created while they sat at the repository root keep the old paths in their labels, so recreate them with the current files (`up -d --force-recreate`) before a backup. Structural image, entrypoint, local volume, security, service and storage-binding checks remain mandatory.
 
 ```sh
 python3 scripts/recovery.py backup --project golf \
-  --compose-file compose.yaml --compose-file compose.ci.yaml --compose-file compose.storage.yaml \
+  --compose-file compose.yaml --compose-file deploy/compose/compose.ci.yaml --compose-file deploy/compose/compose.storage.yaml \
   --recipient "$PUBLIC_AGE_RECIPIENT" --output /private/path/golf.age --writers-drained
 ```
 

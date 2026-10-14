@@ -16,7 +16,7 @@ Operator configuration:
 | `GOLF_RUNNER_APPROVED_IMAGES` | JSON array of exact `repository@sha256:<64 lowercase hex>` references, also approved by the coordinator. Images must already exist on the dedicated daemon. Jobs cannot pull images. |
 | `GOLF_RUNNER_DOCKER_BINARY` | Optional trusted Docker executable path; defaults to `docker`. Docker context/daemon configuration belongs to the operator. |
 
-`Dockerfile.runner` builds the separate binary and pins Alpine 3.23's base digest plus Docker CLI 29.5.2-r0. The final process runs as UID/GID 1000; the operator must grant access to the dedicated socket explicitly. It has no Docker daemon or automatic Docker-in-Docker setup. The image must be built and qualified for the chosen host; a successful image build alone is not a deployed runner proof. [Pinned Alpine package](https://pkgs.alpinelinux.org/packages?branch=v3.23&name=docker-cli).
+`deploy/docker/Dockerfile.runner` builds the separate binary and pins Alpine 3.23's base digest plus Docker CLI 29.5.2-r0. The final process runs as UID/GID 1000; the operator must grant access to the dedicated socket explicitly. It has no Docker daemon or automatic Docker-in-Docker setup. The image must be built and qualified for the chosen host; a successful image build alone is not a deployed runner proof. [Pinned Alpine package](https://pkgs.alpinelinux.org/packages?branch=v3.23&name=docker-cli).
 
 ## Assignment and control traffic
 

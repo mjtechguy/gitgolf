@@ -136,7 +136,7 @@ def main():
     args = parser.parse_args(); stack = args.stack_root.resolve(); output = args.output.resolve()
     assert 1 <= args.seed_timeout <= 600 and not output.exists()
     output.mkdir(parents=True, mode=0o700); output.chmod(0o700)
-    for path in ('compose.yaml','compose.ci.yaml','compose.actions-engine.yaml','compose.runner-tls.yaml'):
+    for path in ('compose.yaml','deploy/compose/compose.ci.yaml','deploy/compose/compose.actions-engine.yaml','deploy/compose/compose.runner-tls.yaml'):
         assert (stack/path).is_file()
     environment = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k != 'DATABASE_URL'}
     def run(*argv, payload=None, timeout=180, expected=0):
@@ -212,7 +212,7 @@ def main():
     pull_policy: never
 ''')
         compose = ['docker','compose','-p',project,'--env-file',str(env_file)]
-        for path in ('compose.yaml','compose.ci.yaml','compose.actions-engine.yaml','compose.runner-tls.yaml'):
+        for path in ('compose.yaml','deploy/compose/compose.ci.yaml','deploy/compose/compose.actions-engine.yaml','deploy/compose/compose.runner-tls.yaml'):
             compose += ['-f',str(stack/path)]
         compose += ['-f',str(override)]
         def command(*argv,**kwargs): return run(*compose,*argv,**kwargs)

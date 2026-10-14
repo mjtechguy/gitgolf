@@ -139,6 +139,8 @@ make check
 make helm-check
 ```
 
+`compose.yaml` at the root is the base stack. Optional Compose overlays (CI, storage, HTTPS, agents, observability and others) live in [`deploy/compose/`](deploy/compose) and are layered after it from the repository root, e.g. `docker compose -f compose.yaml -f deploy/compose/compose.ci.yaml up -d`. Dockerfiles live in [`deploy/docker/`](deploy/docker); the build context stays the repository root: `docker build -f deploy/docker/Dockerfile .`
+
 Read [`AGENTS.md`](AGENTS.md) before changing product scope. No repository CI workflows are configured yet; run the checks locally. The [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records runnable evidence for every shipped capability.
 
 ## Current limits

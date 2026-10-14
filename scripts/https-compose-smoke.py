@@ -62,7 +62,7 @@ def main():
     ports: !override ["127.0.0.1:{native_port}:3000"]
 ''')
         compose = ['docker', 'compose', '-p', project, '--env-file', str(directory/'env'),
-            '-f', str(ROOT/'compose.yaml'), '-f', str(ROOT/'compose.https.yaml'),
+            '-f', str(ROOT/'compose.yaml'), '-f', str(ROOT/'deploy/compose/compose.https.yaml'),
             '-f', str(directory/'override.yaml')]
 
         def command(*arguments, **kwargs):

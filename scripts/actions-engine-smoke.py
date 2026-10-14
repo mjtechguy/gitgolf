@@ -153,7 +153,7 @@ def main():
     stack=args.stack_root.resolve(); output=args.output_dir.resolve()
     assert not output.exists(), 'Output must be a new directory'
     output.mkdir(parents=True,mode=0o700);output.chmod(0o700)
-    for path in ('compose.yaml','compose.ci.yaml','compose.actions-engine.yaml'):
+    for path in ('compose.yaml','deploy/compose/compose.ci.yaml','deploy/compose/compose.actions-engine.yaml'):
         assert (stack/path).is_file(), 'Missing frozen Actions stack source'
     screenshots=None
     if args.ui_screenshots:
@@ -210,7 +210,7 @@ def main():
     pull_policy: never
 ''')
         compose=['docker','compose','-p',project,'--env-file',str(env_file)]
-        for file in ('compose.yaml','compose.ci.yaml','compose.actions-engine.yaml'):compose+=['-f',str(stack/file)]
+        for file in ('compose.yaml','deploy/compose/compose.ci.yaml','deploy/compose/compose.actions-engine.yaml'):compose+=['-f',str(stack/file)]
         compose+=['-f',str(override)]
         def command(*args,**kw):return run(*compose,*args,**kw)
         def admin(*args):return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*args).strip()
