@@ -2293,6 +2293,9 @@ type RepositoryEnvironmentCapability int32
 const (
 	RepositoryEnvironmentCapability_REPOSITORY_ENVIRONMENT_CAPABILITY_UNSPECIFIED        RepositoryEnvironmentCapability = 0
 	RepositoryEnvironmentCapability_REPOSITORY_ENVIRONMENT_CAPABILITY_CONFIGURATION_ONLY RepositoryEnvironmentCapability = 1
+	// Cloudflare native: one environment named preview is enforced on protected
+	// pull-request previews. No deployment, reviewer or wait-timer consumer.
+	RepositoryEnvironmentCapability_REPOSITORY_ENVIRONMENT_CAPABILITY_PREVIEW_POLICY RepositoryEnvironmentCapability = 2
 )
 
 // Enum value maps for RepositoryEnvironmentCapability.
@@ -2300,10 +2303,12 @@ var (
 	RepositoryEnvironmentCapability_name = map[int32]string{
 		0: "REPOSITORY_ENVIRONMENT_CAPABILITY_UNSPECIFIED",
 		1: "REPOSITORY_ENVIRONMENT_CAPABILITY_CONFIGURATION_ONLY",
+		2: "REPOSITORY_ENVIRONMENT_CAPABILITY_PREVIEW_POLICY",
 	}
 	RepositoryEnvironmentCapability_value = map[string]int32{
 		"REPOSITORY_ENVIRONMENT_CAPABILITY_UNSPECIFIED":        0,
 		"REPOSITORY_ENVIRONMENT_CAPABILITY_CONFIGURATION_ONLY": 1,
+		"REPOSITORY_ENVIRONMENT_CAPABILITY_PREVIEW_POLICY":     2,
 	}
 )
 
@@ -65079,10 +65084,11 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x11GitCredentialMode\x12#\n" +
 	"\x1fGIT_CREDENTIAL_MODE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18GIT_CREDENTIAL_MODE_READ\x10\x01\x12\x1d\n" +
-	"\x19GIT_CREDENTIAL_MODE_WRITE\x10\x02*\x8e\x01\n" +
+	"\x19GIT_CREDENTIAL_MODE_WRITE\x10\x02*\xc4\x01\n" +
 	"\x1fRepositoryEnvironmentCapability\x121\n" +
 	"-REPOSITORY_ENVIRONMENT_CAPABILITY_UNSPECIFIED\x10\x00\x128\n" +
-	"4REPOSITORY_ENVIRONMENT_CAPABILITY_CONFIGURATION_ONLY\x10\x01*\x9e\x01\n" +
+	"4REPOSITORY_ENVIRONMENT_CAPABILITY_CONFIGURATION_ONLY\x10\x01\x124\n" +
+	"0REPOSITORY_ENVIRONMENT_CAPABILITY_PREVIEW_POLICY\x10\x02*\x9e\x01\n" +
 	"\x1bRepositoryEnvironmentAction\x12-\n" +
 	")REPOSITORY_ENVIRONMENT_ACTION_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"REPOSITORY_ENVIRONMENT_ACTION_SAVE\x10\x01\x12(\n" +
