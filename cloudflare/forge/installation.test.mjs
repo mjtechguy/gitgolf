@@ -150,7 +150,10 @@ test('only a current operations administrator signed in through Access can chang
   // Revoked between the check and the write: the fenced batch writes nothing.
   f.revokeOn('SELECT * FROM installation_operations');
   assert.equal((await update(f, 'webhooks', value)).status, 403);
-  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM installation_settings').get().n, 0); assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM installation_audit').get().n, 0);
+  // No change and no change row; each refusal is recorded by the dispatch hook as denied.
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM installation_settings').get().n, 0); assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM installation_audit WHERE action='update'").get().n, 0);
+  assert.deepEqual(f.sql.prepare("SELECT action,subject,json_extract(client,'$.outcome') AS outcome,json_extract(client,'$.via') AS via FROM installation_audit ORDER BY id").all().map(row => Object.values(row)),
+    [['installation_policy.update', 'webhooks', 'denied', 'token'], ['installation_policy.update', 'webhooks', 'denied', 'token'], ['installation_policy.update', 'webhooks', 'denied', 'service'], ['installation_policy.update', 'webhooks', 'denied', 'person'], ['installation_policy.update', 'webhooks', 'denied', 'person']]);
   f.sql.exec('UPDATE operations_admins SET active=1');
   assert.equal((await update(f, 'webhooks', value)).status, 200);
   f.env.INSTALLATION_POLICY_EDITING = 'false';

@@ -238,7 +238,10 @@ test('repository administrators toggle within the policy; Actions writes through
   assert.deepEqual([state.actions.effective, state.secrets.decidedBy], [false, 'FEATURE_DECIDER_DEPENDENCY']);
   assert.deepEqual({ ...f.sql.prepare('SELECT manual,push,version FROM repository_execution_policy').get() }, { manual: 0, push: 0, version: 1 });
   assert.deepEqual(f.sql.prepare('SELECT feature,enabled FROM repository_features').all().map(row => [row.feature, row.enabled]), [['releases', 0]]);
-  assert.deepEqual(f.sql.prepare("SELECT scope,scope_id,subject,after FROM installation_audit WHERE scope='repository' ORDER BY id").all().map(row => Object.values(row)), [['repository', '1', 'feature:releases', 'false'], ['repository', '1', 'feature:actions', 'false']]);
+  assert.deepEqual(f.sql.prepare("SELECT scope,scope_id,subject,after FROM installation_audit WHERE scope='repository' AND action='repository_feature.update' AND json_extract(client,'$.outcome') IS NULL ORDER BY id").all().map(row => Object.values(row)), [['repository', '1', 'feature:releases', 'false'], ['repository', '1', 'feature:actions', 'false']]);
+  // The three refusals above (bearer, service token, non-administrator) are each recorded once by the dispatch hook, with who and how.
+  assert.deepEqual(f.sql.prepare("SELECT json_extract(client,'$.outcome') AS outcome,json_extract(client,'$.via') AS via FROM installation_audit WHERE action='repository_feature.update' AND json_extract(client,'$.outcome') IS NOT NULL ORDER BY id").all().map(row => [row.outcome, row.via]),
+    [['denied', 'token'], ['denied', 'service'], ['denied', 'person']]);
   assert.equal((await f.signed('ExecutionPolicyService/GetExecutionPolicy', { scope: 'EXECUTION_SCOPE_REPOSITORY', repository })).policy.mode, 'EXECUTION_MODE_DISABLED');
   const refused = await f.signed('RepositoryService/ListRepositoryReleases', target);
   assert.equal(refused.message, 'Releases are turned off for this repository by the repository policy.');

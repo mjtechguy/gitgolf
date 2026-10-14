@@ -149,7 +149,9 @@ test('repositories choose only where allowed, and fall back when an administrato
   const view = (await f.call('/native/ai-models/read', { action: 'repository', ...f.repo }, { who: 'bob' })).value;
   const drafts = view.uses.find(item => item.use === 'review-drafts');
   assert.equal(view.canEdit, false); assert.equal(drafts.model, flash); assert.equal(drafts.choice, flash); assert.equal(drafts.version, '1');
-  assert.deepEqual({ ...f.sql.prepare("SELECT scope,scope_id,subject,after FROM installation_audit WHERE action='repository_ai_model.update'").get() }, { scope: 'repository', scope_id: '1', subject: 'ai.model.review-drafts', after: JSON.stringify(flash) });
+  // The change's own batch wrote the success row; the dispatch hook added only the refusal of bob, who is not an administrator.
+  assert.deepEqual(f.sql.prepare("SELECT scope,scope_id,subject,after,json_extract(client,'$.outcome') AS outcome FROM installation_audit WHERE action='repository_ai_model.update' ORDER BY id").all().map(row => ({ ...row })),
+    [{ scope: 'repository', scope_id: '1', subject: 'ai.model.review-drafts', after: null, outcome: 'denied' }, { scope: 'repository', scope_id: '1', subject: 'ai.model.review-drafts', after: JSON.stringify(flash), outcome: null }]);
   // Narrowing keeps the repository row but it no longer applies.
   await f.update('review-drafts', { default: glm, allowed: [glm], repositoryOverride: true });
   const fallback = await aiModel(f.env.DB, f.env, 'review-drafts', 1);

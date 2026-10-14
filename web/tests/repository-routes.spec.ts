@@ -284,7 +284,7 @@ for (const width of [320, 1440]) test(`native settings retain the full sidebar a
   await expect(page.getByText('PRIVATE route settings', {exact:true})).toBeVisible();
   const nav = page.locator('.repository-settings-layout > .account-navigation');
   const picker = page.getByRole('combobox', {name:'Settings section', exact:true, includeHidden:true});
-  const sections = ['General', 'Access', 'Git credentials', 'Rules and merge policy', 'Workflows', 'Runners', 'Secrets and variables', 'Environments', 'Webhooks'];
+  const sections = ['General', 'Access', 'Git credentials', 'Rules and merge policy', 'Workflows', 'Runners', 'Secrets and variables', 'Environments', 'Webhooks', 'Audit log'];
   await expect(nav.getByRole('link', {includeHidden:true})).toHaveCount(sections.length);
   await expect(picker.locator('option')).toHaveCount(sections.length);
   for (const section of sections) await expect(nav.getByRole('link', {includeHidden:true}).filter({hasText:section})).toHaveCount(1);
@@ -313,7 +313,7 @@ test('native settings wait for capabilities, retain navigation on failure and re
   await page.goto('/alex/demo/settings/workflows');
   await expect(page.getByRole('heading', {name:'Checking settings availability…',exact:true})).toBeVisible();
   expect(state.methods).not.toContain('InspectWorkflows');
-  await expect(page.getByRole('navigation', {name:'Repository settings',exact:true}).getByRole('link')).toHaveCount(9);
+  await expect(page.getByRole('navigation', {name:'Repository settings',exact:true}).getByRole('link')).toHaveCount(10);
   state.capabilitiesFailed = true; release();
   await expect(page.getByText('Settings availability could not be checked. Retry to load the current installation capabilities.',{exact:true})).toBeVisible();
   expect(state.methods).not.toContain('InspectWorkflows');
@@ -350,7 +350,7 @@ test('native runners settings open the workspace pool chooser and account naviga
   await expect(page.getByText('Not available on this installation',{exact:true})).toHaveCount(0);
   const nav = page.getByRole('navigation', {name:'Repository settings',exact:true});
   await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('href', '/alex/demo/settings/runners');
-  await expect(nav.getByText('Not on this installation')).toContainText('6');
+  await expect(nav.getByText('Not on this installation')).toContainText('7');
   // The native runtime has no API credential, provider connection, agent account or activity service.
   await page.goto('/account/settings');
   const account = page.getByRole('navigation', {name:'Account settings',exact:true});
@@ -368,7 +368,7 @@ test('each unavailable native settings route keeps its selected sidebar without 
     await expect(page.getByText('Not available on this installation',{exact:true})).toBeVisible();
     const nav = page.getByRole('navigation', {name:'Repository settings',exact:true});
     await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('href', `/alex/demo/settings/${suffix}`);
-    await expect(nav.getByRole('link')).toHaveCount(9);
+    await expect(nav.getByRole('link')).toHaveCount(10);
   }
   expect(state.methods.filter(method=>!['GetSession','GetAuthenticationOptions','ListCapabilities','GetRepository'].includes(method))).toEqual([]);
 });

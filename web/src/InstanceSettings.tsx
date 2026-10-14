@@ -51,7 +51,7 @@ const pages: Record<AdminView | 'installation', [string, string]> = {
   infrastructure: ['Infrastructure', 'Infrastructure profiles and source storage connections.'],
   agents: ['Coding agents', 'Installation coding agent connections and their usage.'],
   notifications: ['Email delivery', 'The installation’s outgoing email transport.'],
-  audit: ['Audit log', 'Every installation policy change: who made it, when, from where, and the values before and after.'],
+  audit: ['Audit log', 'The installation audit log: privileged and state-changing actions across this installation, its organizations and repositories. Who acted, what changed, when, from where, and whether it succeeded.'],
   capabilities: ['System capabilities', 'What this installation provides today, with the evidence behind each state.'],
   runners: ['Runners', 'Runner pools, limits and controls for this installation.'],
 };

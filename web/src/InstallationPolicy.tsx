@@ -1,11 +1,9 @@
 import { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
-import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { RefreshCw } from 'lucide-react';
 import { nativeAPI } from './nativeAPI';
-import { DataTable, type DataTableColumn } from './DataTable';
-import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
+import { DateLabel } from './RepositoryUI';
+import { AuditLog } from './AuditLog';
 
 // Mirrors installationPolicies in cloudflare/forge/src/installation.mjs. The Worker re-validates every value and decides what widens.
 type Value = { origins?: string[]; dailyLimit?: number; enabled?: boolean; lifetimeSeconds?: number; concurrency?: number };
@@ -84,25 +82,7 @@ export function RecentChanges({ entries }: { entries: AuditEntry[] }) {
   </section>;
 }
 
-const auditColumns: DataTableColumn<AuditEntry>[] = [
-  { id: 'at', header: 'When', accessorFn: row => row.at, cell: ({ row }) => <DateLabel value={row.original.at} /> },
-  { id: 'actor', header: 'Who', accessorFn: row => `${row.actor} ${row.actorEmail}`, cell: ({ row }) => <><strong>{row.original.actor || 'Unknown account'}</strong><small>{row.original.actorEmail}</small></> },
-  { id: 'subject', header: 'Setting', accessorFn: row => `${row.scope} ${row.scopeId} ${row.subject}`, cell: ({ row }) => <><strong>{subjectLabel(row.original.subject)}</strong><small>{row.original.scope}{row.original.scopeId ? ' · ' + row.original.scopeId : ''}</small></> },
-  { id: 'change', header: 'Change', accessorFn: row => `${describe(row.subject, row.before)} ${describe(row.subject, row.after)}`, cell: ({ row }) => <><span>{describe(row.original.subject, row.original.after)}</span><small>was {describe(row.original.subject, row.original.before)}</small></> },
-  { id: 'widening', header: 'Kind', accessorFn: row => row.widening ? 'Widening' : 'Narrowing or equal', cell: ({ row }) => <span className={`visibility ${row.original.widening ? 'configured' : ''}`}>{row.original.widening ? 'Widening' : 'Narrowing or same'}</span> },
-  { id: 'from', header: 'From', accessorFn: row => [row.client.colo, row.client.country].filter(Boolean).join(', ') || 'Not recorded' },
-];
+// The installation audit log is the shared audit log at installation scope.
 export function InstallationAudit({ userId, signingOut }: { userId: string; signingOut: boolean }) {
-  const query = useInfiniteQuery({ ...privateQuery, queryKey: ['installation-audit', userId], enabled: !signingOut, retry: false, initialPageParam: 1,
-    queryFn: ({ pageParam, signal }) => nativeAPI<{ entries: AuditEntry[]; page: { nextPage: number } }>('/native/installation/read', { action: 'audit', page: { page: pageParam, limit: 50 } }, signal),
-    getNextPageParam: (last, _pages, current) => last.page.nextPage > current ? last.page.nextPage : undefined });
-  if (query.error) return <PanelError error={query.error} retry={() => void query.refetch()} />;
-  if (!query.data) return <Loading label="Reading the audit log…" />;
-  const entries = query.data.pages.flatMap(page => page.entries);
-  return <>
-    <div className="settings-toolbar"><span className="field-help">Entries cannot be edited or removed through Golf. Newest first; {entries.length} loaded.</span><button className="button secondary" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={15} />Refresh</button></div>
-    <section className="browser-panel" aria-labelledby="installation-audit-title"><div className="browser-panel-heading"><h2 id="installation-audit-title">Policy changes</h2></div>
-      <DataTable data={entries} columns={auditColumns} getRowId={row => row.id} label="Installation audit log" emptyMessage="No installation policy has been changed yet." />
-      <div className="list-footer"><span>{entries.length} loaded</span><More hasMore={Boolean(query.hasNextPage)} loading={query.isFetchingNextPage} load={() => void query.fetchNextPage()} label="entries" /></div></section>
-  </>;
+  return <AuditLog scope={{ kind: 'installation' }} userId={userId} signingOut={signingOut} />;
 }

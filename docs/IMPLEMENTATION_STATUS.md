@@ -1,5 +1,31 @@
 # Golf implementation status
 
+## 2026-10-14 — Audit log for privileged and state-changing actions
+
+`/admin/audit` was empty after a day of runner pool, enrollment and placement
+changes because only installation policy edits were recorded. One hook in the
+request dispatch now records every privileged or state-changing request that has
+a descriptor in `src/audit.mjs`: installation, feature and AI model policy,
+runner pools and machines, organizations, repository creation, visibility,
+settings, members, invitations, rules, webhooks, secrets and variables (names
+only), environments, Git credentials, previews, releases, merges, review
+dismissals, labels, milestones and run requests. Each row records outcome
+(success, denied, refused, unknown), actor, Access email, auth kind, country,
+colo, IP, user agent and request id in the existing append-only
+`installation_audit` table; no migration. Policy and feature changes are
+written in the same D1 batch as the change; every other row is written
+best-effort after success, with a visible failure counter. Operations
+administrators read the installation log, repository administrators their
+repository's (`settings/audit`) and organization owners their organization's,
+with server-side filters. Secret values, signing secrets and runner enrollment
+credentials are tested never to appear in a row.
+
+Verified locally: Worker tests (475, 474 pass, 1 skipped), real workerd runtime,
+UI and audit checks, and the audit, installation, feature-policy and
+settings-navigation specs. Not yet audited: pipeline dispatch, cancel and
+approval (one descriptor entry each once pipelines merge). The row stores client
+IP addresses; retention and export are not yet configurable.
+
 ## 2026-10-14 — Semantic search with Workers AI embeddings and Vectorize (AI-E)
 
 Repository administrators build a per-repository index that the maintenance
