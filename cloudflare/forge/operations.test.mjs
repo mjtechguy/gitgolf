@@ -81,7 +81,7 @@ test('additive operations migration does not infer admin roles and safely resume
 test('provider metrics use fixed account/Worker query, retain last success on failure and do not collect on dashboard refresh',async t=>{
  const f=await fixture(t);Object.assign(f.env,{ACCOUNT_ID:'a'.repeat(32),OPERATIONS_WORKER:'golf-test',OPERATIONS_ANALYTICS_TOKEN:{async get(){return 'test-secret-value-1234567890'}}});
  let calls=0;
- const provider=async(url,options)=>{calls++;assert.equal(url,'https://api.cloudflare.com/client/v4/graphql');assert.equal(options.redirect,'error');const request=JSON.parse(options.body);assert.equal(request.variables.scriptName,'golf-test');assert.equal(request.variables.accountTag,'a'.repeat(32));assert.equal(Date.parse(request.variables.end)-Date.parse(request.variables.start),1800000);
+ const provider=async(url,options)=>{calls++;assert.equal(url,'https://api.cloudflare.com/client/v4/graphql');assert.equal(options.redirect,'manual');const request=JSON.parse(options.body);assert.equal(request.variables.scriptName,'golf-test');assert.equal(request.variables.accountTag,'a'.repeat(32));assert.equal(Date.parse(request.variables.end)-Date.parse(request.variables.start),1800000);
   return Response.json({data:{viewer:{accounts:[{workersInvocationsAdaptive:[{dimensions:{scriptName:'golf-test'},sum:{requests:3,errors:0,subrequests:2}}]}]}},errors:null});};
  await collectWorkerMetrics(f.env,provider);await collectWorkerMetrics(f.env,provider);assert.equal(calls,1);
  let data=await(await f.call()).json();assert.equal(data.metrics.find(m=>m.id==='provider.requests').value,3);assert.equal(data.metrics.find(m=>m.id==='provider.errors').value,0);assert.equal(calls,1);

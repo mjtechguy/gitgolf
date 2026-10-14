@@ -68,7 +68,7 @@ export async function gatewayAnalytics(env, providerFetch = fetch, recentCalls =
         }
       } }
     }`;
-    const response = await providerFetch('https://api.cloudflare.com/client/v4/graphql', { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
+    const response = await providerFetch('https://api.cloudflare.com/client/v4/graphql', { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(5000),
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ query, variables: { accountTag: env.ACCOUNT_ID, ...window, gateway: env.EVIDENCE_GATEWAY } }) });
     if (!response.headers.get('Content-Type')?.startsWith('application/json')) throw Error(`The analytics API answered ${response.status} without JSON.`);
