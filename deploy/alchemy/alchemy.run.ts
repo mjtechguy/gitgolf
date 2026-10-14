@@ -36,6 +36,13 @@ export default Alchemy.Stack('GolfDemo', {
     rateLimitingInterval: 60, rateLimitingLimit: 60, rateLimitingTechnique: 'fixed',
     spendLimits: { enabled: true, rules: [{ limitType: 'cost', limit: 500, window: '1 day' }] },
   });
+  // Semantic search (enable-search): vectors carry only { repository, kind }. The repository metadata index exists before the Worker
+  // binds the index, so no vector is ever inserted unfilterable. A new dimension replaces the index and the Worker rebuilds every repository.
+  const search = input.settings.search ? yield* Cloudflare.Vectorize.Index('SearchIndex', {
+    name: input.settings.search.index, dimensions: input.settings.search.dimensions, metric: 'cosine',
+    description: 'Golf semantic search: ids and repository/kind metadata only' }) : undefined;
+  const searchFilter = search ? yield* Cloudflare.Vectorize.MetadataIndex('SearchRepositoryFilter', {
+    indexName: search.indexName, propertyName: 'repository', indexType: 'string' }) : undefined;
   const dispatch = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace('Applications', { name });
   // Email Service sends only from an onboarded subdomain of this zone; Cloudflare DNS receives its DKIM, SPF and return-path records.
   // No copies of sent messages are kept in the provider's activity log.
@@ -126,6 +133,8 @@ export default Alchemy.Stack('GolfDemo', {
       ALCHEMY_OUTBOUND_DEPENDENCY: outbound.workerName,
       // The sender-restricted binding is uploaded only after its sending subdomain exists.
       ...(mail ? { ALCHEMY_MAIL_DEPENDENCY: mail.subdomainId } : {}),
+      // The Vectorize binding is uploaded only after its index and repository filter exist.
+      ...(searchFilter ? { ALCHEMY_SEARCH_DEPENDENCY: searchFilter.indexName } : {}),
     },
   });
   yield* control.bind('native-contract', { bindings: config().pipe(Output.map(bindings)) });

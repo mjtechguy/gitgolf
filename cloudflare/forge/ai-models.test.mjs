@@ -89,7 +89,8 @@ test('administrators read the catalog-backed choices; others cannot', async t =>
   assert.equal(options('review-drafts')[glm52].state, 'available');
   assert.equal(view.uses.find(item => item.use === 'review-drafts').otherCatalogModels, 1);
   assert.equal(options('search')[bge].dimensions, 1024);
-  assert.deepEqual(view.uses.find(item => item.use === 'search').reindex, { known: false, repositories: 0, chunks: 0, calls: 0 });
+  // The search_state table arrives with the semantic search migration: no index yet, so nothing to re-index.
+  assert.deepEqual(view.uses.find(item => item.use === 'search').reindex, { known: true, repositories: 0, chunks: 0, calls: 0 });
 });
 
 test('a model without a reported capability is unverified and cannot be allowed; widening needs typed confirmation', async t => {

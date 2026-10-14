@@ -6,6 +6,16 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+
+def schema_through(name):
+    """schema.sql without the migrations appended after `name`."""
+    schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+    for later in sorted((ROOT/'cloudflare/forge/migrations').glob('*.sql'), reverse=True):
+        if later.name <= name: break
+        tail = '\n'+later.read_text()
+        assert schema.endswith(tail), later.name
+        schema = schema[:-len(tail)]
+    return schema
 import subprocess
 from cloudflare_rehearsal import await_release
 from unittest.mock import patch
@@ -819,7 +829,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
         release = self.release(); release.manifest['schema'] = 29
         with sqlite3.connect(':memory:') as db:
             db.row_factory = sqlite3.Row
-            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            schema = schema_through('0032_ai_runs.sql')
             migration = (ROOT/'cloudflare/forge/migrations/0029_discussion_attachments.sql').read_text()
             later = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0032_ai_runs.sql').read_text()
             schema = schema[:-len('\n'+later)]
@@ -851,7 +861,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
         release = self.release(); release.manifest['schema'] = 30
         with sqlite3.connect(':memory:') as db:
             db.row_factory = sqlite3.Row
-            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            schema = schema_through('0032_ai_runs.sql')
             migration = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()
             schema = schema[:-len('\n'+(ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0032_ai_runs.sql').read_text())]
             self.assertTrue(schema.endswith(';\n\n'+migration))
@@ -884,7 +894,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
         release = self.release(); release.manifest['schema'] = 31
         with sqlite3.connect(':memory:') as db:
             db.row_factory = sqlite3.Row
-            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            schema = schema_through('0032_ai_runs.sql')
             migration = (ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()
             schema = schema[:-len('\n'+(ROOT/'cloudflare/forge/migrations/0032_ai_runs.sql').read_text())]
             self.assertTrue(schema.endswith(';\n\n'+migration))
@@ -919,7 +929,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
         release = self.release(); release.manifest['schema'] = 32
         with sqlite3.connect(':memory:') as db:
             db.row_factory = sqlite3.Row
-            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            schema = schema_through('0032_ai_runs.sql')
             migration = (ROOT/'cloudflare/forge/migrations/0032_ai_runs.sql').read_text()
             self.assertTrue(schema.endswith(';\n\n'+migration))
             db.executescript(schema[:-len('\n'+migration)])
@@ -943,5 +953,40 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             self.assertEqual(applied, [])
             release.state['migration0032'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_ai_schema([])
+
+    def test_search_migration_is_the_schema_tail_resumes_without_replaying(self):
+        release = self.release(); release.manifest['schema'] = 34
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0034_semantic_search.sql').read_text()
+            self.assertTrue(schema.endswith(';\n\n'+migration))
+            db.executescript(schema_through('0032_ai_runs.sql'))
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith('PRAGMA') or sql.startswith('SELECT'):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost search migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0034'): release.check_search_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost search'): release.migrate_search_schema([])
+            applied = []; release.migrate_search_schema(applied)
+            self.assertEqual(applied, ['0034']); release.check_search_schema()
+            # Discussions are queued only for repositories that have an index.
+            db.executescript("""INSERT INTO users(id,login) VALUES(1,'alice');
+              INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at) VALUES(1,'a','','repo-1',1,'k','h','ACTIVE','t'),(2,'b','','repo-2',1,'l','h','ACTIVE','t');
+              INSERT INTO search_state(repository_id,state,model,dimensions,checked_at,updated_at) VALUES(1,'READY','m',1024,'t','t');
+              INSERT INTO discussions(repository_id,number,kind,author_id,title,body,state,created_at,updated_at) VALUES(1,1,'issue',1,'x','','OPEN','t','t'),(2,1,'issue',1,'y','','OPEN','t','t');""")
+            self.assertEqual([tuple(row) for row in db.execute('SELECT repository_id,kind,source FROM search_outbox')], [(1, 'discussion', '1')])
+            applied = []; release.migrate_search_schema(applied)
+            self.assertEqual(applied, [])
+            release.state['migration0034'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_search_schema([])
 
 if __name__ == '__main__': unittest.main()

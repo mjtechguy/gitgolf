@@ -5,7 +5,7 @@ import { runMaintenance } from './operations.mjs';
 import { withInstallationPolicy } from './installation.mjs';
 import { publicFetch } from './public.mjs';
 import { DurableObject, WorkflowEntrypoint, WorkerEntrypoint } from 'cloudflare:workers';
-import { handle, serialize, concurrentRead, advanceEvidence, advanceAi, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI } from './core.mjs';
+import { handle, serialize, concurrentRead, advanceEvidence, advanceAi, advanceSearch, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI } from './core.mjs';
 import { consumeEvidence, consumeEvidenceDeadLetters, reconcileEvidence } from './evidence.mjs';
 import { Fault, deny } from './common.mjs';
 import { reconcileIndexes } from './repository-indexes.mjs';
@@ -251,7 +251,10 @@ async function maintain(env, exports, owner) {
           await exports.PRAgentTask.getByName(job.id).cancel();
         }
       }); if (env.EVIDENCE_ALLOW_AI === 'true') Object.assign(result, await reconcileAi(env.DB.withSession('first-primary'))); await owner.activityChanged(); return result; }],
-      ['indexes', () => reconcileIndexes(env)],
+      // Semantic search indexing shares the read-index stage: the maintenance journal only names the four original stages.
+      ['indexes', async () => { const settled = await Promise.allSettled([reconcileIndexes(env), env.SEARCH_INDEX ? advanceSearch(env) : { processed: 0 }]);
+        for (const result of settled) if (result.status === 'rejected') throw result.reason;
+        return { ...settled[0].value, processed: settled[1].value.processed }; }],
 
     ]); } finally { try { await collectWorkerMetrics(env); } finally { await collectServiceHealth(env); } }
 }
