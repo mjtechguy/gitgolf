@@ -65,7 +65,7 @@ async function backend(page: Page, { enabled = true, inboxCapability = true, lan
         const done = ++state.summaryReads > 1;
         return json({ number: body.number, pullRequestId: '909', baseCommitId: main, headCommitId: '9'.repeat(40), summary: done ? summary : null, run: { id: 'run-1', state: done ? 'SUCCEEDED' : 'RESERVED' }, inFlight: !done, summaries: { available: true, reason: '' } });
       }
-      if (path === '/native/land') return json({ state: 'QUEUED' });
+      if (path === '/native/land') return json({ operation: { id: 'op-1', state: 'LANDED' }, phase: 'LANDED' });
     }
     return json({ code: 'unimplemented', message: 'Fixture route not supplied.' }, 501);
   });
@@ -141,7 +141,7 @@ test('with the land queue reported, ready pull requests that may land can be sel
   await expect(land).toBeDisabled();
   await ready.getByRole('checkbox', { name: 'Select #7 to land' }).check();
   await ready.getByRole('button', { name: 'Land selected (1)' }).click();
-  await expect(ready.getByRole('list', { name: 'Landing requests' })).toContainText('#7: accepted (queued)');
+  await expect(ready.getByRole('list', { name: 'Landing requests' })).toContainText('#7: accepted (landed)');
   expect(state.calls.find(call => call.path === '/native/land')).toMatchObject({ action: 'land', repository: key, repositoryId, number: 7, headCommitId: '7'.repeat(40) });
   const landed = section(page, 'Landed').getByRole('table', { name: 'recent landings' });
   await expect(landed.getByRole('row').filter({ hasText: 'Bump docs' })).toContainText('Landed');

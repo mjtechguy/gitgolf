@@ -28,7 +28,8 @@ export const readInbox = (target: Target, signal?: AbortSignal) => nativeAPI<Inb
 export const readIntent = (target: Target, number: number, signal?: AbortSignal) => nativeAPI<IntentRead>('/native/agent-inbox/read', { ...target, action: 'summary', number }, signal);
 export const summarizeIntent = (target: Target, number: number) => nativeAPI<IntentRequest>('/native/agent-inbox', { ...target, action: 'summarize', number, idempotencyKey: crypto.randomUUID() });
 // The land queue (AM-4 item 4) owns /native/land. The inbox calls it only while the Worker reports repository.agentic-landing ready.
-export const landPull = (target: Target, pull: InboxPull) => nativeAPI<{ state?: string; message?: string }>('/native/land', { ...target, action: 'land', number: pull.number, headCommitId: pull.headCommitId, idempotencyKey: crypto.randomUUID() });
+// The land queue answers {operation: {state, ...}, phase}; the inbox reports the operation's state.
+export const landPull = (target: Target, pull: InboxPull) => nativeAPI<{ operation?: { state?: string } }>('/native/land', { ...target, action: 'land', number: pull.number, headCommitId: pull.headCommitId, idempotencyKey: crypto.randomUUID() }).then(value => ({ state: value.operation?.state }));
 
 export const originLabels: Record<InboxPull['origin'], string> = { '': 'Unknown', person: 'A person', 'api-token': 'API token', 'agent-task': 'Agent task' };
 export const taskStateLabels: Record<InboxTask['state'], string> = { QUEUED: 'Queued', CLAIMED: 'Claimed by host', RUNNING: 'Running' };

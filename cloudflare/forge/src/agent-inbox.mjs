@@ -86,7 +86,7 @@ async function inbox(db, env, row, body, artifact, person) {
       await intentSchema(db) ? db.prepare('SELECT pull_request_id,head_commit_id,model,summary,created_at FROM pull_intent_summaries WHERE pull_request_id IN (SELECT value FROM json_each(?))').bind(ids).all().then(result => result.results) : [],
       // The latest land operation of each pull request, when the land queue exists.
       landingReady ? (async () => { try { return (await db.prepare(`SELECT o.pull_request_id,o.state,o.updated_at FROM land_operations o WHERE o.repository_id=? AND o.pull_request_id IN (SELECT value FROM json_each(?))
-        AND o.id=(SELECT max(x.id) FROM land_operations x WHERE x.pull_request_id=o.pull_request_id)`).bind(row.id, ids).all()).results; } catch { return []; } })() : [],
+        AND o.id=(SELECT x.id FROM land_operations x WHERE x.pull_request_id=o.pull_request_id ORDER BY x.created_at DESC, x.id DESC LIMIT 1)`).bind(row.id, ids).all()).results; } catch { return []; } })() : [],
     ]);
     const intents = new Map(stored.map(summary => [`${summary.pull_request_id}:${summary.head_commit_id}`, summary]));
     const queue = new Map(operations.map(operation => [operation.pull_request_id, { state: operation.state, updatedAt: operation.updated_at }]));

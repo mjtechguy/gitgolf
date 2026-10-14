@@ -147,23 +147,20 @@ test('only a browser session reads the inbox; routes are split by action; outsid
   assert.equal(f.calls.length, 0);
 });
 
-test('without the land queue table the landed section is empty and says so; with it, recent landings and reverts are listed', async t => {
+test('the landed section lists recent landings and reverts from land_operations, and open pull requests show their latest land', async t => {
   const f = await fixture(t);
   await f.save();
   let value = await f.inbox();
-  assert.deepEqual([value.landed, value.landingHistory, value.truncated.landed], [[], 'unavailable', false]);
-  // The table the land queue migration adds (AM-4 item 4).
-  f.sql.exec(`CREATE TABLE land_operations (id INTEGER PRIMARY KEY, repository_id INTEGER NOT NULL, pull_request_id INTEGER NOT NULL, number INTEGER NOT NULL, trigger TEXT NOT NULL, actor_id INTEGER,
-    state TEXT NOT NULL, method TEXT NOT NULL, head_commit_id TEXT NOT NULL, base_commit_id TEXT NOT NULL, landed_commit_id TEXT, revert_commit_id TEXT, attempts INTEGER NOT NULL DEFAULT 0,
-    detail TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-    INSERT INTO land_operations VALUES(1,1,1,14,'policy',NULL,'LANDED','squash','${feature}','${base}','${'c'.repeat(40)}',NULL,1,'{}','2026-10-14T01:00:00Z','2026-10-14T01:00:00Z'),
-      (2,1,1,14,'person',2,'REVERTED','merge','${feature}','${base}','${'d'.repeat(40)}','${'e'.repeat(40)}',1,'{}','2026-10-14T02:00:00Z','2026-10-14T03:00:00Z'),
-      (3,1,1,14,'person',2,'QUEUED','merge','${feature}','${base}',NULL,NULL,0,'{}','2026-10-14T04:00:00Z','2026-10-14T04:00:00Z'),
-      (4,2,9,3,'person',1,'LANDED','merge','${feature}','${base}','${'f'.repeat(40)}',NULL,1,'{}','2026-10-14T05:00:00Z','2026-10-14T05:00:00Z')`);
+  assert.deepEqual([value.landed, value.landingHistory, value.truncated.landed], [[], 'available', false]);
+  // Rows as the land queue (schema 42) writes them.
+  const cols = 'id,repository_id,pull_request_id,number,trigger,actor_id,state,method,head_commit_id,base_commit_id,landed_commit_id,revert_commit_id,attempts,detail,created_at,updated_at';
+  f.sql.exec(`INSERT INTO land_operations(${cols}) VALUES('f-1',1,1,14,'policy',0,'LANDED','squash','${feature}','${base}','${'c'.repeat(40)}','',1,'{}','2026-10-14T01:00:00Z','2026-10-14T01:00:00Z'),
+      ('b-2',1,1,14,'person',2,'REVERTED','merge','${feature}','${base}','${'d'.repeat(40)}','${'e'.repeat(40)}',1,'{}','2026-10-14T02:00:00Z','2026-10-14T03:00:00Z'),
+      ('a-3',1,1,14,'person',2,'QUEUED','merge','${feature}','${base}','','',0,'{}','2026-10-14T04:00:00Z','2026-10-14T04:00:00Z')`);
   value = await f.inbox();
   assert.equal(value.landingHistory, 'available');
   assert.deepEqual(value.landed.map(item => [item.id, item.state, item.trigger, item.actor, item.title, item.landedCommitId.slice(0, 1), item.revertCommitId.slice(0, 1)]),
-    [['2', 'REVERTED', 'person', 'bob', 'Feature work', 'd', 'e'], ['1', 'LANDED', 'policy', '', 'Feature work', 'c', '']]);
+    [['b-2', 'REVERTED', 'person', 'bob', 'Feature work', 'd', 'e'], ['f-1', 'LANDED', 'policy', '', 'Feature work', 'c', '']]);
   // The open pull request shows its latest land operation.
   assert.deepEqual(value.needsPerson[0].landing, { state: 'QUEUED', updatedAt: '2026-10-14T04:00:00Z' });
   value = await f.inbox({ limit: 1 });
