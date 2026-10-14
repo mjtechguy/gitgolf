@@ -64,7 +64,7 @@ Golf removes those limits one measured milestone at a time, and stays Git: no cu
 | **Core** | Workers, Artifacts (Git), D1 and Durable Objects | Go, Forgejo and PostgreSQL with the shared React UI |
 | **Agents and checks** | A Container sandbox per task, Queues and Workflows | Enrolled Docker workers and agent hosts |
 | **AI** | Workers AI and AI Gateway | Optional |
-| **Install** | [Cloudflare setup](https://docs.gitgolf.app/docs/cloudflare-setup/) | [Docker Compose](#quick-start) or [Kubernetes (Helm)](https://docs.gitgolf.app/docs/kubernetes/) |
+| **Install** | [One command](#deploy-on-cloudflare) | [One command](#quick-start) or [Kubernetes (Helm)](https://docs.gitgolf.app/docs/kubernetes/) |
 
 Same interface on both. Cloudflare and AI are optional for the self-hosted core.
 
@@ -77,8 +77,8 @@ Open the [local / Docker simulation](https://gitgolf.app/demo/local) or the [Clo
 Requires Git, Python 3, curl and Docker with Compose v2 and BuildKit, on an amd64 or arm64 host.
 
 ```sh
-git clone git@github.com:mjtechguy/golf-git.git
-cd golf-git
+git clone https://github.com/mjtechguy/gitgolf.git golf
+cd golf
 ./scripts/install.sh         # or: make install
 ```
 
@@ -94,6 +94,28 @@ docker compose up -d   # recreate after down, or apply .env changes
 ```
 
 Keep `.env`, the encryption keys, both databases and the Forgejo data together. Don't add `--volumes` to a routine restart.
+
+## Deploy on Cloudflare
+
+Needs Workers Paid, Workers for Platforms, a Zero Trust organization and a domain on Cloudflare.
+
+```sh
+npm install -g cf@1.0.0-beta.13 && cf auth create golf
+python3 scripts/golf_cloudflare.py doctor --fix --remote   # checks tools and account (read-only)
+python3 scripts/golf_cloudflare.py install                 # or: make cloudflare-install
+```
+
+`install` discovers your account, zone and existing Secrets Store, asks only for your hostnames, email, content and optional services, shows the plan and waits for your yes. See [what you provide and what it creates](https://docs.gitgolf.app/docs/cloudflare-setup/).
+
+## Let your AI agent set it up
+
+Paste this into Claude Code, Codex or OpenCode:
+
+```text
+Read https://docs.gitgolf.app/agent-setup.md and help me set up Golf.
+```
+
+The [runbook](https://docs.gitgolf.app/agent-setup.md) tells the agent how to pick a track with you, check prerequisites, run the installer and verify it, without printing secrets or creating anything billable before you agree.
 
 ## Documentation
 
