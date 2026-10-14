@@ -43,8 +43,8 @@ export class Workspace extends DurableObject {
       } finally {
         if (result?.ok && (selection || event instanceof Request && /\/golf\.v1\.RepositoryWebhookService\/(?:Test|Redeliver)RepositoryWebhook$/.test(new URL(event.url).pathname)))
           this.ctx.waitUntil(this.deliverWebhooks().catch(() => console.log(JSON.stringify({ event:'golf.webhook_delivery_failed' }))));
-        // The first send follows the mutation or background step that queued it; only retries wait for a later drain or the schedule.
-        if (selection ? result?.ok || !(event instanceof Request) : result?.ok && event instanceof Request && new URL(event.url).pathname.endsWith('/golf.v1.EmailNotificationService/RedeliverOwnEmail'))
+        // The first send follows the mutation, runner report or background step that queued it; only retries wait for a later drain or the schedule.
+        if (selection ? result?.ok || !(event instanceof Request) : result?.ok && event instanceof Request && /\/golf\.v1\.EmailNotificationService\/RedeliverOwnEmail$|^\/native\/runner-machine\/[a-f0-9-]{36}\/finish$|^\/api\/v4\/jobs\/[1-9][0-9]{0,15}$/.test(new URL(event.url).pathname))
           this.ctx.waitUntil(this.deliverEmail().catch(() => console.log(JSON.stringify({ event:'golf.email_delivery_failed' }))));
         // Definite refusals have no activity; ambiguous provider failures can have effects.
         if (selection && (!(event instanceof Request) || !result || result.ok || result.status >= 500)) {
