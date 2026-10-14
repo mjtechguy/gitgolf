@@ -1,5 +1,31 @@
 # Golf implementation status
 
+## 2026-10-14 — Native feature policies and repository Features (admin slices 3–4)
+
+Installation administrators set each of 15 governed features (pull requests,
+issues, Actions, secrets, previews, agents, AI advice, merge, attachments, wiki,
+webhooks, email, releases, packages, public repositories) to Disabled everywhere,
+Allowed or Enforced at `/admin/features` (schema 31). The page leads with a
+summary band and grouped cards showing each feature's mode, operator allocation,
+dependencies and reach ("On in 12 of 14 repositories"). Changes are version-fenced
+and audited; widening needs the feature id typed back and a recent Access sign-in;
+public repositories can never be enforced. Repository administrators turn allowed
+features on or off in a Features section on repository settings, and every row
+names the level that decided it (operator allocation, installation policy or the
+repository). A disabled feature leaves the repository's tabs and settings, its
+pages say which level turned it off, and the Worker refuses its requests and
+background work (issues, pull requests, merge gates and the evidence pipeline).
+Turning a feature off keeps its data. With `policy_editing: false` feature
+policies cannot be changed; saved policies stay in force.
+
+Verified locally: Worker tests (425, 424 pass, 1 skipped), capability and
+generated-contract drift checks, Go build and server tests, release-script tests,
+real workerd/D1 runtime, UI and environments checks, and the feature-policy,
+admin, settings, routes and environments browser specs (failures limited to
+`instance-admin:37`, `instance-admin:119` and `repository-routes:64`, which also
+fail on `main`). Organization policies (slice 5) are not built. Hosted acceptance
+follows the 0031 migration.
+
 ## 2026-10-14 — Native workspace renamed from `alice` to `mj`
 
 The retained installation's workspace is now `mj`. Repository and invitation
