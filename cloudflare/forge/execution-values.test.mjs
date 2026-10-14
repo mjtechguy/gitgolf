@@ -104,3 +104,13 @@ test('the capability opens only with the key and the hosted Actions profile, in 
   for (const env of [{ TEST_MODULE: 'test_calc' }, { TEST_MODULE: 'test_calc', EXECUTION_VALUE_KEY: binding(1) }]) assert.deepEqual(executionValueCapability(env), { id: 'settings.repository-secrets', label: 'Secrets and variables', state: 'CAPABILITY_STATE_DISABLED',
     reason: 'Repository values need an operator-approved Actions workflow profile; this installation runs an approved Python test module.' });
 });
+
+test('value and approval changes publish live activity for the job views, and reads do not', async () => {
+  const { activitySelection } = await import('./src/activity.mjs');
+  const target = { repository: { owner: 'alice', name: 'project' }, repositoryId: '1', ownerId: '1' };
+  const selection = method => activitySelection(new Request('https://golf.example.com/rpc/golf.v1.RepositoryExecutionValueService/' + method, { method: 'POST', body: JSON.stringify({ target }) }));
+  // A fence can refuse a queued job, so the same topics as a job change are published for the repository.
+  for (const method of ['SaveRepositoryExecutionValue', 'DeleteRepositoryExecutionValue', 'SaveRepositoryExecutionBinding', 'DeleteRepositoryExecutionBinding'])
+    assert.deepEqual(await selection(method), { name: 'project', id: '1', topics: ['actions', 'agents', 'pulls'] }, method);
+  for (const method of ['ListRepositoryExecutionValues', 'GetRepositoryExecutionVariable', 'GetRepositoryExecutionValueOperation']) assert.equal(await selection(method), undefined, method);
+});

@@ -142,7 +142,7 @@ export async function activitySelection(event) {
   const git = /^\/git\/[^/]+\/([^/]+)\.git\/git-receive-pack$/.exec(path);
   if (event.method !== 'POST') return;
   if (git) return { name: git[1], topics: ['source', 'pulls', 'actions'] };
-  if (!/\/(?:CreateRepository|SetRepositoryStar|SetRepositoryCollaborator|RemoveRepositoryCollaborator|CreateRepositoryInvitation|RevokeRepositoryInvitation|RespondRepositoryInvitation|UpdateRepositorySettings|UpdateRepositoryTopics|SubmitDiscussionResourceOperation|CreateIssue|UpdateIssue|CreateIssueComment|CreatePullRequest|UpdatePullRequest|CreatePullRequestReview|SubmitPullReviewRequest|SubmitPullReviewLifecycle|SubmitPullReviewAuthoringOperation|SubmitStandardPullMerge|ReportCheck)$/.test(path) &&
+  if (!/\/(?:CreateRepository|SetRepositoryStar|SetRepositoryCollaborator|RemoveRepositoryCollaborator|CreateRepositoryInvitation|RevokeRepositoryInvitation|RespondRepositoryInvitation|UpdateRepositorySettings|UpdateRepositoryTopics|SubmitDiscussionResourceOperation|CreateIssue|UpdateIssue|CreateIssueComment|CreatePullRequest|UpdatePullRequest|CreatePullRequestReview|SubmitPullReviewRequest|SubmitPullReviewLifecycle|SubmitPullReviewAuthoringOperation|SubmitStandardPullMerge|ReportCheck|(?:Save|Delete)RepositoryExecution(?:Value|Binding))$/.test(path) &&
       !['/native/repository-visibility', '/native/repository-grant', '/native/repository-check', '/native/pr-evidence', '/native/pr-preview'].includes(path)) return;
   let body;
   try { body = JSON.parse(new TextDecoder().decode(await bounded(event.clone().body, 96 * 1024))); } catch { return; }
@@ -153,5 +153,5 @@ export async function activitySelection(event) {
     id: body.repositoryId || body.selection?.repositoryId || body.target?.repositoryId,
     ...(path.endsWith('/RespondRepositoryInvitation') ? { invitation: body.invitationId } : {}),
     topics: path.endsWith('/native/repository-visibility') ? ['source'] : path.endsWith('/SubmitStandardPullMerge') ? ['source', 'pulls', 'actions'] : path.endsWith('/UpdateRepositorySettings') ? ['source','issues','pulls'] : path.endsWith('/SubmitDiscussionResourceOperation') ? ['issues', 'pulls'] : path.includes('Issue') ? [body.pullRequest ? 'pulls' : 'issues'] : path.includes('PullRequest') || path.includes('PullReview') || path.endsWith('repository-check') ? ['pulls'] :
-      path.endsWith('repository-grant') || /\/(?:(?:Set|Remove)RepositoryCollaborator|(?:Create|Revoke|Respond)RepositoryInvitation)$/.test(path) ? activityTopics : path.endsWith('pr-preview') || path.endsWith('pr-evidence') ? ['actions', 'agents', 'pulls'] : ['issues'] };
+      path.endsWith('repository-grant') || /\/(?:(?:Set|Remove)RepositoryCollaborator|(?:Create|Revoke|Respond)RepositoryInvitation)$/.test(path) ? activityTopics : path.endsWith('pr-preview') || path.endsWith('pr-evidence') || path.includes('.RepositoryExecutionValueService/') ? ['actions', 'agents', 'pulls'] : ['issues'] };
 }

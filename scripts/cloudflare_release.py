@@ -327,7 +327,7 @@ class Release:
         required = {'execution_value_brokers': {'repository_id', 'artifact_name', 'revision'},
                     'execution_values': {'id', 'repository_id', 'artifact_name', 'name', 'kind', 'version', 'deleted', 'value_bytes', 'created_at', 'updated_at'},
                     'execution_value_versions': {'id', 'version', 'value_bytes', 'encrypted', 'key_id', 'created_at'},
-                    'execution_bindings': {'id', 'repository_id', 'artifact_name', 'version', 'deleted', 'workflow_path', 'commit_id', 'blob_id', 'source_sha256', 'engine_catalog', 'event_ref', 'value_refs', 'sponsor_id', 'identity_version', 'grant_generation', 'expires_at', 'created_at', 'updated_at'},
+                    'execution_bindings': {'id', 'repository_id', 'artifact_name', 'version', 'deleted', 'workflow_path', 'commit_id', 'blob_id', 'source_sha256', 'engine_catalog', 'event', 'event_ref', 'value_refs', 'sponsor_id', 'identity_version', 'grant_generation', 'expires_at', 'created_at', 'updated_at'},
                     'execution_value_operations': {'operation_id', 'repository_id', 'actor_id', 'action', 'item_id', 'accepted_version', 'accepted_broker_revision', 'input_hash', 'created_at'},
                     'execution_value_releases': {'job_id', 'binding_id', 'binding_version', 'released_at'}}
         for table, fields in required.items():

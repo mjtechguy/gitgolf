@@ -711,7 +711,7 @@ CREATE TABLE IF NOT EXISTS execution_bindings (
  id TEXT PRIMARY KEY, repository_id INTEGER NOT NULL REFERENCES repositories(id), artifact_name TEXT NOT NULL,
  version INTEGER NOT NULL CHECK(version>0), deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0,1)),
  workflow_path TEXT NOT NULL, commit_id TEXT NOT NULL, blob_id TEXT NOT NULL, source_sha256 TEXT NOT NULL, engine_catalog TEXT NOT NULL,
- event_ref TEXT NOT NULL, value_refs TEXT NOT NULL, sponsor_id INTEGER NOT NULL REFERENCES users(id),
+ event TEXT NOT NULL, event_ref TEXT NOT NULL, value_refs TEXT NOT NULL, sponsor_id INTEGER NOT NULL REFERENCES users(id),
  identity_version INTEGER NOT NULL, grant_generation INTEGER NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS execution_bindings_source ON execution_bindings(repository_id,commit_id);

@@ -81,7 +81,7 @@ function writeGuard(person, row, revision) {
 const kinds = ['REPOSITORY_EXECUTION_VALUE_KIND_UNSPECIFIED', 'REPOSITORY_EXECUTION_VALUE_KIND_SECRET', 'REPOSITORY_EXECUTION_VALUE_KIND_VARIABLE'];
 const wireValue = v => ({ id: v.id, name: v.name, kind: v.kind === 'secret' ? kinds[1] : kinds[2], version: String(v.version), deleted: !!v.deleted, createdAt: v.created_at, updatedAt: v.updated_at });
 const wireBinding = b => ({ id: b.id, version: String(b.version), workflowPath: b.workflow_path, commitId: b.commit_id, workflowBlobId: b.blob_id, sourceSha256: b.source_sha256, engineCatalog: b.engine_catalog,
-  event: 'WORKFLOW_RUN_ORIGIN_PUSH', eventRef: b.event_ref, values: JSON.parse(b.value_refs).map(ref => ({ id: ref.id, version: String(ref.version), scope: 'EXECUTION_VALUE_SCOPE_REPOSITORY' })),
+  event: b.event === 'pull_request' ? 'WORKFLOW_RUN_ORIGIN_PULL_REQUEST' : 'WORKFLOW_RUN_ORIGIN_UNSPECIFIED', eventRef: b.event_ref, values: JSON.parse(b.value_refs).map(ref => ({ id: ref.id, version: String(ref.version), scope: 'EXECUTION_VALUE_SCOPE_REPOSITORY' })),
   deleted: !!b.deleted, expiresAt: b.expires_at, createdAt: b.created_at, updatedAt: b.updated_at, approvalState: b.authorized ? 'requires_current_authority' : 'authority_unavailable' });
 // One identity for what an approval covers: the commit, its tree and the compiled plan of the approved workflow file.
 export const executionSource = (commitId, treeId, workflowSha256) => digest(JSON.stringify(['golf.native.execution-source.v1', commitId, treeId, workflowSha256]));
@@ -160,8 +160,8 @@ export async function repositoryExecutionValues(db, env, person, row, request, m
       .bind(time, body.id, row.id, row.artifact_name, version, ...guard.values));
   } else if (action === 'save_binding') {
     if ((Array.isArray(body.inputs) ? body.inputs.length : body.inputs !== undefined) || body.inputContract || body.schemaSha256 || body.submittedSha256 || body.effectiveSha256) invalid('Typed input approvals are not available on Cloudflare native.');
-    // The contract has no pull-request origin yet: native stores the push origin with the pull request's head branch ref.
-    if (member(body.event, ['WORKFLOW_RUN_ORIGIN_UNSPECIFIED', 'WORKFLOW_RUN_ORIGIN_MANUAL', 'WORKFLOW_RUN_ORIGIN_PUSH']) !== 2 || typeof body.eventRef !== 'string' || !body.eventRef.startsWith('refs/heads/') || !validRef(body.eventRef))
+    // Native runs pull-request jobs only, so that is the one origin an approval can name; manual and push approvals have no consumer here.
+    if (member(body.event, ['WORKFLOW_RUN_ORIGIN_UNSPECIFIED', 'WORKFLOW_RUN_ORIGIN_MANUAL', 'WORKFLOW_RUN_ORIGIN_PUSH', 'WORKFLOW_RUN_ORIGIN_PULL_REQUEST']) !== 3 || typeof body.eventRef !== 'string' || !body.eventRef.startsWith('refs/heads/') || !validRef(body.eventRef))
       invalid('Native approvals cover pull-request jobs: choose the pull request head branch as refs/heads/NAME.');
     if (body.workflowPath !== env.TEST_WORKFLOW_PATH) invalid('Approve the operator-approved workflow path of this installation.');
     const expires = typeof body.expiresAt === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(body.expiresAt) ? Date.parse(body.expiresAt) : NaN;
@@ -189,10 +189,10 @@ export async function repositoryExecutionValues(db, env, person, row, request, m
       WHERE v.repository_id=? AND v.artifact_name=? AND v.deleted=0 AND v.version=json_extract(s.value,'$.version')`).bind(JSON.stringify(selected), row.id, row.artifact_name).all();
     if (values.length !== selected.length) changed();
     if (values.reduce((total, value) => total + value.value_bytes, 0) > maximumEnvironment) invalid('Approved value aggregate exceeds its bound.');
-    statements.push(db.prepare(`INSERT INTO execution_bindings(id,repository_id,artifact_name,version,deleted,workflow_path,commit_id,blob_id,source_sha256,engine_catalog,event_ref,value_refs,sponsor_id,identity_version,grant_generation,expires_at,created_at,updated_at)
-      SELECT ?,?,?,?,0,?,?,?,?,?,?,?,?,?,COALESCE((SELECT generation FROM collaborator_versions WHERE repository_id=? AND user_id=?),0),?,?,? WHERE ${guard.sql}
+    statements.push(db.prepare(`INSERT INTO execution_bindings(id,repository_id,artifact_name,version,deleted,workflow_path,commit_id,blob_id,source_sha256,engine_catalog,event,event_ref,value_refs,sponsor_id,identity_version,grant_generation,expires_at,created_at,updated_at)
+      SELECT ?,?,?,?,0,?,?,?,?,?,'pull_request',?,?,?,?,COALESCE((SELECT generation FROM collaborator_versions WHERE repository_id=? AND user_id=?),0),?,?,? WHERE ${guard.sql}
       AND (EXISTS(SELECT 1 FROM execution_bindings WHERE id=? AND repository_id=? AND version=?) OR (?=0 AND NOT EXISTS(SELECT 1 FROM execution_bindings WHERE id=?) AND (SELECT COUNT(*) FROM execution_bindings WHERE repository_id=?)<?))
-      ON CONFLICT(id) DO UPDATE SET version=excluded.version,deleted=0,workflow_path=excluded.workflow_path,commit_id=excluded.commit_id,blob_id=excluded.blob_id,source_sha256=excluded.source_sha256,engine_catalog=excluded.engine_catalog,event_ref=excluded.event_ref,
+      ON CONFLICT(id) DO UPDATE SET version=excluded.version,deleted=0,workflow_path=excluded.workflow_path,commit_id=excluded.commit_id,blob_id=excluded.blob_id,source_sha256=excluded.source_sha256,engine_catalog=excluded.engine_catalog,event=excluded.event,event_ref=excluded.event_ref,
         value_refs=excluded.value_refs,sponsor_id=excluded.sponsor_id,identity_version=excluded.identity_version,grant_generation=excluded.grant_generation,expires_at=excluded.expires_at,updated_at=excluded.updated_at
         WHERE execution_bindings.repository_id=excluded.repository_id AND execution_bindings.version=?`)
       .bind(body.id, row.id, row.artifact_name, version + 1, body.workflowPath, body.commitId, source.workflow.blobId, await executionSource(body.commitId, source.treeId, await digest(JSON.stringify(source.workflow))), nativeWorkflowContract,
@@ -222,7 +222,7 @@ export async function repositoryExecutionValues(db, env, person, row, request, m
 
 const valuesCurrent = `(SELECT COUNT(*) FROM json_each(b.value_refs) s JOIN execution_values v ON v.id=json_extract(s.value,'$.id') AND v.version=json_extract(s.value,'$.version')
  WHERE v.repository_id=b.repository_id AND v.artifact_name=b.artifact_name AND v.deleted=0)=json_array_length(b.value_refs)`;
-const exactSource = 'b.deleted=0 AND b.workflow_path=? AND b.commit_id=? AND b.blob_id=? AND b.source_sha256=? AND b.event_ref=?';
+const exactSource = "b.deleted=0 AND b.event='pull_request' AND b.workflow_path=? AND b.commit_id=? AND b.blob_id=? AND b.source_sha256=? AND b.event_ref=?";
 const sourceOf = async execution => [execution.workflow.path, execution.commitId, execution.workflow.blobId, await executionSource(execution.commitId, execution.treeId, execution.workflowSha256), 'refs/heads/' + execution.branch];
 const hostedActions = execution => execution?.contract === nativeWorkflowContract && execution.workflow?.plan?.format === 'actions' && !execution.runner;
 // Admission records which approval and value versions a hosted job may later ask for: identities only. No approval, or more than one, means the job runs without values.

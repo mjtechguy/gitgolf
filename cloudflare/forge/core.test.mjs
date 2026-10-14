@@ -3830,7 +3830,7 @@ async function executionValueFixture(t) {
   const list = async () => value(await human('ListRepositoryExecutionValues'));
   const save = async (name, text, fields = {}) => human('SaveRepositoryExecutionValue', { id: nonce(), expectedVersion: '0', expectedBrokerRevision: (await list()).brokerRevision, operationId: nonce(), name, kind: 'REPOSITORY_EXECUTION_VALUE_KIND_SECRET', value: text, ...fields });
   const approve = async (values, fields = {}) => human('SaveRepositoryExecutionBinding', { id: nonce(), expectedVersion: '0', expectedBrokerRevision: (await list()).brokerRevision, operationId: nonce(), workflowPath: path, commitId: 'b'.repeat(40),
-    event: 'WORKFLOW_RUN_ORIGIN_PUSH', eventRef: 'refs/heads/feature', expiresAt: new Date(Date.now() + 900000).toISOString(), values: values.map(v => ({ id: v.id, version: v.version, scope: 'EXECUTION_VALUE_SCOPE_REPOSITORY' })), ...fields });
+    event: 'WORKFLOW_RUN_ORIGIN_PULL_REQUEST', eventRef: 'refs/heads/feature', expiresAt: new Date(Date.now() + 900000).toISOString(), values: values.map(v => ({ id: v.id, version: v.version, scope: 'EXECUTION_VALUE_SCOPE_REPOSITORY' })), ...fields });
   // Every cell D1 holds, for assertions that a plaintext is stored nowhere.
   const stored = () => JSON.stringify(f.sql.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(table => f.sql.prepare('SELECT * FROM ' + table.name).all()));
   return { ...f, execution, blobId, path, state, human, list, save, approve, stored, service };
@@ -3980,7 +3980,7 @@ test('exact-source approvals bind the approved workflow, commit and head branch 
   const f = await executionValueFixture(t);
   await value(await f.save('DEPLOY_TOKEN', 'fixture-secret-value')); await value(await f.save('REGION', 'eu-central', { kind: 2 }));
   const values = (await f.list()).values, ref = { id: values[0].id, version: values[0].version };
-  for (const fields of [{ event: 'WORKFLOW_RUN_ORIGIN_MANUAL', eventRef: '' }, { event: 'WORKFLOW_RUN_ORIGIN_MANUAL' }, { event: 1 }, { eventRef: 'refs/tags/v1' }, { eventRef: 'feature' }, { eventRef: 'refs/heads/a..b' },
+  for (const fields of [{ event: 'WORKFLOW_RUN_ORIGIN_MANUAL', eventRef: '' }, { event: 'WORKFLOW_RUN_ORIGIN_MANUAL' }, { event: 1 }, { event: 'WORKFLOW_RUN_ORIGIN_PUSH' }, { event: 2 }, { event: undefined }, { event: 4 }, { eventRef: 'refs/tags/v1' }, { eventRef: 'feature' }, { eventRef: 'refs/heads/a..b' },
     { workflowPath: '.github/workflows/other.yml' }, { workflowPath: '.gitlab-ci.yml' }, { commitId: 'B'.repeat(40) }, { commitId: 'd'.repeat(40) }, { workflowBlobId: 'short' },
     { expiresAt: new Date(Date.now() + 30000).toISOString() }, { expiresAt: new Date(Date.now() + 86460000).toISOString() }, { expiresAt: 'tomorrow' }, { expiresAt: Date.now() + 900000 },
     { inputs: [{ name: 'tier', stringValue: 'deploy' }] }, { inputContract: 'golf.workflow.dispatch.inputs.v1' }, { schemaSha256: 'e'.repeat(64) }, { submittedSha256: 'e'.repeat(64) }, { effectiveSha256: 'e'.repeat(64) },
@@ -3999,7 +3999,8 @@ test('exact-source approvals bind the approved workflow, commit and head branch 
   assert.deepEqual([approved.action, approved.itemId, approved.acceptedVersion, approved.acceptedBrokerRevision, approved.replayed], ['save_binding', input.id, '1', '3', false]);
   const [binding] = (await f.list()).bindings;
   assert.deepEqual([binding.id, binding.version, binding.workflowPath, binding.commitId, binding.workflowBlobId, binding.engineCatalog, binding.event, binding.eventRef, binding.deleted, binding.approvalState],
-    [input.id, '1', f.path, 'b'.repeat(40), f.blobId, 'golf.native.workflow-shell.v1', 'WORKFLOW_RUN_ORIGIN_PUSH', 'refs/heads/feature', false, 'requires_current_authority']);
+    [input.id, '1', f.path, 'b'.repeat(40), f.blobId, 'golf.native.workflow-shell.v1', 'WORKFLOW_RUN_ORIGIN_PULL_REQUEST', 'refs/heads/feature', false, 'requires_current_authority']);
+  assert.equal(f.sql.prepare('SELECT event FROM execution_bindings').get().event, 'pull_request');
   assert.match(binding.sourceSha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(binding.values.map(v => [v.id, v.version, v.scope]).sort(), values.map(v => [v.id, v.version, 'EXECUTION_VALUE_SCOPE_REPOSITORY']).sort());
   assert.equal(f.sql.prepare('SELECT sponsor_id FROM execution_bindings').get().sponsor_id, 1);
@@ -4140,6 +4141,7 @@ test('a stale approval, changed value, expiry, revoked approver or lost job auth
   await tamper('newer approval version', 'UPDATE execution_bindings SET version=version+1', 'UPDATE execution_bindings SET version=version-1');
   await tamper('removed approval', 'UPDATE execution_bindings SET deleted=1', 'UPDATE execution_bindings SET deleted=0');
   await tamper('approval moved to another commit', `UPDATE execution_bindings SET commit_id='${commit}'`, `UPDATE execution_bindings SET commit_id='${'b'.repeat(40)}'`);
+  await tamper('approval of another origin', "UPDATE execution_bindings SET event='push'", "UPDATE execution_bindings SET event='pull_request'");
   await tamper('approval moved to another branch', "UPDATE execution_bindings SET event_ref='refs/heads/main'", "UPDATE execution_bindings SET event_ref='refs/heads/feature'");
   await tamper('approval of another compiled source', `UPDATE execution_bindings SET source_sha256='${'0'.repeat(64)}'`, `UPDATE execution_bindings SET source_sha256='${source}'`);
   await tamper('rotated value', "UPDATE execution_values SET version=version+1 WHERE name='DEPLOY_TOKEN'", "UPDATE execution_values SET version=version-1 WHERE name='DEPLOY_TOKEN'");

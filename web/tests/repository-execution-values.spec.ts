@@ -132,7 +132,7 @@ test('native approvals cover the approved workflow at a pull request head and of
  await editor.getByRole('button', { name: 'Approve exact source', exact: true }).click();
  await expect(page.getByText('Saved privately. Affected prior attempts are fenced.', { exact: true })).toBeVisible();
  const write = native.writes[0]!;
- expect([write.workflowPath, write.commitId, write.event, write.eventRef, write.inputs.length, write.inputContract, write.schemaSha256, write.submittedSha256, write.effectiveSha256, write.workflowBlobId]).toEqual(['.github/workflows/check.yml', 'a'.repeat(40), Origin.PUSH, 'refs/heads/feature', 0, undefined, '', '', '', '']);
+ expect([write.workflowPath, write.commitId, write.event, write.eventRef, write.inputs.length, write.inputContract, write.schemaSha256, write.submittedSha256, write.effectiveSha256, write.workflowBlobId]).toEqual(['.github/workflows/check.yml', 'a'.repeat(40), Origin.PULL_REQUEST, 'refs/heads/feature', 0, undefined, '', '', '', '']);
  expect(write.values.map(v => [v.id, v.version, v.scope, v.organizationId])).toEqual([[state.rows[0]!.id, '1', Scope.REPOSITORY, '']]);
  expect(state.methods).not.toContain('InspectWorkflows'); expect(state.methods).not.toContain('PrepareWorkflowDispatch');
  const approvals = page.getByRole('table', { name: 'Repository execution source approvals', exact: true });
@@ -148,9 +148,19 @@ test('native approvals cover the approved workflow at a pull request head and of
 });
 test('native refuses an inventory shaped like a portable approval', async ({ page }) => {
  const { native } = await nativeBackend(page);
- for (const change of [{ engineCatalog: 'golf.workflow.act.v0.2.89.linux.v1' }, { event: Origin.MANUAL, eventRef: '' }, { approvalState: 'approved' }, { inputContract: 'golf.workflow.dispatch.inputs.v1' }]) {
-  native.bindings = [create(RepositoryExecutionBindingSchema, { id: '20000000-0000-4000-8000-000000000002', version: '1', workflowPath: '.github/workflows/check.yml', commitId: 'a'.repeat(40), workflowBlobId: 'b'.repeat(40), sourceSha256: 'f'.repeat(64), engineCatalog: 'golf.native.workflow-shell.v1', event: Origin.PUSH, eventRef: 'refs/heads/feature', expiresAt: '2099-10-04T12:00:00Z', approvalState: 'requires_current_authority', values: [{ id: '10000000-0000-4000-8000-000000000001', version: '1', scope: Scope.REPOSITORY }], createdAt: date, updatedAt: date, ...change })];
+ for (const change of [{ engineCatalog: 'golf.workflow.act.v0.2.89.linux.v1' }, { event: Origin.MANUAL, eventRef: '' }, { event: Origin.PUSH }, { approvalState: 'approved' }, { inputContract: 'golf.workflow.dispatch.inputs.v1' }]) {
+  native.bindings = [create(RepositoryExecutionBindingSchema, { id: '20000000-0000-4000-8000-000000000002', version: '1', workflowPath: '.github/workflows/check.yml', commitId: 'a'.repeat(40), workflowBlobId: 'b'.repeat(40), sourceSha256: 'f'.repeat(64), engineCatalog: 'golf.native.workflow-shell.v1', event: Origin.PULL_REQUEST, eventRef: 'refs/heads/feature', expiresAt: '2099-10-04T12:00:00Z', approvalState: 'requires_current_authority', values: [{ id: '10000000-0000-4000-8000-000000000001', version: '1', scope: Scope.REPOSITORY }], createdAt: date, updatedAt: date, ...change })];
   await page.goto('/.tmp/execution-values-fixture.html');
   await expect(page.getByRole('alert')).toBeVisible(); await expect(page.getByRole('table')).toHaveCount(0);
  }
+});
+test('the portable page refuses a pull-request approval, which only Cloudflare native issues', async ({ page }) => {
+ const state = await backend(page);
+ state.bindings = [create(RepositoryExecutionBindingSchema, { id: '20000000-0000-4000-8000-000000000002', version: '1', workflowPath: '.github/workflows/build.yml', commitId: 'a'.repeat(40), workflowBlobId: 'b'.repeat(40), sourceSha256: 'f'.repeat(64), engineCatalog: 'golf.workflow.act.v0.2.89.linux.v1', event: Origin.PULL_REQUEST, eventRef: 'refs/heads/feature', expiresAt: '2099-10-04T12:00:00Z', approvalState: 'requires_current_authority', values: [{ id: '10000000-0000-4000-8000-000000000001', version: '1', scope: Scope.REPOSITORY }], createdAt: date, updatedAt: date })];
+ await page.goto('/.tmp/execution-values-fixture.html');
+ await expect(page.getByRole('alert')).toBeVisible(); await expect(page.getByRole('table')).toHaveCount(0);
+ state.bindings = [create(RepositoryExecutionBindingSchema, { ...state.bindings[0]!, event: Origin.PUSH })]; state.rows = [createValue('10000000-0000-4000-8000-000000000001', 'BUILD_CREDENTIAL', Kind.SECRET)];
+ await open(page);
+ await page.getByRole('button', { name: 'Add approval', exact: true }).click();
+ await expect(page.getByLabel('Event', { exact: true }).locator('option')).toHaveText(['Manual (exact commit dispatch)', 'Configured push']);
 });
