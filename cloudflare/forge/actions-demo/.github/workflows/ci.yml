@@ -1,0 +1,79 @@
+# Golf Actions proof workflow: marketplace actions, matrix, services, needs outputs, secrets, vars,
+# v4 artifacts and a protected deployment environment, on the stock Forgejo Runner.
+name: Demo CI
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      note:
+        description: Free text echoed by the report job
+        default: dispatched
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    outputs:
+      greeting: ${{ steps.out.outputs.greeting }}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+      - name: Reach the postgres service by name
+        run: node -e "require('net').connect(5432,'postgres').on('connect',()=>{console.log('postgres service reachable');process.exit(0)}).on('error',e=>{console.error(e.message);process.exit(1)})"
+      - name: Secret and variable
+        env:
+          DEMO_SECRET: ${{ secrets.DEMO_SECRET }}
+        run: |
+          test -n "$DEMO_SECRET"
+          echo "secret length ${#DEMO_SECRET}"
+          echo "echoed secret: $DEMO_SECRET"
+          echo "variable: ${{ vars.GREETING }}"
+      - id: out
+        run: echo "greeting=hello-from-node-${{ matrix.node }}" >> "$GITHUB_OUTPUT"
+      - run: mkdir -p dist && echo "built with node ${{ matrix.node }}" > dist/out.txt
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.node }}
+          path: dist/
+  stock-upload-artifact:
+    # The unmodified actions/upload-artifact@v4 refuses non-github.com servers (its GHES check); recorded honestly.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - run: mkdir -p out && echo stock > out/x.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stock
+          path: out/
+  report:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "needs output ${{ needs.test.outputs.greeting }}; input ${{ github.event.inputs.note || 'push' }}"
+      - uses: https://code.forgejo.org/forgejo/download-artifact@v4
+        with:
+          name: dist-20
+          path: got
+      - run: cat got/out.txt && grep -q "node 20" got/out.txt
+  deploy:
+    needs: report
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://demo.example.invalid
+    steps:
+      - run: echo "deploying ${{ github.sha }} to production"

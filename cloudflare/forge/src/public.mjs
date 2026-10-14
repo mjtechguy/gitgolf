@@ -4,6 +4,9 @@ import { bounded } from './git.mjs';
 import { accessContext, accessIssuedAt } from './access.mjs';
 import { anonymousLimit } from './rate-limit.mjs';
 import { releaseAssetDownload } from './asset-download.mjs';
+import { pipelinePolicy } from './pipeline-policy.mjs';
+import { forgejoRunner, forgejoRunnerRoute, actionsGit, actionsGitRoute } from './forgejo-runner.mjs';
+import { actionsArtifacts, artifactRoute } from './actions-artifacts.mjs';
 
 // "appearance" or "appearance/layout", matching web/public/theme.js.
 export const defaultAppearance = /^(classic(\/(primer|workbench|reader))?|golf(\/(refined|strokes|tiles))?|flare(\/(kumo|overview|console))?)$/;
@@ -39,6 +42,15 @@ export async function publicFetch(request, env, ctx) {
 async function dispatch(request, env, ctx, clock) {
     const url = new URL(request.url);
     if (url.origin !== env.PUBLIC_ORIGIN) return new Response('Unavailable', { status: 404 });
+    // Stock Forgejo Runner protocol, its artifacts and the job-token Git source: outside Access like /api/v4, each call checks
+    // runner/job/repository/feature authority against D1 and never enters the workspace queue.
+    if (pipelinePolicy(env)) {
+      const pipelineEnv = () => ({ ...env, pipelineCoordinator: ctx.exports?.PipelineRun, waitUntil: promise => ctx.waitUntil(promise),
+        notifyPipeline: id => ctx.waitUntil?.(ctx.exports.Workspace.get(ctx.exports.Workspace.idFromName(env.WORKSPACE_SLUG)).activityChanged(String(id), ['actions']).catch(() => {})) });
+      if (forgejoRunnerRoute(url.pathname)) return forgejoRunner(request, pipelineEnv());
+      if (artifactRoute(url.pathname)) return actionsArtifacts(request, pipelineEnv());
+      if (actionsGitRoute(url.pathname) && (request.method === 'POST' || url.search === '?service=git-upload-pack')) return actionsGit(request, pipelineEnv(), (await import('./core.mjs')).withArtifact);
+    }
     // Configured Access is the outer gate for both people and machine callers.
     const machineRoute = url.pathname.startsWith('/native/runner-machine/') || url.pathname.startsWith('/api/v4/');
     const access = env.ACCESS_AUD && !machineRoute ? await clock.measure('access_auth', () => accessContext(request, env, ctx)) : null;

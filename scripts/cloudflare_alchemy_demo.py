@@ -224,6 +224,20 @@ def enable_dead_letter(directory, value):
     print('Evidence failure retention prepared; deploy to create the dead-letter queue and its consumer.')
 
 
+def enable_pipelines(directory, value, actions_url=None):
+    # Actions/CI pipelines need the evidence allocation: the Worker, queue and coordinator are one installation.
+    if not value['settings'].get('evidence'):
+        raise ValueError('Actions pipelines require the evidence allocation')
+    pipelines = {}
+    if actions_url:
+        if not re.fullmatch(r'https://[a-z0-9.-]+(:[0-9]+)?', actions_url):
+            raise ValueError('Use an HTTPS origin such as https://code.forgejo.org for marketplace actions')
+        pipelines['default_actions_url'] = actions_url
+    value['settings']['pipelines'] = pipelines
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Actions pipelines prepared; deploy to create the logs and artifacts bucket, the intake queue with its dead-letter queue and the run coordinator. Deploy twice if Alchemy reports the new Durable Object class is unresolved. Run migrate first, then register runners under Settings > Runners.')
+
+
 def enable_webhooks(directory, value, origins):
     for origin in origins:
         if not re.fullmatch(r'https://[a-z0-9-]+(\.[a-z0-9-]+)+', origin):
@@ -517,7 +531,7 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email', 'enable-search', 'rename-workspace'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email', 'enable-search', 'enable-pipelines', 'rename-workspace'])
     parser.add_argument('--slug', help='new workspace name for rename-workspace')
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--days', type=int, default=7, help='lifetime for renew-credentials, 1 to 30 days')
@@ -525,6 +539,7 @@ def main():
     parser.add_argument('--limit', type=int, default=300, help='approximate anonymous requests per period for enable-rate-limit, 10 to 10000')
     parser.add_argument('--period', type=int, default=60, choices=[10, 60], help='counting period in seconds for enable-rate-limit')
     parser.add_argument('--dimensions', type=int, default=1024, help='Vectorize index dimension for enable-search; must match the embedding model')
+    parser.add_argument('--actions-url', help='HTTPS origin that resolves unqualified marketplace actions for enable-pipelines, such as https://code.forgejo.org')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
     parser.add_argument('--workflow-path', help='the one approved Actions workflow path for enable-workflow, .github/workflows/NAME.yml')
     parser.add_argument('directory', nargs='?')
@@ -545,6 +560,7 @@ def main():
     if args.action == 'enable-ai': return enable_ai(directory, value, args.agent_path)
     if args.action == 'enable-workflow': return enable_workflow(directory, value, args.workflow_path)
     if args.action == 'enable-dead-letter': return enable_dead_letter(directory, value)
+    if args.action == 'enable-pipelines': return enable_pipelines(directory, value, args.actions_url)
     if args.action == 'enable-operations': return enable_operations(directory, value)
     if args.action == 'enable-rate-limit': return enable_rate_limit(directory, value, args.limit, args.period)
     if args.action == 'rename-workspace': return rename_workspace(directory, value, args.slug)

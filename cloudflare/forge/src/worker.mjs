@@ -18,6 +18,9 @@ import { executionDiagnostic } from './test-policy.mjs';
 import { nativeRunnerStop } from './native-runners.mjs';
 import { managedRegistry } from './managed-registry.mjs';
 import { releaseExecutionValues } from './execution-values.mjs';
+import { pipelinePolicy } from './pipeline-policy.mjs';
+import { advanceRunNow, advancePipelineRun } from './pipelines.mjs';
+import { processPipelineIntake, sweepPipelines } from './actions-intake.mjs';
 import { reconcileAi, runAiWorkflow } from './ai-workflow.mjs';
 
 
@@ -29,7 +32,7 @@ export class Workspace extends DurableObject {
     ctx.waitUntil(ctx.storage.getAlarm().then(at => at ?? ctx.storage.setAlarm(Date.now() + heartbeat)));
     const workflows = env.EvidenceWorkflow || ctx.exports.EvidenceWorkflow;
     this.activity = new RepositoryActivity(ctx.storage, (request, input) => this.authority({ activity: true, request, input }));
-    const configured = this.configured = { ...env, previewChanged: id => this.activity.publish(String(id), ['actions', 'pulls']), performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask,
+    const configured = this.configured = { ...env, previewChanged: id => this.activity.publish(String(id), ['actions', 'pulls']), performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask, pipelineCoordinator: ctx.exports.PipelineRun, notifyPipeline: id => this.activity.publish(String(id), ['actions']),
       AiWorkflow: env.AiWorkflow || (env.AI_WORKFLOW_NAME ? ctx.exports.AiWorkflow : undefined) };
     if (env.REGISTRY_PROVIDER === 'cloudflare') {
       configured.registryUploadStore = ctx.storage;
@@ -169,6 +172,34 @@ export class RepositoryReads extends DurableObject {
   alarm() { return this.index(); }
 }
 
+// One coordinator per pipeline run: serializes DAG advancement, cancellation and timeouts. A Durable Object, not a
+// Workflow: runs are driven by runner callbacks and can wait on manual jobs indefinitely; an alarm re-checks timeouts.
+export class PipelineRun extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.chain = Promise.resolve();
+  }
+  pipelineEnv() {
+    const workspace = this.ctx.exports.Workspace, owner = workspace.get(workspace.idFromName(this.env.WORKSPACE_SLUG));
+    return { ...this.env, pipelineCoordinator: this.ctx.exports.PipelineRun, waitUntil: promise => this.ctx.waitUntil(promise),
+      notifyPipeline: id => this.ctx.waitUntil(owner.activityChanged(String(id), ['actions']).catch(() => {})) };
+  }
+  advance(runId) {
+    const next = this.chain.then(async () => {
+      this.ctx.storage.kv.put('run', runId);
+      const result = await advanceRunNow(this.pipelineEnv(), runId);
+      if (result.nextCheck) await this.ctx.storage.setAlarm(result.nextCheck); else await this.ctx.storage.deleteAlarm();
+      return { state: result.state };
+    });
+    this.chain = next.catch(() => {});
+    return next;
+  }
+  async alarm() {
+    const runId = this.ctx.storage.kv.get('run');
+    if (runId) await this.advance(runId);
+  }
+}
+
 // Only the dedicated preview Worker's scoped service binding can invoke this RPC.
 export class PreviewBroker extends WorkerEntrypoint {
   preview(input) {
@@ -251,10 +282,12 @@ async function maintain(env, exports, owner) {
           await exports.PRAgentTask.getByName(job.id).cancel();
         }
       }); if (env.EVIDENCE_ALLOW_AI === 'true') Object.assign(result, await reconcileAi(env.DB.withSession('first-primary'))); await owner.activityChanged(); return result; }],
-      // Semantic search indexing shares the read-index stage: the maintenance journal only names the four original stages.
-      ['indexes', async () => { const settled = await Promise.allSettled([reconcileIndexes(env), env.SEARCH_INDEX ? advanceSearch(env) : { processed: 0 }]);
+      // Semantic search and the Actions pipeline sweep share the read-index stage: the maintenance journal only names the four original stages.
+      ['indexes', async () => { const pipelines = pipelinePolicy(env) ? { ...env, pipelineCoordinator: exports.PipelineRun } : null;
+        const settled = await Promise.allSettled([reconcileIndexes(env), env.SEARCH_INDEX ? advanceSearch(env) : { processed: 0 },
+          pipelines ? sweepPipelines(pipelines, (await import('./core.mjs')).withArtifact, id => advancePipelineRun(pipelines, id)).then(r => ({ processed: r.intakes + r.runs })) : { processed: 0 }]);
         for (const result of settled) if (result.status === 'rejected') throw result.reason;
-        return { ...settled[0].value, processed: settled[1].value.processed }; }],
+        return { ...settled[0].value, processed: settled[1].value.processed + settled[2].value.processed }; }],
 
     ]); } finally { try { await collectWorkerMetrics(env); } finally { await collectServiceHealth(env); } }
 }
@@ -269,6 +302,14 @@ export default {
   async queue(batch, env, ctx) {
     const workspace = ctx.exports.Workspace;
     const owner = workspace.get(workspace.idFromName(env.WORKSPACE_SLUG));
+    if (env.PIPELINE_QUEUE_NAME && batch.queue === env.PIPELINE_QUEUE_NAME) {
+      const pipelineEnv = { ...env, pipelineCoordinator: ctx.exports.PipelineRun, waitUntil: promise => ctx.waitUntil(promise),
+        notifyPipeline: id => ctx.waitUntil(owner.activityChanged(String(id), ['actions']).catch(() => {})) };
+      for (const message of batch.messages) {
+        try { await processPipelineIntake(pipelineEnv, String(message.body?.intake || ''), (await import('./core.mjs')).withArtifact); message.ack(); } catch { message.retry(); }
+      }
+      return;
+    }
     if (batch.queue === env.EVIDENCE_DEAD_LETTER_QUEUE) { const result = await consumeEvidenceDeadLetters(batch, env); await owner.activityChanged(); return result; }
     return consumeEvidence(batch, env, owner);
   },

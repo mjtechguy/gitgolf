@@ -6,6 +6,7 @@ import { useRepositorySettingsAccess } from './useRepositorySettingsAccess';
 import { DataTable } from './DataTable';
 import type { DataTableColumn } from './DataTable';
 import { nativeAPI } from './NativeForge';
+import { NativePipelineRunners } from './NativePipelineRunners';
 
 type Pool = { id: string; name: string; version: number; state: 'ACTIVE' | 'DRAINING'; trust_class: 'UNTRUSTED' | 'TRUSTED'; max_parallel: number; image_id: string };
 type Machine = { id: string; pool_id: string; name: string; protocol: 'native' | 'gitlab'; version: number; state: 'ACTIVE' | 'DRAINING' | 'QUARANTINED' | 'REVOKED'; expires_at: number; last_seen_at: string | null; active_job_id: string | null; cleanup_state: 'CONFIRMED' | 'UNKNOWN' };
@@ -86,8 +87,9 @@ export function NativeRunnerAdmin() {
 // Settings → Runners on the native runtime: the repository chooses one of the workspace's runner pools.
 export function NativeRepositoryRunners({ userId, owner, name, signingOut }: { userId: string; owner: string; name: string; signingOut: boolean }) {
   const { access, error, refresh } = useRepositorySettingsAccess(userId, owner, name, signingOut);
-  return <section className="page-stack"><header className="repository-intro"><div><h1>Runners</h1><p>Choose the runner pool that runs this repository's approved pull request jobs. Workspace administrators enroll machines and manage pools.</p></div></header>
-    {error ? <PanelError error={error} retry={refresh} /> : !access ? <Loading label="Verifying repository access…" /> : signingOut ? null : <NativeRunnerPlacement key={access.repositoryId} context={{ repository: { owner, name }, repositoryId: access.repositoryId }} />}
+  const config = useQuery({ ...privateQuery, queryKey: ['native-config', userId], queryFn: ({ signal }) => nativeAPI<{ tests?: boolean }>('/native/config', {}, signal) });
+  return <section className="page-stack"><header className="repository-intro"><div><h1>Runners</h1><p>Self-hosted runners for this repository's workflows and pipelines, and the runner pool for approved pull request checks.</p></div></header>
+    {error ? <PanelError error={error} retry={refresh} /> : !access ? <Loading label="Verifying repository access…" /> : signingOut ? null : <><NativePipelineRunners key={`pipelines-${access.repositoryId}`} userId={userId} target={{ scope: 'repository', repository: { owner, name }, repositoryId: access.repositoryId }} />{config.data?.tests ? <NativeRunnerPlacement key={access.repositoryId} context={{ repository: { owner, name }, repositoryId: access.repositoryId }} /> : null}</>}
   </section>;
 }
 
