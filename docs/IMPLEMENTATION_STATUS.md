@@ -1,5 +1,28 @@
 # Golf implementation status
 
+## 2026-10-14 — Native workflow settings, repository run switch and recent runs
+
+The Cloudflare-native repository page `/:owner/:name/settings/workflows` is
+available: `WorkflowService.InspectWorkflows` lists `.github/workflows/*.yml`
+and `*.yaml` and `.gitlab-ci.yml` at the default-branch commit (at most 20
+files of 64 KiB) for accounts with a repository grant and marks the one
+operator-approved path; it starts nothing, and panels without a native service
+are not mounted. An installation may approve an Actions shell workflow for
+pull-request runs beside the Python module that agent proposals test with
+(`cloudflare_alchemy_demo.py enable-workflow --workflow-path PATH` on the
+Alchemy path). `ExecutionPolicyService` Get/Update at repository scope (schema
+25) lets an administrator signed in through Access turn pull-request runs and
+automatic push tests off for one repository; it is checked at admission only,
+does not stop admitted runs and does not govern agent proposals. The native
+Actions page lists the latest 50 runs across pull requests from stored rows,
+without a staleness claim.
+
+Evidence: local Worker tests (329, 328 pass, 1 skipped), the workerd/D1 UI
+check, release and setup script tests, and native Playwright cases with mocked
+RPCs. Remaining: no manual dispatch, branch-push or tag triggers, no run
+history service, no workflow editor, one approved path per installation, no
+revocation of admitted runs. Hosted acceptance is recorded separately.
+
 ## 2026-10-14 — Maintenance no longer depends on Cron Trigger delivery
 
 The workspace Durable Object keeps a five-minute alarm and runs the scheduled
