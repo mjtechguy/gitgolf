@@ -1018,7 +1018,8 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
  needs TEXT NOT NULL DEFAULT '[]',                      -- JSON array of job_key (Forgejo) or job name (GitLab) in the same run
  runs_on TEXT NOT NULL DEFAULT '[]',                    -- JSON array of labels a runner must all carry (GitLab: tags)
  payload TEXT NOT NULL,                                 -- Forgejo: single-job workflow YAML; GitLab: JSON job spec (gitlab-pipeline.mjs owns it)
- state TEXT NOT NULL CHECK(state IN ('BLOCKED','QUEUED','RUNNING','SUCCESS','FAILURE','CANCELLED','SKIPPED','MANUAL')),
+ state TEXT NOT NULL CHECK(state IN ('BLOCKED','QUEUED','RUNNING','SUCCESS','FAILURE','CANCELLED','SKIPPED','MANUAL','APPROVAL')),
+ environment TEXT,                                      -- JSON { name, url, action } or NULL
  when_mode TEXT NOT NULL DEFAULT 'on_success' CHECK(when_mode IN ('on_success','on_failure','always','manual','conditional')),
  allow_failure INTEGER NOT NULL DEFAULT 0 CHECK(allow_failure IN (0,1)),
  timeout_seconds INTEGER NOT NULL DEFAULT 3600 CHECK(timeout_seconds BETWEEN 60 AND 21600),
@@ -1074,3 +1075,52 @@ CREATE TABLE IF NOT EXISTS pipeline_intake (
  attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS pipeline_intake_pending ON pipeline_intake(state,created_at);
+-- Deployment environments for Actions/CI jobs (`environment:`). Separate from the single preview-policy row in
+-- repository_environments. A name used by a job and not configured is created unprotected, as on GitHub.
+CREATE TABLE IF NOT EXISTS pipeline_environments (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ repository_id INTEGER NOT NULL REFERENCES repositories(id),
+ artifact_name TEXT NOT NULL,
+ name TEXT NOT NULL,
+ reviewers TEXT NOT NULL DEFAULT '[]',                  -- JSON array of user ids; empty = no approval needed
+ prevent_self_review INTEGER NOT NULL DEFAULT 1 CHECK(prevent_self_review IN (0,1)),
+ branches TEXT NOT NULL DEFAULT '[]',                   -- JSON array of branch patterns; empty = any ref
+ url TEXT NOT NULL DEFAULT '',
+ version INTEGER NOT NULL DEFAULT 1,
+ created_by INTEGER NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0,1))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS pipeline_environments_name ON pipeline_environments(repository_id,name) WHERE deleted=0;
+-- Environment-scoped secrets and variables, sealed with the repository value key under their own additional-data domain.
+CREATE TABLE IF NOT EXISTS pipeline_environment_values (
+ environment_id INTEGER NOT NULL REFERENCES pipeline_environments(id),
+ name TEXT NOT NULL,
+ kind TEXT NOT NULL CHECK(kind IN ('secret','variable')),
+ version INTEGER NOT NULL CHECK(version>0),
+ value_bytes INTEGER NOT NULL CHECK(value_bytes BETWEEN 1 AND 65536),
+ encrypted TEXT NOT NULL, key_id TEXT NOT NULL,
+ updated_by INTEGER NOT NULL REFERENCES users(id), updated_at TEXT NOT NULL,
+ PRIMARY KEY(environment_id,name)
+);
+CREATE TABLE IF NOT EXISTS pipeline_approvals (
+ job_id INTEGER NOT NULL REFERENCES pipeline_jobs(id),
+ environment_id INTEGER NOT NULL REFERENCES pipeline_environments(id),
+ reviewer_id INTEGER NOT NULL REFERENCES users(id),
+ decision TEXT NOT NULL CHECK(decision IN ('APPROVED','REJECTED')),
+ comment TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL,
+ PRIMARY KEY(job_id)
+);
+CREATE TABLE IF NOT EXISTS pipeline_deployments (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ environment_id INTEGER NOT NULL REFERENCES pipeline_environments(id),
+ run_id INTEGER NOT NULL REFERENCES pipeline_runs(id),
+ job_id INTEGER NOT NULL UNIQUE REFERENCES pipeline_jobs(id),
+ action TEXT NOT NULL,
+ commit_id TEXT NOT NULL, ref TEXT NOT NULL, url TEXT NOT NULL DEFAULT '',
+ state TEXT NOT NULL CHECK(state IN ('SUCCESS','FAILURE','CANCELLED')),
+ actor_id INTEGER NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS pipeline_deployments_environment ON pipeline_deployments(environment_id,id);

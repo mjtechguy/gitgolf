@@ -19,6 +19,9 @@ import { operationsAdmin, operationsDashboard } from './operations.mjs';
 import { installationAPI, schemaVersion, installationOverlay, installationSettings, withInstallationPolicy } from './installation.mjs';
 import { nativeRunnerAdmin, nativeRunnerPlacement, nativeRunnerMachine } from './native-runners.mjs';
 import { gitLabRunner } from './gitlab-runner.mjs';
+import { pipelinePolicy } from './pipeline-policy.mjs';
+import { pipelineAPI, pipelineRunnerAPI } from './pipeline-api.mjs';
+import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
@@ -137,7 +140,7 @@ export async function activityAuthority(request, env, input) {
   return String(person.id);
 }
 
-async function withArtifact(env, row, action, defaultHead = false) {
+export async function withArtifact(env, row, action, defaultHead = false) {
   const measure = (name, action) => env.timings ? env.timings.measure('artifacts', () => env.timings.measure('artifact_' + name, action)) : action();
   const repo = await measure('open', () => env.ARTIFACTS.get(row.artifact_name));
   try {
@@ -259,6 +262,11 @@ async function git(db, env, person, request, url, providerFetch) {
         db.prepare("UPDATE git_operations SET state='APPLIED',ci_state=? WHERE id=? AND state='DISPATCHED'").bind(env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE', operation),
         db.prepare('UPDATE repositories SET write_pending=NULL WHERE id=? AND write_pending=?').bind(row.id, operation),
       ]);
+      // Actions/CI: the confirmed push is recorded before the response; discovery runs after it.
+      if (pipelinePolicy(env) && command.next !== '0'.repeat(40)) {
+        try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'push', { ref: command.ref, before: command.old, after: command.next, actorId: person.id, operationId: operation }, 'push:' + operation), withArtifact); }
+        catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
+      }
     }
     await confirmGitCredential(db,person,row);
     let bytes=result.bytes;
@@ -394,6 +402,18 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) || 0, previewTTL: Number(env.PREVIEW_TTL) || 0, appTTL: appPolicy(env)?.ttl || 0 });
     if (url.pathname === '/native/installation' || url.pathname === '/native/installation/read') return await installationAPI(db, env, person, request, body, url.pathname.endsWith('/read'));
     if (url.pathname === '/native/runner-admin') return await nativeRunnerAdmin(db, env, person, request, body);
+    if (url.pathname === '/native/pipelines') {
+      // History stays readable when Actions are off; pipelineAPI refuses mutations then.
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
+      const result = await pipelineAPI(db, env, person, row, request, body, withArtifact);
+      return result instanceof Response ? result : reply(result);
+    }
+    if (url.pathname === '/native/pipeline-runners') return reply(await pipelineRunnerAPI(db, env, person, request, body, async () => {
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (body.repositoryId !== String(row.id)) deny();
+      return row;
+    }));
     if (url.pathname === '/native/runner-placement') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'actions');
       if (body.repositoryId !== String(row.id)) deny();
@@ -602,7 +622,16 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (service === 'RepositoryService' && resourceMethods.has(method)) return reply(await discussionResources(db, env, person, row, method, body));
     if (service === 'RepositoryWebhookService') { await requireFeature(db, env, row, 'webhooks'); return reply(await repositoryWebhooks(db, env, person, row, method, body)); }
     if (service === 'RepositoryService' && releaseReadMethods.has(method)) { await requireFeature(db, env, row, 'releases'); return reply(await releases(db, env, person, row, method, body)); }
-    if (collaborationMethods.has(method)) return reply(await collaboration(db, env, person, method, body, row, action => withArtifact(env, row, action)));
+    if (collaborationMethods.has(method)) {
+      const value = await collaboration(db, env, person, method, body, row, action => withArtifact(env, row, action));
+      // Actions pull_request opened/reopened; the mutation receipt keys the intake, so a replayed request records nothing.
+      const reopened = method === 'UpdatePullRequest' && (body.state === 'ISSUE_STATE_OPEN' || body.state === 1);
+      if (pipelinePolicy(env) && (method === 'CreatePullRequest' || reopened) && value?.mutation?.id && value.pullRequest) {
+        try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'pull_request', { number: value.mutation.number, action: reopened ? 'reopened' : 'opened', headCommitId: value.pullRequest.head?.commitId, actorId: person.id }, 'pull:' + value.mutation.id), withArtifact); }
+        catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
+      }
+      return reply(value);
+    }
     if (method === 'GetRepository') return reply(await withArtifact(env, row, async (_repo, _info, commits) => {
       const head = commits[0]?.hash;
       if (head && !sha(head)) throw Error('Invalid default branch identity');
