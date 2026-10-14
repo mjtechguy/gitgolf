@@ -82,7 +82,7 @@ above and the editable "AI on/off" approval.
 | Agent proposals: OpenCode in a container edits the approved file and runs its tests | Workers AI `@cf/zai-org/glm-5.3-flash`, Containers, Artifacts forks | shipped (moved from `glm-4.7-flash` to `glm-5.3`, then `glm-5.3-flash`, on 2026-10-14) |
 | Review advice: one constrained question about the next review step | Workers AI `@cf/cloudflare/clef` | shipped |
 | Clef recommendation card on the pull request page | existing stored advice | shipped (hosted acceptance pending) |
-| Pull request summary and review draft from the bounded diff, edited and published by a person through the existing review contracts | Workers AI text generation | planned |
+| Pull request summary and review draft from the bounded diff, edited and published by a person through the existing review contracts | Workers AI text generation | shipped (hosted acceptance pending) |
 | Issue triage: label suggestions from the repository's own labels | Workers AI `@cf/cloudflare/clef` | shipped (hosted acceptance pending) |
 | Release notes draft from merged pull requests since the previous tag | Workers AI text generation | shipped (hosted acceptance pending) |
 | Semantic search over code and issues, filtered by the reader's current access | Workers AI embeddings, Vectorize | shipped (hosted acceptance pending) |

@@ -1,5 +1,28 @@
 # Golf implementation status
 
+## 2026-10-14 — AI pull request summary and review draft (AI-B)
+
+Writers can ask Workers AI, through the private AI Gateway, to read up to 96 KiB
+of a pull request's exact diff (bound to the pull request id, base, head and
+merge base) and draft a summary and `path:line` review notes that only the
+requester sees, using the installation's chosen model for the `review-drafts`
+use (default `@cf/zai-org/glm-5.3`, strict `json_schema`, no tools). Output is
+validated against the diff (each finding must sit on an added or context line of
+a file the model was given; no duplicates or oversize text) and neutralized.
+"Start pending review with this text" seeds the existing pending review form;
+the person chooses the decision and nothing is posted until they publish it as
+their own review. A draft is marked out of date when the head or base moved or
+the title or description changed; "No findings is not an approval." It sits under
+the `ai-review-drafts` feature policy, requires pull requests, and adds no
+migration.
+
+Verified locally: Worker tests (509, 508 pass, 1 skipped), a real workerd
+D1/DO/Workflows run with a stub model (`ai-review-runtime-check.mjs`),
+`pull-ai-draft.spec.ts` and the advice-card and review-authoring specs. The three
+older review specs fail the same 64 of 70 tests with and without this change on
+the same base. Unverified live: GLM 5.3 `json_schema` adherence and latency inside
+the 150 s step. Not built: "Use as description".
+
 ## 2026-10-14 — Native Actions pipelines on the stock Forgejo Runner, and GitLab CI pipelines on the stock GitLab Runner (RUN-A/B/C)
 
 Implemented and verified locally; migration 0035 (schema 35); not yet hosted.
