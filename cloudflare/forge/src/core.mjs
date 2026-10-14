@@ -237,7 +237,14 @@ async function git(db, env, person, request, url, providerFetch) {
   // Preserve v2 shallow negotiation; receive-pack keeps its existing v0 contract.
   const protocol = service === 'git-upload-pack' && request.headers.get('Git-Protocol') === 'version=2' ? 'version=2' : null;
   if (!advertisement && (request.headers.get('Content-Type') !== `application/x-${service}-request` || request.headers.has('Content-Encoding'))) invalid('Invalid Git content.');
-  const body = advertisement ? null : await bounded(request.body, 8 * 1024 * 1024);
+  let body = null;
+  if (!advertisement) {
+    try { body = await bounded(request.body, 8 * 1024 * 1024); }
+    catch { throw new Fault('resource_exhausted', 413, 'A push is limited to 8 MiB. Push the history in smaller steps, for example one branch tip at a time.'); }
+  }
+  // Git sends one flush packet before a push larger than http.postBuffer, to learn whether the server needs credentials. Access has already been checked.
+  if (!advertisement && service === 'git-receive-pack' && body.length === 4 && new TextDecoder().decode(body) === '0000')
+    return new Response(null, { status: 200, headers: { 'Content-Type': 'application/x-git-receive-pack-result', 'Cache-Control': 'no-store' } });
   let command, rulesVersion;
   if (!advertisement && service === 'git-receive-pack') {
     try { command = receiveCommand(body); } catch { invalid('Only one ordinary SHA-1 branch/tag update per bounded push is supported.'); }
