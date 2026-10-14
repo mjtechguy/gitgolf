@@ -70,6 +70,8 @@ evidence is recorded in `docs/IMPLEMENTATION_STATUS.md`.
 
 ### AM-0 Measure
 
+**Status (2026-10-14): done.** #75 (bench), #97 (hosted evidence for AM-0 to AM-3).
+
 A load tool that runs the same scenarios against the hosted demo or a local
 `wrangler dev`.
 
@@ -122,6 +124,8 @@ node scripts/agent_speed_bench.mjs --scenarios S1,S2,S3,S4,S5 --concurrency 1,4,
   through `git http-backend` with fake RPC and Source API endpoints.
 
 ### AM-1 Concurrent Git traffic
+
+**Status (2026-10-14): done, hosted-verified.** #77, #82 (provider retry), #88 (branch-only fence for unknown outcomes, schema 40). Exit met: S2/S3 at 16 succeed without 409/429 (48/48, 2.19 writes/s across repositories against 0.38 before). The `RepositoryWrites` split (item 5) is still conditional; the deployment tops out near 2 writes/s.
 
 1. **Admission classes** (`core.mjs` `serialize`):
    - **read:** overlaps.
@@ -179,6 +183,8 @@ node scripts/agent_speed_bench.mjs --scenarios S1,S2,S3,S4,S5 --concurrency 1,4,
    - This is a separate design note before any code.
 
 ### AM-2 Source API: change code without a clone
+
+**Status (2026-10-14): done, hosted-verified.** #74 (object writer, tree merge), #79 (routes, schema 38). S6: a branch per writer 48/48 at 16; many writers merging onto one shared branch mostly run out of their 3 attempts (13/63) — AM-4 landing is the answer there.
 
 A JSON API for agents and tools, in a new `source-api.mjs`, backed by a Git object
 writer in a new `git-objects.mjs`.
@@ -239,6 +245,8 @@ writer in a new `git-objects.mjs`.
 
 ### AM-3 Agent access: API tokens and remote MCP
 
+**Status (2026-10-14): done, hosted-verified.** #83, #86 (schema 39). Exit met: Claude Code via hosted `/mcp` with an `agent/*` token opened PR #4 in `mj/actions-demo`; a commit to `main` was refused. The agent host prompt does not mention MCP yet.
+
 1. **API tokens** (migration `0037` or `0038`, table `api_tokens`):
    - Prefix `golf_pat_`; only the SHA-256 is stored.
    - Fields: owner user, label, expiry (1 hour to 90 days), last used.
@@ -289,6 +297,8 @@ writer in a new `git-objects.mjs`.
 
 ### AM-4 Landing at agent speed
 
+**Status (2026-10-14): built and merged; hosted exit run pending.** #94 (diverged merge and squash, hosted-verified: merge commit tree equals `git merge-tree`), #96 (setting and policy, schema 41), #100 (land queue, landing without a person, revert on failure, schema 42).
+
 1. **Better merges** (`pull-merge.mjs` on `tree-merge.mjs`):
    - Merge diverged branches with a real three-way tree merge.
    - Squash: a single parent, with the tree from the merge.
@@ -338,6 +348,8 @@ writer in a new `git-objects.mjs`.
      - a deliberately failing change is reverted automatically.
 
 ### AM-5 Agentic inbox and intent summaries
+
+**Status (2026-10-14): first slice merged; hosted walkthrough pending.** #101 (inbox, AI intent summaries, schema 43). Not yet: revert action in the inbox, batch approval, hiding agent branches, all-layout browser coverage.
 
 1. Repository page `/:owner/:repo/agents` becomes the inbox. It is linked from the
    repository navigation when agentic mode is on. Sections, each in the shared
