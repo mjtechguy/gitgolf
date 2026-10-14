@@ -1,5 +1,22 @@
 # Golf implementation status
 
+## 2026-10-14 — Native workspace renamed from `alice` to `mj`
+
+The retained installation's workspace is now `mj`. Repository and invitation
+lookups bind the installation's unique Artifacts namespace instead of the
+workspace slug, so the database row and the Worker's `WORKSPACE_SLUG` cannot
+disagree during a rename (#40). The guarded `rename-workspace --slug` step
+updates the row and redeploys; a Durable Object left under the old name deletes
+its own maintenance alarm. New installations no longer hard-code `alice`.
+Existing R2 object keys keep their `…/alice/…` paths because their full keys are
+stored.
+
+Verified on hosted: `/native/config` reports workspace `mj`, the repository list
+(19) and `GetRepository` load, and the maintenance journal shows the CI,
+evidence, preview and index stages succeeding at 06:45 UTC after the rename,
+with the workspace row `slug = mj`. That the old object stopped its alarm is
+inferred from the code path, not observed directly.
+
 ## 2026-10-14 — Native installation overview and editable installation policy
 
 Operations administrators signed in through Access see every installation setting
