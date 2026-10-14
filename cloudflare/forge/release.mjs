@@ -1,6 +1,7 @@
 import { nativeBuildIdentity } from './build-identity.mjs';
 import { webhookBindings } from './src/webhooks.mjs';
 import { executionValueBindings } from './src/execution-values.mjs';
+import { emailBindings } from './src/email.mjs';
 import { accessBindings } from './src/access.mjs';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
@@ -55,9 +56,12 @@ export async function buildRelease(directory, executable) {
   Object.assign(config.env, webhookBindings(settings));
   delete config.env.EXECUTION_VALUE_KEY;
   Object.assign(config.env, executionValueBindings(settings));
+  delete config.env.EMAIL_POLICY; delete config.env.EMAIL;
+  Object.assign(config.env, emailBindings(settings));
   delete config.env.ACCESS_TEAM_DOMAIN;
   Object.assign(config.env, accessBindings(settings));
   if (settings.webhooks && !config.triggers?.some(trigger => trigger.type === 'scheduled')) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '* * * * *' }];
+  if (settings.email && !config.triggers?.some(trigger => trigger.type === 'scheduled')) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '*/5 * * * *' }];
   config.exports.RepositoryReads = { type: 'durable-object', storage: 'sqlite' };
   config.env.READ_INDEXES = { type: 'text', value: 'true' };
   try {
@@ -68,7 +72,7 @@ export async function buildRelease(directory, executable) {
   await esbuild.build({ entryPoints: ['cloudflare/forge/src/' + (settings.agent_path ? 'agent-entry.mjs' : settings.tests ? 'test-entry.mjs' : 'worker.mjs')], outfile: target + '.next', bundle: true, format: 'esm', platform: 'neutral',
     define: { GOLF_NATIVE_ASSETS: JSON.stringify(assets), GOLF_NATIVE_RELEASE: JSON.stringify(release), GOLF_NATIVE_CONFIGURATION: JSON.stringify(configuration) }, nodePaths: ['cloudflare/agents/node_modules'],
     conditions: ['workerd', 'worker', 'browser'], external: ['cloudflare:workers', 'node:*'] });
-  const manifest = { format: 1, release, contract: 1, schema: 26, account: settings.account, worker: settings.worker, database: settings.database.uuid,
+  const manifest = { format: 1, release, contract: 1, schema: 27, account: settings.account, worker: settings.worker, database: settings.database.uuid,
     namespace: settings.namespace, workspace: settings.workspace, origin: settings.origin, bucket: settings.evidence.bucket,
     previousBundleSha256: base, bundleSha256: hash(await readFile(target + '.next')), assets: retained, createdAt: new Date().toISOString() };
   await writeFile(resolve(root, 'release-manifest.json.next'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });

@@ -32,6 +32,11 @@ export function bindings(config) {
       case 'rate-limit': return { name, type: 'ratelimit', namespaceId: value.namespace, simple: value.simple };
       case 'secrets-store-secret': return { name, type: 'secrets_store_secret', storeId: value.storeId, secretName: value.secretName };
       case 'worker': return { name, type: 'service', service: value.worker, entrypoint: value.exportName };
+      // Sender-restricted only: a destination restriction would name mailboxes at deploy time, and recipients are each account's own address.
+      case 'send-email':
+        if (Object.keys(value).some(key => !['type', 'allowedSenderAddresses'].includes(key)) || !Array.isArray(value.allowedSenderAddresses) || value.allowedSenderAddresses.length !== 1 || typeof value.allowedSenderAddresses[0] !== 'string')
+          throw Error('Unqualified Alchemy email binding');
+        return { name, type: 'send_email', allowedSenderAddresses: value.allowedSenderAddresses };
       case 'dispatch-namespace': return { name, type: 'dispatch_namespace', namespace: value.namespace,
         outbound: { worker: { service: value.outbound.worker } } };
       default: throw Error('Unqualified Alchemy binding: ' + value.type);

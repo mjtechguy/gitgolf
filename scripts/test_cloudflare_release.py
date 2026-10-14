@@ -468,6 +468,43 @@ class ReleaseTests(unittest.TestCase):
             release.state['migration0022'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_public_schema([])
 
+    def test_email_migration_preserves_consent_and_recovers_missing_objects(self):
+        release = self.release()
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0027_email_notifications.sql').read_text()
+            self.assertTrue(schema.endswith(';\n\n' + migration))
+            db.executescript(schema[:schema.index(migration)])
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                self.assertNotIn('--', sql)
+                if sql.startswith(('PRAGMA', 'SELECT')):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost email migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0027'): release.check_email_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost email'): release.migrate_email_schema([])
+            applied = []; release.migrate_email_schema(applied)
+            self.assertEqual(applied, ['0027']); release.check_email_schema()
+            db.executescript("INSERT INTO users(id,login,email) VALUES(1,'owner','owner@example.com'); INSERT INTO email_preferences VALUES(1,3,1,'owner@example.com',0,'','2026'); INSERT INTO email_daily VALUES('2026-10-14',7);"
+                             "DROP TRIGGER email_source_event; DROP INDEX email_delivery_due;")
+            with self.assertRaisesRegex(ValueError, 'triggers or indexes'): release.check_email_schema()
+            applied = []; release.migrate_email_schema(applied)
+            self.assertEqual(applied, ['0027'])
+            self.assertEqual(tuple(db.execute('SELECT version,enabled,email FROM email_preferences').fetchone()), (3, 1, 'owner@example.com'))
+            self.assertEqual(db.execute('SELECT attempts FROM email_daily').fetchone()[0], 7)
+            applied = []; release.migrate_email_schema(applied)
+            self.assertEqual(applied, [])
+            release.state['migration0027'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_email_schema([])
+
     def test_environment_migration_resumes_without_replaying(self):
         release = self.release()
         with sqlite3.connect(':memory:') as db:

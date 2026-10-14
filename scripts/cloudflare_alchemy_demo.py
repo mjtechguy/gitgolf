@@ -90,6 +90,9 @@ def renew_deploy(directory, value):
         account_names.add('AI Gateway Write')
     if value.get('operationsAnalytics'):
         account_names.add('Account Analytics Read')
+    if value['settings'].get('email'):
+        # Registers the sending subdomain; the Worker itself sends through its binding and holds no token.
+        account_names.add('Email Sending Write')
     zone_names = {'Zone Read', 'DNS Write', 'Workers Routes Write'}
     policies = []
     for scope, names, resource in [('com.cloudflare.api.account', account_names, value['account']),
@@ -251,6 +254,23 @@ def enable_secrets(directory, value):
     workflow = (value['settings'].get('tests') or {}).get('workflow') or {}
     print('Repository value encryption key prepared; deploy to store and bind it.' + ('' if workflow.get('format') == 'actions' else
         ' Secrets and variables stay unavailable until this installation has an approved Actions workflow profile.'))
+
+
+def enable_email(directory, value, limit):
+    if type(limit) is not int or not 1 <= limit <= 5000:
+        raise ValueError('Use a daily email attempt limit between 1 and 5000')
+    if not re.fullmatch(r'[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+', value['hostname']) or len(value['hostname']) > 200:
+        raise ValueError('The installation hostname cannot name a sending subdomain')
+    # The outbox arrives with the current schema; the migrate action applies whatever the installation is missing.
+    current = hashlib.sha256((ROOT/'cloudflare/forge/schema.sql').read_text().encode()).hexdigest()
+    if json.loads(private_read(directory/'schema-receipt.json'))['sha256'] != current:
+        raise ValueError('Run the migrate action before enabling email')
+    # One sender on a sending subdomain of the installation's own hostname. No credential, and no recipient: mail goes to each account's own sign-in address.
+    sender = 'golf@mail.'+value['hostname']
+    value['settings']['email'] = {'sender': sender, 'dailyLimit': limit}
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Repository email prepared from '+sender+', at most '+str(limit)+' attempts a day; run renew-deploy for the Email Sending permission, then deploy.'
+        +' Deployment registers the sending subdomain. The capability stays degraded until Cloudflare accepts a first message.')
 
 
 def enable_public(directory, value):
@@ -454,9 +474,10 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email'])
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--days', type=int, default=7, help='lifetime for renew-credentials, 1 to 30 days')
+    parser.add_argument('--email-limit', type=int, default=200, help='daily send attempts for enable-email, 1 to 5000')
     parser.add_argument('--limit', type=int, default=300, help='approximate anonymous requests per period for enable-rate-limit, 10 to 10000')
     parser.add_argument('--period', type=int, default=60, choices=[10, 60], help='counting period in seconds for enable-rate-limit')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
@@ -474,6 +495,7 @@ def main():
     if args.action == 'enable-observability': return enable_observability(directory, value)
     if args.action == 'enable-analytics': return enable_analytics(directory, value)
     if args.action == 'enable-webhooks': return enable_webhooks(directory, value, args.origin)
+    if args.action == 'enable-email': return enable_email(directory, value, args.email_limit)
     if args.action == 'enable-ai': return enable_ai(directory, value, args.agent_path)
     if args.action == 'enable-workflow': return enable_workflow(directory, value, args.workflow_path)
     if args.action == 'enable-dead-letter': return enable_dead_letter(directory, value)

@@ -1,6 +1,7 @@
 import { nativeBuildIdentity } from './build-identity.mjs';
 import { webhookBindings } from './src/webhooks.mjs';
 import { executionValueBindings } from './src/execution-values.mjs';
+import { emailBindings } from './src/email.mjs';
 import { accessBindings } from './src/access.mjs';
 import { rateLimitBindings } from './src/rate-limit.mjs';
 import { defaultAppearance } from './src/public.mjs';
@@ -197,6 +198,9 @@ if (mode !== 'retire') {
   Object.assign(config.env, webhookBindings(settings));
   Object.assign(config.env, executionValueBindings(settings));
   if (settings.webhooks && !config.triggers?.some(trigger => trigger.type === 'scheduled')) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '* * * * *' }];
+  // A sender address and a limit; the binding refuses any other sender. Retries ride the schedule, or the workspace alarm when it does not run.
+  Object.assign(config.env, emailBindings(settings));
+  if (settings.email && !config.triggers?.some(trigger => trigger.type === 'scheduled')) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '*/5 * * * *' }];
 }
 if (mode !== 'retire' && (operations.analyticsSecret || operations.serviceHealth) && !config.triggers?.some(trigger => trigger.type === 'scheduled')) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '*/5 * * * *' }];
 await u.writeWorkerConfig({ root, config, manifest: { type: 'partial', mainModule: 'worker.mjs', modules: {} } });

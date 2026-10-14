@@ -35,6 +35,10 @@ export default Alchemy.Stack('GolfDemo', {
     spendLimits: { enabled: true, rules: [{ limitType: 'cost', limit: 500, window: '1 day' }] },
   });
   const dispatch = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace('Applications', { name });
+  // Email Service sends only from an onboarded subdomain of this zone; Cloudflare DNS receives its DKIM, SPF and return-path records.
+  // No copies of sent messages are kept in the provider's activity log.
+  const mail = input.settings.email ? yield* Cloudflare.Email.SendingSubdomain('Mail', {
+    zoneId: input.zone, name: input.settings.email.sender.split('@')[1], previewEnabled: false }) : undefined;
   const machine = yield* Cloudflare.Access.ServiceToken('Operator', { name: name + '-operator', duration: '5h' });
   const idp = yield* Cloudflare.Access.IdentityProvider('Login', { name, type: 'onetimepin', config: {} });
   const policies = [
@@ -116,6 +120,8 @@ export default Alchemy.Stack('GolfDemo', {
       ...(agents ? { PRAgentTask: Cloudflare.DurableObject('PRAgentTask', { containers: [agent] }) } : {}),
       EvidenceWorkflow: Cloudflare.Workflow('EvidenceWorkflow', { workflowName: name, limits: { steps } }),
       ALCHEMY_OUTBOUND_DEPENDENCY: outbound.workerName,
+      // The sender-restricted binding is uploaded only after its sending subdomain exists.
+      ...(mail ? { ALCHEMY_MAIL_DEPENDENCY: mail.subdomainId } : {}),
     },
   });
   yield* control.bind('native-contract', { bindings: config().pipe(Output.map(bindings)) });

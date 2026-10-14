@@ -15,7 +15,7 @@ test('release schema 27 is the latest migration and ends schema.sql after 25 and
   assert.equal(migrations.at(-1), '0027_email_notifications.sql');
   const latest = await readFile(new URL('./migrations/0025_repository_execution_policy.sql', import.meta.url), 'utf8') + '\n' + await readFile(new URL('./migrations/0026_execution_values.sql', import.meta.url), 'utf8') + '\n' + await readFile(new URL('./migrations/0027_email_notifications.sql', import.meta.url), 'utf8');
   const migration = await readFile(new URL('./migrations/0024_pull_merges.sql', import.meta.url), 'utf8'), schema = await readFile(new URL('./schema.sql', import.meta.url), 'utf8');
-  assert.match(await readFile(new URL('./release.mjs', import.meta.url), 'utf8'), /contract: 1, schema: 26, /);
+  assert.match(await readFile(new URL('./release.mjs', import.meta.url), 'utf8'), /contract: 1, schema: 27, /);
   // Tail migrations are appended after one blank line; the Alchemy migrate step peels exactly that.
   assert.ok(schema.endsWith(';\n\n' + migration + '\n' + latest));
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());

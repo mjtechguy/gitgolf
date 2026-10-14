@@ -220,6 +220,31 @@ keep the key, because saved subscriptions are encrypted with it. Receiver URLs
 and signing secrets are entered in the repository's Webhooks settings, never in
 this directory. Retries ride the stack's five-minute schedule.
 
+Enable repository email on a retained installation, after `migrate`:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-email NEW_DIRECTORY --email-limit 200
+python3 scripts/cloudflare_alchemy_demo.py renew-deploy NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+`enable-email` writes one sender, `golf@mail.HOSTNAME`, and a daily attempt
+limit to the private input; no key, token or recipient. The stack registers
+`mail.HOSTNAME` as a Cloudflare Email Service sending subdomain with message
+previews off, and binds `send_email` restricted to that sender. `renew-deploy`
+is needed once because the deployment token gains `Email Sending Write` only
+when email is enabled; it stops if the account does not offer that permission.
+Mail goes only to each subscriber's own Access sign-in address, after they
+enable it under Profile and subscribe on a repository's Webhooks page. The
+capability reads degraded until Cloudflare accepts a first message from the
+sender, and ready after that. A message's first attempt follows the request
+that caused it; retries and mail held by the daily limit ride the five-minute
+maintenance, from the Cron Trigger or, when none reports in, the workspace
+alarm. Not qualified live:
+whether the account may use Email Service, whether `Email Sending Write` covers
+the zone's subdomain endpoint, DNS validation of the subdomain, and whether an
+upload is refused while the subdomain is unverified.
+
 The stack's own API tokens (management, registry and, when enabled, analytics)
 expire seven days after `prepare`. When they lapse, app previews, registry
 publishing and the analytics feed stop. Extend them before that:

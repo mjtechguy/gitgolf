@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -129,6 +129,8 @@ class Release:
             self.check_execution_policy_schema()
         if self.manifest['schema'] >= 26:
             self.check_execution_value_schema()
+        if self.manifest['schema'] >= 27:
+            self.check_email_schema()
         deployments =self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -211,6 +213,8 @@ class Release:
             self.migrate_execution_policy_schema(applied)
         if self.manifest['schema'] >= 26:
             self.migrate_execution_value_schema(applied)
+        if self.manifest['schema'] >= 27:
+            self.migrate_email_schema(applied)
         return applied or 'already-applied'
 
     def check_execution_policy_schema(self):
@@ -322,6 +326,47 @@ class Release:
             self.command('d1', 'query', self.manifest['database'], '--sql', sql)
             self.check_public_schema()
             self.state['migration0022'] = digest; self.save(); applied.append('0022')
+
+    def check_email_schema(self):
+        required = {
+            'email_preferences': {'user_id', 'version', 'enabled', 'email', 'identity_version', 'suppression', 'updated_at'},
+            'email_subscriptions': {'id', 'user_id', 'repository_id', 'artifact_name', 'version', 'event_topics', 'workflow_notifications', 'enabled', 'identity_version', 'grant_generation', 'created_at', 'updated_at'},
+            'email_deliveries': {'id', 'subscription_id', 'subscription_version', 'user_id', 'repository_id', 'identity_version', 'event_id', 'event_topic', 'automatic_key', 'input_hash', 'state', 'attempts', 'failure_code', 'possible_duplicate', 'sender', 'provider_message_id', 'lease', 'lease_until', 'next_attempt_at', 'created_at', 'completed_at'},
+            'email_daily': {'day', 'attempts'},
+            'email_acceptance': {'sender', 'delivery_id', 'accepted_at'},
+            'email_maintenance': {'stage', 'started_at', 'completed_at', 'last_success_at', 'outcome', 'processed', 'pending'},
+        }
+        for table, fields in required.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info(' + table + ')')[0]['results']
+            if {row['name'] for row in columns} != fields:
+                raise ValueError('Apply reviewed 0027 email notification migration before releasing')
+        objects = self.command('d1', 'query', self.manifest['database'], '--sql', "SELECT name FROM sqlite_master WHERE name LIKE 'email_%' AND type IN ('trigger','index')")[0]['results']
+        expected = {'email_subscription_repository', 'email_delivery_inventory', 'email_delivery_due', 'email_delivery_pending', 'email_discussion_event', 'email_source_event', 'email_test_admission_event', 'email_test_state_event'}
+        if not expected.issubset({row['name'] for row in objects}):
+            raise ValueError('Email outbox triggers or indexes are missing')
+
+    def migrate_email_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0027_email_notifications.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0027') not in (None, digest):
+            raise ValueError('Recorded email notification migration differs from reviewed source')
+        statements, pending = [], ''
+        for line in re.sub(r'--[^\n]*', '', sql).splitlines(keepends=True):
+            pending += line
+            if sqlite3.complete_statement(pending):
+                statements.append(pending.strip()); pending = ''
+        reviewed = r'CREATE (?:TABLE IF NOT EXISTS email_(?:preferences|subscriptions|deliveries|daily|acceptance|maintenance)|INDEX IF NOT EXISTS email_(?:subscription_repository|delivery_inventory|delivery_due|delivery_pending)|TRIGGER IF NOT EXISTS email_(?:discussion|source|test_admission|test_state)_event)\b'
+        if pending.strip() or len(statements) != 14 or any(not re.match(reviewed, statement) for statement in statements):
+            raise ValueError('Email migration must only add reviewed outbox tables, indexes and triggers')
+        ready = False
+        try:
+            self.check_email_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0027') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', '\n'.join(statements))
+            self.check_email_schema()
+            self.state['migration0027'] = digest; self.save(); applied.append('0027')
 
     def check_execution_value_schema(self):
         required = {'execution_value_brokers': {'repository_id', 'artifact_name', 'revision'},
