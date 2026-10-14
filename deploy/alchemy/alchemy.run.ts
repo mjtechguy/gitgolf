@@ -60,6 +60,10 @@ export default Alchemy.Stack('GolfDemo', {
   const registry = yield* Cloudflare.ApiToken.AccountApiToken('RegistryAuthority', {
     name: name + '-registry', expiresOn: input.expiresAt, policies: policy(['Workers Containers Write']),
   });
+  // The operations feed reads Worker analytics with its own read-only token, never the management one.
+  const analytics = input.operationsAnalytics ? yield* Cloudflare.ApiToken.AccountApiToken('AnalyticsAuthority', {
+    name: name + '-analytics', expiresOn: input.expiresAt, policies: policy(['Account Analytics Read']),
+  }) : undefined;
   const store = input.secretStoreId ? { storeId: input.secretStoreId, accountId: input.account }
     : yield* Cloudflare.SecretsStore.Store('Secrets');
   const secrets = yield* Effect.all([
@@ -67,6 +71,7 @@ export default Alchemy.Stack('GolfDemo', {
     Cloudflare.SecretsStore.Secret('RegistrySecret', { store, name: name + '-registry', value: registry.value }),
     Cloudflare.SecretsStore.Secret('SigningSecret', { store, name: name + '-signing', value: Redacted.make(input.signingKey) }),
     ...(input.webhookKey ? [Cloudflare.SecretsStore.Secret('WebhookSecret', { store, name: name + '-webhook', value: Redacted.make(input.webhookKey) })] : []),
+    ...(analytics ? [Cloudflare.SecretsStore.Secret('AnalyticsSecret', { store, name: name + '-analytics', value: analytics.value })] : []),
   ]);
   const settings = Output.all(db.databaseId, controlAccess.aud, previewAccess.aud,
     bucket.bucketName, queue.queueName, dispatch.name, ...secrets.map(s => s.storeId)).pipe(Output.map(([databaseId, aud, previewAud, , , , storeId]) => ({
@@ -76,6 +81,7 @@ export default Alchemy.Stack('GolfDemo', {
       apps: { ...input.settings.apps, provisioner: { store: storeId, name: name + '-management' },
         policy: { ...input.settings.apps.policy, secret: { store: storeId, name: name + '-signing' } } },
       ...(input.webhookKey ? { webhooks: { ...input.settings.webhooks, key: { store: storeId, name: name + '-webhook' } } } : {}),
+      ...(analytics ? { operations: { ...input.settings.operations, analytics_secret: { store: storeId, name: name + '-analytics' } } } : {}),
   })));
   const build = yield* Command.Build('NativeBuild', {
     command: 'python3 scripts/cloudflare_alchemy_demo.py build', cwd: root, outdir: resolve(directory, '.cloudflare'),

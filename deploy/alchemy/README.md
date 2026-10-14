@@ -240,6 +240,18 @@ container application for a Durable Object class in the same run that creates
 the class: the first deploy stops with `requires a resolved Durable Object
 namespace` after updating the Worker, and a second `deploy` completes it.
 
+Add service probes and the Workers analytics feed to Operations:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-operations NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py renew-deploy NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+Probes use the existing Artifacts and R2 bindings. The feed reads Worker
+analytics with a separate account token that holds only `Account Analytics
+Read`, stored in Secrets Store; the management token is not reused.
+
 Retain failed evidence deliveries with a dead-letter queue:
 
 ```sh

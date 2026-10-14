@@ -88,6 +88,8 @@ def renew_deploy(directory, value):
         'Access: Organizations, Identity Providers, and Groups Write', 'Access: Service Tokens Write'}
     if value['settings']['evidence'].get('allow_ai'):
         account_names.add('AI Gateway Write')
+    if value.get('operationsAnalytics'):
+        account_names.add('Account Analytics Read')
     zone_names = {'Zone Read', 'DNS Write', 'Workers Routes Write'}
     policies = []
     for scope, names, resource in [('com.cloudflare.api.account', account_names, value['account']),
@@ -157,6 +159,14 @@ def enable_observability(directory, value):
     operations['observability'] = {'enabled': True, 'sampling': 0.01}
     replace_private_json(directory/'alchemy-input.json', value)
     print('Bounded performance collection prepared; deploy to apply it with 1% redacted request logging.')
+
+
+def enable_operations(directory, value):
+    # Probes use the existing Artifacts and R2 bindings; the analytics feed gets its own read-only token at deploy.
+    value['settings'].setdefault('operations', {})['service_health'] = True
+    value['operationsAnalytics'] = True
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Service probes and the Workers analytics feed prepared; run renew-deploy for the analytics permission, then deploy.')
 
 
 def enable_analytics(directory, value):
@@ -403,7 +413,7 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-dead-letter', 'migrate'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-dead-letter', 'enable-operations', 'migrate'])
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
     parser.add_argument('directory', nargs='?')
@@ -420,6 +430,7 @@ def main():
     if args.action == 'enable-webhooks': return enable_webhooks(directory, value, args.origin)
     if args.action == 'enable-ai': return enable_ai(directory, value, args.agent_path)
     if args.action == 'enable-dead-letter': return enable_dead_letter(directory, value)
+    if args.action == 'enable-operations': return enable_operations(directory, value)
     if args.action == 'migrate': return migrate(directory, value)
     if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)

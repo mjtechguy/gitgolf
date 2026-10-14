@@ -67,6 +67,14 @@ class Observability(unittest.TestCase):
             saved=json.loads((directory/'alchemy-input.json').read_text())['settings']['operations']
             self.assertEqual(saved,{'service_health':True,'analytics_secret':{'store':'store','name':'secret'},'observability':{'enabled':True,'sampling':0.01}})
 
+    def test_enabling_operations_keeps_observability_and_requests_the_read_only_feed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            value={'settings':{'operations':{'observability':{'enabled':True,'sampling':0.01}}}}
+            demo.enable_operations(directory,value)
+            saved=json.loads((directory/'alchemy-input.json').read_text())
+            self.assertEqual(saved,{'settings':{'operations':{'observability':{'enabled':True,'sampling':0.01},'service_health':True}},'operationsAnalytics':True})
+
     def test_enabling_analytics_names_a_valid_dataset_and_keeps_other_settings(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory=Path(temporary)
