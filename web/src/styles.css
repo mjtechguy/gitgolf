@@ -2094,3 +2094,18 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .probability-bar meter::-moz-meter-bar { border-radius:4px; background:var(--line-strong); }
 .probability-bar li.chosen meter::-moz-meter-bar { background:var(--accent); }
 @media(max-width:480px) { .probability-bar li { grid-template-columns:minmax(0,1fr) 3rem; gap:4px 10px; } .probability-bar meter { grid-column:1 / -1; grid-row:2; } }
+/* Workers AI review draft: findings grouped by file, severity chips from the existing status tones, the action row under them. */
+.ai-findings { display:grid; gap:10px; }
+.ai-finding-file { border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); overflow:hidden; }
+.ai-finding-file h4 { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:4px 12px; margin:0; padding:7px 12px; border-bottom:1px solid var(--line); background:var(--raised); font-size:.8125rem; font-weight:600; }
+.ai-finding-file h4 code { font-family:var(--mono); overflow-wrap:anywhere; }
+.ai-finding-file h4 .muted { font-weight:500; }
+.ai-finding-file ol { margin:0; padding:0; list-style:none; }
+.ai-finding { display:grid; gap:4px; padding:10px 12px; }
+.ai-finding + .ai-finding { border-top:1px solid var(--line); }
+.ai-finding-head { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
+.ai-finding-head code { font-family:var(--mono); font-size:.8125rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+.ai-finding p { margin:0; color:var(--muted); line-height:1.55; }
+.ai-finding-suggestion span { margin-right:8px; color:var(--text); font-size:.75rem; font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+.ai-advisory-body > .row-actions { flex-wrap:wrap; gap:8px; }
+.ai-advisory-empty svg { vertical-align:-2px; margin-right:4px; }
