@@ -10,6 +10,7 @@ import { executionValueState } from './execution-values.mjs';
 import { operationsAdmin } from './operations.mjs';
 import { auditStatement, clientHeaders, locked } from './installation.mjs';
 import { settingsAuthority } from './repository-settings.mjs';
+import { searchUnallocated } from './search.mjs';
 
 // GitHub-style features: operator allocation ∩ installation ∩ organization ∩ repository choice ∩ dependencies.
 // Missing rows mean ALLOWED and enabled, so the migration alone changes nothing. Turning a feature off never deletes data.
@@ -30,6 +31,7 @@ const catalogue = [
   { id: 'email', label: 'Email notifications', plural: true, group: 'Integrations', requires: [], choice: true, allocated: env => Boolean(emailPolicy(env)) || 'The operator has not configured Cloudflare Email Service with Access sign-in on this installation.' },
   { id: 'releases', label: 'Releases', plural: true, group: 'Distribution', requires: [], choice: true, allocated: env => Boolean(env.EVIDENCE_BUCKET) || 'Releases need the private R2 bucket binding on this installation.' },
   { id: 'packages', label: 'Packages', plural: true, group: 'Distribution', requires: [], choice: true, allocated: env => Boolean(env.REGISTRY && env.REGISTRY_ORIGIN) || 'The operator has not connected an OCI registry to this installation.' },
+  { id: 'semantic-search', label: 'Semantic search', group: 'Collaboration', requires: [], choice: true, allocated: env => searchUnallocated(env) || true },
   { id: 'public-repositories', label: 'Public repositories', plural: true, group: 'Distribution', requires: [], choice: false, allocated: env => env.PUBLIC_REPOSITORIES === 'true' || 'The operator has not enabled public repositories for this deployment.' },
 ];
 const known = new Map(catalogue.map(feature => [feature.id, feature]));
@@ -142,7 +144,7 @@ export async function discussionFeatures(db, person, row, service, method, body)
 const capabilityFeatures = { 'native-pr-tests': 'actions', 'native-ci-automatic': 'actions', 'settings.repository-execution-policy': 'actions', 'settings.repository-secrets': 'secrets',
   'native-pr-previews': 'previews', 'native-preview-browser': 'previews', 'native-pr-apps': 'previews', 'settings.repository-environments': 'previews', 'native-pr-agents': 'agents',
   'discussion.attachments': 'attachments', 'settings.repository-webhooks': 'webhooks', 'repository.email-notifications': 'email', 'repository.releases': 'releases',
-  'repository.packages': 'packages', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues',
+  'repository.packages': 'packages', 'repository.semantic-search': 'semantic-search', 'ci.registry-publish': 'packages', 'repository.public-source': 'public-repositories', 'pull.merge': 'merge', 'discussion.templates': 'issues',
   ...Object.fromEntries(['pull.merge-observation', 'pull.review-requests', 'pull.review-lifecycle', 'pull.pending-reviews', 'pull.codeowners'].map(id => [id, 'pull-requests'])) };
 export async function policyCapabilities(db, env, capabilities) {
   const { results } = await db.prepare("SELECT scope,feature,mode FROM feature_policies WHERE scope='installation' AND scope_id=''").all();
