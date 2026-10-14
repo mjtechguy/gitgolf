@@ -1,5 +1,75 @@
 # Golf implementation status
 
+## 2026-10-14 — Hosted run of real repositories on stock runners, in kind, and live AI and search checks
+
+Run on `https://demo.gitgolf.mjtechguy.com` (schema 35, deployed before the fixes
+below) with unmodified Forgejo Runner v13.2.0 and GitLab Runner 18.5.0, from this
+machine and from a kind cluster.
+
+Hosted evidence:
+
+- **Registration:** installation registration tokens made on Settings > Runners
+  registered both stock runners; they declared their labels and polled. A
+  push to a new repository created a run within seconds.
+- **`mj/actions-demo`** (matrix 20/22, postgres service reached by name, secret
+  and variable, v4 artifacts, `needs` outputs, `workflow_dispatch` input, an
+  environment): run 1 failed at the secret step as it should without the secret;
+  after adding `DEMO_SECRET` and `GREETING` in the settings page, run 2
+  (dispatched from the Actions tab) succeeded in 1m 9s with two artifacts. The
+  unmodified `actions/upload-artifact@v4` still refuses this server upstream and is
+  marked `continue-on-error`.
+- **`mj/chalk`**, upstream `.github/workflows/main.yml` unchanged: Node.js 26 and
+  22 succeeded (1m 36s).
+- **`mj/inkscape-extensions`**, upstream `.gitlab-ci.yml` unchanged, 3,403 commits
+  pushed in four steps: `codestyle:ci`, `archive` (5.2 MB artifact in R2), five
+  `test:linux` matrix jobs, `mypy` and `sphinx` succeeded; both Windows jobs
+  waited with "Waiting for a runner with saas-windows-medium-amd64" and
+  `test:coverage` stayed blocked, as on GitLab. Pipelines for older pushed commits
+  ran their old configuration and failed upstream (`pyenv: version 3.6.8 not
+  installed`).
+- **Kubernetes CD (`mj/kind-deploy-demo`):** stock runners as Deployments in kind
+  (Forgejo Runner with a DinD sidecar, GitLab Runner with the Kubernetes
+  executor). The GitHub workflow ran `test`, `image` (`docker build` and push to
+  the kind registry), then waited at the `kind-production` environment (required
+  reviewer, secret `KIND_KUBECONFIG`) and deployed after approval; the service in
+  kind answered with the pushed commit. The GitLab pipeline ran `test`, a kaniko
+  `build`, a manual `deploy` and the same approval, and rolled out its own commit.
+  The Deployments panel lists three successful and two failed deployments (the
+  failures were demo-configuration errors, below).
+- **Audit log:** `/admin/audit` showed the repository, Git credential, secret and
+  variable rows for this session with actor, location and outcome. Runner
+  registration tokens, runner edits and pipeline actions had no rows (fixed in a
+  separate change).
+- **AI review draft:** GLM 5.3 returned a valid draft for the open pull request in
+  `mj/review-playground` (1,106 tokens, one high-severity finding), state
+  SUCCEEDED.
+- **Semantic search:** `mj/review-playground` index READY and verified (8 files,
+  10 chunks, `@cf/qwen/qwen3-embedding-0.6b`, 1024 dimensions); a natural-language
+  query returned ranked excerpts with scores.
+
+Defects found and fixed: pushes over 1 MiB failed with HTTP 400 (git's chunked
+probe), an oversized push returned 503 instead of 413, and the page printed
+`gitlab-runner register --token`, which stock GitLab Runner rejects for
+registration tokens (needs `--registration-token`). Runner token and pipeline
+action audit rows were missing.
+
+Findings left open:
+
+- The installation's default actions host is `code.forgejo.org`, which has
+  `actions/checkout` and `actions/setup-node` but not every marketplace action
+  (`azure/setup-kubectl` failed to resolve). Write a full `https://github.com/…`
+  URL in `uses:`, or enable pipelines with `--actions-url https://github.com`.
+- Settings > Secrets and variables and Settings > Environments still describe the
+  older approved-workflow path ("required reviewers … are not available on this
+  installation") even though pipelines are on and Actions > Environments holds
+  reviewers, branch rules and environment secrets.
+- A stock runner warns `ReportState error: not all logs are submitted 1 remain`
+  once per job; jobs complete normally.
+- One kaniko build in kind failed to resolve `kind-registry` (it queried 1.1.1.1:53)
+  and passed on the next pipeline; not reproduced or explained.
+- Not run on hosted: node-postgres, pages/hugo, itsdangerous, organization-scope
+  runners, `schedule` triggers, triage and release-notes drafts with real models.
+
 ## 2026-10-14 — AI pull request summary and review draft (AI-B)
 
 Writers can ask Workers AI, through the private AI Gateway, to read up to 96 KiB
