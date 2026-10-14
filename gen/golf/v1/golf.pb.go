@@ -1125,6 +1125,9 @@ const (
 	WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_UNSPECIFIED WorkflowRunOrigin = 0
 	WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_MANUAL      WorkflowRunOrigin = 1
 	WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_PUSH        WorkflowRunOrigin = 2
+	// A pull-request job at the pull request's head. Cloudflare native source approvals
+	// only; the portable server neither emits it nor accepts it.
+	WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_PULL_REQUEST WorkflowRunOrigin = 3
 )
 
 // Enum value maps for WorkflowRunOrigin.
@@ -1133,11 +1136,13 @@ var (
 		0: "WORKFLOW_RUN_ORIGIN_UNSPECIFIED",
 		1: "WORKFLOW_RUN_ORIGIN_MANUAL",
 		2: "WORKFLOW_RUN_ORIGIN_PUSH",
+		3: "WORKFLOW_RUN_ORIGIN_PULL_REQUEST",
 	}
 	WorkflowRunOrigin_value = map[string]int32{
-		"WORKFLOW_RUN_ORIGIN_UNSPECIFIED": 0,
-		"WORKFLOW_RUN_ORIGIN_MANUAL":      1,
-		"WORKFLOW_RUN_ORIGIN_PUSH":        2,
+		"WORKFLOW_RUN_ORIGIN_UNSPECIFIED":  0,
+		"WORKFLOW_RUN_ORIGIN_MANUAL":       1,
+		"WORKFLOW_RUN_ORIGIN_PUSH":         2,
+		"WORKFLOW_RUN_ORIGIN_PULL_REQUEST": 3,
 	}
 )
 
@@ -64967,11 +64972,12 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x19WORKFLOW_RUN_STATE_FAILED\x10\x04\x12 \n" +
 	"\x1cWORKFLOW_RUN_STATE_CANCELLED\x10\x05\x12 \n" +
 	"\x1cWORKFLOW_RUN_STATE_TIMED_OUT\x10\x06\x12\x1b\n" +
-	"\x17WORKFLOW_RUN_STATE_LOST\x10\a*v\n" +
+	"\x17WORKFLOW_RUN_STATE_LOST\x10\a*\x9c\x01\n" +
 	"\x11WorkflowRunOrigin\x12#\n" +
 	"\x1fWORKFLOW_RUN_ORIGIN_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aWORKFLOW_RUN_ORIGIN_MANUAL\x10\x01\x12\x1c\n" +
-	"\x18WORKFLOW_RUN_ORIGIN_PUSH\x10\x02*\xa7\x02\n" +
+	"\x18WORKFLOW_RUN_ORIGIN_PUSH\x10\x02\x12$\n" +
+	" WORKFLOW_RUN_ORIGIN_PULL_REQUEST\x10\x03*\xa7\x02\n" +
 	"\x11WorkflowStepState\x12#\n" +
 	"\x1fWORKFLOW_STEP_STATE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bWORKFLOW_STEP_STATE_PENDING\x10\x01\x12\x1f\n" +

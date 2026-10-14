@@ -5,6 +5,7 @@ import { bounded, sha, validRef } from './git.mjs';
 import { executionDiagnostic, nativeTestContract, testModuleOK, testTerminal } from './test-policy.mjs';
 import { nativeWorkflowContract, nativeWorkflowPath, nativeWorkflowPlanOK } from './native-workflow.mjs';
 import { registryNameOK } from './managed-registry.mjs';
+import { maskExecutionResult } from './execution-values.mjs';
 
 const trust = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: '/auth',
   GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
@@ -36,7 +37,7 @@ export class PRTestTask extends DurableObject {
   async create(input) {
     const workflow = input?.contract === nativeWorkflowContract;
     if (!input || input.contract !== undefined && ![nativeTestContract, nativeWorkflowContract].includes(input.contract) ||
-        Object.keys(input).some(key => !(workflow ? ['contract', 'jobId', 'commitId', 'treeId', 'branch', 'workflow', 'workflowSha256', 'policySha256', 'remote', 'deadline', 'registry'] :
+        Object.keys(input).some(key => !(workflow ? ['contract', 'jobId', 'commitId', 'treeId', 'branch', 'workflow', 'workflowSha256', 'policySha256', 'remote', 'deadline', 'registry', 'values'] :
           ['contract', 'jobId', 'commitId', 'treeId', 'branch', 'module', 'policySha256', 'remote', 'deadline', 'registry']).includes(key)) ||
         !uuidOK(input.jobId) || !sha(input.commitId) || !sha(input.treeId) || typeof input.branch !== 'string' || !validRef('refs/heads/' + input.branch) ||
         (workflow ? !input.workflow || Object.keys(input.workflow).some(key => !['path', 'blobId', 'plan'].includes(key)) ||
@@ -44,6 +45,10 @@ export class PRTestTask extends DurableObject {
           !/^[a-f0-9]{64}$/.test(input.workflowSha256 || '') || input.workflowSha256 !== await digest(JSON.stringify(input.workflow)) : !testModuleOK(input.module)) ||
         !/^[a-f0-9]{64}$/.test(input.policySha256 || '') || !Number.isSafeInteger(input.deadline) || input.deadline <= Date.now() || input.deadline > Date.now() + 600000 ||
         typeof input.remote !== 'string' || !/^https:\/\/[a-f0-9]{32}\.artifacts\.cloudflare\.net\/git\/[a-z0-9-]{3,63}\/repo-[a-f0-9]{32}\.git$/.test(input.remote)) throw Error('Invalid test admission');
+    // Admission names an approval and value versions only; the hash below binds them to this one task.
+    if (input.values !== undefined && (input.workflow.plan.format !== 'actions' || !input.values || Object.keys(input.values).sort().join(',') !== 'bindingId,bindingVersion,refs' || !uuidOK(input.values.bindingId) ||
+        !Number.isSafeInteger(input.values.bindingVersion) || input.values.bindingVersion < 1 || !Array.isArray(input.values.refs) || input.values.refs.length < 1 || input.values.refs.length > 64 ||
+        input.values.refs.some(ref => !ref || Object.keys(ref).sort().join(',') !== 'id,version' || !uuidOK(ref.id) || !Number.isSafeInteger(ref.version) || ref.version < 1))) throw Error('Invalid value admission');
     if(input.registry && (typeof input.registry !== 'object' || Array.isArray(input.registry) || Object.keys(input.registry).some(key=>!['origin','name'].includes(key)) || this.env.REGISTRY_CI_ENABLED!=='true' || input.registry.origin!==this.env.REGISTRY_ORIGIN || !registryNameOK(this.env,input.registry.name))) throw Error('Invalid registry admission');
     const hash = await digest(JSON.stringify(input));
     // One task ID admits one process; an uncertain dispatch never starts it again.
@@ -87,13 +92,20 @@ export class PRTestTask extends DurableObject {
     if (r.contract === nativeWorkflowContract && await this.checked(['git', 'rev-parse', 'HEAD:' + r.workflow.path]) !== r.workflow.blobId) throw Error('Selected workflow moved');
     if ((await this.owner().evidence(r.jobId, 'authorize-test')).state !== 'AUTHORIZED') return this.finish('CANCELLED');
     this.phase('test');
+    let values = {};
+    if (r.values) {
+      // Released at the last moment under a fresh authorization. The text lives in this isolate's memory and the step environment, never in the stored record.
+      const released = await this.owner().testValues(r.jobId);
+      if (released?.state !== 'RELEASED') return this.finish('CANCELLED');
+      values = released.environment; this.secrets = released.secrets;
+    }
     const environment = { ...trust, ...(r.registry?{GOLF_REGISTRY:r.registry.origin,GOLF_IMAGE:r.registry.name+':ci-'+r.jobId,GOLF_COMMIT:r.commitId}:{}) };
     const run = async (argv, suffix = '', extraEnv = {}) => {
       const seconds = Math.min(60, Math.ceil((r.deadline - Date.now()) / 1000));
       if (seconds <= 0) return { exitCode: 124, stdout: '', stderr: '' };
       // Wheel/source artifacts share the registry's 32 MiB file bound; logs retain their separate read bound.
       const script = `ulimit -f 65536; timeout --signal=TERM --kill-after=5s ${seconds}s "$@" > /workspace/task/stdout${suffix} 2> /workspace/task/stderr${suffix}`;
-      const process = await this.container.exec(['/bin/sh', '-c', script, 'golf-test', ...argv], { cwd: '/workspace/repo', env: { ...environment, ...extraEnv }, user: '1000:1000' });
+      const process = await this.container.exec(['/bin/sh', '-c', script, 'golf-test', ...argv], { cwd: '/workspace/repo', env: { ...values, ...environment, ...extraEnv }, user: '1000:1000' });
       const output = await process.output();
       const read = async path => new TextDecoder('utf-8', { fatal: true }).decode(await bounded((await this.files.readFile(path + suffix)).body, 32768));
       return { exitCode: output.exitCode, stdout: await read('/workspace/task/stdout'), stderr: await read('/workspace/task/stderr') };
@@ -144,6 +156,8 @@ export class PRTestTask extends DurableObject {
     if (testTerminal.has(r.state) && r.cleanup === 'destroyed') return this.status();
     // Destruction interrupts in-flight preparation; its error must not replace the first terminal result.
     if (this.finishing) return this.finishing;
+    // Every result passes here before it is stored, so nothing a step printed is kept unmasked.
+    output = maskExecutionResult(output, this.secrets);
     if (!testTerminal.has(r.state)) this.record = { ...r, state, stage: 'terminal', failureStage: r.stage, exitCode: null, stdout: '', stderr: '', finishedAt: Date.now(), ...output };
     this.finishing = (async () => {
       await this.ctx.storage.deleteAlarm();
@@ -166,6 +180,11 @@ export class PRTestTask extends DurableObject {
       ...(r.state === 'LOST' ? { failureStage: r.failureStage, diagnostic: r.diagnostic || '' } : {}) };
   }
   cancel() { return this.finish('CANCELLED'); }
+  // After a release, only this task's own fixed messages are kept: a runtime or broker message could quote what a step sent it.
+  diagnostic(error) {
+    return !this.secrets || ['Native workflow log limit', 'payload limit', 'Registry publication readback unavailable', 'Registry publication digest differs'].includes(error?.message) ? executionDiagnostic(error) :
+      'Execution failed after repository values were released; the runtime message is withheld.';
+  }
   async alarm() {
     if (!this.record || testTerminal.has(this.record.state) && this.record.cleanup === 'destroyed') return;
     try {
@@ -173,8 +192,7 @@ export class PRTestTask extends DurableObject {
       if (this.record.state !== 'ADMITTED') return await this.finish('LOST');
       await this.prepare();
     } catch (error) {
-      const diagnostic = executionDiagnostic(error);
-      await this.finish('LOST', { diagnostic });
+      await this.finish('LOST', { diagnostic: this.diagnostic(error) });
     }
   }
   async outbound(request) {
@@ -186,7 +204,7 @@ export class PRTestTask extends DurableObject {
         return response;
       }
       catch (error) {
-        await this.finish('LOST', { diagnostic: executionDiagnostic(error) });
+        await this.finish('LOST', { diagnostic: this.diagnostic(error) });
         return new Response('Registry broker unavailable', { status: 503 });
       }
     }

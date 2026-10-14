@@ -6,6 +6,7 @@ import { create } from '@bufbuild/protobuf';
 import { GetAuthenticationOptionsResponseSchema,GetSessionResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryAccessResponseSchema, ListRepositoryExecutionValuesResponseSchema, SaveRepositoryExecutionValueRequestSchema, GetRepositoryExecutionValueOperationRequestSchema, RepositoryExecutionValueKind as Kind, type RepositoryExecutionValue, type InheritedExecutionValue, ExecutionValueScope as Scope, SaveRepositoryExecutionBindingRequestSchema, GetRepositoryExecutionVariableResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, PrepareWorkflowDispatchRequestSchema, PrepareWorkflowDispatchResponseSchema, WorkflowDispatchInputDefinitionSchema, WorkflowDispatchInputType as InputType, WorkflowFormat, WorkflowInspectionState, RepositoryExecutionBindingSchema, type RepositoryExecutionBinding } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
+import { WorkflowRunOrigin as Origin } from '../src/gen/golf/v1/golf_pb';
 
 // This mounts the actual new component/Connect client in a test-only host. The
 // product route/API registration is a separate parent-owned integration proof.
@@ -94,3 +95,72 @@ test('mismatched preparation preserves reviewed text but cannot save approval',a
 test('preparation permission loss clears private input text without approval',async({page})=>{const s=await typedFixture(page);s.prepareDenied=true;await typedApproval(page);await page.getByLabel('text value',{exact:true}).fill('private notes');await page.getByRole('button',{name:'Approve exact source with inputs',exact:true}).click();await expect(page.getByRole('form',{name:'Approval inputs',exact:true})).toHaveCount(0);expect(s.bindingWrites).toHaveLength(0);});
 test('late preparation after current-authority refresh cannot write or restore private draft',async({page})=>{const s=await typedFixture(page);let release!:()=>void;s.prepareBarrier=new Promise<void>(resolve=>{release=resolve;});await typedApproval(page);await page.getByLabel('text value',{exact:true}).fill('private notes');await page.getByRole('button',{name:'Approve exact source with inputs',exact:true}).click();await expect.poll(()=>s.prepared.length).toBe(1);await page.getByRole('button',{name:'Refresh execution values',exact:true}).click();release();await expect(page.getByRole('form',{name:'Approval inputs',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Add approval',exact:true})).toBeEnabled();expect(s.bindingWrites).toHaveLength(0);});
 for(const theme of ['dark','light'])test(`typed approval shared editor uses real fonts and bounded mobile layout ${theme}`,async({page})=>{await page.setViewportSize({width:390,height:844});await typedFixture(page);await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);await typedApproval(page);await expect(page.getByRole('form',{name:'Approval inputs',exact:true})).toBeVisible();await page.evaluate(()=>document.fonts.ready);expect(await page.evaluate(()=>document.fonts.check('14px Archivo'))).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByLabel('text value',{exact:true}).fill('<script>unsafe</script>');expect(await page.locator('script').filter({hasText:'unsafe'}).count()).toBe(0);});
+
+
+// Cloudflare native: one operator-approved workflow path, pull-request jobs only, no typed input service.
+async function nativeBackend(page: Page) {
+ const state = await backend(page); state.rows = [createValue('10000000-0000-4000-8000-000000000001', 'BUILD_CREDENTIAL', Kind.SECRET)]; state.revision = '1';
+ const native = { bindings: [] as RepositoryExecutionBinding[], writes: [] as ReturnType<typeof create<typeof SaveRepositoryExecutionBindingRequestSchema>>[], config: 0 };
+ const service = '**/rpc/golf.v1.RepositoryExecutionValueService/';
+ await page.route('**/rpc/golf.v1.CapabilityService/ListCapabilities', route => respond(route, ListCapabilitiesResponseSchema, { runtimeProfile: 'cloudflare-native', capabilities: [{ id: 'settings.repository-secrets', label: 'Secrets and variables', state: 3, reason: 'Native fixture.' }] }));
+ await page.route('**/native/config', route => { native.config++; return route.fulfill({ status: 200, contentType: 'application/json', json: { runtimeProfile: 'cloudflare-native', testWorkflowPath: '.github/workflows/check.yml' } }); });
+ await page.route(service + 'ListRepositoryExecutionValues', route => respond(route, ListRepositoryExecutionValuesResponseSchema, { target, brokerRevision: state.revision, values: state.rows, bindings: native.bindings, maximumValues: 64, maximumBindings: 20, consumerProfile: 'golf.repository-env.v1' }));
+ await page.route(service + 'SaveRepositoryExecutionBinding', route => {
+  const input = request(route, SaveRepositoryExecutionBindingRequestSchema); native.writes.push(input); state.revision = '2';
+  native.bindings = [create(RepositoryExecutionBindingSchema, { id: input.id, version: '1', workflowPath: input.workflowPath, commitId: input.commitId, workflowBlobId: 'b'.repeat(40), sourceSha256: 'f'.repeat(64), engineCatalog: 'golf.native.workflow-shell.v1', event: input.event, eventRef: input.eventRef, expiresAt: '2099-10-04T12:00:00Z', approvalState: 'requires_current_authority', values: input.values, createdAt: date, updatedAt: date })];
+  return route.fulfill({ status: 200, contentType: 'application/json', json: { operation: { target, operationId: input.operationId, action: 'save_binding', itemId: input.id, acceptedVersion: '1', acceptedBrokerRevision: '2', committedAt: date } } });
+ });
+ return { state, native };
+}
+test('native approvals cover the approved workflow at a pull request head and offer no typed or manual option', async ({ page }) => {
+ const { state, native } = await nativeBackend(page); await open(page);
+ await expect(page.getByText('A Cloudflare-hosted pull-request job receives them as environment variables only when an administrator has approved its exact commit.', { exact: false })).toBeVisible();
+ await expect(page.getByText('Secret-bearing output is withheld until verified completion', { exact: false })).toHaveCount(0);
+ await page.getByRole('button', { name: 'Add approval', exact: true }).click();
+ const editor = page.getByRole('form', { name: 'Execution source approval editor', exact: true });
+ await expect(editor.getByLabel('Input approval', { exact: true })).toHaveCount(0); await expect(editor.getByLabel('Event', { exact: true })).toHaveCount(0);
+ await expect(editor.getByText('typed', { exact: false })).toHaveCount(0);
+ const path = editor.getByLabel('Approved workflow path', { exact: true });
+ await expect(path).toHaveValue('.github/workflows/check.yml'); await expect(path).toHaveAttribute('readonly', '');
+ await expect(editor.getByLabel('Exact trusted commit', { exact: true })).toBeFocused();
+ await editor.getByLabel('Exact trusted commit', { exact: true }).fill('a'.repeat(40));
+ await editor.getByRole('checkbox', { name: 'BUILD_CREDENTIAL · v1 · Repository', exact: true }).check();
+ // Without the head branch there is nothing to approve: no request leaves the page.
+ await editor.getByRole('button', { name: 'Approve exact source', exact: true }).click();
+ await expect(editor.getByRole('alert')).toContainText('Select exact source'); expect(native.writes).toHaveLength(0);
+ await editor.getByLabel('Pull request head branch ref', { exact: true }).fill('refs/heads/feature');
+ await editor.getByRole('button', { name: 'Approve exact source', exact: true }).click();
+ await expect(page.getByText('Saved privately. Affected prior attempts are fenced.', { exact: true })).toBeVisible();
+ const write = native.writes[0]!;
+ expect([write.workflowPath, write.commitId, write.event, write.eventRef, write.inputs.length, write.inputContract, write.schemaSha256, write.submittedSha256, write.effectiveSha256, write.workflowBlobId]).toEqual(['.github/workflows/check.yml', 'a'.repeat(40), Origin.PULL_REQUEST, 'refs/heads/feature', 0, undefined, '', '', '', '']);
+ expect(write.values.map(v => [v.id, v.version, v.scope, v.organizationId])).toEqual([[state.rows[0]!.id, '1', Scope.REPOSITORY, '']]);
+ expect(state.methods).not.toContain('InspectWorkflows'); expect(state.methods).not.toContain('PrepareWorkflowDispatch');
+ const approvals = page.getByRole('table', { name: 'Repository execution source approvals', exact: true });
+ await expect(approvals).toContainText('Pull request'); await expect(approvals).toContainText('Requires current authority'); await expect(approvals).not.toContainText('Manual');
+ // The approver's current authority is shown as the server reports it.
+ native.bindings = [create(RepositoryExecutionBindingSchema, { ...native.bindings[0]!, approvalState: 'authority_unavailable' })];
+ await page.getByRole('button', { name: 'Refresh execution values', exact: true }).click();
+ await expect(approvals).toContainText('Approver authority unavailable');
+ await page.getByRole('button', { name: 'Edit source approval .github/workflows/check.yml', exact: true }).click();
+ await expect(editor.getByLabel('Input approval', { exact: true })).toHaveCount(0); await expect(editor.getByLabel('Pull request head branch ref', { exact: true })).toHaveValue('refs/heads/feature');
+ await page.getByRole('button', { name: 'Remove value BUILD_CREDENTIAL', exact: true }).click();
+ await expect(page.getByRole('dialog')).toContainText('Queued and running jobs admitted under it are stopped.');
+});
+test('native refuses an inventory shaped like a portable approval', async ({ page }) => {
+ const { native } = await nativeBackend(page);
+ for (const change of [{ engineCatalog: 'golf.workflow.act.v0.2.89.linux.v1' }, { event: Origin.MANUAL, eventRef: '' }, { event: Origin.PUSH }, { approvalState: 'approved' }, { inputContract: 'golf.workflow.dispatch.inputs.v1' }]) {
+  native.bindings = [create(RepositoryExecutionBindingSchema, { id: '20000000-0000-4000-8000-000000000002', version: '1', workflowPath: '.github/workflows/check.yml', commitId: 'a'.repeat(40), workflowBlobId: 'b'.repeat(40), sourceSha256: 'f'.repeat(64), engineCatalog: 'golf.native.workflow-shell.v1', event: Origin.PULL_REQUEST, eventRef: 'refs/heads/feature', expiresAt: '2099-10-04T12:00:00Z', approvalState: 'requires_current_authority', values: [{ id: '10000000-0000-4000-8000-000000000001', version: '1', scope: Scope.REPOSITORY }], createdAt: date, updatedAt: date, ...change })];
+  await page.goto('/.tmp/execution-values-fixture.html');
+  await expect(page.getByRole('alert')).toBeVisible(); await expect(page.getByRole('table')).toHaveCount(0);
+ }
+});
+test('the portable page refuses a pull-request approval, which only Cloudflare native issues', async ({ page }) => {
+ const state = await backend(page);
+ state.bindings = [create(RepositoryExecutionBindingSchema, { id: '20000000-0000-4000-8000-000000000002', version: '1', workflowPath: '.github/workflows/build.yml', commitId: 'a'.repeat(40), workflowBlobId: 'b'.repeat(40), sourceSha256: 'f'.repeat(64), engineCatalog: 'golf.workflow.act.v0.2.89.linux.v1', event: Origin.PULL_REQUEST, eventRef: 'refs/heads/feature', expiresAt: '2099-10-04T12:00:00Z', approvalState: 'requires_current_authority', values: [{ id: '10000000-0000-4000-8000-000000000001', version: '1', scope: Scope.REPOSITORY }], createdAt: date, updatedAt: date })];
+ await page.goto('/.tmp/execution-values-fixture.html');
+ await expect(page.getByRole('alert')).toBeVisible(); await expect(page.getByRole('table')).toHaveCount(0);
+ state.bindings = [create(RepositoryExecutionBindingSchema, { ...state.bindings[0]!, event: Origin.PUSH })]; state.rows = [createValue('10000000-0000-4000-8000-000000000001', 'BUILD_CREDENTIAL', Kind.SECRET)];
+ await open(page);
+ await page.getByRole('button', { name: 'Add approval', exact: true }).click();
+ await expect(page.getByLabel('Event', { exact: true }).locator('option')).toHaveText(['Manual (exact commit dispatch)', 'Configured push']);
+});

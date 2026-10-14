@@ -70,6 +70,24 @@ class NativeSetup(unittest.TestCase):
             initialize(*args, anonymous_rate_limit=limit)
             self.assertEqual(json.loads((root/'forge.json').read_text())['anonymous_rate_limit'], limit)
 
+    def test_execution_value_key_reference_is_dedicated_and_never_a_value(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)/'native'
+            args = (root, 'a'*32, 'golf.example.com', 'golf-native', 'team', 'golf-native',
+                    '12345678-1234-4234-8234-123456789012', 'golf-native', 'owner')
+            key = {'store': 'b'*32, 'name': 'execution-value-key'}
+            webhooks = {'origins': ['https://receiver.example.com'], 'dailyLimit': 100, 'key': key}
+            for refused in [{}, [], 'key', {'key': None}, {'key': {'store': 'b'*32}}, {'key': {**key, 'store': 'short'}},
+                            {'key': {**key, 'name': '../secret'}}, {'key': {**key, 'value': 'fixture'}}, {'key': key, 'value': 'fixture'}]:
+                with self.assertRaises(ValueError):
+                    initialize(*args, execution_values=refused)
+                self.assertFalse(root.exists())
+            with self.assertRaisesRegex(ValueError, 'their own encryption key'):
+                initialize(*args, webhooks=webhooks, execution_values={'key': key})
+            self.assertFalse(root.exists())
+            initialize(*args, webhooks={**webhooks, 'key': {**key, 'name': 'webhook-key'}}, execution_values={'key': key})
+            self.assertEqual(json.loads((root/'forge.json').read_text())['execution_values'], {'key': key})
+
     def test_operations_setup_validates_before_writing_and_enrolls_only_the_owner(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)/'native'

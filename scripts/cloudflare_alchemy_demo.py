@@ -242,6 +242,17 @@ def enable_rate_limit(directory, value, limit, period):
         'Counts are approximate and kept per Cloudflare location. It applies only to public repositories and never to signed-in or credentialed requests.')
 
 
+def enable_secrets(directory, value):
+    # Stored repository values are encrypted with this key, so a repeated run keeps the first one. It is never the webhook key.
+    value.setdefault('executionValueKey', base64.b64encode(secrets.token_bytes(32)).decode())
+    if value['executionValueKey'] == value.get('webhookKey'):
+        raise ValueError('Repository values need their own encryption key')
+    replace_private_json(directory/'alchemy-input.json', value)
+    workflow = (value['settings'].get('tests') or {}).get('workflow') or {}
+    print('Repository value encryption key prepared; deploy to store and bind it.' + ('' if workflow.get('format') == 'actions' else
+        ' Secrets and variables stay unavailable until this installation has an approved Actions workflow profile.'))
+
+
 def enable_public(directory, value):
     if not re.fullmatch(r'https://[a-z0-9-]+\.cloudflareaccess\.com', value['settings'].get('access_team_domain', '')):
         raise ValueError('Public sites require the configured Access issuer for signed login cookies')
@@ -443,7 +454,7 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets'])
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--days', type=int, default=7, help='lifetime for renew-credentials, 1 to 30 days')
     parser.add_argument('--limit', type=int, default=300, help='approximate anonymous requests per period for enable-rate-limit, 10 to 10000')
@@ -469,6 +480,7 @@ def main():
     if args.action == 'enable-operations': return enable_operations(directory, value)
     if args.action == 'enable-rate-limit': return enable_rate_limit(directory, value, args.limit, args.period)
     if args.action == 'migrate': return migrate(directory, value)
+    if args.action == 'enable-secrets': return enable_secrets(directory, value)
     if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)
     if args.action == 'receipt': return receipt(directory, value)

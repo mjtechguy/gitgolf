@@ -1547,6 +1547,9 @@ enum WorkflowRunOrigin {
   WORKFLOW_RUN_ORIGIN_UNSPECIFIED = 0;
   WORKFLOW_RUN_ORIGIN_MANUAL = 1;
   WORKFLOW_RUN_ORIGIN_PUSH = 2;
+  // A pull-request job at the pull request's head. Cloudflare native source approvals
+  // only; the portable server neither emits it nor accepts it.
+  WORKFLOW_RUN_ORIGIN_PULL_REQUEST = 3;
 }
 message WorkflowRun {
   string id = 1;

@@ -16,6 +16,7 @@ for (const file of ['worker.mjs', 'owners.mjs', 'public-profiles.mjs', 'public-r
 modules.push({ type: 'ESModule', path: 'forge/src/performance.mjs', contents: await readFile(new URL('./src/performance.mjs', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'forge/src/rate-limit.mjs', contents: await readFile(new URL('./src/rate-limit.mjs', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'forge/src/activity.mjs', contents: activity.outputFiles[0].text });
+for (const file of ['execution-values.mjs', 'sealed.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: await readFile(new URL('./src/' + file, import.meta.url), 'utf8') });
 const access = await esbuild.build({ entryPoints: ['cloudflare/forge/src/access.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral' });
 modules.push({ type: 'ESModule', path: 'forge/src/access.mjs', contents: access.outputFiles[0].text });
 const nativeWorkflow = await esbuild.build({ entryPoints: ['cloudflare/forge/src/native-workflow.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./git.mjs'] });
@@ -28,7 +29,7 @@ let webhookRequests = 0;
 const webhookSecret = 'r'.repeat(40);
 const runtime = new Miniflare(convertV4MiniflareOptions({
   host: '127.0.0.1', port: 0, modules, compatibilityDate: '2026-10-08',
-  secretsStoreSecrets: { WEBHOOK_KEY: {store_id:'local-automation',secret_name:'webhook-key'}, REGISTRY_API_TOKEN: {store_id:'local-registry',secret_name:'registry-token'} },
+  secretsStoreSecrets: { WEBHOOK_KEY: {store_id:'local-automation',secret_name:'webhook-key'}, EXECUTION_VALUE_KEY: {store_id:'local-automation',secret_name:'execution-value-key'}, REGISTRY_API_TOKEN: {store_id:'local-registry',secret_name:'registry-token'} },
   outboundService: async request => {
     if (new URL(request.url).origin === 'https://api.cloudflare.com') {
       assert.equal(request.headers.get('Authorization'), 'Bearer local-registry-api-token');
@@ -45,6 +46,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     webhookRequests++; return new Response(null,{status:204});
   },
   bindings: { PUBLIC_REPOSITORIES: 'true', REGISTRY_PROVIDER: 'cloudflare', REGISTRY_ORIGIN: 'https://registry.cloudflare.com', REGISTRY_ACCOUNT: 'a'.repeat(32), REGISTRY_REPOSITORY_PREFIX: 'a'.repeat(32) + '/local-native-r', REGISTRY_CI_ENABLED: 'false',
+    TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/check.yml',
     WEBHOOK_POLICY: JSON.stringify({origins:['https://receiver.example.com'],dailyLimit:10}), PUBLIC_ORIGIN: 'https://golf.example.com', WORKSPACE_SLUG: 'alice', ACCOUNT_ID: 'a'.repeat(32), ARTIFACTS_NAMESPACE: 'local-proof', EVIDENCE_DAILY_LIMIT: '2', EVIDENCE_ALLOW_AI: 'false',
     EVIDENCE_DEAD_LETTER_QUEUE: 'local-failed-evidence', EVIDENCE_QUEUE_NAME: 'local-evidence', EVIDENCE_WORKFLOW_NAME: 'local-evidence', OPERATIONS_SERVICE_HEALTH: 'true' },
   d1Databases: { DB: 'local-native-proof' },
@@ -250,6 +252,27 @@ try {
   assert.equal(disabledHook.status,200,await disabledHook.clone().text());
   assert.ok(!(await database.prepare('SELECT encrypted FROM webhook_subscriptions').first()).encrypted.includes(webhookSecret));
   console.log('Real workerd/Secrets Store/D1 webhook encryption, signed outbound delivery, original receipt and disable passed');
+  await (await runtime.getSecretsStoreSecretAPI('EXECUTION_VALUE_KEY'))().create(Buffer.alloc(32,5).toString('base64'));
+  const valueAccess = (await (await accessCall('GetRepositoryAccess')).json()).access, valueTarget = {repository:issueInput.repository,repositoryId:'1',ownerId:valueAccess.ownerId,accessRevision:valueAccess.revision};
+  const valueCall = (method, body) => owner.fetch(new Request('https://golf.example.com/rpc/golf.v1.RepositoryExecutionValueService/'+method,{method:'POST',headers:{'Content-Type':'application/json','Connect-Protocol-Version':'1','X-Golf-Native-Access-Email':'alice@example.com'},body:JSON.stringify({target:valueTarget,...body})}));
+  const runtimeSecret = 'runtime-fixture-secret', secretInput = {id:crypto.randomUUID(),expectedVersion:'0',expectedBrokerRevision:'0',operationId:crypto.randomUUID(),name:'RUNTIME_TOKEN',kind:'REPOSITORY_EXECUTION_VALUE_KIND_SECRET',value:runtimeSecret};
+  // The public Worker strips a forged identity header and a bearer credential never manages values.
+  assert.equal((await call('/rpc/golf.v1.RepositoryExecutionValueService/SaveRepositoryExecutionValue',token,{'X-Golf-Native-Access-Email':'alice@example.com'},{target:valueTarget,...secretInput})).status,404);
+  const savedValue = await valueCall('SaveRepositoryExecutionValue',secretInput);
+  assert.equal(savedValue.status,200,await savedValue.clone().text());assert.equal((await savedValue.json()).operation.acceptedBrokerRevision,'1');
+  assert.equal((await (await valueCall('SaveRepositoryExecutionValue',secretInput)).json()).operation.replayed,true);
+  const changedReplay = await valueCall('SaveRepositoryExecutionValue',{...secretInput,value:'another-runtime-secret'});
+  assert.equal(changedReplay.status,409);assert.equal(changedReplay.headers.get('Golf-Execution-Effect'),'none');
+  const variableInput = {...secretInput,id:crypto.randomUUID(),operationId:crypto.randomUUID(),expectedBrokerRevision:'1',name:'RUNTIME_REGION',kind:'REPOSITORY_EXECUTION_VALUE_KIND_VARIABLE',value:'runtime-region'};
+  assert.equal((await valueCall('SaveRepositoryExecutionValue',variableInput)).status,200);
+  assert.equal((await (await valueCall('GetRepositoryExecutionVariable',{id:variableInput.id,version:'1'})).json()).value,'runtime-region');
+  assert.equal((await valueCall('GetRepositoryExecutionVariable',{id:secretInput.id,version:'1'})).status,404);
+  const valueInventory = await (await valueCall('ListRepositoryExecutionValues',{})).json();
+  assert.equal(valueInventory.brokerRevision,'2');assert.equal(valueInventory.values.length,2);assert.ok(!JSON.stringify(valueInventory).includes(runtimeSecret));
+  const sealedValues = JSON.stringify((await database.prepare('SELECT * FROM execution_value_versions').all()).results);
+  assert.ok(!sealedValues.includes(runtimeSecret));assert.ok(!sealedValues.includes('runtime-region'));
+  assert.equal((await database.prepare('SELECT COUNT(*) AS n FROM execution_value_operations').first()).n,2);
+  console.log('Real workerd/Secrets Store/D1 repository value sealing, variable readback, guarded receipts and plaintext-mismatch replay refusal passed');
   const generated = await esbuild.build({ stdin: { contents: "export { RepositoryActivityService } from './web/src/gen/golf/v1/golf_pb.ts'", resolveDir: process.cwd() }, bundle: true, write: false, format: 'esm', platform: 'neutral' });
   const { RepositoryActivityService } = await import('data:text/javascript;base64,' + Buffer.from(generated.outputFiles[0].text).toString('base64'));
   const { createClient, Code } = await import('../../web/node_modules/@connectrpc/connect/dist/esm/index.js');

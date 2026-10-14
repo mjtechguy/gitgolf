@@ -277,3 +277,126 @@ test('a shell that exits zero after the hard deadline cannot publish success', a
     assert.equal(f.counters().destroyed, 1);
   } finally { Date.now = now; }
 });
+
+async function valueFixture(steps = '      - run: ./first.sh\n      - run: ./second.sh\n        shell: sh\n') {
+  const f = fixture(), blobId = 'f'.repeat(40), secret = 'fixture-secret-value';
+  const workflow = { path: '.github/workflows/check.yml', blobId, plan: nativeWorkflow('actions', 'on: pull_request\njobs:\n  check:\n    runs-on: golf-native-linux\n    steps:\n' + steps) };
+  const sha256 = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2, '0')).join('');
+  f.input = { ...f.input, contract: nativeWorkflowContract, workflow, workflowSha256: await sha256(JSON.stringify(workflow)), values: { bindingId: crypto.randomUUID(), bindingVersion: 1, refs: [{ id: crypto.randomUUID(), version: 2 }] } };
+  delete f.input.module;
+  const execute = f.container.exec, environments = [], releases = [];
+  f.container.exec = async (args, options) => {
+    environments.push({ shell: args[0] === '/bin/sh', env: options.env });
+    if (args[0] === 'git' && args[2] === 'HEAD:' + workflow.path) return { output: async () => ({ exitCode: 0, stdout: new TextEncoder().encode(blobId), stderr: new Uint8Array() }) };
+    return execute(args, options);
+  };
+  f.owner.testValues = async id => { releases.push({ id, commands: f.commands.length }); return { state: 'RELEASED', environment: { DEPLOY_TOKEN: secret, REGION: 'eu-central' }, secrets: [secret] }; };
+  // Everything the Durable Object keeps: its stored record and its public status.
+  const kept = () => JSON.stringify([f.task.record, f.task.status()]);
+  return { ...f, secret, workflow, environments, releases, kept };
+}
+
+test('approved values reach every step beneath the trusted environment and never the stored record', async () => {
+  const f = await valueFixture(), { executionValueName } = await import('./src/execution-values.mjs');
+  // A release that tried to replace trusted keys still cannot: the task's own environment is applied last.
+  const release = f.owner.testValues;
+  f.owner.testValues = async id => { const released = await release(id); return { ...released, environment: { ...released.environment, PATH: '/attacker/bin', HOME: '/attacker', GIT_CONFIG_COUNT: '0', SSL_CERT_FILE: '/attacker/ca' } }; };
+  Object.assign(f.container.files, { '/workspace/task/stdout0': 'first prints ' + f.secret.slice(0, 7), '/workspace/task/stdout1': f.secret.slice(7) + ' and again ' + f.secret + '\n',
+    '/workspace/task/stderr0': 'region eu-central ', '/workspace/task/stderr1': 'warning: ' + f.secret + '\n' });
+  await f.task.create(f.input);
+  assert.equal(f.kept().includes(f.secret), false);
+  await f.task.alarm();
+  const result = f.task.status(), stars = '*'.repeat(f.secret.length);
+  assert.equal(result.state, 'PASSED');
+  assert.equal(result.stdout, 'first prints ' + stars + ' and again ' + stars + '\n');
+  // Variables are plain configuration and are not masked.
+  assert.equal(result.stderr, 'region eu-central warning: ' + stars + '\n');
+  assert.equal(f.kept().includes(f.secret), false); assert.equal(f.kept().includes(f.secret.slice(0, 7)), false); assert.equal(f.kept().includes('DEPLOY_TOKEN'), false);
+  assert.deepEqual(testResult(result, f.input.jobId, f.input), result);
+  // One release, asked for after the exact commit and tree were verified and before any step.
+  assert.deepEqual(f.releases.map(r => r.id), [f.input.jobId]);
+  assert.equal(f.commands.slice(0, f.releases[0].commands).some(args => args[0] === '/bin/sh'), false);
+  assert.equal(f.commands.slice(0, f.releases[0].commands).some(args => args[0] === 'git' && args[2] === 'HEAD^{tree}'), true);
+  const steps = f.environments.filter(e => e.shell), trusted = f.environments.filter(e => !e.shell);
+  assert.equal(steps.length, 2); assert.ok(trusted.length >= 4);
+  for (const { env } of steps) assert.deepEqual([env.DEPLOY_TOKEN, env.REGION, env.PATH, env.HOME, env.GIT_CONFIG_COUNT, env.SSL_CERT_FILE],
+    [f.secret, 'eu-central', '/usr/local/bin:/usr/bin:/bin', '/auth', '3', '/etc/cloudflare/certs/cloudflare-containers-ca.crt']);
+  // Cloning and source verification never see a value, and no trusted key is a name a value may take.
+  for (const { env } of trusted) { assert.equal(env.DEPLOY_TOKEN, undefined); assert.equal(env.REGION, undefined); for (const name of Object.keys(env)) assert.equal(executionValueName(name), false, name); }
+  for (const name of ['GOLF_REGISTRY', 'GOLF_IMAGE', 'GOLF_COMMIT', 'CI_JOB_STATUS']) assert.equal(executionValueName(name), false, name);
+  await f.task.alarm(); await f.task.create(f.input);
+  assert.equal(f.releases.length, 1);
+});
+
+test('a refused or failed release runs no step, and a job without approved values never asks', async () => {
+  for (const state of ['REFUSED', 'NONE', undefined]) {
+    const f = await valueFixture(); f.owner.testValues = async () => state && { state, environment: { DEPLOY_TOKEN: f.secret }, secrets: [f.secret] };
+    await f.task.create(f.input); await f.task.alarm();
+    assert.equal(f.task.status().state, 'CANCELLED'); assert.equal(f.commands.some(args => args[0] === '/bin/sh'), false); assert.equal(f.counters().destroyed, 1);
+  }
+  const failed = await valueFixture(); failed.owner.testValues = async () => { throw Error('Repository value unavailable'); };
+  await failed.task.create(failed.input); await failed.task.alarm();
+  assert.deepEqual([failed.task.status().state, failed.task.status().diagnostic, failed.commands.some(args => args[0] === '/bin/sh')], ['LOST', 'Repository value unavailable', false]);
+  // Cancelled while the release was in flight: the returned values are dropped unused.
+  const late = await valueFixture(), release = late.owner.testValues;
+  late.owner.testValues = async id => { await late.task.cancel(); return release(id); };
+  await late.task.create(late.input); await late.task.alarm();
+  assert.equal(late.task.status().state, 'CANCELLED'); assert.equal(late.commands.some(args => args[0] === '/bin/sh'), false);
+  const plain = await valueFixture(); delete plain.input.values;
+  await plain.task.create(plain.input); await plain.task.alarm();
+  assert.equal(plain.task.status().state, 'PASSED'); assert.equal(plain.releases.length, 0);
+  for (const { env } of plain.environments) assert.equal(env.DEPLOY_TOKEN, undefined);
+});
+
+test('value admission is bound to the task identity and refused outside the hosted Actions lane', async () => {
+  const f = await valueFixture(), values = f.input.values;
+  for (const invalid of [null, {}, { ...values, bindingVersion: 0 }, { ...values, bindingId: 'x' }, { ...values, refs: [] }, { ...values, refs: [{ id: 'x', version: 2 }] }, { ...values, refs: Array.from({ length: 65 }, () => ({ id: crypto.randomUUID(), version: 1 })) }, { ...values, refs: [{ id: values.refs[0].id, version: '2' }] }, { ...values, refs: [{ ...values.refs[0], name: 'DEPLOY_TOKEN' }] },
+    { ...values, environment: { DEPLOY_TOKEN: f.secret } }, { ...values, refs: [{ ...values.refs[0], value: f.secret }] }])
+    await assert.rejects(f.task.create({ ...f.input, values: invalid }), /Invalid value admission/);
+  const module = fixture();
+  await assert.rejects(module.task.create({ ...module.input, values }), /Invalid test admission/);
+  const gitlab = { path: '.gitlab-ci.yml', blobId: 'f'.repeat(40), plan: nativeWorkflow('gitlab', 'check:\n  script: echo ok\n') };
+  const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(gitlab)))), b => b.toString(16).padStart(2, '0')).join('');
+  await assert.rejects(f.task.create({ ...f.input, workflow: gitlab, workflowSha256: digest }), /Invalid value admission/);
+  assert.equal(f.task.record, undefined);
+  await f.task.create(f.input);
+  // The same task cannot be re-admitted with another approval, other versions, or none.
+  await assert.rejects(f.task.create({ ...f.input, values: { ...values, bindingVersion: 2 } }), /identity conflict/);
+  await assert.rejects(f.task.create({ ...f.input, values: { ...values, refs: [{ ...values.refs[0], version: 3 }] } }), /identity conflict/);
+  const { values: _, ...without } = f.input;
+  await assert.rejects(f.task.create(without), /identity conflict/);
+});
+
+test('failures, timeouts and broker errors after a release cannot store or echo a secret', async () => {
+  // A runtime error that quotes the environment is replaced by a fixed message.
+  const echoed = await valueFixture(), execute = echoed.container.exec;
+  echoed.container.exec = async (args, options) => { if (args[0] === '/bin/sh') throw Error('exec failed with env DEPLOY_TOKEN=' + echoed.secret); return execute(args, options); };
+  await echoed.task.create(echoed.input); await echoed.task.alarm();
+  assert.deepEqual([echoed.task.status().state, echoed.task.status().diagnostic], ['LOST', 'Execution failed after repository values were released; the runtime message is withheld.']);
+  assert.equal(echoed.kept().includes(echoed.secret), false);
+  // The task's own fixed messages stay readable.
+  const large = await valueFixture(); large.container.files['/workspace/task/stdout0'] = echoed.secret.repeat(2000);
+  await large.task.create(large.input); await large.task.alarm();
+  assert.deepEqual([large.task.status().state, large.task.status().diagnostic, large.task.status().stdout], ['LOST', 'payload limit', '']);
+  // A failing step keeps its masked output and the after-failure path stores nothing unmasked.
+  const failing = await valueFixture(), run = failing.container.exec;
+  failing.container.files['/workspace/task/stderr0'] = 'curl: (6) could not resolve host for token ' + failing.secret + '\n';
+  failing.container.exec = async (args, options) => { const process = await run(args, options); return args[0] === '/bin/sh' ? { output: async () => ({ ...await process.output(), exitCode: 6 }) } : process; };
+  await failing.task.create(failing.input); await failing.task.alarm();
+  assert.deepEqual([failing.task.status().state, failing.task.status().exitCode, failing.task.status().stderr], ['FAILED', 6, 'curl: (6) could not resolve host for token ' + '*'.repeat(failing.secret.length) + '\n']);
+  assert.equal(failing.commands.filter(args => args[0] === '/bin/sh').length, 1);
+  // Output read before the deadline passed is masked on the timed-out path too.
+  const slow = await valueFixture('      - run: ./only.sh\n'), now = Date.now, step = slow.container.exec;
+  let clock = now(); slow.input.deadline = clock + 10000; slow.container.files['/workspace/task/stdout0'] = 'late ' + slow.secret;
+  slow.container.exec = async (args, options) => { const process = await step(args, options); return args[0] === '/bin/sh' ? { output: async () => { clock = slow.input.deadline + 1; return process.output(); } } : process; };
+  Date.now = () => clock;
+  try { await slow.task.create(slow.input); await slow.task.alarm(); } finally { Date.now = now; }
+  assert.deepEqual([slow.task.status().state, slow.task.status().stdout], ['TIMED_OUT', 'late ' + '*'.repeat(slow.secret.length)]);
+  // A registry broker failure during the test stage could quote a request the step made.
+  const broker = await valueFixture(); Object.assign(broker.task.env, { REGISTRY_CI_ENABLED: 'true', REGISTRY_ORIGIN: 'https://registry.test' }); broker.input.registry = { origin: 'https://registry.test', name: 'team/project' };
+  await broker.task.create(broker.input); broker.task.record = { ...broker.task.record, state: 'RUNNING', stage: 'test' }; broker.task.secrets = [broker.secret];
+  broker.owner.testRegistry = async () => { throw Error('Registry management: unknown blob /v2/team/project/blobs/' + broker.secret); };
+  assert.equal((await broker.task.outbound(new Request('https://registry.test/v2/team/project/blobs/' + broker.secret))).status, 503);
+  assert.deepEqual([broker.task.status().state, broker.task.status().diagnostic], ['LOST', 'Execution failed after repository values were released; the runtime message is withheld.']);
+  for (const f of [large, failing, slow, broker]) assert.equal(f.kept().includes(f.secret), false);
+});

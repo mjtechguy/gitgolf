@@ -15,7 +15,7 @@ from cloudflare_setup import ROOT, hostname, private_write
 ACTIONS_WORKFLOW_PATH = r'\.github/workflows/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml'
 
 
-def initialize(directory, account, host, worker, workspace, namespace, database_id, database_name, login, evidence=None, tests=None, analytics=None, agent_path=None, access_aud=None, owner_email=None, web_assets=None, previews=None, apps=None, automatic_ci=False, operations=None, webhooks=None, anonymous_rate_limit=None):
+def initialize(directory, account, host, worker, workspace, namespace, database_id, database_name, login, evidence=None, tests=None, analytics=None, agent_path=None, access_aud=None, owner_email=None, web_assets=None, previews=None, apps=None, automatic_ci=False, operations=None, webhooks=None, anonymous_rate_limit=None, execution_values=None):
     if operations is not None:
         if not isinstance(operations, dict) or set(operations) - {'analytics_secret', 'observability', 'service_health'}:
             raise ValueError('Invalid operations configuration')
@@ -124,6 +124,14 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
         limit = anonymous_rate_limit
         if not isinstance(limit, dict) or set(limit) != {'namespace', 'limit', 'period'} or not isinstance(limit['namespace'], str) or not re.fullmatch('[1-9][0-9]{0,9}', limit['namespace']) or int(limit['namespace']) > 2147483647 or type(limit['limit']) is not int or not 10 <= limit['limit'] <= 10000 or limit['period'] not in (10, 60) or type(limit['period']) is not int:
             raise ValueError('Anonymous rate limit needs a positive integer namespace, a limit of 10 to 10000 and a period of 10 or 60 seconds')
+    if execution_values is not None:
+        ref = execution_values.get('key') if isinstance(execution_values, dict) else None
+        if not isinstance(execution_values, dict) or set(execution_values) != {'key'} or not isinstance(ref, dict) or set(ref) != {'store', 'name'} or not isinstance(ref['store'], str) or not re.fullmatch('[a-f0-9]{32}', ref['store']) or not isinstance(ref['name'], str) or not re.fullmatch('[A-Za-z0-9_-]{1,128}', ref['name']):
+            raise ValueError('Use a Secrets Store repository value encryption key reference')
+        # Sharing a key would let one store's ciphertext be presented to another.
+        used = [(webhooks or {}).get('key'), (apps or {}).get('provisioner'), ((apps or {}).get('policy') or {}).get('secret'), (operations or {}).get('analytics_secret')]
+        if any(isinstance(other, dict) and other.get('store') == ref['store'] and other.get('name') == ref['name'] for other in used):
+            raise ValueError('Repository values need their own encryption key, separate from every other secret reference')
     directory.parent.mkdir(parents=True, exist_ok=True)
     directory.mkdir(mode=0o700)  # Refuse existing installs instead of rotating authority.
     settings = {'account': account, 'worker': worker, 'namespace': namespace, 'workspace': workspace,
@@ -150,6 +158,8 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
         settings['operations'] = operations
     if webhooks is not None:
         settings['webhooks'] = webhooks
+    if execution_values is not None:
+        settings['execution_values'] = execution_values
     if automatic_ci:
         settings['automatic_ci'] = True
     if anonymous_rate_limit is not None:
@@ -207,6 +217,8 @@ def main():
     parser.add_argument('--preview-manual', action='store_true', help='Disable automatic publication after passing canonical tests')
     parser.add_argument('--automatic-ci', action='store_true', help='Admit bounded tests after confirmed eligible PR pushes')
     parser.add_argument('--webhooks-config', type=Path, help='JSON approved HTTPS origins, dailyLimit and key {store,name}; never a secret value')
+    parser.add_argument('--execution-value-key-store', help='Existing Secrets Store ID holding the dedicated repository value encryption key')
+    parser.add_argument('--execution-value-key-name', help='Existing 32-byte base64 key secret name; never pass its value and never reuse the webhook key')
     parser.add_argument('--app-namespace', help='Existing Workers for Platforms dispatch namespace; paid entitlement required')
     parser.add_argument('--app-entry', help='Approved prebundled .mjs entry in immutable Artifacts source')
     parser.add_argument('--app-migration', help='Approved .sql schema for a disposable preview D1 database')
@@ -258,7 +270,8 @@ def main():
             rate_limit = {'namespace': args.anonymous_rate_namespace, 'limit': args.anonymous_rate_limit, 'period': args.anonymous_rate_period}
         initialize(args.directory, args.account_id, args.hostname, args.worker, args.workspace,
                    args.namespace, args.database_id, args.database_name, args.owner, evidence, tests, args.analytics_dataset, args.agent_path,
-                   args.access_aud, args.owner_email, args.web_assets, previews, apps, args.automatic_ci, operations or None, json.loads(args.webhooks_config.read_text()) if args.webhooks_config else None, rate_limit)
+                   args.access_aud, args.owner_email, args.web_assets, previews, apps, args.automatic_ci, operations or None, json.loads(args.webhooks_config.read_text()) if args.webhooks_config else None, rate_limit,
+                   {'key': {'store': args.execution_value_key_store, 'name': args.execution_value_key_name}} if args.execution_value_key_store or args.execution_value_key_name else None)
     except (ValueError, OSError) as error:
         parser.exit(1, str(error) + '\n')
     print('Private native configuration prepared; no resources provisioned. Bootstrap credential expires in one hour.')

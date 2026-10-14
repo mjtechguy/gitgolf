@@ -2930,7 +2930,7 @@ test('native merge writes one verified merge commit through the push journal and
   const again=(await value(await f.submit(f.input({selection:compared,expectedPullRevision:merged.revision})))).operation;
   assert.equal(again.phase,mergePhase('REJECTED'));assert.equal(again.failureCode,'preflight_refused');assert.equal(f.journal()[1].detail,'pull_request_not_open');
   assert.equal(f.counts().effects,1);
-  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,25);
+  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,26);
   const capability=(await value(await f.call('',{},ownerToken,'/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c=>c.id==='pull.merge');
   assert.equal(capability.length,1);assert.equal(capability[0].state,'CAPABILITY_STATE_READY');
 });
@@ -3806,4 +3806,479 @@ test('recent repository runs come from stored rows for current repository accoun
   f.sql.prepare('DELETE FROM grants WHERE repository_id=1 AND user_id=2').run();
   assert.equal((await list({}, readerToken)).status, 404);
   assert.equal((await f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/native/pr-evidence/read', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify({ action: 'list', repository: key, repositoryId: '1' }) }))).status, 401);
+});
+
+async function executionValueFixture(t) {
+  const f = await evidenceFixture(t), execution = allocateTests(f), blobId = '9'.repeat(40), path = '.github/workflows/check.yml';
+  delete f.env.TEST_MODULE;
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: path, TEST_POLICY_SHA256: '8'.repeat(64), EXECUTION_VALUE_KEY: { get: async () => Buffer.alloc(32, 9).toString('base64') } });
+  f.sql.exec("UPDATE users SET email=login||'@example.com'");
+  const state = { source: 'on: pull_request\njobs:\n  check:\n    runs-on: golf-native-linux\n    steps:\n      - run: ./check.sh\n' };
+  const trees = { ['f'.repeat(40)]: { name: '.github', hash: '7'.repeat(40), type: 'tree' }, ['7'.repeat(40)]: { name: 'workflows', hash: '8'.repeat(40), type: 'tree' }, ['8'.repeat(40)]: { name: 'check.yml', hash: blobId, type: 'blob' } };
+  const get = f.env.ARTIFACTS.get;
+  f.env.ARTIFACTS.get = async name => {
+    const repo = await get(name), readTree = repo.readTree, readBlob = repo.readBlob;
+    return { ...repo,
+      async readTree(hash) { const entries = await readTree(hash); return trees[hash] ? [...(entries || []), trees[hash]] : entries; },
+      async readBlob(hash) { return hash === blobId ? new Blob([state.source]) : readBlob(hash); } };
+  };
+  const service = '/rpc/golf.v1.RepositoryExecutionValueService/';
+  const access = async (token = ownerToken) => (await value(await f.call('', { repository: key }, token, '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess'))).access.revision;
+  const target = async token => ({ repository: key, repositoryId: '1', ownerId: '1', accessRevision: await access(token) });
+  const human = async (method, body = {}, email = 'alice@example.com', token = ownerToken, headers = {}) => f.dispatch(new Request(f.env.PUBLIC_ORIGIN + service + method, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Origin: f.env.PUBLIC_ORIGIN, ...(email ? { 'X-Golf-Native-Access-Email': email } : {}), ...headers }, body: JSON.stringify({ target: await target(token), ...body }) }));
+  const list = async () => value(await human('ListRepositoryExecutionValues'));
+  const save = async (name, text, fields = {}) => human('SaveRepositoryExecutionValue', { id: nonce(), expectedVersion: '0', expectedBrokerRevision: (await list()).brokerRevision, operationId: nonce(), name, kind: 'REPOSITORY_EXECUTION_VALUE_KIND_SECRET', value: text, ...fields });
+  const approve = async (values, fields = {}) => human('SaveRepositoryExecutionBinding', { id: nonce(), expectedVersion: '0', expectedBrokerRevision: (await list()).brokerRevision, operationId: nonce(), workflowPath: path, commitId: 'b'.repeat(40),
+    event: 'WORKFLOW_RUN_ORIGIN_PULL_REQUEST', eventRef: 'refs/heads/feature', expiresAt: new Date(Date.now() + 900000).toISOString(), values: values.map(v => ({ id: v.id, version: v.version, scope: 'EXECUTION_VALUE_SCOPE_REPOSITORY' })), ...fields });
+  // Every cell D1 holds, for assertions that a plaintext is stored nowhere.
+  const stored = () => JSON.stringify(f.sql.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(table => f.sql.prepare('SELECT * FROM ' + table.name).all()));
+  return { ...f, execution, blobId, path, state, human, list, save, approve, stored, service };
+}
+const refusedBeforeCommit = async (response, status) => { assert.equal(response.status, status, await response.clone().text()); assert.equal(response.headers.get('Golf-Execution-Effect'), 'none'); };
+
+test('repository values keep only ciphertext, never return a secret and replay only the original request', async t => {
+  const f = await executionValueFixture(t), secret = 'fixture-secret-not-a-real-credential';
+  const input = { id: nonce(), expectedVersion: '0', expectedBrokerRevision: '0', operationId: nonce(), name: 'DEPLOY_TOKEN', kind: 'REPOSITORY_EXECUTION_VALUE_KIND_SECRET', value: secret };
+  const saved = await f.human('SaveRepositoryExecutionValue', input);
+  assert.equal(saved.headers.get('Golf-Execution-Effect'), null);
+  const receipt = (await value(saved)).operation;
+  assert.deepEqual([receipt.action, receipt.itemId, receipt.acceptedVersion, receipt.acceptedBrokerRevision, receipt.replayed], ['save_value', input.id, '1', '1', false]);
+  assert.equal(f.stored().includes(secret), false); assert.equal(JSON.stringify(receipt).includes(secret), false);
+  const version = f.sql.prepare('SELECT * FROM execution_value_versions').get();
+  assert.match(version.encrypted, /^[A-Za-z0-9+/=]+\.[A-Za-z0-9+/=]+$/); assert.match(version.key_id, /^[a-f0-9]{16}$/); assert.equal(version.value_bytes, secret.length);
+  const listed = await f.list();
+  assert.deepEqual([listed.brokerRevision, listed.maximumValues, listed.maximumBindings, listed.consumerProfile], ['1', 64, 20, 'golf.repository-env.v1']);
+  assert.deepEqual(listed.values.map(v => [v.name, v.kind, v.version, v.deleted]), [['DEPLOY_TOKEN', 'REPOSITORY_EXECUTION_VALUE_KIND_SECRET', '1', false]]);
+  assert.equal(JSON.stringify(listed).includes(secret), false);
+  assert.equal((await f.human('GetRepositoryExecutionVariable', { id: input.id, version: '1' })).status, 404);
+  const replayed = (await value(await f.human('SaveRepositoryExecutionValue', input))).operation;
+  assert.deepEqual([replayed.acceptedVersion, replayed.acceptedBrokerRevision, replayed.replayed, replayed.committedAt], ['1', '1', true, receipt.committedAt]);
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { ...input, value: 'another-fixture-secret' }), 409);
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { ...input, value: secret + 'x' }), 409);
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { ...input, name: 'OTHER_TOKEN' }), 409);
+  await refusedBeforeCommit(await f.human('DeleteRepositoryExecutionValue', { ...input, expectedVersion: '1', expectedBrokerRevision: '1' }), 409);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM execution_value_versions').get().n, 1);
+  assert.equal((await value(await f.human('GetRepositoryExecutionValueOperation', { operationId: input.operationId }))).operation.acceptedVersion, '1');
+  assert.equal((await f.human('GetRepositoryExecutionValueOperation', { operationId: nonce() })).status, 404);
+  const variable = { ...input, id: nonce(), operationId: nonce(), expectedBrokerRevision: '1', name: 'REGION', kind: 'REPOSITORY_EXECUTION_VALUE_KIND_VARIABLE', value: 'eu-central' };
+  await value(await f.human('SaveRepositoryExecutionValue', variable));
+  assert.equal(f.stored().includes('eu-central'), false);
+  assert.equal((await value(await f.human('GetRepositoryExecutionVariable', { id: variable.id, version: '1' }))).value, 'eu-central');
+  assert.equal((await f.human('GetRepositoryExecutionVariable', { id: variable.id, version: '2' })).status, 404);
+  const rotated = (await value(await f.human('SaveRepositoryExecutionValue', { ...input, operationId: nonce(), expectedVersion: '1', expectedBrokerRevision: '2', value: 'rotated-fixture-secret' }))).operation;
+  assert.deepEqual([rotated.acceptedVersion, rotated.acceptedBrokerRevision], ['2', '3']);
+  // After a rotation the first receipt still answers only for the text it sealed.
+  assert.equal((await value(await f.human('SaveRepositoryExecutionValue', input))).operation.replayed, true);
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { ...input, value: 'rotated-fixture-secret' }), 409);
+  const removed = (await value(await f.human('DeleteRepositoryExecutionValue', { id: input.id, expectedVersion: '2', expectedBrokerRevision: '3', operationId: nonce() }))).operation;
+  assert.deepEqual([removed.action, removed.acceptedVersion], ['delete_value', '3']);
+  assert.deepEqual((await f.list()).values.map(v => [v.name, v.deleted, v.version]), [['DEPLOY_TOKEN', true, '3'], ['REGION', false, '1']]);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM execution_value_versions WHERE id=?').get(input.id).n, 2);
+  assert.equal(f.stored().includes('rotated-fixture-secret'), false);
+});
+
+test('repository values refuse readers, writers, bearer and service credentials and stale observations', async t => {
+  const f = await executionValueFixture(t), secret = 'fixture-secret-not-a-real-credential';
+  const input = { id: nonce(), expectedVersion: '0', expectedBrokerRevision: '0', operationId: nonce(), name: 'DEPLOY_TOKEN', kind: 'REPOSITORY_EXECUTION_VALUE_KIND_SECRET', value: secret };
+  for (const role of ['read', 'write']) {
+    f.sql.prepare('UPDATE grants SET role=? WHERE user_id=2').run(role);
+    for (const [method, body] of [['ListRepositoryExecutionValues', {}], ['SaveRepositoryExecutionValue', input], ['GetRepositoryExecutionVariable', { id: input.id, version: '1' }], ['GetRepositoryExecutionValueOperation', { operationId: input.operationId }]])
+      assert.equal((await f.human(method, body, 'bob@example.com', readerToken)).status, 404, role + ' ' + method);
+  }
+  const bearer = await f.call('', { target: { repository: key, repositoryId: '1', ownerId: '1', accessRevision: 'a'.repeat(64) }, ...input }, ownerToken, f.service + 'SaveRepositoryExecutionValue');
+  await refusedBeforeCommit(bearer, 404);
+  assert.equal((await f.human('ListRepositoryExecutionValues', {}, 'alice@example.com', ownerToken, { Authorization: 'Bearer ' + ownerToken })).status, 404);
+  assert.equal((await f.human('ListRepositoryExecutionValues', {}, 'alice@example.com', ownerToken, { 'CF-Access-Client-Id': 'service.access' })).status, 404);
+  assert.equal((await f.human('ListRepositoryExecutionValues', {}, '')).status, 401);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM execution_values').get().n, 0);
+  const call = (method, body) => f.dispatch(new Request(f.env.PUBLIC_ORIGIN + f.service + method, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', 'X-Golf-Native-Access-Email': 'alice@example.com' }, body: JSON.stringify(body) }));
+  const target = { repository: key, repositoryId: '1', ownerId: '1' };
+  await refusedBeforeCommit(await call('SaveRepositoryExecutionValue', { target: { ...target, accessRevision: 'a'.repeat(64) }, ...input }), 412);
+  await refusedBeforeCommit(await call('SaveRepositoryExecutionValue', { target: { ...target, ownerId: '2' }, ...input }), 404);
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { ...input, expectedBrokerRevision: '1' }), 409);
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { ...input, expectedVersion: '1' }), 409);
+  await value(await f.human('SaveRepositoryExecutionValue', input));
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { ...input, operationId: nonce(), expectedVersion: '1', expectedBrokerRevision: '0' }), 409);
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { ...input, operationId: nonce(), expectedVersion: '0', expectedBrokerRevision: '1' }), 409);
+  await refusedBeforeCommit(await f.human('DeleteRepositoryExecutionValue', { id: input.id, operationId: nonce(), expectedVersion: '2', expectedBrokerRevision: '1' }), 409);
+  // Bob becomes an administrator: he may manage values, but another person's operation ID is not his to read or reuse.
+  f.sql.prepare("UPDATE grants SET role='admin' WHERE user_id=2").run();
+  assert.equal((await f.human('GetRepositoryExecutionValueOperation', { operationId: input.operationId }, 'bob@example.com', readerToken)).status, 404);
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', input, 'bob@example.com', readerToken), 404);
+  // Authority lost between the request's checks and its write changes nothing.
+  const get = f.env.EXECUTION_VALUE_KEY.get;
+  f.env.EXECUTION_VALUE_KEY.get = async () => { f.sql.exec("UPDATE grants SET role='write' WHERE user_id=1"); return get(); };
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { ...input, id: nonce(), operationId: nonce(), name: 'LATE_TOKEN', expectedBrokerRevision: '1' }), 409);
+  assert.deepEqual(f.sql.prepare('SELECT name FROM execution_values').all().map(v => v.name), ['DEPLOY_TOKEN']);
+  assert.equal(f.sql.prepare('SELECT revision FROM execution_value_brokers').get().revision, 1);
+});
+
+test('repository values enforce the portable limits and the native reserved names', async t => {
+  const f = await executionValueFixture(t);
+  for (const name of ['PATH', 'HOME', 'CI', 'TRACE', 'PS4', 'SHELLOPTS', 'SSL_CERT_FILE', 'GIT_SSL_CAINFO', 'GIT_CONFIG_KEY_0', 'GOLF_REGISTRY', 'GOLF_COMMIT', 'CI_JOB_STATUS', 'CI_DEBUG_TRACE', 'FF_SCRIPT_SECTIONS', 'GITLAB_TOKEN', 'GITHUB_TOKEN', 'BASH_ENV', 'LD_PRELOAD', 'lower', '1LEADING', 'HAS-DASH', 'A'.repeat(65), ''])
+    await refusedBeforeCommit(await f.save(name, 'fixture-secret-value'), 400);
+  for (const text of ['short77', 'x'.repeat(8193), 'two\nlines-of-text', 'nul\u0000inside-text', 'separator inside', 'lone\ud800surrogate', '', 7])
+    await refusedBeforeCommit(await f.save('DEPLOY_TOKEN', text), 400);
+  await refusedBeforeCommit(await f.save('DEPLOY_TOKEN', 'fixture-secret-value', { kind: 'REPOSITORY_EXECUTION_VALUE_KIND_UNSPECIFIED' }), 400);
+  await refusedBeforeCommit(await f.save('DEPLOY_TOKEN', 'fixture-secret-value', { id: 'not-a-uuid' }), 400);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM execution_values').get().n, 0);
+  await value(await f.save('EDGE_SECRET', 'é'.repeat(4096)));
+  await value(await f.save('EDGE_VARIABLE', 'v', { kind: 2 }));
+  await refusedBeforeCommit(await f.save('EDGE_SECRET', 'fixture-secret-value'), 400);
+  // 64 KiB of active values: six more full-size values fit, a seventh does not, and then not one byte more.
+  for (let i = 0; i < 6; i++) await value(await f.save('FULL_' + i, 'x'.repeat(8192)));
+  await refusedBeforeCommit(await f.save('OVER_BUDGET', 'x'.repeat(8192)), 400);
+  await value(await f.save('LAST_BYTES', 'x'.repeat(8191)));
+  await refusedBeforeCommit(await f.save('ONE_MORE', 'x', { kind: 2 }), 400);
+  for (const v of (await f.list()).values.filter(v => v.name.startsWith('FULL_')))
+    await value(await f.human('DeleteRepositoryExecutionValue', { id: v.id, expectedVersion: v.version, expectedBrokerRevision: (await f.list()).brokerRevision, operationId: nonce() }));
+  for (let i = 0; i < 55; i++) await value(await f.save('NAME_' + i, 'fixture-secret-value'));
+  assert.equal((await f.list()).values.length, 64);
+  // Removed names keep their slot, as on the portable broker.
+  await refusedBeforeCommit(await f.save('NAME_65', 'fixture-secret-value'), 400);
+  const edge = (await f.list()).values.find(v => v.name === 'EDGE_VARIABLE');
+  let version = Number(edge.version);
+  for (let history = f.sql.prepare('SELECT COUNT(*) n FROM execution_value_versions').get().n; history < 256; history++, version++)
+    await value(await f.save('EDGE_VARIABLE', 'v' + history, { id: edge.id, kind: 2, expectedVersion: String(version) }));
+  await refusedBeforeCommit(await f.save('EDGE_VARIABLE', 'one-too-many', { id: edge.id, kind: 2, expectedVersion: String(version) }), 400);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM execution_value_versions').get().n, 256);
+});
+
+test('repository value ciphertext is bound to its installation, repository, value, version, name, kind and length', async t => {
+  const f = await executionValueFixture(t);
+  await value(await f.save('FIRST_VALUE', 'first-variable-text', { kind: 2 })); await value(await f.save('SECOND_VALUE', 'second-variable-text', { kind: 2 }));
+  const [first, second] = (await f.list()).values, read = () => f.human('GetRepositoryExecutionVariable', { id: first.id, version: '1' });
+  const original = f.sql.prepare('SELECT encrypted FROM execution_value_versions WHERE id=?').get(first.id).encrypted;
+  const readable = async () => assert.equal((await value(await read())).value, 'first-variable-text');
+  const unreadable = async () => { const response = await read(); assert.equal(response.status, 503); assert.equal((await response.text()).includes('variable-text'), false); };
+  await readable();
+  f.sql.prepare('UPDATE execution_value_versions SET encrypted=(SELECT encrypted FROM execution_value_versions WHERE id=?) WHERE id=?').run(second.id, first.id); await unreadable();
+  f.sql.prepare('UPDATE execution_value_versions SET encrypted=? WHERE id=?').run(original, first.id); await readable();
+  f.sql.prepare("UPDATE execution_values SET name='RENAMED' WHERE id=?").run(first.id); await unreadable();
+  f.sql.prepare("UPDATE execution_values SET name='FIRST_VALUE' WHERE id=?").run(first.id); await readable();
+  f.sql.prepare('UPDATE execution_value_versions SET value_bytes=value_bytes+1 WHERE id=?').run(first.id); await unreadable();
+  f.sql.prepare('UPDATE execution_value_versions SET value_bytes=value_bytes-1 WHERE id=?').run(first.id); await readable();
+  // A later version of the same value cannot be served from an earlier ciphertext.
+  f.sql.prepare('UPDATE execution_values SET version=2 WHERE id=?').run(first.id);
+  f.sql.prepare('UPDATE execution_value_versions SET version=2 WHERE id=?').run(first.id);
+  const later = await f.human('GetRepositoryExecutionVariable', { id: first.id, version: '2' }); assert.equal(later.status, 503);
+  f.sql.prepare('UPDATE execution_value_versions SET version=1 WHERE id=?').run(first.id);
+  f.sql.prepare('UPDATE execution_values SET version=1 WHERE id=?').run(first.id); await readable();
+  // The same rows under another repository identity or another installation origin do not open.
+  const artifact = f.sql.prepare('SELECT artifact_name FROM repositories WHERE id=1').get().artifact_name, renamed = name => f.sql.exec(`UPDATE repositories SET artifact_name='${name}'; UPDATE execution_values SET artifact_name='${name}'`);
+  renamed('repo-' + '0'.repeat(32)); await unreadable(); renamed(artifact); await readable();
+  f.env.PUBLIC_ORIGIN = 'https://other.example.com'; await unreadable();
+  f.env.PUBLIC_ORIGIN = 'https://golf.example.com'; await readable();
+  // A different key is named before any decryption is attempted, and an unusable key reads nothing.
+  f.env.EXECUTION_VALUE_KEY = { get: async () => Buffer.alloc(32, 3).toString('base64') }; await unreadable();
+  f.env.EXECUTION_VALUE_KEY = { get: async () => 'not-a-key' }; await unreadable();
+  f.env.EXECUTION_VALUE_KEY = { get: async () => Buffer.alloc(32, 9).toString('base64') }; await readable();
+});
+
+test('exact-source approvals bind the approved workflow, commit and head branch under current administrator authority', async t => {
+  const f = await executionValueFixture(t);
+  await value(await f.save('DEPLOY_TOKEN', 'fixture-secret-value')); await value(await f.save('REGION', 'eu-central', { kind: 2 }));
+  const values = (await f.list()).values, ref = { id: values[0].id, version: values[0].version };
+  for (const fields of [{ event: 'WORKFLOW_RUN_ORIGIN_MANUAL', eventRef: '' }, { event: 'WORKFLOW_RUN_ORIGIN_MANUAL' }, { event: 1 }, { event: 'WORKFLOW_RUN_ORIGIN_PUSH' }, { event: 2 }, { event: undefined }, { event: 4 }, { eventRef: 'refs/tags/v1' }, { eventRef: 'feature' }, { eventRef: 'refs/heads/a..b' },
+    { workflowPath: '.github/workflows/other.yml' }, { workflowPath: '.gitlab-ci.yml' }, { commitId: 'B'.repeat(40) }, { commitId: 'd'.repeat(40) }, { workflowBlobId: 'short' },
+    { expiresAt: new Date(Date.now() + 30000).toISOString() }, { expiresAt: new Date(Date.now() + 86460000).toISOString() }, { expiresAt: 'tomorrow' }, { expiresAt: Date.now() + 900000 },
+    { inputs: [{ name: 'tier', stringValue: 'deploy' }] }, { inputContract: 'golf.workflow.dispatch.inputs.v1' }, { schemaSha256: 'e'.repeat(64) }, { submittedSha256: 'e'.repeat(64) }, { effectiveSha256: 'e'.repeat(64) },
+    { values: [] }, { values: [ref, ref] }, { values: [{ ...ref, scope: 'EXECUTION_VALUE_SCOPE_ORGANIZATION' }] }, { values: [{ ...ref, organizationId: '1' }] }, { values: [{ ...ref, version: '0' }] }, { values: [{ id: 'x', version: '1' }] }])
+    await refusedBeforeCommit(await f.approve(values, fields), 400);
+  for (const fields of [{ values: [{ ...ref, version: '2' }] }, { values: [{ id: nonce(), version: '1' }] }, { workflowBlobId: '1'.repeat(40) }, { expectedVersion: '1' }, { expectedBrokerRevision: '9' }])
+    await refusedBeforeCommit(await f.approve(values, fields), 409);
+  const supported = f.state.source;
+  // What an approval covers must be a workflow the hosted lane can run, read from the approved commit itself.
+  for (const source of ['on: push\njobs:\n  check:\n    runs-on: golf-native-linux\n    steps:\n      - run: ./check.sh\n', 'on: pull_request\njobs:\n  check:\n    runs-on: golf-native-linux\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n']) {
+    f.state.source = source; await refusedBeforeCommit(await f.approve(values), 400);
+  }
+  f.state.source = supported;
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM execution_bindings').get().n, 0);
+  const input = { id: nonce(), operationId: nonce() }, approved = (await value(await f.approve(values, input))).operation;
+  assert.deepEqual([approved.action, approved.itemId, approved.acceptedVersion, approved.acceptedBrokerRevision, approved.replayed], ['save_binding', input.id, '1', '3', false]);
+  const [binding] = (await f.list()).bindings;
+  assert.deepEqual([binding.id, binding.version, binding.workflowPath, binding.commitId, binding.workflowBlobId, binding.engineCatalog, binding.event, binding.eventRef, binding.deleted, binding.approvalState],
+    [input.id, '1', f.path, 'b'.repeat(40), f.blobId, 'golf.native.workflow-shell.v1', 'WORKFLOW_RUN_ORIGIN_PULL_REQUEST', 'refs/heads/feature', false, 'requires_current_authority']);
+  assert.equal(f.sql.prepare('SELECT event FROM execution_bindings').get().event, 'pull_request');
+  assert.match(binding.sourceSha256, /^[a-f0-9]{64}$/);
+  assert.deepEqual(binding.values.map(v => [v.id, v.version, v.scope]).sort(), values.map(v => [v.id, v.version, 'EXECUTION_VALUE_SCOPE_REPOSITORY']).sort());
+  assert.equal(f.sql.prepare('SELECT sponsor_id FROM execution_bindings').get().sponsor_id, 1);
+  // Replaying the original request needs its original fields; the receipt never moves to another source.
+  const first = { id: input.id, operationId: input.operationId, expectedBrokerRevision: '2', expiresAt: binding.expiresAt };
+  assert.equal((await value(await f.approve(values, first))).operation.replayed, true);
+  await refusedBeforeCommit(await f.approve(values, { ...first, commitId: commit }), 409);
+  await refusedBeforeCommit(await f.approve(values, { ...first, eventRef: 'refs/heads/main' }), 409);
+  await refusedBeforeCommit(await f.approve([values[0]], first), 409);
+  const edited = (await value(await f.approve([values[0]], { id: input.id, expectedVersion: '1', commitId: commit }))).operation;
+  assert.equal(edited.acceptedVersion, '2');
+  assert.deepEqual((await f.list()).bindings.map(b => [b.commitId, b.values.length]), [[commit, 1]]);
+  // A rotated value leaves the approval pointing at the old version until an administrator approves again.
+  await value(await f.save('DEPLOY_TOKEN', 'rotated-fixture-secret', { id: values[0].id, expectedVersion: '1' }));
+  await refusedBeforeCommit(await f.approve([values[0]], { id: input.id, expectedVersion: '2' }), 409);
+  // The approver's authority is read when the approval is shown: losing administration, even briefly, ends it.
+  f.sql.exec("UPDATE grants SET role='admin' WHERE user_id=2; UPDATE grants SET role='write' WHERE user_id=1; UPDATE grants SET role='admin' WHERE user_id=1");
+  assert.equal((await f.list()).bindings[0].approvalState, 'authority_unavailable');
+  const removal = { id: input.id, expectedVersion: '2', expectedBrokerRevision: (await f.list()).brokerRevision, operationId: nonce() };
+  assert.equal((await value(await f.human('DeleteRepositoryExecutionBinding', removal))).operation.action, 'delete_binding');
+  assert.equal((await value(await f.human('DeleteRepositoryExecutionBinding', removal))).operation.replayed, true);
+  await refusedBeforeCommit(await f.human('DeleteRepositoryExecutionBinding', { ...removal, operationId: nonce(), expectedVersion: '3', expectedBrokerRevision: (await f.list()).brokerRevision }), 409);
+  assert.deepEqual((await f.list()).bindings.map(b => [b.deleted, b.version]), [[true, '3']]);
+  const current = (await f.list()).values.filter(v => !v.deleted);
+  for (let i = 1; i < 20; i++) await value(await f.approve(current));
+  await refusedBeforeCommit(await f.approve(current), 400);
+  assert.equal((await f.list()).bindings.length, 20);
+});
+
+test('repository values stay unavailable without a dedicated key or an approved Actions workflow profile', async t => {
+  const f = await executionValueFixture(t), key = f.env.EXECUTION_VALUE_KEY;
+  const capability = async () => { const all = (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c => c.id === 'settings.repository-secrets'); assert.equal(all.length, 1); return all[0]; };
+  // The reason the settings page shows for being closed is the sentence the service refuses with.
+  const refusal = async () => { const response = await f.human('ListRepositoryExecutionValues'), shown = await capability(); assert.equal(response.status, 412); const { message } = await response.json();
+    assert.deepEqual([shown.state, shown.reason], ['CAPABILITY_STATE_DISABLED', message]); return message; };
+  delete f.env.EXECUTION_VALUE_KEY;
+  assert.equal(await refusal(), 'Configure a dedicated Secrets Store encryption key for repository values.');
+  Object.assign(f.env, { EXECUTION_VALUE_KEY: key, TEST_WORKFLOW_FORMAT: 'gitlab', TEST_WORKFLOW_PATH: '.gitlab-ci.yml' });
+  assert.equal(await refusal(), 'Repository values need an operator-approved Actions workflow profile; this installation runs an approved GitLab CI workflow.');
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions-act', TEST_WORKFLOW_PATH: f.path });
+  assert.equal(await refusal(), 'Repository values need an operator-approved Actions workflow profile; this installation runs pinned Actions jobs on customer runners.');
+  delete f.env.TEST_WORKFLOW_FORMAT; delete f.env.TEST_WORKFLOW_PATH; f.env.TEST_MODULE = 'test_calc';
+  assert.equal(await refusal(), 'Repository values need an operator-approved Actions workflow profile; this installation runs an approved Python test module.');
+  // A key alone does not make a module-only installation offer values.
+  await refusedBeforeCommit(await f.human('SaveRepositoryExecutionValue', { id: nonce(), expectedVersion: '0', expectedBrokerRevision: '0', operationId: nonce(), name: 'DEPLOY_TOKEN', kind: 1, value: 'fixture-secret-value' }), 412);
+  assert.equal((await f.human('NotAMethod')).status, 501);
+});
+
+async function releaseFixture(t) {
+  const { releaseExecutionValues } = await import('./src/execution-values.mjs');
+  const f = await executionValueFixture(t), secret = 'fixture-secret-not-a-real-credential';
+  f.env.EVIDENCE_DAILY_LIMIT = '20';
+  await value(await f.save('DEPLOY_TOKEN', secret)); await value(await f.save('REGION', 'eu-central', { kind: 2 }));
+  const values = (await f.list()).values, binding = { id: nonce() };
+  await value(await f.approve(values, binding));
+  // The hosted task asks through the workspace; here the same function runs with the same authorization callback.
+  const release = id => releaseExecutionValues(f.env, id, job => advanceEvidence(f.env, job, 'authorize-test', f.env.workflow));
+  const start = async () => { const job = (await value(await f.evidence({ ...f.input, advice: false, runTests: true, idempotencyKey: nonce() }))).job; assert.equal((await f.advance(job.id, 'tests')).state, 'RUNNING'); return job; };
+  const snapshot = id => JSON.parse(f.sql.prepare('SELECT snapshot FROM evidence_jobs WHERE id=?').get(id).snapshot);
+  const finish = async (id, output) => { Object.assign(f.execution.tasks.get(id), { state: 'PASSED', cleanup: 'destroyed', exitCode: 0, stdout: '', stderr: '', finishedAt: Date.now(), ...output });
+    await f.advance(id, 'tests'); await f.advance(id, 'advice'); await f.advance(id, 'store'); return value(await f.read(id, 'report', readerToken)); };
+  // What a new job at the pull request head is admitted with; the job is stopped again so the two-container bound never interferes.
+  const admitted = async () => { const job = await start(), approved = snapshot(job.id).execution.values; await value(await f.read(job.id, 'cancel')); return approved; };
+  return { ...f, secret, values, binding, release, start, snapshot, finish, admitted, releases: () => f.sql.prepare('SELECT * FROM execution_value_releases').all() };
+}
+
+test('an approved exact commit is released once to the hosted job and plaintext reaches no store or report', async t => {
+  const f = await releaseFixture(t), job = await f.start(), admitted = f.snapshot(job.id).execution.values, task = f.execution.tasks.get(job.id);
+  assert.deepEqual(admitted, { bindingId: f.binding.id, bindingVersion: 1, refs: f.values.map(v => ({ id: v.id, version: 1 })).sort((a, b) => a.id < b.id ? -1 : 1) });
+  // The task is admitted with the same identities, bound into its hash, and nothing else.
+  assert.deepEqual(task.values, admitted); assert.equal(JSON.stringify(task).includes(f.secret), false);
+  assert.equal(f.stored().includes(f.secret), false); assert.deepEqual(f.releases(), []);
+  const released = await f.release(job.id);
+  assert.deepEqual(released, { state: 'RELEASED', environment: { DEPLOY_TOKEN: f.secret, REGION: 'eu-central' }, secrets: [f.secret] });
+  assert.deepEqual(f.releases().map(r => [r.job_id, r.binding_id, r.binding_version]), [[job.id, f.binding.id, 1]]);
+  // A second request for the same job gets nothing.
+  assert.deepEqual(await f.release(job.id), { state: 'REFUSED' });
+  assert.equal(f.stored().includes(f.secret), false);
+  // Even a task that reported unmasked output cannot make it durable: the save masks again.
+  const half = f.secret.slice(0, 12), stars = '*'.repeat(f.secret.length);
+  const result = await f.finish(job.id, { stdout: 'token is ' + f.secret + '\nfirst half ' + half, stderr: f.secret.slice(12) + ' printed by a later step\nregion eu-central\n' });
+  assert.equal(result.report.tests.stdout, 'token is ' + stars + '\nfirst half ' + '*'.repeat(12));
+  assert.equal(result.report.tests.stderr, '*'.repeat(f.secret.length - 12) + ' printed by a later step\nregion eu-central\n');
+  assert.equal(result.report.execution.values, undefined); assert.equal(JSON.stringify(result).includes(f.binding.id), false);
+  assert.ok(result.report.limitations.includes('Repository values were released to this administrator-approved exact commit. Exact secret text is masked in the stored output; transformed values are not detected.'));
+  for (const [where, text] of [['D1', f.stored()], ['R2', JSON.stringify([...f.objects])], ['report', JSON.stringify(result)], ['status', await (await f.read(job.id)).text()]]) {
+    assert.equal(text.includes(f.secret), false, where); assert.equal(text.includes(half), false, where);
+  }
+  // A finished job cannot be used to ask again.
+  assert.deepEqual(await f.release(job.id), { state: 'REFUSED' });
+  const capability = (await value(await f.call('', {}, readerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c => c.id === 'settings.repository-secrets');
+  assert.deepEqual(capability.map(c => c.state), ['CAPABILITY_STATE_READY']); assert.match(capability[0].reason, /^Encrypted repository secrets and plain variables, released as environment variables only to an administrator-approved exact commit/);
+});
+
+test('a job at an unapproved commit, branch or workflow runs without values and its report says so', async t => {
+  const f = await releaseFixture(t), without = 'This job ran without repository values: no current administrator approval matches this exact commit, workflow and head branch.';
+  const edit = async fields => value(await f.approve(f.values, { id: f.binding.id, expectedVersion: (await f.list()).bindings[0].version, ...fields }));
+  await edit({ commitId: commit });
+  const other = await f.start();
+  assert.equal(f.snapshot(other.id).execution.values, undefined); assert.equal(f.execution.tasks.get(other.id).values, undefined);
+  assert.deepEqual(await f.release(other.id), { state: 'NONE' });
+  // The job's output is stored as it was: nothing was released, so nothing is masked.
+  const report = (await f.finish(other.id, { stdout: 'echo ' + f.secret })).report;
+  assert.ok(report.limitations.includes(without)); assert.equal(report.tests.stdout, 'echo ' + f.secret);
+  await edit({ eventRef: 'refs/heads/other' });
+  assert.equal(await f.admitted(), undefined);
+  await edit({});
+  assert.equal((await f.admitted()).bindingId, f.binding.id);
+  // The same commit with another workflow file at the approved path is a different source.
+  f.state.source = f.state.source.replace('./check.sh', './check.sh && env');
+  assert.equal(await f.admitted(), undefined);
+  f.state.source = f.state.source.replace(' && env', '');
+  assert.equal((await f.admitted()).bindingId, f.binding.id);
+  // Two approvals for one source are ambiguous, an expired one is not an approval, and neither is one whose approver lost administration.
+  await value(await f.approve([f.values[0]]));
+  assert.equal(await f.admitted(), undefined);
+  f.sql.prepare('UPDATE execution_bindings SET deleted=1 WHERE id<>?').run(f.binding.id);
+  assert.equal((await f.admitted()).bindingId, f.binding.id);
+  f.sql.prepare("UPDATE execution_bindings SET expires_at='2000-01-01T00:00:00.000Z'").run();
+  assert.equal(await f.admitted(), undefined);
+  f.sql.prepare('UPDATE execution_bindings SET expires_at=?').run(new Date(Date.now() + 600000).toISOString());
+  assert.equal((await f.admitted()).bindingId, f.binding.id);
+  f.sql.exec("UPDATE grants SET role='admin' WHERE user_id=2; UPDATE grants SET role='write' WHERE user_id=1");
+  assert.equal(await f.admitted(), undefined);
+  assert.deepEqual(f.releases(), []);
+  // A repository with no approvals says nothing about values.
+  f.sql.exec('UPDATE execution_bindings SET deleted=1');
+  const quiet = await f.start();
+  assert.equal((await f.finish(quiet.id, {})).report.limitations.some(line => line.includes('repository values')), false);
+});
+
+test('a stale approval, changed value, expiry, revoked approver or lost job authority releases nothing', async t => {
+  const f = await releaseFixture(t), job = await f.start(), refused = async why => { assert.deepEqual(await f.release(job.id), { state: 'REFUSED' }, why); assert.deepEqual(f.releases(), [], why); };
+  assert.ok(f.snapshot(job.id).execution.values);
+  const tamper = async (why, change, restore) => { f.sql.exec(change); await refused(why); f.sql.exec(restore); };
+  const expiry = f.sql.prepare('SELECT expires_at FROM execution_bindings').get().expires_at, source = f.sql.prepare('SELECT source_sha256 FROM execution_bindings').get().source_sha256;
+  await tamper('expired approval', "UPDATE execution_bindings SET expires_at='2000-01-01T00:00:00.000Z'", `UPDATE execution_bindings SET expires_at='${expiry}'`);
+  await tamper('newer approval version', 'UPDATE execution_bindings SET version=version+1', 'UPDATE execution_bindings SET version=version-1');
+  await tamper('removed approval', 'UPDATE execution_bindings SET deleted=1', 'UPDATE execution_bindings SET deleted=0');
+  await tamper('approval moved to another commit', `UPDATE execution_bindings SET commit_id='${commit}'`, `UPDATE execution_bindings SET commit_id='${'b'.repeat(40)}'`);
+  await tamper('approval of another origin', "UPDATE execution_bindings SET event='push'", "UPDATE execution_bindings SET event='pull_request'");
+  await tamper('approval moved to another branch', "UPDATE execution_bindings SET event_ref='refs/heads/main'", "UPDATE execution_bindings SET event_ref='refs/heads/feature'");
+  await tamper('approval of another compiled source', `UPDATE execution_bindings SET source_sha256='${'0'.repeat(64)}'`, `UPDATE execution_bindings SET source_sha256='${source}'`);
+  await tamper('rotated value', "UPDATE execution_values SET version=version+1 WHERE name='DEPLOY_TOKEN'", "UPDATE execution_values SET version=version-1 WHERE name='DEPLOY_TOKEN'");
+  await tamper('removed value', "UPDATE execution_values SET deleted=1 WHERE name='REGION'", "UPDATE execution_values SET deleted=0 WHERE name='REGION'");
+  await tamper('job no longer running its tests', "UPDATE evidence_jobs SET test_state='REQUESTED'", "UPDATE evidence_jobs SET test_state='RUNNING'");
+  await tamper('agent job', "UPDATE evidence_jobs SET agent_state='RUNNING'", "UPDATE evidence_jobs SET agent_state='NONE'");
+  await tamper('approver identity changed', 'UPDATE native_identity_versions SET version=version+1 WHERE user_id=1', 'UPDATE native_identity_versions SET version=version-1 WHERE user_id=1');
+  await tamper('approval names another approver', 'UPDATE execution_bindings SET sponsor_id=2', 'UPDATE execution_bindings SET sponsor_id=1');
+  const key = f.env.EXECUTION_VALUE_KEY; delete f.env.EXECUTION_VALUE_KEY; await refused('key removed'); f.env.EXECUTION_VALUE_KEY = key;
+  // The job's own authorization is asked first and its answer is final.
+  const { releaseExecutionValues } = await import('./src/execution-values.mjs');
+  assert.deepEqual(await releaseExecutionValues(f.env, job.id, async () => ({ state: 'REFUSED' })), { state: 'REFUSED' }); assert.deepEqual(f.releases(), []);
+  // Everything restored: the same job is released, which shows each refusal above came from its one change.
+  assert.equal((await f.release(job.id)).state, 'RELEASED');
+  assert.equal(f.releases().length, 1);
+  // The approver loses administration while a second job waits; the job's own actor is still a writer.
+  f.sql.exec("DELETE FROM execution_value_releases; UPDATE evidence_jobs SET state='REFUSED'");
+  const waiting = await f.start();
+  f.sql.exec("UPDATE grants SET role='admin' WHERE user_id=2; UPDATE grants SET role='write' WHERE user_id=1");
+  assert.equal((await f.advance(waiting.id, 'authorize-test')).state, 'AUTHORIZED');
+  assert.deepEqual(await f.release(waiting.id), { state: 'REFUSED' });
+  f.sql.exec("UPDATE grants SET role='admin' WHERE user_id=1");
+  assert.deepEqual(await f.release(waiting.id), { state: 'REFUSED' });
+  // The pull request head moves: the job's authorization itself ends.
+  f.setRefs([['refs/heads/main', commit], ['refs/heads/feature', 'c'.repeat(40)]]);
+  assert.deepEqual(await f.release(waiting.id), { state: 'REFUSED' });
+  assert.deepEqual(f.releases(), []);
+});
+
+test('a key that cannot open the released versions delivers nothing and stored output is withheld', async t => {
+  const f = await releaseFixture(t), job = await f.start(), key = f.env.EXECUTION_VALUE_KEY;
+  f.env.EXECUTION_VALUE_KEY = { get: async () => Buffer.alloc(32, 4).toString('base64') };
+  await assert.rejects(f.release(job.id), /^Error: Repository value unavailable$/);
+  // The release was recorded, so the job cannot ask again once the key is back, and nothing it prints is stored unchecked.
+  assert.equal(f.releases().length, 1);
+  const report = (await f.finish(job.id, { stdout: 'unchecked ' + f.secret, stderr: 'also ' + f.secret })).report;
+  assert.deepEqual([report.tests.state, report.tests.stdout, report.tests.stderr], ['PASSED', '', 'Output withheld: it could not be checked for repository secrets.\n']);
+  f.env.EXECUTION_VALUE_KEY = key;
+  assert.deepEqual(await f.release(job.id), { state: 'REFUSED' });
+  assert.equal(f.stored().includes(f.secret), false); assert.equal(JSON.stringify([...f.objects]).includes(f.secret), false);
+});
+
+test('rotating a value or changing an approval refuses queued jobs admitted under it and stops their containers', async t => {
+  const f = await releaseFixture(t), first = await f.start(), state = id => f.sql.prepare('SELECT state FROM evidence_jobs WHERE id=?').get(id).state;
+  assert.equal((await f.release(first.id)).state, 'RELEASED');
+  const token = f.values.find(v => v.name === 'DEPLOY_TOKEN');
+  await value(await f.save('DEPLOY_TOKEN', 'rotated-fixture-secret', { id: token.id, expectedVersion: '1' }));
+  assert.equal(state(first.id), 'REFUSED'); assert.equal(f.execution.tasks.get(first.id).state, 'CANCELLED');
+  assert.equal((await f.advance(first.id, 'authorize-test')).state, 'REFUSED');
+  // The approval still names the old version, so the next job runs without values until an administrator approves again.
+  const unapproved = await f.start();
+  assert.equal(f.snapshot(unapproved.id).execution.values, undefined);
+  const current = (await f.list()).values;
+  await value(await f.approve(current, { id: f.binding.id, expectedVersion: '1' }));
+  // A job that never had values is not touched by an approval change.
+  assert.equal(state(unapproved.id), 'QUEUED'); assert.equal(f.execution.tasks.get(unapproved.id).state, 'RUNNING');
+  await f.read(unapproved.id, 'cancel');
+  const second = await f.start();
+  assert.equal(f.snapshot(second.id).execution.values.bindingVersion, 2);
+  await value(await f.human('DeleteRepositoryExecutionBinding', { id: f.binding.id, expectedVersion: '2', expectedBrokerRevision: (await f.list()).brokerRevision, operationId: nonce() }));
+  assert.equal(state(second.id), 'REFUSED'); assert.equal(f.execution.tasks.get(second.id).state, 'CANCELLED');
+  assert.deepEqual(await f.release(second.id), { state: 'REFUSED' });
+  // A refused change fences nothing.
+  await value(await f.approve(current, { id: f.binding.id, expectedVersion: '3' }));
+  const third = await f.start();
+  await refusedBeforeCommit(await f.approve(current, { id: f.binding.id, expectedVersion: '9' }), 409);
+  assert.equal(state(third.id), 'QUEUED');
+  const region = current.find(v => v.name === 'REGION');
+  await value(await f.human('DeleteRepositoryExecutionValue', { id: region.id, expectedVersion: region.version, expectedBrokerRevision: (await f.list()).brokerRevision, operationId: nonce() }));
+  assert.equal(state(third.id), 'REFUSED');
+  assert.equal(f.stored().includes('rotated-fixture-secret'), false);
+});
+
+test('agent jobs and customer-runner jobs receive no values', async t => {
+  const { releaseExecutionValues } = await import('./src/execution-values.mjs');
+  const f = await releaseFixture(t), authorized = async () => ({ state: 'AUTHORIZED' });
+  const hosted = await f.start(), approved = f.snapshot(hosted.id).execution.values;
+  // An agent job has no test execution at all; even one forged to carry an approval is refused before the release is recorded.
+  const forge = (id, change) => { const snapshot = f.snapshot(id); change(snapshot); f.sql.prepare('UPDATE evidence_jobs SET snapshot=? WHERE id=?').run(JSON.stringify(snapshot), id); };
+  forge(hosted.id, snapshot => { snapshot.agent = { commitId: 'b'.repeat(40), allowedPath: 'calc.py' }; });
+  assert.deepEqual(await releaseExecutionValues(f.env, hosted.id, authorized), { state: 'REFUSED' });
+  forge(hosted.id, snapshot => { delete snapshot.agent; snapshot.execution.runner = { poolId: nonce(), poolVersion: 1, placementVersion: 1, imageId: 'sha256:' + 'a'.repeat(64) }; });
+  assert.deepEqual(await releaseExecutionValues(f.env, hosted.id, authorized), { state: 'REFUSED' });
+  for (const contract of ['golf.native.pr-test.v1', 'golf.native.actions-act.v1', 'golf.native.actions-act-build.v1']) {
+    forge(hosted.id, snapshot => { delete snapshot.execution.runner; snapshot.execution.contract = contract; });
+    assert.deepEqual(await releaseExecutionValues(f.env, hosted.id, authorized), { state: 'REFUSED' }, contract);
+  }
+  forge(hosted.id, snapshot => { snapshot.execution.contract = 'golf.native.workflow-shell.v1'; snapshot.execution.workflow.plan.format = 'gitlab'; });
+  assert.deepEqual(await releaseExecutionValues(f.env, hosted.id, authorized), { state: 'REFUSED' });
+  assert.deepEqual(f.releases(), []);
+  await assert.rejects(releaseExecutionValues(f.env, 'not-a-job', authorized), /Invalid value release/);
+  await f.read(hosted.id, 'cancel');
+  // The same approved commit placed on a customer runner is admitted without values and says why.
+  const pool = nonce();
+  f.env.TEST_IMAGE_ID = 'sha256:' + 'a'.repeat(64);
+  f.sql.prepare("INSERT INTO native_runner_pools(id,name,version,state,trust_class,max_parallel,image_id,created_at) VALUES(?,'pool',1,'ACTIVE','UNTRUSTED',1,?,'2026-01-01T00:00:00.000Z')").run(pool, f.env.TEST_IMAGE_ID);
+  f.sql.prepare("INSERT INTO native_runner_placements(repository_id,pool_id,pool_version,version,updated_at) VALUES(1,?,1,1,'2026-01-01T00:00:00.000Z')").run(pool);
+  const placed = (await value(await f.evidence({ ...f.input, advice: false, runTests: true, idempotencyKey: nonce() }))).job, execution = f.snapshot(placed.id).execution;
+  assert.ok(execution.runner); assert.equal(execution.values, undefined);
+  assert.deepEqual(await f.release(placed.id), { state: 'NONE' });
+  const { executionValueNote } = await import('./src/execution-values.mjs');
+  const db = f.env.DB, note = snapshot => executionValueNote(db, { id: placed.id, repository_id: 1 }, snapshot);
+  assert.deepEqual(await note(f.snapshot(placed.id)), ['This job ran without repository values: customer-runner jobs do not receive them.']);
+  assert.deepEqual(await note({ execution: { ...execution, values: approved } }), ['Repository values were approved for this commit at admission but were not released to the job.']);
+  assert.deepEqual(await note({ agent: {} }), []);
+  // Neither the agent task nor the customer-runner protocol has a path to the release.
+  for (const file of ['./src/agent-worker.mjs', './src/agents.mjs', './src/native-runners.mjs', './src/gitlab-runner.mjs', '../agents/src/worker.mjs']) {
+    const source = await readFile(new URL(file, import.meta.url), 'utf8');
+    assert.equal(/testValues|releaseExecutionValues|execution-values/.test(source), false, file);
+  }
+});
+
+test('with the agent module beside the approved Actions workflow, values reach the workflow run and never the agent job', async t => {
+  const { releaseExecutionValues } = await import('./src/execution-values.mjs');
+  const f = await releaseFixture(t), agents = allocateAgents(f);
+  // The combined profile: the hosted workflow runs pull requests, the module only tests agent proposals.
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: f.path });
+  const config = await value(await f.call('', {}, ownerToken, '/native/config'));
+  assert.deepEqual([config.testModule, config.testWorkflowPath, config.agents], ['test_calc', f.path, true]);
+  const capability = (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.find(c => c.id === 'settings.repository-secrets');
+  assert.equal(capability.state, 'CAPABILITY_STATE_READY');
+  const run = await f.start(), execution = f.snapshot(run.id).execution;
+  assert.equal(execution.contract, 'golf.native.workflow-shell.v1'); assert.equal(execution.module, undefined); assert.equal(execution.values.bindingId, f.binding.id);
+  assert.deepEqual(await f.release(run.id), { state: 'RELEASED', environment: { DEPLOY_TOKEN: f.secret, REGION: 'eu-central' }, secrets: [f.secret] });
+  // An agent job at the same approved commit runs the module and has no test execution to release to.
+  const agent = (await value(await f.evidence({ ...f.input, advice: false, agent: { prompt: 'Improve the approved source file.' }, idempotencyKey: nonce() }))).job, snapshot = f.snapshot(agent.id);
+  assert.equal(snapshot.agent.module, 'test_calc'); assert.equal(snapshot.execution, undefined);
+  await f.advance(agent.id, 'agents'); await f.advance(agent.id, 'agents');
+  const task = agents.tasks.get(agent.id);
+  assert.equal(task.module, 'test_calc'); assert.equal(task.values, undefined); assert.equal(JSON.stringify(task).includes(f.secret), false);
+  assert.deepEqual(await f.release(agent.id), { state: 'REFUSED' });
+  // Even with its own authorization granted, an agent job is refused before a release is recorded.
+  assert.deepEqual(await releaseExecutionValues(f.env, agent.id, async () => ({ state: 'AUTHORIZED' })), { state: 'REFUSED' });
+  assert.deepEqual(f.releases().map(r => r.job_id), [run.id]);
+  assert.equal(f.stored().includes(f.secret), false);
+  // Without the workflow the same installation is module-only again, and the page closes with the module wording.
+  delete f.env.TEST_WORKFLOW_FORMAT; delete f.env.TEST_WORKFLOW_PATH;
+  const closed = (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.find(c => c.id === 'settings.repository-secrets');
+  assert.deepEqual([closed.state, closed.reason], ['CAPABILITY_STATE_DISABLED', 'Repository values need an operator-approved Actions workflow profile; this installation runs an approved Python test module.']);
 });

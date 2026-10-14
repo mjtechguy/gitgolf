@@ -1,5 +1,6 @@
 import { digest, deny, invalid, Fault, page, uuidOK } from './common.mjs';
 import { ownerJoin, ownerSlug } from './owners.mjs';
+import { sealingKey, seal as sealValue, open as openValue } from './sealed.mjs';
 
 export const webhookMethods = new Set(['ListRepositoryWebhooks', 'SaveRepositoryWebhook', 'ListRepositoryWebhookDeliveries', 'TestRepositoryWebhook', 'RedeliverRepositoryWebhook']);
 const text = new TextEncoder(), now = () => new Date().toISOString();
@@ -36,23 +37,13 @@ function destination(env, endpoint) {
   if (!policy?.origins.includes(url.origin)) invalid('This webhook destination requires operator approval in the Cloudflare webhook policy.');
   return url;
 }
-const encode = bytes => btoa(String.fromCharCode(...bytes));
-async function encryptionKey(env) {
-  const value = await env.WEBHOOK_KEY.get();
-  if (typeof value !== 'string' || !/^[A-Za-z0-9+/]{43}=$/.test(value)) throw Error('Webhook encryption key unavailable');
-  return crypto.subtle.importKey('raw', Uint8Array.from(atob(value), c => c.charCodeAt(0)), 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-const binding = (env, row, id, version) => text.encode(JSON.stringify(['golf.native.webhook.v1', env.PUBLIC_ORIGIN, row.id, row.artifact_name, id, version]));
+const encryptionKey = async env => (await sealingKey(env.WEBHOOK_KEY, 'Webhook')).key;
+const binding = (env, row, id, version) => ['golf.native.webhook.v1', env.PUBLIC_ORIGIN, row.id, row.artifact_name, id, version];
 async function seal(env, row, id, version, value) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: binding(env, row, id, version) }, await encryptionKey(env), text.encode(JSON.stringify(value)));
-  return encode(iv) + '.' + encode(new Uint8Array(encrypted));
+  return sealValue(await encryptionKey(env), binding(env, row, id, version), JSON.stringify(value));
 }
 async function open(env, row, subscription) {
-  const [iv, encrypted] = subscription.encrypted.split('.');
-  const bytes = value => Uint8Array.from(atob(value), c => c.charCodeAt(0));
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(iv), additionalData: binding(env, row, subscription.id, subscription.credential_version) }, await encryptionKey(env), bytes(encrypted));
-  const value = JSON.parse(new TextDecoder().decode(plain));
+  const value = JSON.parse(await openValue(await encryptionKey(env), binding(env, row, subscription.id, subscription.credential_version), subscription.encrypted));
   if (!keyOK(value.signingSecret)) throw Error('Webhook credential unavailable');
   return value;
 }

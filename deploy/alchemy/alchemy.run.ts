@@ -72,6 +72,7 @@ export default Alchemy.Stack('GolfDemo', {
     Cloudflare.SecretsStore.Secret('SigningSecret', { store, name: name + '-signing', value: Redacted.make(input.signingKey) }),
     ...(input.webhookKey ? [Cloudflare.SecretsStore.Secret('WebhookSecret', { store, name: name + '-webhook', value: Redacted.make(input.webhookKey) })] : []),
     ...(analytics ? [Cloudflare.SecretsStore.Secret('AnalyticsSecret', { store, name: name + '-analytics', value: analytics.value })] : []),
+    ...(input.executionValueKey ? [Cloudflare.SecretsStore.Secret('ExecutionValueSecret', { store, name: name + '-execution-values', value: Redacted.make(input.executionValueKey) })] : []),
   ]);
   const settings = Output.all(db.databaseId, controlAccess.aud, previewAccess.aud,
     bucket.bucketName, queue.queueName, dispatch.name, ...secrets.map(s => s.storeId)).pipe(Output.map(([databaseId, aud, previewAud, , , , storeId]) => ({
@@ -82,6 +83,7 @@ export default Alchemy.Stack('GolfDemo', {
         policy: { ...input.settings.apps.policy, secret: { store: storeId, name: name + '-signing' } } },
       ...(input.webhookKey ? { webhooks: { ...input.settings.webhooks, key: { store: storeId, name: name + '-webhook' } } } : {}),
       ...(analytics ? { operations: { ...input.settings.operations, analytics_secret: { store: storeId, name: name + '-analytics' } } } : {}),
+      ...(input.executionValueKey ? { execution_values: { key: { store: storeId, name: name + '-execution-values' } } } : {}),
   })));
   const build = yield* Command.Build('NativeBuild', {
     command: 'python3 scripts/cloudflare_alchemy_demo.py build', cwd: root, outdir: resolve(directory, '.cloudflare'),

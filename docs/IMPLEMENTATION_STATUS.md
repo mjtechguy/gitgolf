@@ -1,5 +1,28 @@
 # Golf implementation status
 
+## 2026-10-14 — Native repository secrets and variables
+
+Cloudflare native: repository secrets and variables are stored as AES-GCM
+ciphertext under a dedicated Secrets Store key (`EXECUTION_VALUE_KEY`; Alchemy
+`enable-secrets`) and managed only by an Access-verified administrator, with the
+portable limits, version fences and receipts (schema 26). Values are released as
+environment variables only to Cloudflare-hosted pull-request jobs of the
+operator-approved Actions workflow at an administrator-approved exact commit
+and head branch, for at most 24 hours per approval, with the new
+`WORKFLOW_RUN_ORIGIN_PULL_REQUEST` origin; other jobs run without values and say
+so. Stored output masks exact secret text only; transformed values are not
+detected. Typed inputs, manual dispatch, organization values, environment
+scopes, secrets expressions, customer runners and agent jobs do not receive
+values. Portable Go refuses the new origin before any write.
+
+Evidence: Worker tests (369, 368 pass, 1 skipped), targeted mutation checks
+(39 of 40 caught; the survivor is covered by the source hash), a real
+workerd/Secrets Store/D1 value check, and native Playwright cases. Remaining:
+hosted run with a workflow profile, live confirmation that released values
+reach a container step and appear in no provider log, a key rotation
+procedure, and an approved-egress broker so jobs can use secrets against
+outside services.
+
 ## 2026-10-14 — Native issue templates; anonymous read throttling
 
 Cloudflare native serves `ListIssueTemplates` (`discussion.templates` ready):

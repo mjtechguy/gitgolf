@@ -149,3 +149,24 @@ test('the alarm repeats maintenance only while no scheduled run has reported in'
   try { Date.now = () => realNow() + 11 * 60_000; await f.workspace.alarm(); } finally { Date.now = realNow; }
   assert.equal(f.stages().length, 8);
 });
+
+test('a value release never overlaps a client revocation and asks the job authorization first', async () => {
+  const f = fixture(), phases = [], id = crypto.randomUUID();
+  let hold = deferred();
+  f.workspace.configured.handle = async () => { f.events.push('revoke'); await hold.promise; f.events.push('revoked'); return new Response('revoked'); };
+  f.workspace.configured.background = async (job, phase) => { f.events.push('authorize'); phases.push([job, phase]); await hold.promise; f.events.push('answered'); return { state: 'REFUSED' }; };
+  // A revocation that is being applied finishes before the release looks at anything.
+  let revoke = f.workspace.fetch(request('RevokeRepositoryCollaborator')); await tick();
+  let release = f.workspace.testValues(id); await tick();
+  assert.deepEqual(f.events, ['revoke']);
+  hold.resolve(); await revoke; assert.deepEqual(await release, { state: 'REFUSED' });
+  assert.deepEqual(f.events, ['revoke', 'revoked', 'authorize', 'answered']); assert.deepEqual(phases, [[id, 'authorize-test']]);
+  // And a release in progress finishes before a revocation starts: the two never interleave.
+  f.events.length = 0; hold = deferred();
+  release = f.workspace.testValues(id); await tick();
+  revoke = f.workspace.fetch(request('RevokeRepositoryCollaborator')); await tick();
+  assert.deepEqual(f.events, ['authorize']);
+  hold.resolve(); await release; await revoke;
+  assert.deepEqual(f.events, ['authorize', 'answered', 'revoke', 'revoked']);
+  await assert.rejects(f.workspace.testValues('not-a-job'), /Invalid value release/);
+});
