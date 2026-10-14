@@ -1,5 +1,59 @@
 # Golf implementation status
 
+## 2026-10-14 — Primer, Tiles and Console follow the layout study
+
+The first layout change (below) placed navigation and panes but did not look
+like the designs that were chosen. Primer (Classic), Tiles (Golf) and Console
+(Flare) now follow the [layout study](../design/layout-study/README.md) on the
+code, repository list, pull request, settings and sign-in pages.
+
+- **Primer.** One light header band holds the mark, an owner/repository
+  breadcrumb, the jump field, New repository and the tabs. The repository root
+  keeps a title row; other pages put its controls beside the breadcrumb.
+- **Tiles.** One top line carries the breadcrumb, branch picker and Code. The
+  repository root is three full-height tiles: files, README and About. The rail
+  lists the repository's sections with notifications and the account menu at
+  its foot. The repository list gains a filter tile; pull requests and settings
+  use the same edge-to-edge tiles.
+- **Console.** Flare takes Cloudflare's neutral scale and Inter. The top bar
+  holds owner, repository and branch chips and the jump field; plain tabs sit
+  under it, then the repository name and description.
+- **Shared.** A jump field (`Ctrl K`) finds a repository from the first page of
+  the reader's repositories. File rows show their latest change by default; the
+  existing lazy per-row read is unchanged and a reader's saved "hide" still
+  applies. Issues and pull request tabs show open counts from one bounded read
+  each (`50+` when another page exists). "Go to file" moves into the toolbar in
+  Primer and Console. Classic and Flare sign in from a centered card.
+
+`@fontsource/inter` is the one new dependency. No schema, binding or RPC changed.
+
+Deliberate differences from the study:
+
+- Manual refresh and live-status controls stay, shown as quiet icons.
+- In Tiles the star control sits beside the breadcrumb and Code precedes the
+  jump field, so keyboard order matches reading order.
+- The header has no global issue or pull request buttons; Golf has no such pages.
+- Check totals, commit totals, watch counts, a latest release, a language filter
+  and an activity feed are not shown: nothing loads them.
+- The pull request page has no changed-files tile on its conversation view.
+- Workbench, Reader, Refined, Fewer strokes, Kumo and Overview are unchanged.
+
+The browser suite now saves the standard layout and hidden row changes before
+each test, so existing specs keep exercising the arrangement they were written
+for; `layout-presets.spec.ts` clears that and covers the layouts itself.
+`GOLF_LAYOUT=appearance/layout` runs the suite in another layout.
+
+Validation: typecheck and both frontend builds pass. `layout-presets.spec.ts`
+has 22 tests: every layout at 1440 and 390 pixels, the structure of the three
+designs against the study, open counts, the jump field, the filter tile, sign-in
+per appearance, and width checks at 390 and 900 pixels after a desktop start.
+The full browser suite ran on this branch: 2,033 passed and 199 failed in 26.1
+minutes. 189 of the failures were already failing in the previous full run on
+`main`; of the other ten, three fail on `main` in isolation and seven passed
+when rerun. Each of the three designs was compared with its drawing page by
+page. Go and Worker code is unchanged. This was checked against the mocked
+backend only, and not yet against a signed-in session on the hosted site.
+
 ## 2026-10-13 — Nine layout presets across the three appearances
 
 Each appearance now offers three named layouts in Appearance settings. The

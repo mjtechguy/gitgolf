@@ -152,8 +152,6 @@ for (const theme of ['light', 'dark']) test(`directory change metadata fits mobi
 
 for (const theme of ['dark', 'light']) for (const width of [320, 390, 1280, 1920, 2560]) {
   test(`repository work surface stays centered and bounds long filenames at ${width}px ${theme}`, async ({ page }) => {
-    // This measures the standard arrangement; layout-presets.spec.ts covers panes.
-    await page.addInitScript(() => localStorage.setItem('golf.layout.golf', 'refined'));
     await fixture(page);
     const path = 'a-very-long-literal-filename-' + 'detail-'.repeat(27) + '.ts';
     await page.route('**/rpc/golf.v1.RepositoryService/GetContents', async route => respond(route, GetContentsResponseSchema, { repositoryId: repositoryId,

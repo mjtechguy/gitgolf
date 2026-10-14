@@ -377,8 +377,7 @@ test('work navigation stays compact and system status is separate from repositor
   const nav = page.getByRole('navigation', { name: 'Workspace', exact: true });
   const repositories = nav.getByRole('link', { name: 'Repositories', exact: true });
   await expect(repositories).toHaveAttribute('aria-current', 'page');
-  // Golf's default rail lists repositories, organizations and notifications.
-  await expect(nav.getByRole('link')).toHaveCount(3);
+  await expect(nav.getByRole('link')).toHaveCount(2);
   await expect(page.locator('.sidebar')).toHaveCount(0);
   await page.getByLabel('Repository ownership', { exact: true }).selectOption('owned');
   await expect(page.locator('.repository-row')).toHaveCount(2);
@@ -429,7 +428,7 @@ test('appearance choices color the Golf brand, persist, and share the header col
   await expect(root).toHaveAttribute('data-appearance', 'golf');
   await expect(page.getByRole('heading', { name: 'Appearance', exact: true })).toBeVisible();
   const brandColors: Record<string, [string, string]> = {
-    'Classic/Light': ['rgb(9, 105, 218)', 'rgb(9, 105, 218)'],
+    'Classic/Light': ['rgb(9, 105, 218)', 'rgb(121, 184, 255)'],
     'Classic/Dark': ['rgb(121, 184, 255)', 'rgb(121, 184, 255)'],
     'Golf/Light': ['rgb(212, 255, 58)', 'rgb(63, 100, 0)'],
     'Golf/Dark': ['rgb(212, 255, 58)', 'rgb(212, 255, 58)'],
@@ -442,8 +441,7 @@ test('appearance choices color the Golf brand, persist, and share the header col
     await expect(root).toHaveAttribute('data-appearance', name.toLowerCase());
     await expect(root).toHaveAttribute('data-theme', color.toLowerCase());
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', name === 'Golf' ? '/golf.svg' : name === 'Classic' && color === 'Dark' ? '/golf-classic-dark.svg' : `/golf-${name.toLowerCase()}.svg`);
-    // Classic's default layout keeps the brand in the top bar; Golf and Flare start with a rail.
-    const brand = page.locator(name === 'Classic' ? '.topbar .brand' : '.appearance-sidebar .brand');
+    const brand = page.locator(name === 'Flare' ? '.appearance-sidebar .brand' : '.topbar .brand');
     expect([
       await brand.locator('.brand-mark').evaluate(element => getComputedStyle(element).backgroundColor),
       await brand.evaluate(element => getComputedStyle(element).color),
