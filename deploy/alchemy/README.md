@@ -316,6 +316,10 @@ contain the maintained OpenCode controller. Alchemy beta.83 cannot create a
 container application for a Durable Object class in the same run that creates
 the class: the first deploy stops with `requires a resolved Durable Object
 namespace` after updating the Worker, and a second `deploy` completes it.
+Enabling AI also creates the `<name>-ai` Workflow (`AiWorkflow`) for Workers AI
+runs. Its settings are applied before the Worker creates that Workflow, so the
+first deploy after upgrading stops with `WorkflowNotFound` once the Worker is
+updated, and a second `deploy` completes it (seen 2026-10-14).
 
 Run pull-request tests from a workflow file while agent proposals keep the
 approved Python module:
