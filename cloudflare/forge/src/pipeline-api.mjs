@@ -5,7 +5,7 @@ import { Fault, invalid, deny } from './common.mjs';
 import { ownerSlug } from './owners.mjs';
 import { sha } from './git.mjs';
 import { operationsAdmin } from './operations.mjs';
-import { pipelinePolicy, forgejoRunnerVersion, forgejoRunnerSha256 } from './pipeline-policy.mjs';
+import { pipelinePolicy, forgejoRunnerVersion, forgejoRunnerSha256, gitlabRunnerVersion, gitlabRunnerSha256 } from './pipeline-policy.mjs';
 import { pipelineAllowed, cancelPipelineRun, rerunPipelineRun, playManualJob, readJobLog, listRunArtifacts, openArtifact, createRegistrationToken, pipelineEngines, approveEnvironmentJob, saveEnvironmentValue } from './pipelines.mjs';
 import { dispatchWorkflow, listWorkflows, repositoryRefs } from './actions-intake.mjs';
 
@@ -160,7 +160,11 @@ const wireRunner = (runner, online) => ({ id: String(runner.id), uuid: runner.uu
 const wireToken = token => ({ id: token.id, engine: token.engine, scope: token.scope, scopeId: token.scope_id, labels: parse(token.labels, []), expiresAt: new Date(token.expires_at).toISOString(), usesLeft: token.uses_left, revoked: Boolean(token.revoked), createdAt: token.created_at });
 export function registerCommands(env, engine, token, labels) {
   const origin = env.PUBLIC_ORIGIN;
-  if (engine === 'gitlab-ci') return [`gitlab-runner register --non-interactive --url ${origin} --token ${token} --executor docker --docker-image alpine:3.22 --description golf-runner`];
+  if (engine === 'gitlab-ci') {
+    const tags = labels.length ? ` --tag-list ${labels.join(',')}` : '';
+    // A registration token is not an authentication token: GitLab Runner only takes it through --registration-token.
+    return [`# GitLab Runner ${gitlabRunnerVersion} (linux-amd64 sha256 ${gitlabRunnerSha256})`, `gitlab-runner register --non-interactive --url ${origin} --registration-token ${token} --executor docker --docker-image alpine:3.22 --description golf-runner${tags}`, 'gitlab-runner run'];
+  }
   const label = labels.length ? labels.join(',') : 'ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-24.04';
   return [`# Forgejo Runner ${forgejoRunnerVersion} (linux-amd64 sha256 ${forgejoRunnerSha256})`, `forgejo-runner register --no-interactive --instance ${origin} --token ${token} --name golf-runner --labels ${label}`, 'forgejo-runner daemon'];
 }

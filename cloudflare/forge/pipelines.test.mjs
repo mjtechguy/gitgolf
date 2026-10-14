@@ -109,3 +109,15 @@ test('playing a manual job to a protected environment waits for approval, then q
   await p.approveEnvironmentJob(f.db, f.env, { id: 2 }, id, { approve: true });
   assert.equal(state().state, 'QUEUED');
 });
+
+test('the GitLab registration command uses --registration-token and the Forgejo one uses --token', async () => {
+  const { registerCommands } = await import('./src/pipeline-api.mjs');
+  const env = { PUBLIC_ORIGIN: 'https://golf.example' };
+  const gitlab = registerCommands(env, 'gitlab-ci', 'golfreg_x', ['docker', 'golf']);
+  assert.match(gitlab[0], /^# GitLab Runner 18\.5\.0 \(linux-amd64 sha256 [a-f0-9]{64}\)$/);
+  assert.match(gitlab[1], /^gitlab-runner register --non-interactive --url https:\/\/golf\.example --registration-token golfreg_x --executor docker .* --tag-list docker,golf$/);
+  assert.doesNotMatch(gitlab[1], / --token /);
+  assert.equal(gitlab[2], 'gitlab-runner run');
+  assert.match(registerCommands(env, 'gitlab-ci', 'golfreg_x', [])[1], /--registration-token golfreg_x --executor docker [^]*golf-runner$/);
+  assert.match(registerCommands(env, 'forgejo-actions', 'golfreg_x', [])[1], /^forgejo-runner register --no-interactive --instance https:\/\/golf\.example --token golfreg_x /);
+});

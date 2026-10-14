@@ -136,6 +136,17 @@ test('native runner HTTP routes separate current admin sign-in from machine cred
   assert.equal(machine.status,403);
 });
 
+test('a push probe is acknowledged and an oversized push is refused with a clear 413', async t => {
+  const f = await fixture(t); await f.create(); await f.sendPush();
+  const post = body => f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + ownerToken, 'Content-Type': 'application/x-git-receive-pack-request' }, body }));
+  const probe = await post(Buffer.from('0000'));
+  assert.equal(probe.status, 200); assert.equal(probe.headers.get('Content-Type'), 'application/x-git-receive-pack-result'); assert.equal((await probe.arrayBuffer()).byteLength, 0);
+  assert.equal(f.counts().effects, 1);
+  const large = await post(new Uint8Array(8 * 1024 * 1024 + 1));
+  assert.equal(large.status, 413); assert.match((await large.json()).message, /limited to 8 MiB/);
+});
+
 test('default metadata overlaps independent provider reads and withholds mismatched identity', async t => {
   const f = await fixture(t); await f.create(); await f.sendPush();
   const get = f.env.ARTIFACTS.get; let started = false, finished = false, disposed = false, mismatch = false;

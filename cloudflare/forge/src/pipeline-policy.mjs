@@ -16,3 +16,5 @@ export function pipelineCapabilities(env) {
 }
 export const forgejoRunnerVersion = 'v13.2.0';
 export const forgejoRunnerSha256 = 'fadaec897f5e6641c363f87ecaf75f866f99c81b7097ec6b433e4c48123fcad1';
+export const gitlabRunnerVersion = '18.5.0';
+export const gitlabRunnerSha256 = '4f84c2995cff1aaff89ce8639426bf1219cb3770d9360ce8783e9b5fde628762';
