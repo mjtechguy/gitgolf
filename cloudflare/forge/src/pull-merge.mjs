@@ -5,6 +5,7 @@ import { inventory, pullReviewContext } from './collaboration.mjs';
 import { comparison } from './repository-diff.mjs';
 import { discussionEvent } from './discussion-engagement.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
+import { commitObject, packObjects, join } from './git-objects.mjs';
 
 export const pullMergeMethods = new Set(['SubmitStandardPullMerge', 'GetStandardPullMergeOperation']);
 const encoder = new TextEncoder();
@@ -14,28 +15,10 @@ const writable = row => ['write', 'admin'].includes(row.role);
 const unresolved = "phase IN ('RESERVED','DISPATCH_UNKNOWN')";
 const columns = 'actor_id,operation_id,repository_id,pull_request_id,input_hash,original,phase,detail,git_operation_id,created_at,updated_at';
 
-function join(...chunks) {
-  const bytes = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.length, 0)); let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-  return bytes;
-}
-const sha1 = async bytes => new Uint8Array(await crypto.subtle.digest('SHA-1', bytes));
-
 // Exact Git object bytes: the commit ID is SHA-1 over "commit <size>\0" and this body.
-export async function mergeCommit({ tree, parents, name, email, time, message }) {
-  const who = `${name} <${email}> ${time} +0000`;
-  const body = encoder.encode(`tree ${tree}\n${parents.map(parent => `parent ${parent}\n`).join('')}author ${who}\ncommitter ${who}\n\n${message}`);
-  return { id: [...await sha1(join(encoder.encode(`commit ${body.length}\0`), body))].map(b => b.toString(16).padStart(2, '0')).join(''), body };
-}
-// Pack v2 holding one undeltified commit: type/size varint, zlib stream, then SHA-1 of all preceding bytes.
-export async function commitPack(body) {
-  const entry = []; let size = body.length, byte = 0x10 | size & 15;
-  for (size >>>= 4; size; size >>>= 7) { entry.push(byte | 0x80); byte = size & 0x7f; }
-  entry.push(byte);
-  const deflated = new Uint8Array(await new Response(new Blob([body]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
-  const pack = join(Uint8Array.of(0x50, 0x41, 0x43, 0x4b, 0, 0, 0, 2, 0, 0, 0, 1), Uint8Array.from(entry), deflated);
-  return join(pack, await sha1(pack));
-}
+export const mergeCommit = ({ tree, parents, name, email, time, message }) => commitObject({ tree, parents, author: { name, email, time }, message });
+// Pack v2 holding one undeltified commit.
+export const commitPack = body => packObjects([{ type: 'commit', body }]);
 // One receive-pack command; report-status is the only capability requested, so the reply has no side-band.
 export const receiveRequest = (old, next, ref, pack) => join(packetLine(`${old} ${next} ${ref}\0 report-status`), encoder.encode('0000'), pack);
 
