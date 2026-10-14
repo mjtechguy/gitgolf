@@ -17,6 +17,7 @@ import { invitationMethods } from './src/invitations.mjs';
 import { collaborationMethods } from './src/collaboration.mjs';
 import { workflowMethods } from './src/workflow-inventory.mjs';
 import { executionPolicyMethods } from './src/execution-policy.mjs';
+import { featurePolicyMethods, repositoryFeatureMethods } from './src/feature-policy.mjs';
 const contracts = new URL('../../api/golf/v1/', import.meta.url);
 const files = (await readdir(contracts)).filter(name => name.endsWith('.proto')).sort();
 const protos = await Promise.all(files.map(async name => ({ name, text: await readFile(new URL(name, contracts), 'utf8') })));
@@ -29,6 +30,8 @@ const supported = {
   RepositoryRulesService: ruleMethods,
   WorkflowService: workflowMethods,
   ExecutionPolicyService: executionPolicyMethods,
+  FeaturePolicyService: featurePolicyMethods,
+  RepositoryFeatureService: repositoryFeatureMethods,
   RepositoryWebhookService: webhookMethods,
   EmailNotificationService: emailMethods,
   RepositoryEnvironmentService: environmentMethods,
@@ -66,6 +69,8 @@ const limitations = {
   DiscussionCollaborationService: 'Current-authority reactions, own subscriptions and in-app inbox; transaction-bound timeline since schema14. Historical activity is not backfilled. Issue templates and forms are read from the default-branch head with the portable limits; email remains separate.',
   WorkflowService: 'Read-only inventory of .github/workflows/*.yml and .gitlab-ci.yml at the default-branch commit for current repository accounts: at most 20 files of 64 KiB, classified against the native shell subset, with the one operator-approved path marked. No dispatch, editor or run history.',
   ExecutionPolicyService: 'Repository scope only: current administrators under a verified human Access sign-in turn pull-request runs and automatic push tests off or on with policy and authority revision checks; bearer and service-token callers can read but not change it. Enforced when a run is admitted; admitted runs are not revoked. No instance or organization ceilings, repository selection or workflow path lists.',
+  FeaturePolicyService: 'Installation scope only: current operations administrators under a verified human Access sign-in read every feature with its mode, operator allocation and reach, and change one mode at a time with a version fence; widening needs the feature id typed back and public repositories can never be required. Organization policies are not available yet.',
+  RepositoryFeatureService: 'Effective state of every governed feature for one repository and the level that decided it, joined into the repository grant read. Repository changes are not available yet.',
   RepositoryActivityService: 'Bounded resumable Connect JSON/protobuf invalidations from the workspace SQLite journal; current authority before each frame. External Artifacts writes need native ingress.',
   OperationsService: 'Current Access-enrolled workspace ops administrators; inventories and maintenance journal. Fleet provider analytics/billing not collected.',
   SessionService: 'Access identity; local password, MFA, SSH and account lifecycle remain separate.',
@@ -76,7 +81,7 @@ const limitations = {
   RepositoryInvitationService: 'Enrolled Access users only; current issuer administration, expiring consent, atomic grant/decision and original receipt lookup. No email delivery or automatic enrollment.',
   RepositoryService: 'Bounded Git/read contract, immutable source pages and complete bounded filename/path indexes, overall reviews and same-repository PRs. Repository labels/milestones, issue/PR assignment and author/admin comment editing; no protected merge, inline review threads or organization labels. Pending overall drafts use PullReviewAuthoringService.',
 };
-const source = (await Promise.all(['core.mjs', 'file-index.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'owners.mjs', 'workspace-ui.mjs', 'environments.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs', 'execution-values.mjs', 'email.mjs', 'releases.mjs', 'attachments.mjs'].map(name => readFile(new URL('./src/' + name, import.meta.url), 'utf8')))).join('\n');
+const source = (await Promise.all(['core.mjs', 'file-index.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'owners.mjs', 'workspace-ui.mjs', 'environments.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs', 'feature-policy.mjs', 'execution-values.mjs', 'email.mjs', 'releases.mjs', 'attachments.mjs'].map(name => readFile(new URL('./src/' + name, import.meta.url), 'utf8')))).join('\n');
 for (const methods of Object.values(supported)) for (const method of methods) if (!collaborationMethods.has(method) && !source.includes("'" + method + "'") && !source.includes("/" + method + "'")) throw Error('Native adapter declaration has no maintained implementation: ' + method);
 const inventory = [];
 for (const proto of protos) for (const service of proto.text.matchAll(/service\s+(\w+)\s*\{(.*?)\n\}/gs)) for (const method of service[2].matchAll(/rpc\s+(\w+)/g)) inventory.push({ service: service[1], method: method[1], contract: proto.name, adapter: supported[service[1]]?.has(method[1]) ? 'Bounded adapter' : 'Missing native adapter' });

@@ -1,5 +1,6 @@
 import { deny, invalid, Fault } from './common.mjs';
 import { repositoryAccess, settingsAuthority } from './repository-settings.mjs';
+import { repositoryFeatures } from './feature-policy.mjs';
 
 export const executionPolicyMethods = new Set(['GetExecutionPolicy', 'UpdateExecutionPolicy']);
 const stale = () => { throw new Fault('failed_precondition', 412, 'Execution policy or repository access changed. Refresh before editing.'); };
@@ -26,9 +27,11 @@ export async function executionPolicy(db, env, person, row, request, method, bod
   if (!executionPolicyMethods.has(method) || named(body.scope, 'EXECUTION_SCOPE_', ['UNSPECIFIED', 'INSTANCE', 'ORGANIZATION', 'REPOSITORY']) !== 3 || body.organization)
     throw new Fault('unimplemented', 501, 'This installation has a repository switch only; instance and organization execution ceilings are operator-managed.');
   if (!['admin', 'write', 'read'].includes(row.role)) deny();
-  const { access } = await repositoryAccess(db, env, person, row), current = await repositoryExecution(db, row);
+  const { access } = await repositoryAccess(db, env, person, row), current = await repositoryExecution(db, row), actions = (await repositoryFeatures(db, env, row)).get('actions');
   if (method === 'UpdateExecutionPolicy') {
     if (!human(request) || row.role !== 'admin' || body.scopeId !== String(row.id)) deny();
+    // A policy that turned Actions off or requires it leaves the repository switch nothing to decide.
+    if (!actions.canChange && actions.decidedBy !== 'OPERATOR') throw new Fault('failed_precondition', 412, actions.reason);
     const mode = named(body.mode, 'EXECUTION_MODE_', ['UNSPECIFIED', 'DISABLED', 'ALL', 'SELECTED']), manual = body.manualDispatchEnabled ?? false, push = body.pushAllowed ?? false;
     if (Object.keys(body).some(key => !fields.includes(key)) || ![1, 2].includes(mode) || typeof manual !== 'boolean' || typeof push !== 'boolean' || body.allowAllWorkflows !== true ||
         [body.selectedRepositoryIds, body.workflowPaths].some(list => list !== undefined && (!Array.isArray(list) || list.length)))
@@ -50,5 +53,5 @@ export async function executionPolicy(db, env, person, row, request, method, bod
   // Admission is the only enforcement point, so the revocation epoch never advances: no admitted run is revoked.
   return { policy: { scope: 'EXECUTION_SCOPE_REPOSITORY', scopeId: String(row.id), ownerId: String(row.workspace_id), mode: current.manual || current.push ? 'EXECUTION_MODE_ALL' : 'EXECUTION_MODE_DISABLED',
     selectedRepositoryIds: [], manualDispatchEnabled: current.manual, allowAllWorkflows: true, workflowPaths: [], revision: String(current.version), revocationEpoch: '0',
-    canEdit: row.role === 'admin' && human(request), authorityRevision: access.revision, pushAllowed: current.push } };
+    canEdit: row.role === 'admin' && human(request) && (actions.canChange || actions.decidedBy === 'OPERATOR'), authorityRevision: access.revision, pushAllowed: current.push } };
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runtimeLabel, runtimeFeature, settingAvailable, settingForRoute, emailNotificationsMounted, type RuntimeManifest } from '../src/runtimeCapabilities.ts';
+import { runtimeLabel, runtimeFeature, settingAvailable, settingForRoute, emailNotificationsMounted, repositoryFeature, type RuntimeManifest } from '../src/runtimeCapabilities.ts';
 
 test('deployment labels do not imply adapters or grant settings authority', () => {
   for (const runtimeProfile of ['portable', 'local', 'docker', 'kubernetes', 'cloudflare-bridge', 'cloudflare-native']) {
@@ -57,4 +57,15 @@ test('native operations route is available explicitly while unsupported portable
  assert.equal(settingForRoute('repository-runners',undefined,true),'settings.runners');
  for(const view of ['execution','organizations','agents'])assert.ok(settingForRoute('instance-settings',view,true)?.startsWith('settings.'));
  assert.equal(settingForRoute('instance-settings','overview',true),null);
+});
+
+test('feature policies narrow what the installation reports; unallocated features and missing reads fall back',()=>{
+ const native={runtimeProfile:'cloudflare-native',capabilities:[{id:'repository.releases',state:3,reason:''}]};
+ assert.equal(settingForRoute('instance-settings','features',true),'settings.feature-policy');
+ assert.equal(settingForRoute('instance-settings','features'),'settings.feature-policy');
+ assert.equal(repositoryFeature(native,undefined,'releases','repository.releases'),true);
+ assert.equal(repositoryFeature(native,[{feature:'releases',effective:false,decidedBy:2}],'releases','repository.releases'),false);
+ assert.equal(repositoryFeature(native,[{feature:'releases',effective:false,decidedBy:1}],'releases','repository.releases'),true);
+ assert.equal(repositoryFeature(native,[{feature:'releases',effective:true,decidedBy:4}],'releases','repository.packages'),false);
+ assert.equal(repositoryFeature(undefined,[{feature:'actions',effective:false,decidedBy:5}],'actions'),false);
 });

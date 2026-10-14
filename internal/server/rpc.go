@@ -138,6 +138,9 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewGitAccessServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewGitTransportServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositorySettingsServiceHandler(s, options...))
+	// Feature policies are served by the Cloudflare-native Worker first; the portable server answers Unimplemented and the web keeps its current behaviour.
+	mux.Handle(golfv1connect.NewFeaturePolicyServiceHandler(golfv1connect.UnimplementedFeaturePolicyServiceHandler{}, options...))
+	mux.Handle(golfv1connect.NewRepositoryFeatureServiceHandler(golfv1connect.UnimplementedRepositoryFeatureServiceHandler{}, options...))
 	return mux
 }
 
@@ -187,6 +190,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.InfrastructureConnectionServiceListCloudflareEnvironmentResourcesProcedure,
 			golfv1connect.OrganizationCreationServiceGetOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceCreateOrganizationProcedure,
 			golfv1connect.ExecutionPolicyServiceGetExecutionPolicyProcedure, golfv1connect.ExecutionPolicyServiceUpdateExecutionPolicyProcedure,
+			golfv1connect.FeaturePolicyServiceGetFeaturePolicyProcedure, golfv1connect.FeaturePolicyServiceUpdateFeaturePolicyProcedure, golfv1connect.RepositoryFeatureServiceGetRepositoryFeaturesProcedure, golfv1connect.RepositoryFeatureServiceUpdateRepositoryFeaturesProcedure,
 			golfv1connect.ActionRunServiceListActionRunsProcedure, golfv1connect.ActionRunServiceGetActionRunProcedure,
 			golfv1connect.WorkflowArtifactServiceGetWorkflowArtifactProcedure, golfv1connect.WorkflowRunServicePrepareWorkflowDispatchProcedure, golfv1connect.WorkflowRunServiceDispatchWorkflowProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunProcedure, golfv1connect.WorkflowRunServiceGetWorkflowDispatchProcedure, golfv1connect.WorkflowRunServiceListWorkflowRunsProcedure, golfv1connect.WorkflowRunServiceCancelWorkflowRunProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunLogsProcedure,
 			golfv1connect.InstanceAdminServiceDisableLocalAccountProcedure, golfv1connect.WorkflowServiceInspectWorkflowsProcedure,

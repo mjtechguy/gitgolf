@@ -13,7 +13,7 @@ const { Miniflare, convertV4MiniflareOptions } = await import(pathToFileURL(reso
 const modules = [];
 const activity = await esbuild.build({ entryPoints: ['cloudflare/forge/src/activity.mjs'], outfile: 'cloudflare/forge/src/activity.runtime.mjs', bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./common.mjs', './git.mjs'] });
 const assets = await readUIAssets(resolve('web/dist-native'));
-for (const file of ['worker.mjs', 'operations.mjs', 'installation.mjs', 'operations-provider.mjs', 'core.mjs', 'file-index.mjs', 'telemetry.mjs', 'repository-indexes.mjs', 'repository-metadata.mjs', 'metadata-jobs.mjs', 'repository-images.mjs', 'repository-reads.mjs', 'repository-cache.mjs', 'repository-settings.mjs', 'managed-registry.mjs', 'native-runners.mjs', 'gitlab-runner.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'repository-diff.mjs', 'owners.mjs', 'public-profiles.mjs', 'public-repositories.mjs', 'workspace-ui.mjs', 'git.mjs', 'common.mjs', 'collaboration.mjs', 'evidence.mjs', 'delivery.mjs', 'environments.mjs', 'email.mjs', 'apps.mjs', 'app-policy.mjs', 'public.mjs', 'test-policy.mjs', 'agent-policy.mjs', 'agents.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: (file === 'public.mjs' ? 'const GOLF_NATIVE_ASSETS=' + JSON.stringify(assets) + ';\n' : '') + (await readFile(new URL('./src/' + file, import.meta.url), 'utf8')).replace("'../data/languages.json' with { type: 'json' }", "'../data/languages.mjs'") });
+for (const file of ['worker.mjs', 'operations.mjs', 'installation.mjs', 'operations-provider.mjs', 'core.mjs', 'file-index.mjs', 'telemetry.mjs', 'repository-indexes.mjs', 'repository-metadata.mjs', 'metadata-jobs.mjs', 'repository-images.mjs', 'repository-reads.mjs', 'repository-cache.mjs', 'repository-settings.mjs', 'managed-registry.mjs', 'native-runners.mjs', 'gitlab-runner.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'repository-diff.mjs', 'owners.mjs', 'public-profiles.mjs', 'public-repositories.mjs', 'workspace-ui.mjs', 'git.mjs', 'common.mjs', 'collaboration.mjs', 'evidence.mjs', 'delivery.mjs', 'environments.mjs', 'email.mjs', 'apps.mjs', 'app-policy.mjs', 'public.mjs', 'test-policy.mjs', 'agent-policy.mjs', 'agents.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs', 'feature-policy.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: (file === 'public.mjs' ? 'const GOLF_NATIVE_ASSETS=' + JSON.stringify(assets) + ';\n' : '') + (await readFile(new URL('./src/' + file, import.meta.url), 'utf8')).replace("'../data/languages.json' with { type: 'json' }", "'../data/languages.mjs'") });
 modules.push({ type: 'ESModule', path: 'forge/src/activity.mjs', contents: activity.outputFiles[0].text });
 for (const file of ['execution-values.mjs', 'sealed.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: await readFile(new URL('./src/' + file, import.meta.url), 'utf8') });
 for (const file of ['releases.mjs', 'asset-download.mjs', 'attachments.mjs']) modules.push({ type: 'ESModule', path: 'forge/src/' + file, contents: await readFile(new URL('./src/' + file, import.meta.url), 'utf8') });
@@ -53,7 +53,7 @@ try {
   assert.equal(session.status, 200, await session.clone().text()); assert.equal((await session.json()).user.login, 'local-reviewer');
   const rpc = (path, body = {}) => runtime.dispatchFetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Origin: origin }, body: JSON.stringify(body) });
   assert.equal((await (await rpc('/rpc/golf.v1.SessionService/GetSession')).json()).user.isInstanceAdmin,true);
-  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 30);
+  assert.equal((await (await rpc('/native/diagnostics')).json()).schema, 31);
   const inbox = await rpc('/rpc/golf.v1.RepositoryInvitationService/ListOwnRepositoryInvitations');
   assert.equal(inbox.status, 200, await inbox.clone().text()); assert.deepEqual((await inbox.json()).invitations, []);
   const config = await (await rpc('/native/config')).json();
@@ -71,6 +71,16 @@ try {
   await db.prepare("INSERT OR IGNORE INTO workspaces(slug,artifact_namespace) VALUES('local-access-proof','local-access-proof')").run();
   await db.prepare("INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at) VALUES(1,'rules-proof','','rules-proof',1,'original','hash','ACTIVE',?)").bind(new Date().toISOString()).run();
   await db.prepare("INSERT INTO grants VALUES(1,1,'admin')").run();
+  // Feature policy on real D1 under the Access identity: one allocated feature off, the repository read names the installation, and back.
+  const policies = await (await rpc('/rpc/golf.v1.FeaturePolicyService/GetFeaturePolicy', { scope: 'FEATURE_POLICY_SCOPE_INSTALLATION' })).json(), governed = policies.policies.find(p => p.allocated && p.repositoryChoice);
+  assert.ok(governed, JSON.stringify(policies)); assert.equal(policies.revision, '0');
+  const changePolicy = async (mode, expectedVersion) => (await rpc('/rpc/golf.v1.FeaturePolicyService/UpdateFeaturePolicy', { scope: 'FEATURE_POLICY_SCOPE_INSTALLATION', feature: governed.feature, mode, expectedVersion, confirmation: governed.feature, operationId: crypto.randomUUID() })).json();
+  assert.equal((await changePolicy('FEATURE_POLICY_MODE_DISABLED', '0')).revision, '1');
+  const governedRead = (await (await rpc('/rpc/golf.v1.RepositoryFeatureService/GetRepositoryFeatures', { repository: { owner: 'local-access-proof', name: 'rules-proof' }, repositoryId: '1' })).json()).features.find(f => f.feature === governed.feature);
+  assert.deepEqual([governedRead.effective, governedRead.decidedBy], [false, 'FEATURE_DECIDER_INSTALLATION']);
+  assert.equal((await rpc('/rpc/golf.v1.FeaturePolicyService/UpdateFeaturePolicy', { scope: 'FEATURE_POLICY_SCOPE_INSTALLATION', feature: governed.feature, mode: 'FEATURE_POLICY_MODE_ALLOWED', expectedVersion: '0', confirmation: governed.feature, operationId: crypto.randomUUID() })).status, 412);
+  assert.equal((await changePolicy('FEATURE_POLICY_MODE_ALLOWED', '1')).policy.version, '2');
+  console.log(`Real Access/workerd/D1 feature policy: ${governed.feature} off and back on, repository read names the installation, stale version refused`);
   const target={repository:{owner:'local-access-proof',name:'rules-proof'},repositoryId:'1',ownerId:'1'};
   const read = async (service, method, body) => {
     const response=await rpc('/rpc/golf.v1.'+service+'/'+method,body);

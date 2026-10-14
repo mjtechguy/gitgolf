@@ -9,6 +9,7 @@ import { appPolicy, appOrigin, appPolicyHash } from './app-policy.mjs';
 import { appBundle, provisionApp, appDispatch, purgeApp } from './apps.mjs';
 import { repositoryPackages } from './repository-settings.mjs';
 import { previewEnvironment, previewEnvironmentGuard, branchAllowed, previewSlots } from './environments.mjs';
+import { requireFeature } from './feature-policy.mjs';
 
 const now = () => new Date().toISOString();
 const tokenOK = value => typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
@@ -153,6 +154,7 @@ export async function previewBundle(repo, commitId, path) {
 
 export async function previewAPI(db, env, person, row, artifact, body) {
   if (!previewPolicy(env)) throw new Fault('failed_precondition', 412, 'An operator-approved protected preview allocation is required.');
+  await requireFeature(db, env, row, 'previews');
   if (body.action === 'list') {
     const { results } = await db.prepare('SELECT * FROM previews WHERE repository_id=? ORDER BY created_at DESC,id DESC LIMIT 101').bind(row.id).all();
     return reply({ previews: results.slice(0, 100).map(p => wire(p, env)), truncated: results.length > 100 });

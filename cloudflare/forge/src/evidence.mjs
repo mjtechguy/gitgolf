@@ -10,6 +10,7 @@ import { agentPolicy } from './agent-policy.mjs';
 import { agentStep, agentSource } from './agents.mjs';
 import { repositoryExecution } from './execution-policy.mjs';
 import { admitExecutionValues, executionValueNote, maskReleasedOutput } from './execution-values.mjs';
+import { admissionFeatures, evidenceRefused, featureOff } from './feature-policy.mjs';
 
 const terminal = new Set(['SUCCEEDED', 'REFUSED', 'EXPIRED']);
 const choices = ['inspect_changes', 'run_tests', 'resolve_feedback'];
@@ -106,6 +107,7 @@ export async function evidenceAPI(db, env, person, row, artifact, body, origin =
     if (job && (job.repository_id !== row.id || job.input_hash !== hash)) throw new Fault('already_exists', 409, 'Operation key belongs to different inputs.');
     if (!job) {
       policy(env, body.advice);
+      await admissionFeatures(db, env, row, { tests: runTests, agent: runAgent, advice: body.advice });
       if (runTests && !testPolicy(env)) throw new Fault('failed_precondition', 412, 'An operator-approved container test allocation is required.');
       if (runAgent && !agentPolicy(env)) throw new Fault('failed_precondition', 412, 'An operator-approved native agent allocation is required.');
       if (runTests && !(await repositoryExecution(db, row))[origin === 'push' ? 'push' : 'manual']) throw new Fault('failed_precondition', 412, origin === 'push' ? 'Automatic push tests are turned off for this repository.' : 'Pull-request runs are turned off for this repository.');
@@ -143,7 +145,7 @@ export async function evidenceAPI(db, env, person, row, artifact, body, origin =
           ...(runner ? { runner } : {}),
           ...(env.REGISTRY_CI_ENABLED === 'true' && env.REGISTRY ? { registry: { origin:env.REGISTRY_ORIGIN, name:registryRepository(env,row) } } : {}) };
       });
-      const values = execution && await admitExecutionValues(db, env, row, execution);
+      const values = execution && !await featureOff(db, env, row, 'secrets') && await admitExecutionValues(db, env, row, execution);
       if (values) execution.values = values;
       const snapshot = JSON.stringify({ selection: s, pullRequest: observed.pr, reviews: reviews.reviews, reportedChecks: checks.checks,
         ...(execution ? { execution } : {}), ...(agent ? { agent, artifactName: row.artifact_name } : {}),
@@ -201,6 +203,7 @@ export async function evidenceStep(db, env, job, context, phase, workflows) {
   if (!context || !evidencePolicy(env) || job.advice_state !== 'NONE' && !(env.EVIDENCE_ALLOW_AI === 'true' && env.AI && env.EVIDENCE_GATEWAY)) return update(db, job, 'REFUSED');
   if (job.expires_at <= time()) return update(db, job, 'EXPIRED');
   const { person, row, artifact } = context, snapshot = JSON.parse(job.snapshot);
+  if (await evidenceRefused(db, env, row, job, snapshot)) return update(db, job, 'REFUSED');
   if (snapshot.execution && (!testPolicy(env) || snapshot.execution.contract !== undefined && snapshot.execution.contract !== (env.TEST_WORKFLOW_FORMAT === 'actions-act' ? env.TEST_SOCKETLESS_BUILD === 'true' ? nativeActionsBuildContract : nativeActionsContract : env.TEST_WORKFLOW_FORMAT ? nativeWorkflowContract : nativeTestContract) ||
       Boolean(snapshot.execution.build) !== (env.TEST_SOCKETLESS_BUILD === 'true') ||
       (env.TEST_WORKFLOW_FORMAT ? snapshot.execution.workflow?.plan?.format !== env.TEST_WORKFLOW_FORMAT || snapshot.execution.workflow?.path !== env.TEST_WORKFLOW_PATH : snapshot.execution.module !== env.TEST_MODULE) ||

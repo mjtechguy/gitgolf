@@ -40,6 +40,7 @@ import { previewAPI, previewPolicy, environmentPolicy, previewRequest, cleanupPr
 import { repositoryEnvironments, environmentMethods } from './environments.mjs';
 import { releases, releaseMethods, releaseReadMethods, releaseAssetGrant } from './releases.mjs';
 import { discussionAttachments, attachmentMethods } from './attachments.mjs';
+import { featureColumns, publicAllowed, requireFeature, featureOff, policyCapabilities, featurePolicyService, repositoryFeatureService } from './feature-policy.mjs';
 import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user, bodyLimit } from './common.mjs';
 export { digest } from './common.mjs';
 import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, remote, sha, validRef, GitProviderError } from './git.mjs';
@@ -74,12 +75,13 @@ export function concurrentRead(request) {
   if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read'].includes(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
   if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
+  if (/^\/rpc\/golf\.v1\.(?:FeaturePolicyService\/GetFeaturePolicy|RepositoryFeatureService\/GetRepositoryFeatures)$/.test(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.EmailNotificationService\/(GetOwnEmailNotifications|GetRepositoryEmailSubscription|ListOwnEmailDeliveries)$/.test(new URL(request.url).pathname)) return true;
   if (/^\/(?:native\/release-asset\/read|rpc\/golf\.v1\.(?:RepositoryService\/(?:ListRepositoryReleases|GetRepositoryRelease)|RepositoryReleasePublicationService\/GetRepositoryReleasePublicationOperation))$/.test(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(?:DiscussionAttachmentService\/(?:ListDiscussionAttachments|DownloadDiscussionAttachment)|DiscussionAttachmentUploadService\/GetDiscussionAttachmentUploadState)$/.test(new URL(request.url).pathname)) return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
-const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+))$/;
+const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
 async function input(request) {
   if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') invalid('Use JSON.');
@@ -112,16 +114,18 @@ async function actor(db, request, anonymous = false) {
   return row;
 }
 
-async function authorizedRepository(db, person, key, env, id) {
+// feature names the policy-governed feature the caller is about to use; the policy columns arrive with the grant in one read.
+async function authorizedRepository(db, person, key, env, id, feature) {
   if (!nameOK(key?.owner) || !nameOK(key?.name)) deny();
-  let row = await db.prepare(`SELECT r.*,g.role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,COALESCE(v.version,0) AS access_version,COALESCE(s.description,r.description) AS description FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN workspaces w ON w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id LEFT JOIN repository_access_versions v ON v.repository_id=r.id
+  let row = await db.prepare(`SELECT r.*,g.role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,COALESCE(v.version,0) AS access_version,COALESCE(s.description,r.description) AS description,${featureColumns} FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN workspaces w ON w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id LEFT JOIN repository_access_versions v ON v.repository_id=r.id
     WHERE r.name=? AND g.user_id=? AND r.state='ACTIVE'`).bind(env.ARTIFACTS_NAMESPACE, key.name, person.id).first();
-  if (!row && env.publicRead && !person.git_repository_id) row = await db.prepare(`SELECT r.*,'public' AS role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,p.version AS access_version,COALESCE(s.description,r.description) AS description
+  if (!row && env.publicRead && !person.git_repository_id) row = await db.prepare(`SELECT r.*,'public' AS role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,p.version AS access_version,COALESCE(s.description,r.description) AS description,${featureColumns}
     FROM repositories r JOIN repository_visibility p ON p.repository_id=r.id AND p.is_public=1
     JOIN workspaces w ON w.artifact_namespace=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
-    WHERE r.name=? AND r.state='ACTIVE'`).bind(env.ARTIFACTS_NAMESPACE, key.name).first();
+    WHERE r.name=? AND r.state='ACTIVE' AND ${publicAllowed}`).bind(env.ARTIFACTS_NAMESPACE, key.name).first();
   if (!row || ownerSlug(row,env) !== key.owner || id && String(row.id) !== id || person.git_repository_id && person.git_repository_id!==row.id) deny();
-  if (env.PUBLIC_REPOSITORIES === 'true') row.is_public = (await db.prepare('SELECT is_public FROM repository_visibility WHERE repository_id=?').bind(row.id).first())?.is_public || 0;
+  if (env.PUBLIC_REPOSITORIES === 'true') row.is_public = (await db.prepare(`SELECT v.is_public AND ${publicAllowed} AS is_public FROM repository_visibility v JOIN repositories r ON r.id=v.repository_id WHERE v.repository_id=?`).bind(row.id).first())?.is_public || 0;
+  await requireFeature(db, env, row, feature);
   return row;
 }
 
@@ -375,10 +379,12 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (!preview) deny();
       const stored = await withOwner(db, await db.prepare('SELECT * FROM repositories WHERE id=?').bind(preview.repository_id).first());
       if (!stored) deny();
-      const row = await authorizedRepository(db, person, { owner: ownerSlug(stored,env), name: stored.name }, env, String(stored.id));
+      const row = await authorizedRepository(db, person, { owner: ownerSlug(stored,env), name: stored.name }, env, String(stored.id), 'previews');
       return await previewAPI(db, env, person, row, action => withArtifact(env, row, action), { action: 'grant', previewId: preview.id });
     }
     if (url.pathname === '/native/owners') return reply(await ownersAPI(db, person, body));
+    const featurePolicyRoute = /^\/rpc\/golf\.v1\.FeaturePolicyService\/([A-Za-z]+)$/.exec(url.pathname);
+    if (featurePolicyRoute) return reply(await featurePolicyService(db, env, person, request, featurePolicyRoute[1], body));
     if (url.pathname === '/native/config') return reply({ runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG, accessLogin: Boolean(env.ACCESS_AUD), canCreate: Boolean(person.can_create),
       evidence: evidencePolicy(env), tests: Boolean(testPolicy(env)), agents: Boolean(agentPolicy(env)),
       advice: env.EVIDENCE_ALLOW_AI === 'true', previews: previewPolicy(env), apps: Boolean(appPolicy(env)), automaticCI: env.CI_AUTO === 'true', appPath: appPolicy(env)?.entry || '',
@@ -388,7 +394,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (url.pathname === '/native/installation' || url.pathname === '/native/installation/read') return await installationAPI(db, env, person, request, body, url.pathname.endsWith('/read'));
     if (url.pathname === '/native/runner-admin') return await nativeRunnerAdmin(db, env, person, request, body);
     if (url.pathname === '/native/runner-placement') {
-      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'actions');
       if (body.repositoryId !== String(row.id)) deny();
       return await nativeRunnerPlacement(db, env, row, body);
     }
@@ -398,20 +404,20 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       return reply({ role: row.role });
     }
     if (url.pathname === '/native/repository-visibility') {
-      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, body.action === 'set' && body.isPublic === true ? 'public-repositories' : undefined);
       return reply(await repositoryVisibility(db, env, person, row, body));
     }
     if (url.pathname === '/native/repository-packages') {
-      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'packages');
       return reply(await repositoryPackages(env, person, row, body));
     }
     if (url.pathname === '/native/release-asset/read') {
-      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'releases');
       return reply(await releaseAssetGrant(db, env, row, body));
     }
     if (url.pathname === '/native/pr-preview' || url.pathname === '/native/pr-preview/read') {
       if (url.pathname.endsWith('/read') && body.action !== 'list') invalid('This route only lists previews.');
-      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'previews');
       if (body.repositoryId !== String(row.id)) deny();
       return await previewAPI(db, env, person, row, action => withArtifact(env, row, action), body);
     }
@@ -425,7 +431,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     }
     if (url.pathname === '/rpc/golf.v1.WorkflowService/InspectWorkflows') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
-      return reply(await workflowInventory(db, env, person, row, request, 'InspectWorkflows', body, action => withArtifact(env, row, action, true), Boolean(testPolicy(env)) && evidencePolicy(env)));
+      // Still readable when Actions is off by policy; it then reports execution unavailable.
+      return reply(await workflowInventory(db, env, person, row, request, 'InspectWorkflows', body, action => withArtifact(env, row, action, true), Boolean(testPolicy(env)) && evidencePolicy(env) && !await featureOff(db, env, row, 'actions')));
     }
     if (/^\/rpc\/golf\.v1\.ExecutionPolicyService\/[A-Za-z]+$/.test(url.pathname)) {
       if (!body.repository) unsupported();
@@ -441,33 +448,39 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (environment) {
       if (!environmentMethods.has(environment[1])) unsupported();
       if (!environmentPolicy(env)) throw new Fault('failed_precondition', 412, 'Repository environments need protected previews and Access sign-in on this installation.');
-      const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId);
+      const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId, 'previews');
       return reply(await repositoryEnvironments(db, env, person, row, request, environment[1], body));
     }
     const valueRoute = /^\/rpc\/golf\.v1\.RepositoryExecutionValueService\/([A-Za-z]+)$/.exec(url.pathname);
     if (valueRoute) {
       if (!executionValueMethods.has(valueRoute[1])) unsupported();
-      const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId);
+      const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId, 'secrets');
       return reply(await repositoryExecutionValues(db, env, person, row, request, valueRoute[1], body, action => withArtifact(env, row, action)));
     }
     const mail = /^\/rpc\/golf\.v1\.EmailNotificationService\/([A-Za-z]+)$/.exec(url.pathname);
     if (mail) {
       // SMTP transports and mailbox verification codes belong to the portable installation.
       if (!emailMethods.has(mail[1])) unsupported();
-      const row = body.target ? await authorizedRepository(db, person, body.target.repository, env, body.target.repositoryId) : null;
+      const row = body.target ? await authorizedRepository(db, person, body.target.repository, env, body.target.repositoryId, 'email') : null;
       return reply(await emailNotifications(db, env, person, row, request, mail[1], body));
     }
     const releaseRoute = /^\/rpc\/golf\.v1\.(RepositoryReleasePublicationService|RepositoryReleaseManagementService)\/([A-Za-z]+)$/.exec(url.pathname);
     if (releaseRoute) {
       if (!releaseMethods[releaseRoute[1]].has(releaseRoute[2])) unsupported();
-      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'releases');
       return reply(await releases(db, env, person, row, releaseRoute[2], body, () => withArtifact(env, row, repo => refs(env, repo, row, providerFetch))));
     }
     const attachmentRoute = /^\/rpc\/golf\.v1\.(DiscussionAttachmentService|DiscussionAttachmentUploadService)\/([A-Za-z]+)$/.exec(url.pathname);
     if (attachmentRoute) {
       if (!attachmentMethods[attachmentRoute[1]].has(attachmentRoute[2])) unsupported();
-      const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId);
+      // Existing files stay readable when attachments are off; new uploads are refused.
+      const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId, attachmentRoute[2] === 'SubmitDiscussionAttachmentUpload' ? 'attachments' : undefined);
       return reply(await discussionAttachments(db, env, person, row, attachmentRoute[2], body));
+    }
+    const featureRoute = /^\/rpc\/golf\.v1\.RepositoryFeatureService\/([A-Za-z]+)$/.exec(url.pathname);
+    if (featureRoute) {
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      return reply(await repositoryFeatureService(db, env, person, row, request, featureRoute[1], body));
     }
     const route = /^\/rpc\/golf\.v1\.(SessionService|RepositoryService|CapabilityService|ProfileService|OrganizationService|RepositorySettingsService|RepositoryAccessService|RepositoryInvitationService|RepositoryWebhookService|RepositoryRulesService|GitTransportService|PullReviewRequestService|PullReviewAuthoringService|PullMergeObservationService|StandardPullMergeService|DiscussionCollaborationService)\/([A-Za-z]+)$/.exec(url.pathname);
     if (!route) unsupported();
@@ -480,7 +493,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (method === 'GetAuthenticationOptions') return reply({ providerLabel: 'Cloudflare Access' });
       unsupported();
     }
-    if (service === 'CapabilityService' && method === 'ListCapabilities') return reply({ runtimeProfile: 'cloudflare-native', capabilities: [
+    if (service === 'CapabilityService' && method === 'ListCapabilities') return reply({ runtimeProfile: 'cloudflare-native', capabilities: await policyCapabilities(db, env, [
       { id: 'repository.public-source', label: 'Public repositories', state: env.PUBLIC_REPOSITORIES === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Administrators can publish source and Git history for anonymous browsing and HTTPS cloning. Collaboration and execution retain repository grants.' },
       { id: 'operations.dashboard', label: 'Operations dashboard', state: 'CAPABILITY_STATE_READY', reason: 'Current workspace administrators; durable inventories and maintenance observations. Provider usage/billing remain uncollected.' },
       { id: 'native-artifacts-git', label: 'Artifacts repositories', state: 'CAPABILITY_STATE_READY', reason: 'Private repositories; bounded unprotected single-ref Git.' },
@@ -536,7 +549,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'pull.merge-observation', label: 'Merge diagnostics', state: 'CAPABILITY_STATE_READY', reason: 'Exact source and target, current writer, branch-lock and base-ancestry observations. An observation never authorizes a merge; each merge request rechecks them.' },
       { id: 'pull.merge', label: 'Merge execution', state: 'CAPABILITY_STATE_READY', reason: 'Same-repository merge commits by current writers when the base branch tip is already contained in the head branch. One journaled single-ref write under Git rules, confirmed by reading the branch back. Squash, rebase, diverged branches, forks and locked or protected targets are refused; an unconfirmed write fences the repository like an unconfirmed push.' },
       { id: 'native-protected-merge', label: 'Protected merge', state: 'CAPABILITY_STATE_DISABLED', reason: 'Not implemented on this native path.' },
-    ] });
+    ]) });
     if (service === 'CapabilityService') unsupported();
     if (service === 'DiscussionCollaborationService' && method === 'ListOwnForgeNotifications') return reply(await engagement(db, env, person, null, method, body));
     if (service === 'RepositoryInvitationService' && ownInvitationMethods.has(method)) return reply(await invitations(db, env, person, null, method, body, request));
@@ -553,9 +566,9 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (method === 'ListRepositories') {
       const paging = page(body);
       const visible = env.PUBLIC_REPOSITORIES === 'true';
-      const { results } = await db.prepare(`SELECT r.*,${ownerColumns},COALESCE(s.description,r.description) AS description${visible ? ',COALESCE(p.is_public,0) AS is_public' : ''} FROM repositories r LEFT JOIN grants g ON g.repository_id=r.id AND g.user_id=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
+      const { results } = await db.prepare(`SELECT r.*,${ownerColumns},COALESCE(s.description,r.description) AS description${visible ? `,COALESCE(p.is_public AND ${publicAllowed},0) AS is_public` : ''} FROM repositories r LEFT JOIN grants g ON g.repository_id=r.id AND g.user_id=? ${ownerJoin} LEFT JOIN repository_settings s ON s.repository_id=r.id
         ${visible ? 'LEFT JOIN repository_visibility p ON p.repository_id=r.id' : ''}
-        WHERE (g.user_id IS NOT NULL ${visible ? 'OR p.is_public=1' : ''}) AND r.state='ACTIVE' AND (?='' OR COALESCE(o.slug,?)=?) ORDER BY r.id LIMIT ? OFFSET ?`).bind(person.id, body.owner || '', env.WORKSPACE_SLUG, body.owner || '', paging.limit + 1, paging.offset).all();
+        WHERE (g.user_id IS NOT NULL ${visible ? `OR p.is_public=1 AND ${publicAllowed}` : ''}) AND r.state='ACTIVE' AND (?='' OR COALESCE(o.slug,?)=?) ORDER BY r.id LIMIT ? OFFSET ?`).bind(person.id, body.owner || '', env.WORKSPACE_SLUG, body.owner || '', paging.limit + 1, paging.offset).all();
       const selected = results.slice(0, paging.limit);
       if (body.metadataOnly === true) return reply({ repositories: selected.map(row => wireRepository(row, env)), page: { nextPage: results.length > paging.limit ? paging.number + 1 : 0 } });
       const repositories = [];
@@ -584,8 +597,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (service === 'RepositoryRulesService') return reply(await repositoryRules(db, env, person, row, request, method, body));
     if (service === 'RepositoryAccessService') return reply(await repositoryCollaborators(db, env, person, row, method, body));
     if (service === 'RepositoryService' && resourceMethods.has(method)) return reply(await discussionResources(db, env, person, row, method, body));
-    if (service === 'RepositoryWebhookService') return reply(await repositoryWebhooks(db, env, person, row, method, body));
-    if (service === 'RepositoryService' && releaseReadMethods.has(method)) return reply(await releases(db, env, person, row, method, body));
+    if (service === 'RepositoryWebhookService') { await requireFeature(db, env, row, 'webhooks'); return reply(await repositoryWebhooks(db, env, person, row, method, body)); }
+    if (service === 'RepositoryService' && releaseReadMethods.has(method)) { await requireFeature(db, env, row, 'releases'); return reply(await releases(db, env, person, row, method, body)); }
     if (collaborationMethods.has(method)) return reply(await collaboration(db, env, person, method, body, row, action => withArtifact(env, row, action)));
     if (method === 'GetRepository') return reply(await withArtifact(env, row, async (_repo, _info, commits) => {
       const head = commits[0]?.hash;
@@ -760,7 +773,7 @@ export async function runCI(env) {
       await db.prepare("UPDATE git_operations SET ci_state='REFUSED' WHERE id=?").bind(push.id).run(); continue;
     }
     // A repository that turned automatic push tests off records no intake for this push.
-    if (!(await repositoryExecution(db, c.row)).push) { await db.prepare("UPDATE git_operations SET ci_state='REFUSED' WHERE id=?").bind(push.id).run(); continue; }
+    if (!(await repositoryExecution(db, c.row)).push || await featureOff(db, env, c.row, 'actions')) { await db.prepare("UPDATE git_operations SET ci_state='REFUSED' WHERE id=?").bind(push.id).run(); continue; }
     const branch = push.ref.slice('refs/heads/'.length);
     const { results } = await db.prepare("SELECT d.number FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE d.repository_id=? AND d.state='OPEN' AND (p.head_branch=? OR p.base_branch=?) ORDER BY d.number LIMIT 11").bind(c.row.id, branch, branch).all();
     if (results.length > 10) { await db.prepare("UPDATE git_operations SET ci_state='REFUSED' WHERE id=?").bind(push.id).run(); continue; }
@@ -848,6 +861,7 @@ export async function registryExecution(env, actorId, row, execution) {
   if (env.REGISTRY_CI_ENABLED !== 'true' || execution?.contract !== 'golf.registry-job.v1' || !uuidOK(execution.jobId) || !sha(execution.commitId) || !/^[a-f0-9]{64}$/.test(execution.policySha256||'') || !Number.isSafeInteger(execution.expiresAt) || execution.expiresAt <= Date.now()) return false;
   const job=await env.DB.withSession('first-primary').prepare('SELECT * FROM evidence_jobs WHERE id=? AND repository_id=? AND user_id=?').bind(execution.jobId,row.id,actorId).first();
   if (!job || job.state!=='QUEUED' || job.test_state!=='RUNNING' || row.write_pending || Date.parse(job.expires_at)!==execution.expiresAt) return false;
+  if (await featureOff(env.DB.withSession('first-primary'), env, row.id, 'packages')) return false;
   const snapshot=JSON.parse(job.snapshot);
   if (snapshot.execution?.commitId!==execution.commitId || snapshot.execution.policySha256!==execution.policySha256 || snapshot.execution.registry?.origin!==env.REGISTRY_ORIGIN || snapshot.execution.registry?.name!==registryRepository(env,row)) return false;
   return (await advanceEvidence(env,job.id,'authorize-test')).state==='AUTHORIZED';

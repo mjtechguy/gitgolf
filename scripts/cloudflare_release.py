@@ -227,6 +227,8 @@ class Release:
             self.migrate_attachment_schema(applied)
         if self.manifest['schema'] >= 30:
             self.migrate_installation_schema(applied)
+        if self.manifest['schema'] >= 31:
+            self.migrate_feature_policy_schema(applied)
         return applied or 'already-applied'
 
     def check_installation_schema(self):
@@ -262,6 +264,34 @@ class Release:
             self.command('d1', 'query', self.manifest['database'], '--sql', sql)
             self.check_installation_schema()
             self.state['migration0030'] = digest; self.save(); applied.append('0030')
+
+    def check_feature_policy_schema(self):
+        required = {'feature_policies': {'scope', 'scope_id', 'feature', 'mode', 'version', 'updated_by', 'updated_at'},
+                    'repository_features': {'repository_id', 'artifact_name', 'feature', 'enabled', 'version', 'updated_by', 'updated_at'},
+                    'policy_revisions': {'scope', 'scope_id', 'revision'}}
+        for table, fields in required.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
+            if {row['name'] for row in columns} != fields:
+                raise ValueError('Apply reviewed 0031 feature policy migration before releasing')
+
+    def migrate_feature_policy_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0031') not in (None, digest):
+            raise ValueError('Recorded feature policy migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        prefixes = ['CREATE TABLE IF NOT EXISTS feature_policies (', 'CREATE TABLE IF NOT EXISTS repository_features (', 'CREATE TABLE IF NOT EXISTS policy_revisions (']
+        if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement, prefix in zip(statements, prefixes)):
+            raise ValueError('Feature policy migration must only add reviewed tables')
+        ready = False
+        try:
+            self.check_feature_policy_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0031') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_feature_policy_schema()
+            self.state['migration0031'] = digest; self.save(); applied.append('0031')
 
     def check_attachment_schema(self):
         required = {'discussion_attachments': {'id', 'repository_id', 'discussion_id', 'comment_id', 'name', 'size', 'sha256', 'r2_key', 'author_id', 'created_at'},

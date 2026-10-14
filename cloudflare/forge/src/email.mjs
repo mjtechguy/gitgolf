@@ -1,5 +1,6 @@
 import { digest, deny, invalid, Fault, page, uuidOK } from './common.mjs';
 import { ownerJoin, ownerSlug } from './owners.mjs';
+import { deliveryCancelled, requireFeature } from './feature-policy.mjs';
 
 // The recipient is the caller's own Access sign-in address, so SMTP transports and mailbox verification codes are not served here.
 export const emailMethods = new Set(['GetOwnEmailNotifications', 'SaveOwnEmailPreference', 'GetRepositoryEmailSubscription', 'SaveRepositoryEmailSubscription', 'ListOwnEmailDeliveries', 'RedeliverOwnEmail']);
@@ -89,6 +90,7 @@ export async function emailNotifications(db, env, person, row, request, method, 
       FROM email_deliveries d JOIN email_subscriptions s ON s.id=d.subscription_id WHERE d.id=? AND d.user_id=?`).bind(body.deliveryId, person.id).first();
     // History and replay of a repository the caller can no longer read stay closed.
     if (!original?.readable) deny();
+    await requireFeature(db, env, original.repository_id, 'email');
     const inputHash = await digest(JSON.stringify([method, person.id, body.deliveryId, body.expectedContactVersion]));
     const previous = await db.prepare('SELECT * FROM email_deliveries WHERE id=?').bind(body.operationId).first();
     if (previous) {
@@ -181,6 +183,7 @@ export async function drainEmail(env) {
     const d = await db.prepare(read).bind(item.id).first();
     if (!d || !['queued', 'retrying'].includes(d.state)) continue;
     if (!d.authorized) { await db.prepare("UPDATE email_deliveries SET state='cancelled',failure_code='authority_changed',completed_at=? WHERE id=? AND state IN ('queued','retrying')").bind(now(), d.id).run(); continue; }
+    if (await deliveryCancelled(db, env, d.repository_id, 'email', d.id)) continue;
     if (!categories[d.event_topic] || !addressOK(d.email)) { await db.prepare("UPDATE email_deliveries SET state='failed',failure_code='message_unavailable',completed_at=? WHERE id=? AND state IN ('queued','retrying')").bind(now(), d.id).run(); continue; }
     const lease = crypto.randomUUID(), day = now().slice(0, 10), leaseUntil = new Date(Date.now() + 30000).toISOString();
     const due = `d.id=? AND d.state IN ('queued','retrying') AND d.next_attempt_at<=? AND EXISTS(SELECT 1 FROM email_subscriptions s WHERE s.id=d.subscription_id AND ${live})`, claimed = now();

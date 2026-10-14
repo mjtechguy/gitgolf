@@ -14,7 +14,7 @@ import { previewSlots } from './environments.mjs';
 import { defaultAppearance } from './public.mjs';
 
 // Newest first: the first table present names the applied schema.
-const schemaTables = [[30, 'installation_audit'], [29, 'discussion_attachment_operations'], [28, 'repository_release_operations'], [27, 'email_deliveries'], [26, 'execution_value_brokers'],
+const schemaTables = [[31, 'policy_revisions'], [30, 'installation_audit'], [29, 'discussion_attachment_operations'], [28, 'repository_release_operations'], [27, 'email_deliveries'], [26, 'execution_value_brokers'],
   [25, 'repository_execution_policy'], [24, 'pull_merge_operations'], [23, 'repository_environment_operations'], [22, 'repository_visibility'], [21, 'native_owners'],
   [20, 'gitlab_runner_jobs'], [19, 'native_runner_pools'], [18, 'pull_review_operations'], [17, 'git_credentials'], [16, 'repository_rule_operations'],
   [15, 'webhook_subscriptions'], [14, 'discussion_events'], [13, 'discussion_resources'], [12, 'repository_invitations'], [11, 'repository_access_operations'],
@@ -217,7 +217,7 @@ function policyView(env, key, row) {
 }
 const stale = () => { throw new Fault('failed_precondition', 412, 'This setting changed since you read it. Refresh before editing.'); };
 const recentSignIn = 600;
-const clientHeaders = request => Object.fromEntries([['colo', /^[A-Z]{3}$/], ['country', /^[A-Z]{2}$/]]
+export const clientHeaders = request => Object.fromEntries([['colo', /^[A-Z]{3}$/], ['country', /^[A-Z]{2}$/]]
   .map(([name, pattern]) => [name, request.headers.get(name === 'colo' ? 'X-Golf-Native-Access-Colo' : 'X-Golf-Native-Access-Country') || '', pattern]).filter(([, value, pattern]) => pattern.test(value)).map(([name, value]) => [name, value]));
 
 // Operations administrators only, checked before and after the reads like the dashboard, so a revocation during the read returns nothing.

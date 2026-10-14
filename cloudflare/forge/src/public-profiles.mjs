@@ -1,9 +1,10 @@
 import { digest, deny, invalid, Fault, page } from './common.mjs';
+import { publicAllowed } from './feature-policy.mjs';
 
 const slug = value => typeof value === 'string' && /^[a-z0-9][a-z0-9-]{0,38}$/.test(value);
 const wire = row => ({ id: String(row.id), name: row.name, owner: row.slug, fullName: `${row.slug}/${row.name}`,
   description: row.description, topics: JSON.parse(row.topics || '[]'), updatedAt: row.created_at });
-const publicRepositories = `FROM repositories r JOIN repository_visibility v ON v.repository_id=r.id AND v.is_public=1
+const publicRepositories = `FROM repositories r JOIN repository_visibility v ON v.repository_id=r.id AND v.is_public=1 AND ${publicAllowed}
   JOIN repository_owners ro ON ro.repository_id=r.id JOIN native_owners o ON o.id=ro.owner_id
   LEFT JOIN repository_settings s ON s.repository_id=r.id`;
 const columns = 'r.id,r.name,r.created_at,o.slug,COALESCE(s.description,r.description) AS description,s.topics';
