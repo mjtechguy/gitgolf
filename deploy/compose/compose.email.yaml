@@ -6,7 +6,9 @@ services:
     environment:
       GOLF_EMAIL_EGRESS_POLICY: ${GOLF_EMAIL_EGRESS_POLICY:-}
   email-worker:
-    build: .
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
     command: [email-worker]
     environment:
       GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:-http://localhost:${GOLF_HTTP_PORT:-8080}}

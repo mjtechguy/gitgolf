@@ -19,7 +19,7 @@ existing = dict(line.split('=', 1) for line in path.read_text().splitlines() if 
 token = sys.stdin.read().strip() if args.publisher_token_stdin else existing.get('GOLF_REVIEW_PUBLISHER_TOKEN', '')
 if not re.fullmatch(r'[A-Za-z0-9_-]{8,512}', token):
     sys.exit('Enroll a private nonadministrator publishing bot and supply its token via --publisher-token-stdin.')
-subprocess.run(['docker', 'build', '-f', 'Dockerfile.opencode', '-t', 'golf-opencode-review:local', '.'], cwd=ROOT, check=True)
+subprocess.run(['docker', 'build', '-f', 'deploy/docker/Dockerfile.opencode', '-t', 'golf-opencode-review:local', '.'], cwd=ROOT, check=True)
 image = subprocess.check_output(['docker', 'image', 'inspect', '--format', '{{.Id}}', 'golf-opencode-review:local'], cwd=ROOT, text=True).strip()
 if not re.fullmatch(r'sha256:[a-f0-9]{64}', image):
     sys.exit('Exact native runtime identity could not be verified.')

@@ -97,9 +97,9 @@ def main():
     image: {worker}
     pull_policy: never
 ''')
-        compose = ['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/'compose.yaml'),'-f',str(ROOT/'compose.ci.yaml')]
+        compose = ['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/'compose.yaml'),'-f',str(ROOT/'deploy/compose/compose.ci.yaml')]
         if args.objects:
-            compose += ['-f',str(ROOT/'compose.storage.yaml')]
+            compose += ['-f',str(ROOT/'deploy/compose/compose.storage.yaml')]
         compose += ['-f',str(override)]
         def command(*arguments, **kwargs): return run(*compose,*arguments,**kwargs)
         def runtime():

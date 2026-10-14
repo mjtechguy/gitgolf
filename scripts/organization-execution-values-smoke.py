@@ -174,7 +174,7 @@ def main():
     assert 1 <= args.seed_timeout <= 600 and not output.exists() and re.fullmatch('[a-f0-9]{40}',args.expected_source)
     assert re.fullmatch(r'(?:sha256:[a-f0-9]{64}|[^\s]+@sha256:[a-f0-9]{64})',args.image) and re.fullmatch(r'(?:sha256:[a-f0-9]{64}|[^\s]+@sha256:[a-f0-9]{64})',args.runner_image)
     output.mkdir(parents=True, mode=0o700); output.chmod(0o700); OUTPUT=output
-    for path in ('compose.yaml','compose.ci.yaml','compose.actions-engine.yaml','compose.runner-tls.yaml'):
+    for path in ('compose.yaml','deploy/compose/compose.ci.yaml','deploy/compose/compose.actions-engine.yaml','deploy/compose/compose.runner-tls.yaml'):
         assert (stack/path).is_file()
     environment = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k != 'DATABASE_URL'}
     def run(*argv, payload=None, timeout=180, expected=0):
@@ -252,7 +252,7 @@ def main():
     pull_policy: never
 ''')
         compose = ['docker','compose','-p',project,'--env-file',str(env_file)]
-        for path in ('compose.yaml','compose.ci.yaml','compose.actions-engine.yaml','compose.runner-tls.yaml'):
+        for path in ('compose.yaml','deploy/compose/compose.ci.yaml','deploy/compose/compose.actions-engine.yaml','deploy/compose/compose.runner-tls.yaml'):
             compose += ['-f',str(stack/path)]
         compose += ['-f',str(override)]
         def command(*argv,**kwargs): return run(*compose,*argv,**kwargs)

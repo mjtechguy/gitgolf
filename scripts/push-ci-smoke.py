@@ -180,8 +180,8 @@ def main():
     pull_policy: never
 ''')
         compose = ['docker', 'compose', '-p', project, '--env-file', str(env_file),
-            '-f', str(ROOT/'compose.yaml'), '-f', str(ROOT/'compose.ci.yaml'),
-            '-f', str(ROOT/'compose.storage.yaml'), '-f', str(override)]
+            '-f', str(ROOT/'compose.yaml'), '-f', str(ROOT/'deploy/compose/compose.ci.yaml'),
+            '-f', str(ROOT/'deploy/compose/compose.storage.yaml'), '-f', str(override)]
 
         def command(*arguments, **kwargs):
             return run(*compose, *arguments, **kwargs)

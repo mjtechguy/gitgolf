@@ -31,7 +31,7 @@ Python lives in the image's read-only `AGENT_TOOLSDIRECTORY`. The genuine setup-
 
 ## Configuration
 
-Use `compose.actions-remote.yaml` after `compose.yaml`, `compose.ci.yaml`, `compose.actions-engine.yaml` and `compose.runner-tls.yaml`. Supply:
+Use `deploy/compose/compose.actions-remote.yaml` after `compose.yaml`, `deploy/compose/compose.ci.yaml`, `deploy/compose/compose.actions-engine.yaml` and `deploy/compose/compose.runner-tls.yaml`. Supply:
 
 - `GOLF_REMOTE_ACTIONS_BUNDLES`: absolute path to the acquired `bundles.json`, readable by the core and worker's non-root users.
 - `GOLF_RUNNER_GIT_PREPARATION_IMAGE`: approved immutable Git image, preserving the existing exact-H source-preparation contract.

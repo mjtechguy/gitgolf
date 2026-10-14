@@ -229,7 +229,7 @@ def main():
         self_check(stack); return
     if not args.image or not args.sink_image or not re.fullmatch(r'[0-9a-f]{40}', args.source_commit or ''):
         parser.error('Actual qualification requires --image, --sink-image and exact --source-commit')
-    if not all((stack/p).is_file() for p in ('compose.yaml', 'compose.webhooks.yaml', 'deploy/postgres/init.sh')):
+    if not all((stack/p).is_file() for p in ('compose.yaml', 'deploy/compose/compose.webhooks.yaml', 'deploy/postgres/init.sh')):
         parser.error('Combined webhook source/overlay is required')
     screens = args.screenshots.resolve() if args.screenshots else None
     if screens:
@@ -352,7 +352,7 @@ networks:
     ipam:
       config: [{{subnet: {subnet}}}]
 ''')
-        compose = ['docker','compose','--project-directory',str(stack),'-p',project,'--env-file',str(env_file),'-f',str(stack/'compose.yaml'),'-f',str(stack/'compose.webhooks.yaml'),'-f',str(override)]
+        compose = ['docker','compose','--project-directory',str(stack),'-p',project,'--env-file',str(env_file),'-f',str(stack/'compose.yaml'),'-f',str(stack/'deploy/compose/compose.webhooks.yaml'),'-f',str(override)]
         def command(*arguments, payload=None, timeout=120):
             return run(*compose,*arguments,payload=None if payload is None else json.dumps(payload),timeout=timeout)
         def admin(*arguments):

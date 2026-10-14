@@ -43,7 +43,9 @@ services:
       postgres:
         condition: service_healthy
   golf:
-    build: .
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
     environment:
       GOLF_LISTEN_ADDR: ':8080'
       GOLF_PUSH_CI_ENABLED: ${GOLF_PUSH_CI_ENABLED:-false}

@@ -10,7 +10,7 @@ services:
     command: [agent-worker]
     build:
       context: .
-      dockerfile: Dockerfile.agent-worker
+      dockerfile: deploy/docker/Dockerfile.agent-worker
     environment:
       GOLF_REVIEW_IMAGE: ${GOLF_REVIEW_IMAGE:-}
       GOLF_REVIEW_PUBLISHER_TOKEN: ${GOLF_REVIEW_PUBLISHER_TOKEN:-}

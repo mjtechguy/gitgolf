@@ -45,7 +45,7 @@ k3d cluster create golf-smoke --image rancher/k3s:v1.35.5-k3s1 \
   --api-port 127.0.0.1:6556 --kubeconfig-update-default=false \
   --kubeconfig-switch-context=false --k3s-arg '--disable=traefik@server:0'
 k3d kubeconfig get golf-smoke > .tmp/kubernetes/kubeconfig
-docker build -t golf-local:qualification .
+docker build -f deploy/docker/Dockerfile -t golf-local:qualification .
 k3d image import golf-local:qualification -c golf-smoke
 make cli helm-check
 python3 scripts/kubernetes-smoke.py \

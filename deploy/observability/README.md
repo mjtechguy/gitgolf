@@ -7,7 +7,7 @@ From the repository root, after preparing the normal `.env` and building Golf:
 ```sh
 python3 deploy/observability/init.py
 docker compose --env-file .env --env-file .tmp/observability/monitoring.env \
-  -f compose.yaml -f compose.observability.yaml up -d --build
+  -f compose.yaml -f deploy/compose/compose.observability.yaml up -d --build
 ```
 
 The initializer creates fresh random credentials and refuses to overwrite an existing directory. `.tmp/observability` is mode `0700`; `monitoring.env` is `0600`. Its two individual secret files are `0444` inside the private directory so the non-root container UIDs can read their read-only mounts. Do not move those files into a publicly traversable directory. Compose file secrets are local bind mounts, not encrypted secret storage; host/Docker administrators remain trusted. Do not print or share resolved `docker compose config`/container environment output. [Compose secrets semantics](https://docs.docker.com/reference/compose-file/services/#secrets).
@@ -32,10 +32,10 @@ To disable monitoring, stop its services, then recreate Golf with the ordinary c
 
 ```sh
 docker compose --env-file .env --env-file .tmp/observability/monitoring.env \
-  -f compose.yaml -f compose.observability.yaml stop jaeger prometheus grafana
+  -f compose.yaml -f deploy/compose/compose.observability.yaml stop jaeger prometheus grafana
 docker compose --env-file .env -f compose.yaml up -d --no-deps --force-recreate golf
 docker compose --env-file .env --env-file .tmp/observability/monitoring.env \
-  -f compose.yaml -f compose.observability.yaml rm -f jaeger prometheus grafana
+  -f compose.yaml -f deploy/compose/compose.observability.yaml rm -f jaeger prometheus grafana
 ```
 
 These commands preserve application and monitoring volumes. Do **not** use `down --volumes` on the shared installation to remove monitoring: that also removes PostgreSQL/Gitea data. Changing Grafana's initial admin-password file does not reset the password already stored in its database; use Grafana's supported password management. Reuse existing initializer files to restart the same monitoring installation.
@@ -43,7 +43,7 @@ These commands preserve application and monitoring volumes. Do **not** use `down
 ## Reproducible native qualification
 
 ```sh
-docker build -t golf-local:observability .
+docker build -f deploy/docker/Dockerfile -t golf-local:observability .
 python3 scripts/observability-smoke.py --image golf-local:observability
 ```
 
@@ -61,7 +61,7 @@ The full native drill passed on 2026-10-02 using Golf image `sha256:8ee648f2f7a3
 
 ## Pinned upstream components
 
-Versions and multiarchitecture index digests were resolved on 2026-10-02 using `docker buildx imagetools inspect` and checked against official release/install sources. The complete immutable image references are in `compose.observability.yaml`.
+Versions and multiarchitecture index digests were resolved on 2026-10-02 using `docker buildx imagetools inspect` and checked against official release/install sources. The complete immutable image references are in `deploy/compose/compose.observability.yaml`.
 
 | Component | Version | Primary source |
 | --- | --- | --- |
