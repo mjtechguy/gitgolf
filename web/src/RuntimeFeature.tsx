@@ -5,5 +5,6 @@ import { useRuntimeCapabilities } from './useRuntimeCapabilities';
 // Gate mounting as well as visibility, so unsupported editors make no requests.
 export function RuntimeFeature({ id, children }: { id: string; children: ReactNode }) {
   const runtime = useRuntimeCapabilities();
-  return runtimeFeature(runtime.isError ? undefined : runtime.data, id) ? children : null;
+  // A failed refresh keeps the last answer: one dropped request must not hide tabs until the next poll.
+  return runtimeFeature(runtime.data, id) ? children : null;
 }
