@@ -104,7 +104,19 @@ export class Workspace extends DurableObject {
     // Native reads overlap in both queues, but cannot pass a pending client revocation.
     const path = new URL(request.url).pathname;
     // Serve this request, then restart so the next one runs the newer bundle the edge already runs; pending-write fences survive restarts.
-    if (!this.retiring && newerEdge(request)) { this.retiring = true; console.log(JSON.stringify({ event: 'golf.workspace_retiring' })); this.ctx.waitUntil(new Promise(resolve => setTimeout(resolve, 2000)).then(() => this.ctx.abort('A newer release is serving this workspace.'))); }
+    // A new version can take a little while to reach this object, so a restart may come back on the old bundle: retire at most
+    // once per 20 s (remembered across restarts) to converge within a minute without dropping a burst of in-flight requests.
+    if (!this.retiring && newerEdge(request)) {
+      this.retiring = true;
+      this.ctx.waitUntil((async () => {
+        const last = await this.ctx.storage.get('retiredAt');
+        if (typeof last === 'number' && Date.now() - last < 20_000) { setTimeout(() => { this.retiring = false; }, 20_000 - (Date.now() - last)); return; }
+        await this.ctx.storage.put('retiredAt', Date.now());
+        console.log(JSON.stringify({ event: 'golf.workspace_retiring' }));
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        this.ctx.abort('A newer release is serving this workspace.');
+      })());
+    }
     const response = path === activityPath ? handle(request, this.configured)
       : path === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' || path.startsWith('/native/') || !concurrentRead(request) ? this.authority(request) : this.dispatch(request);
     if (this.env.CI_AUTO === 'true' && request.method === 'POST' && new URL(request.url).pathname.endsWith('/git-receive-pack')) this.ctx.waitUntil(response.then(() => this.runCI()));
