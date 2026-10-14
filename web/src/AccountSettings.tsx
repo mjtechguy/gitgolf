@@ -9,7 +9,7 @@ import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
-import { Rocket, Server, MailPlus, Webhook, History, KeyRound, Plug, ScrollText, ShieldCheck, Tags, UserRound } from 'lucide-react';
+import { Bot, Rocket, Server, MailPlus, Webhook, History, KeyRound, Plug, ScrollText, ShieldCheck, Tags, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { useQuery } from '@tanstack/react-query';
@@ -31,6 +31,7 @@ export function AccountLayout({ children }: { children: ReactNode }) {
     <Link to="/account/invitations" activeOptions={{ exact:true }}><MailPlus size={18} />Invitations</Link>
     {portable && <Link to="/account/connections" activeOptions={{exact:true}}><Plug size={18}/>Provider connections</Link>}
     {portable && <Link to="/account/agents" activeOptions={{ exact:true }}><KeyRound size={18} />Coding agents</Link>}
+    {!portable && settingAvailable(runtime.isError ? undefined : runtime.data, 'agents.hosts') && <Link to="/account/agents" activeOptions={{ exact:true }}><Bot size={18} />Agent hosts</Link>}
     {localAuth && <Link to="/account/sessions" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sessions</Link>}
     {localAuth && <Link to="/account/ssh-keys" activeOptions={{ exact:true }}><KeyRound size={18} />SSH keys</Link>}
     {portable && <Link to="/account/api-credentials" activeOptions={{ exact:true }}><KeyRound size={18} />API credentials</Link>}
@@ -41,12 +42,13 @@ export function AccountLayout({ children }: { children: ReactNode }) {
 export function OrganizationSettingsLayout({ children, organization }: { children: ReactNode; organization: string }) {
   // The native runtime has no organization label or organization value service.
   const runtime = useRuntimeCapabilities(), portable = runtime.data?.runtimeProfile !== 'cloudflare-native';
-  const audit = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.installation-audit');
+  const audit = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.installation-audit'), agentHosts = settingAvailable(runtime.isError ? undefined : runtime.data, 'agents.hosts');
   return <div className="account-layout"><nav className="account-navigation" aria-label="Organization settings"><span className="eyebrow">ORGANIZATION SETTINGS</span>
     <Link to="/organizations/$organization/settings" params={{ organization }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
     {portable && <Link to="/organizations/$organization/settings/labels" params={{organization}} activeOptions={{exact:true}}><Tags size={18}/>Labels</Link>}
     {portable && <Link to="/organizations/$organization/settings/secrets" params={{ organization }} activeOptions={{ exact: true }}><KeyRound size={18} />Secrets and variables</Link>}
     {audit && <Link to="/organizations/$organization/settings/audit" params={{ organization }} activeOptions={{ exact: true }}><ScrollText size={18} />Audit log</Link>}
+    {agentHosts && <Link to="/organizations/$organization/settings/agents" params={{ organization }} activeOptions={{ exact: true }}><Bot size={18} />Agent hosts</Link>}
     <Link to="/organizations/$organization" params={{ organization }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Members and teams</Link>
   </nav><div className="account-content">{children}</div></div>;
 }
