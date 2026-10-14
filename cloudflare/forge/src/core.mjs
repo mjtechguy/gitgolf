@@ -17,6 +17,7 @@ import { resourceMethods, discussionResources, resourceOperation } from './discu
 import { invitations, ownInvitationMethods } from './invitations.mjs';
 import { operationsAdmin, operationsDashboard } from './operations.mjs';
 import { installationAPI, schemaVersion, installationOverlay, installationSettings, withInstallationPolicy } from './installation.mjs';
+import { audited, auditAPI } from './audit.mjs';
 import { nativeRunnerAdmin, nativeRunnerPlacement, nativeRunnerMachine } from './native-runners.mjs';
 import { gitLabRunner } from './gitlab-runner.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
@@ -325,7 +326,8 @@ async function sourceEntry(repo, entry, path) {
 export async function handle(request, env, providerFetch = fetch, imageFetch = fetch) {
   const start = performance.now(), clock = timings();
   const configured = { ...env, timings: clock, DB: timedDatabase(env.DB, clock) };
-  const response = await handleRequest(request, configured, providerFetch, imageFetch);
+  // The one audit recording point: privileged and state-changing routes named in audit.mjs, including their refusals.
+  const response = await audited(request, configured, () => handleRequest(request, configured, providerFetch, imageFetch), () => actor(configured.DB.withSession('first-primary'), request));
   if (response.ok && configured.readAuthority && env.confirmRead) {
     try { await clock.measure('authority', () => env.confirmRead(configured.readAuthority, clock)); }
     catch (error) { return timedResponse(reply(error instanceof Fault ? { code: error.code, message: error.message } : { code: 'unavailable', message: 'Repository access could not be confirmed.' }, error instanceof Fault ? error.status : 503), clock, 'native', performance.now() - start); }
@@ -399,6 +401,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       testModule: env.TEST_MODULE || '', testWorkflowFormat: env.TEST_WORKFLOW_FORMAT || '', testWorkflowPath: env.TEST_WORKFLOW_PATH || '',
       dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) || 0, previewTTL: Number(env.PREVIEW_TTL) || 0, appTTL: appPolicy(env)?.ttl || 0 });
     if (url.pathname === '/native/installation' || url.pathname === '/native/installation/read') return await installationAPI(db, env, person, request, body, url.pathname.endsWith('/read'));
+    if (url.pathname === '/native/audit/read') return await auditAPI(db, env, person, request, body, () => authorizedRepository(db, person, body.repository, env, body.repositoryId));
     if (url.pathname === '/native/runner-admin') return await nativeRunnerAdmin(db, env, person, request, body);
     if (url.pathname === '/native/ai-models' || url.pathname === '/native/ai-models/read') return await aiModelsAPI(db, env, person, request, body, url.pathname.endsWith('/read'), () => authorizedRepository(db, person, body.repository, env, body.repositoryId));
     if (url.pathname === '/native/ai-usage/read') return await aiUsageAPI(db, env, person, request, body, providerFetch);
@@ -558,7 +561,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'settings.native', label: 'Cloudflare allocation settings', state: 'CAPABILITY_STATE_READY', reason: "Operations administrators signed in through Access see every installation setting the Worker holds: allocations, approved origins, sender, limits and today's use. Secret values are never shown. " + (env.INSTALLATION_POLICY_EDITING === 'false' ? 'Installation policy is locked at deploy.' : 'Webhook origins and limits, email, AI advice, agent proposals, preview lifetime and slots, anonymous rate limiting and daily evidence admissions are editable within the deploy allocation; widening needs typed confirmation and a recent Access sign-in.') },
       { id: 'settings.ai-models', label: 'AI models', state: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'Operations administrators choose the Workers AI model for each AI use case within the deploy list, from the account catalog; repositories choose only where allowed. Clef stays fixed for advice and triage.' : 'Workers AI is not allocated on this installation (enable-ai).' },
       { id: 'operations.ai-usage', label: 'AI usage', state: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'Golf’s own run ledger by feature, model and day against the daily AI limit; AI Gateway analytics when an Account Analytics Read token is bound. Cloudflare billing is authoritative.' : 'Workers AI is not allocated on this installation (enable-ai).' },
-      { id: 'settings.installation-audit', label: 'Installation audit log', state: env.installationSchema ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.installationSchema ? 'Append-only record of installation policy changes, readable by operations administrators signed in through Access.' : 'Apply the schema 30 migration to keep an installation audit log.' },
+      { id: 'settings.installation-audit', label: 'Installation audit log', state: env.installationSchema ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.installationSchema ? 'Append-only record of privileged and state-changing actions at installation, organization and repository scope. Operations administrators read all of it through Access; organization owners and repository administrators read their own scope.' : 'Apply the schema 30 migration to keep an installation audit log.' },
       // The portable administration pages these name have no native service; the specific reason replaces a generic blocked page.
       { id: 'settings.execution', label: 'Installation execution policy', state: 'CAPABILITY_STATE_DISABLED', reason: 'Cloudflare native has no installation-wide execution policy service. Repository administrators switch pull-request runs per repository; the approved workflow is fixed at deploy.' },
       { id: 'settings.organization-creation', label: 'Organization creation policy', state: 'CAPABILITY_STATE_DISABLED', reason: 'Cloudflare native has no organization creation policy service. Accounts allowed to create repositories create organizations.' },

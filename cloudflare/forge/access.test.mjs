@@ -102,6 +102,9 @@ test('installation policy writes receive the verified sign-in time and location;
   // Cloudflare's runtime context has no iat, so the application token is verified for this route.
   await post('/native/installation', { access: { aud: env.ACCESS_AUD, getIdentity: async () => ({ email: claims.email }) } });
   assert.deepEqual(seen.pop(), { 'x-golf-native-access-email': claims.email, 'x-golf-native-access-issued-at': String(issued) });
+  // Every route receives Cloudflare's location for audit rows; the sign-in time stays specific to policy writes.
   await post('/native/installation/read', {}, { colo: 'LHR', country: 'GB' });
+  assert.deepEqual(seen.pop(), { 'x-golf-native-access-email': claims.email, 'x-golf-native-access-colo': 'LHR', 'x-golf-native-access-country': 'GB' });
+  await post('/native/runner-admin', {});
   assert.deepEqual(seen.pop(), { 'x-golf-native-access-email': claims.email });
 });

@@ -232,7 +232,8 @@ export async function installationAPI(db, env, person, request, body, read) {
       item.state = allocated.find(row => row.id === item.id).state;
       if (Object.hasOwn(installationPolicies, item.id)) item.policy = policyView(env, item.id, rows?.get(item.id)) || undefined;
     }
-    const recent = rows ? (await db.prepare(auditSelect + ' ORDER BY a.id DESC LIMIT 10').all()).results.map(auditRow) : [];
+    // Policy changes only; the full log of other actions is read through audit.mjs.
+    const recent = rows ? (await db.prepare(auditSelect + " WHERE a.action IN ('update','feature_policy.update','ai_model.update') ORDER BY a.id DESC LIMIT 10").all()).results.map(auditRow) : [];
     await requireAdmin();
     return reply({ generatedAt: new Date().toISOString(), release, configuration, schema, workspace: env.WORKSPACE_SLUG, publicOrigin: env.PUBLIC_ORIGIN, demoStopAt: env.DEMO_STOP_AT || '',
       editing: rows ? editing(env) : { enabled: false, reason: 'Apply the schema 30 migration to edit installation policy. Deploy values apply.' }, groups, recent });
