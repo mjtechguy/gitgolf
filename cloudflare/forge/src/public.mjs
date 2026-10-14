@@ -1,4 +1,4 @@
-import { release, configuration, timings } from './telemetry.mjs';
+import { release, configuration, timings, builtAt } from './telemetry.mjs';
 import { performanceSample } from './performance.mjs';
 import { bounded } from './git.mjs';
 import { accessContext, accessIssuedAt } from './access.mjs';
@@ -80,6 +80,8 @@ async function dispatch(request, env, ctx, clock) {
     }
     const headers = new Headers(request.headers);
     for (const name of ['X-Golf-Native-Access-Email', 'X-Golf-Native-Access-Issued-At', 'X-Golf-Native-Access-Colo', 'X-Golf-Native-Access-Country']) headers.delete(name);
+    // Always this edge's own build, never a caller's value: the workspace retires an instance older than the edge serving it.
+    headers.set('X-Golf-Edge-Built-At', String(builtAt));
     if (!headers.has('Authorization') && access) {
       const identity = await clock.measure('access', () => access.getIdentity());
       if (typeof identity?.email === 'string' && identity.email.length <= 254) headers.set('X-Golf-Native-Access-Email', identity.email);

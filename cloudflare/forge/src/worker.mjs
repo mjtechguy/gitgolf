@@ -1,3 +1,4 @@
+import { newerEdge } from './telemetry.mjs';
 import { drainWebhooks, webhookPolicy } from './webhooks.mjs';
 import { drainEmail, emailPolicy } from './email.mjs';
 import { collectWorkerMetrics, collectServiceHealth } from './operations-provider.mjs';
@@ -102,6 +103,8 @@ export class Workspace extends DurableObject {
     // Streams re-enter the admission queue only for short authorization reads.
     // Native reads overlap in both queues, but cannot pass a pending client revocation.
     const path = new URL(request.url).pathname;
+    // Serve this request, then restart so the next one runs the newer bundle the edge already runs; pending-write fences survive restarts.
+    if (!this.retiring && newerEdge(request)) { this.retiring = true; console.log(JSON.stringify({ event: 'golf.workspace_retiring' })); this.ctx.waitUntil(new Promise(resolve => setTimeout(resolve, 2000)).then(() => this.ctx.abort('A newer release is serving this workspace.'))); }
     const response = path === activityPath ? handle(request, this.configured)
       : path === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' || path.startsWith('/native/') || !concurrentRead(request) ? this.authority(request) : this.dispatch(request);
     if (this.env.CI_AUTO === 'true' && request.method === 'POST' && new URL(request.url).pathname.endsWith('/git-receive-pack')) this.ctx.waitUntil(response.then(() => this.runCI()));

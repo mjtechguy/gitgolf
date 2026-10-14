@@ -70,7 +70,7 @@ export async function buildRelease(directory, executable) {
     if (deadline) config.env.DEMO_STOP_AT = { type: 'text', value: deadline };
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   await esbuild.build({ entryPoints: ['cloudflare/forge/src/' + (settings.agent_path ? 'agent-entry.mjs' : settings.tests ? 'test-entry.mjs' : 'worker.mjs')], outfile: target + '.next', bundle: true, format: 'esm', platform: 'neutral',
-    define: { GOLF_NATIVE_ASSETS: JSON.stringify(assets), GOLF_NATIVE_RELEASE: JSON.stringify(release), GOLF_NATIVE_CONFIGURATION: JSON.stringify(configuration) }, nodePaths: ['cloudflare/agents/node_modules'],
+    define: { GOLF_NATIVE_ASSETS: JSON.stringify(assets), GOLF_NATIVE_RELEASE: JSON.stringify(release), GOLF_NATIVE_CONFIGURATION: JSON.stringify(configuration), GOLF_NATIVE_BUILT_AT: String(Date.now()) }, nodePaths: ['cloudflare/agents/node_modules'],
     conditions: ['workerd', 'worker', 'browser'], external: ['cloudflare:workers', 'node:*'] });
   const manifest = { format: 1, release, contract: 1, schema: 36, account: settings.account, worker: settings.worker, database: settings.database.uuid,
     namespace: settings.namespace, workspace: settings.workspace, origin: settings.origin, bucket: settings.evidence.bucket,
