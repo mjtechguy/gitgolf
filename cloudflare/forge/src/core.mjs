@@ -5,6 +5,7 @@ import { fileIndex } from './file-index.mjs';
 import { pullCodeOwners } from './codeowners.mjs';
 import { reviewAuthoring, reviewAuthoringMethods } from './review-authoring.mjs';
 import { pullReviews, pullReviewMethods, pullMergeObservation } from './pull-reviews.mjs';
+import { standardPullMerge, pullMergeMethods } from './pull-merge.mjs';
 import { gitCredentialActor, confirmGitCredential, gitCredentialSQL, gitCredentials, gitCredentialMethods } from './git-credentials.mjs';
 import { repositoryRules, enforceGitRules, ruleMethods } from './repository-rules.mjs';
 import { repositoryWebhooks, webhookPolicy } from './webhooks.mjs';
@@ -356,7 +357,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const budget = await db.prepare('PRAGMA table_info(repository_index_budget)').all();
       const operations = await db.prepare('PRAGMA table_info(operations_maintenance)').all();
       const access = await db.prepare('PRAGMA table_info(repository_access_operations)').all();
-      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(repository_environment_operations)').all()).results.length ? 23 : (await db.prepare('PRAGMA table_info(repository_visibility)').all()).results.length ? 22 : (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
+      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(pull_merge_operations)').all()).results.length ? 24 : (await db.prepare('PRAGMA table_info(repository_environment_operations)').all()).results.length ? 23 : (await db.prepare('PRAGMA table_info(repository_visibility)').all()).results.length ? 22 : (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
         configuration, runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG });
     }
     if (url.pathname === '/native/preview-resume') {
@@ -420,10 +421,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId);
       return reply(await repositoryEnvironments(db, env, person, row, request, environment[1], body));
     }
-    const route = /^\/rpc\/golf\.v1\.(SessionService|RepositoryService|CapabilityService|ProfileService|OrganizationService|RepositorySettingsService|RepositoryAccessService|RepositoryInvitationService|RepositoryWebhookService|RepositoryRulesService|GitTransportService|PullReviewRequestService|PullReviewAuthoringService|PullMergeObservationService|DiscussionCollaborationService)\/([A-Za-z]+)$/.exec(url.pathname);
+    const route = /^\/rpc\/golf\.v1\.(SessionService|RepositoryService|CapabilityService|ProfileService|OrganizationService|RepositorySettingsService|RepositoryAccessService|RepositoryInvitationService|RepositoryWebhookService|RepositoryRulesService|GitTransportService|PullReviewRequestService|PullReviewAuthoringService|PullMergeObservationService|StandardPullMergeService|DiscussionCollaborationService)\/([A-Za-z]+)$/.exec(url.pathname);
     if (!route) unsupported();
     const [, service, method] = route;
-    if (service === 'PullReviewAuthoringService' && !reviewAuthoringMethods.has(method) || service === 'PullReviewRequestService' && !pullReviewMethods.has(method) || service === 'RepositoryRulesService' && !ruleMethods.has(method) || service === 'GitTransportService' && !gitCredentialMethods.has(method)) unsupported();
+    if (service === 'PullReviewAuthoringService' && !reviewAuthoringMethods.has(method) || service === 'PullReviewRequestService' && !pullReviewMethods.has(method) || service === 'RepositoryRulesService' && !ruleMethods.has(method) || service === 'GitTransportService' && !gitCredentialMethods.has(method) || service === 'StandardPullMergeService' && !pullMergeMethods.has(method)) unsupported();
     if (service === 'ProfileService') return reply(await profile(db, person, method, body));
     if (service === 'OrganizationService') return reply(await organizations(db, env, person, method, body));
     if (service === 'SessionService') {
@@ -463,7 +464,6 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
         ['settings.repository-lifecycle', 'Archive, transfer and deletion'],
         ['settings.repository-agents', 'Agent policy editor'],
         ['repository.source-write', 'Browser file editing'], ['pull.advanced-reviews', 'Inline and pending reviews'],
-        ['pull.merge', 'Merge execution'],
         ['discussion.attachments', 'Discussion attachments'], ['discussion.templates', 'Issue templates'],
         ['repository.releases', 'Releases'], ['repository.wiki', 'Wiki workspace'],
       ].map(([id, label, reason]) => ({ id, label, state: 'CAPABILITY_STATE_DISABLED', reason: reason || 'This feature is not available in the Cloudflare-native installation yet.' })),
@@ -477,7 +477,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'pull.review-requests', label: 'Review assignments', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Requires verified human Access identity. Current enrolled repository accounts; request/cancel, versioned receipts and live activity. Teams and CODEOWNERS are separate.' },
       { id: 'pull.review-lifecycle', label: 'Review dismissal and restoration', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Requires verified human Access identity. Repository administrators can dismiss reviews and restore only the latest non-stale review. These decisions do not authorize protected merge.' },
       { id: 'pull.codeowners', label: 'CODEOWNERS routing', state: 'CAPABILITY_STATE_READY', reason: 'Bounded GitHub-format CODEOWNERS suggestions from the exact PR base. No automatic requests or protected approval authority; unsupported patterns are explicit.' },
-      { id: 'pull.merge-observation', label: 'Merge diagnostics', state: 'CAPABILITY_STATE_READY', reason: 'Exact source and target, current writer and branch-lock observations. Publication remains disabled.' },
+      { id: 'pull.merge-observation', label: 'Merge diagnostics', state: 'CAPABILITY_STATE_READY', reason: 'Exact source and target, current writer, branch-lock and base-ancestry observations. An observation never authorizes a merge; each merge request rechecks them.' },
+      { id: 'pull.merge', label: 'Merge execution', state: 'CAPABILITY_STATE_READY', reason: 'Same-repository merge commits by current writers when the base branch tip is already contained in the head branch. One journaled single-ref write under Git rules, confirmed by reading the branch back. Squash, rebase, diverged branches, forks and locked or protected targets are refused; an unconfirmed write fences the repository like an unconfirmed push.' },
       { id: 'native-protected-merge', label: 'Protected merge', state: 'CAPABILITY_STATE_DISABLED', reason: 'Not implemented on this native path.' },
     ] });
     if (service === 'CapabilityService') unsupported();
@@ -522,6 +523,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if(method !== 'GetPullRequestMergeObservation') unsupported();
       return reply(await pullMergeObservation(db,env,person,row,body,action=>withArtifact(env,row,action)));
     }
+    if (service === 'StandardPullMergeService') return reply(await standardPullMerge(db,env,person,row,method,body,action=>withArtifact(env,row,action),providerFetch));
     if (service === 'RepositoryRulesService') return reply(await repositoryRules(db, env, person, row, request, method, body));
     if (service === 'RepositoryAccessService') return reply(await repositoryCollaborators(db, env, person, row, method, body));
     if (service === 'RepositoryService' && resourceMethods.has(method)) return reply(await discussionResources(db, env, person, row, method, body));

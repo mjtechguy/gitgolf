@@ -47,8 +47,8 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | GitTransportService | 4 | 1 | Own Access-authenticated account; repository-only, identity/grant-bound HTTPS read/write credentials, one-time secrets, 5–60 minute expiry and revocation. Separate Access gate; SSH and receive-outcome RPC remain unavailable. |
 | OrganizationExecutionValueService | 0 | 5 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryEnvironmentService | 4 | 0 | One environment named preview, enforced on protected PR previews: head branches, lifetime under the operator ceiling and concurrent previews. Verified Access administrator, version-fenced saves and original receipts. No reviewers, wait timers, tag/commit selectors, environment secrets or deployment. |
-| PullMergeObservationService | 1 | 0 | Exact current same-repository comparison, branch locks, retained source and current writer observations. No executable merge authority; all strategies remain disabled. |
-| StandardPullMergeService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
+| PullMergeObservationService | 1 | 0 | Exact current same-repository comparison, branch locks, retained source, current writer and base-ancestry observations. No executable merge authority; merge commits are reported only for a pull request the native merge slice would currently admit. |
+| StandardPullMergeService | 2 | 0 | Same-repository merge commits when the base tip is already contained in the head: writer authority, rules, one journaled single-ref write and ref/commit readback; original receipts. Squash, diverged branches, forks and locked targets are durably refused; an unconfirmed write stays unknown and fences the repository. Provider acceptance of the generated pack needs hosted proof. |
 | WorkflowArtifactService | 0 | 1 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryReleasePublicationService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryDeploymentService | 0 | 7 | Native migration required; portable service remains available on its own setup path. |
@@ -303,8 +303,8 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | RepositoryEnvironmentService/DeleteRepositoryEnvironment | golf.proto | Bounded adapter |
 | RepositoryEnvironmentService/GetRepositoryEnvironmentOperation | golf.proto | Bounded adapter |
 | PullMergeObservationService/GetPullRequestMergeObservation | golf.proto | Bounded adapter |
-| StandardPullMergeService/SubmitStandardPullMerge | golf.proto | Missing native adapter |
-| StandardPullMergeService/GetStandardPullMergeOperation | golf.proto | Missing native adapter |
+| StandardPullMergeService/SubmitStandardPullMerge | golf.proto | Bounded adapter |
+| StandardPullMergeService/GetStandardPullMergeOperation | golf.proto | Bounded adapter |
 | WorkflowArtifactService/GetWorkflowArtifact | golf.proto | Missing native adapter |
 | RepositoryReleasePublicationService/SubmitRepositoryReleasePublication | golf.proto | Missing native adapter |
 | RepositoryReleasePublicationService/GetRepositoryReleasePublicationOperation | golf.proto | Missing native adapter |

@@ -58,6 +58,16 @@ export function receiveCommand(bytes) {
   return { old: fields[0], next: fields[1], ref: fields[2] };
 }
 
+// report-status without side-band: '' only for "unpack ok" plus "ok <ref>"; otherwise the provider's own line.
+export function receiveStatus(bytes, ref) {
+  try {
+    const lines = [];
+    for (let offset = 0; offset < bytes.length;) { const row = packet(bytes, offset); offset = row.end; if (row.flush) break; lines.push(row.text.replace(/\n$/, '')); }
+    if (lines[0] === 'unpack ok' && lines.includes('ok ' + ref)) return '';
+    return (lines.find(line => line !== 'unpack ok') || 'no ref status').replace(/[^\x20-\x7e]/g, '?').slice(0, 160);
+  } catch { return 'unreadable status'; }
+}
+
 export function advertisedRefs(bytes) {
   const refs = new Map();
   let offset = 0;

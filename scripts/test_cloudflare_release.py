@@ -497,6 +497,75 @@ class ReleaseTests(unittest.TestCase):
             release.state['migration0023'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_environment_schema([])
 
+    def test_pull_merge_migration_resumes_and_requires_its_uniqueness_indexes(self):
+        release = self.release()
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0024_pull_merges.sql').read_text()
+            self.assertTrue(schema.endswith(';\n\n'+migration))
+            db.executescript(schema[:-len('\n'+migration)])
+            lost = True; writes = []
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith(('PRAGMA', 'SELECT')):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                writes.append(sql); db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost pull merge migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0024'): release.check_pull_merge_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost pull merge'): release.migrate_pull_merge_schema([])
+            applied = []; release.migrate_pull_merge_schema(applied)
+            self.assertEqual(applied, ['0024']); release.check_pull_merge_schema()
+            self.assertEqual(db.execute('SELECT count(*) FROM pull_merge_operations').fetchone()[0], 0)
+            applied = []; release.migrate_pull_merge_schema(applied)
+            self.assertEqual(applied, []); self.assertEqual(len(writes), 2)
+            # A table without either partial unique index would admit two unresolved merges or two successes.
+            for index in ['pull_merge_one_unresolved', 'pull_merge_one_success']:
+                db.execute('DROP INDEX '+index)
+                with self.assertRaisesRegex(ValueError, 'uniqueness'): release.check_pull_merge_schema()
+                db.execute('CREATE INDEX '+index+' ON pull_merge_operations(pull_request_id)')
+                with self.assertRaisesRegex(ValueError, 'uniqueness'): release.check_pull_merge_schema()
+                db.execute('DROP INDEX '+index)
+                applied = []; release.migrate_pull_merge_schema(applied)
+                self.assertEqual(applied, ['0024']); release.check_pull_merge_schema()
+            release.state['migration0024'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_pull_merge_schema([])
+
+    def test_pull_merge_schema_gates_only_schema24_releases(self):
+        release = self.release(); called = []
+        for name in ['check_access_schema', 'check_invitation_schema', 'check_discussion_schema', 'check_engagement_schema', 'check_webhook_schema', 'check_rules_schema',
+                     'check_git_credentials_schema', 'check_pull_reviews_schema', 'check_runner_schema', 'check_owner_schema', 'check_public_schema', 'check_environment_schema']:
+            setattr(release, name, lambda *args: None)
+        release.check_pull_merge_schema = lambda: called.append('check')
+        release.migrate_pull_merge_schema = lambda applied: called.append('migrate')
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            db.executescript((ROOT/'cloudflare/forge/schema.sql').read_text())
+            def command(*args, **kwargs):
+                if args[0] != 'd1': raise RuntimeError('stop before provider deployment reads')
+                return [{'results': [dict(row) for row in db.execute(args[-1])]}]
+            release.command = command
+            for schema, expected in [(23, []), (24, ['check'])]:
+                release.manifest['schema'] = schema; called.clear()
+                with self.assertRaisesRegex(RuntimeError, 'stop before provider'): release.check()
+                self.assertEqual(called, expected)
+        for name in ['migrate_access', 'migrate_invitations', 'migrate_discussions', 'migrate_engagement', 'migrate_webhooks', 'migrate_rules', 'migrate_git_credentials',
+                     'migrate_pull_reviews', 'migrate_runner_schema', 'migrate_owner_schema', 'migrate_public_schema', 'migrate_environment_schema']:
+            setattr(release, name, lambda applied: None)
+        release.state['migration0010'] = hashlib.sha256((ROOT/'cloudflare/forge/migrations/0010_operations.sql').read_text().encode()).hexdigest()
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            db.executescript((ROOT/'cloudflare/forge/schema.sql').read_text())
+            release.command = lambda *args, **kwargs: [{'results': [dict(row) for row in db.execute(args[-1])]}]
+            for schema, expected in [(23, []), (24, ['migrate'])]:
+                release.manifest['schema'] = schema; called.clear(); release.migrate()
+                self.assertEqual(called, expected)
+
     def test_uncertain_deployment_is_not_dispatched_twice(self):
         release = self.release(); release.check = lambda: 'previous'; release.retain = lambda: 1
         release.state['releases'][release.manifest['release']] = {'state':'dispatched'}

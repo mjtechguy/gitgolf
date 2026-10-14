@@ -114,6 +114,7 @@ cloudflare-check:
 	node --check cloudflare/forge/ui-assets.mjs
 	node --check cloudflare/forge/runtime-check.mjs
 	node --check cloudflare/forge/review-runtime-check.mjs
+	node --check cloudflare/forge/merge-runtime-check.mjs
 	node --check cloudflare/forge/demo-check.mjs
 	node --test cloudflare/control/worker.test.mjs
 	node --check cloudflare/control/prepare.mjs

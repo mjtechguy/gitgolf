@@ -4,19 +4,23 @@ import { sha } from './git.mjs';
 import { pullReviewContext, review } from './collaboration.mjs';
 import { discussionEvent } from './discussion-engagement.mjs';
 import { branchLockObservation } from './repository-rules.mjs';
+import { mergeBlocker } from './pull-merge.mjs';
 
 export async function pullMergeObservation(db,env,person,row,body,artifact) {
   const selected=body.selection;
   if(!selected || !sha(selected.headCommitId) || !sha(selected.baseCommitId) || !/^[a-f0-9]{64}$/.test(body.expectedPullRevision||'')) invalid('Select the exact pull request comparison and revision.');
-  const {current}=await pullReviewContext(db,env,person,row,selected,artifact);
+  const {d,current}=await pullReviewContext(db,env,person,row,selected,artifact);
   if(current.revision!==body.expectedPullRevision || current.head.commitId!==selected.headCommitId || current.base.commitId!==selected.baseCommitId) throw new Fault('failed_precondition',412,'The pull request changed. Refresh before inspecting it.');
   const rule=await branchLockObservation(db,row,current.base.ref);
+  // The merge flags are true only for what a native merge request would currently admit; the request rechecks all of it.
+  const blocker=await artifact(repo=>mergeBlocker(db,row,d,current,repo)), mergeable=!blocker&&!rule.locked&&['write','admin'].includes(row.role);
   const source=current.head.retainedSnapshot?{}:{sourceRepository:{owner:ownerSlug(row,env),name:row.name},sourceRepositoryId:String(row.id),sourceOwnerId:String(row.workspace_id),source:{kind:'REPOSITORY_SOURCE_REF_KIND_BRANCH',name:current.head.ref,commitId:current.head.commitId}};
   const observation={selection:selected,pullRevision:current.revision,targetOwnerId:String(row.workspace_id),...source,
-    ...(current.base.retainedSnapshot?{}:{base:{kind:'REPOSITORY_SOURCE_REF_KIND_BRANCH',name:current.base.ref,commitId:current.base.commitId},nativeCallerCanMerge:false}),
+    ...(current.base.retainedSnapshot?{}:{base:{kind:'REPOSITORY_SOURCE_REF_KIND_BRANCH',name:current.base.ref,commitId:current.base.commitId},nativeCallerCanMerge:mergeable}),
     targetProtection:'PULL_MERGE_TARGET_PROTECTION_'+(current.base.retainedSnapshot?'UNKNOWN':rule.locked?'PROTECTED':'UNPROTECTED'),
     currentTargetWriter:['write','admin'].includes(row.role),sourceState:'PULL_MERGE_SOURCE_STATE_'+(current.head.retainedSnapshot?'RETAINED_ONLY':'CURRENT'),
-    mergeConfiguration:{defaultMergeStyle:'merge',defaultUpdateStyle:'merge'},unavailableReason:'protected_integration_unqualified'};
+    mergeConfiguration:{...(mergeable?{allowMergeCommits:true}:{}),defaultMergeStyle:'merge',defaultUpdateStyle:'merge'},
+    unavailableReason:['base_not_ancestor','ancestry_unproven','write_unresolved'].includes(blocker)?'native_'+blocker:'protected_integration_unqualified'};
   observation.fingerprint=await digest(JSON.stringify(['native.merge-observation.v1',row.artifact_name,row.access_version,rule.version,Boolean(row.write_pending),observation]));
   observation.observedAt=new Date().toISOString();
   await confirmReviewAuthority(db,person,row);
