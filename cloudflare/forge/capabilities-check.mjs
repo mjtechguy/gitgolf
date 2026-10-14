@@ -3,6 +3,7 @@ import { pullReviewMethods } from './src/pull-reviews.mjs';
 import { gitCredentialMethods } from './src/git-credentials.mjs';
 import { ruleMethods } from './src/repository-rules.mjs';
 import { webhookMethods } from './src/webhooks.mjs';
+import { environmentMethods } from './src/environments.mjs';
 import { engagementMethods } from './src/discussion-engagement.mjs';
 import { resourceMethods } from './src/discussion-resources.mjs';
 // Inventory every public RPC against the explicitly bounded native adapter.
@@ -19,6 +20,7 @@ const supported = {
   GitTransportService: gitCredentialMethods,
   RepositoryRulesService: ruleMethods,
   RepositoryWebhookService: webhookMethods,
+  RepositoryEnvironmentService: environmentMethods,
   DiscussionCollaborationService: engagementMethods,
   RepositoryActivityService: new Set(['WatchRepository']),
   OperationsService: new Set(['GetOperationsDashboard']),
@@ -38,6 +40,7 @@ const limitations = {
   GitTransportService: 'Own Access-authenticated account; repository-only, identity/grant-bound HTTPS read/write credentials, one-time secrets, 5–60 minute expiry and revocation. Separate Access gate; SSH and receive-outcome RPC remain unavailable.',
   RepositoryRulesService: 'Branch locks and tag account restrictions enforced on Golf Git; exact/prefix patterns, current admin, atomic receipts. No protected merge, review/check gates, teams or provider-side enforcement.',
   RepositoryWebhookService: 'Encrypted subscriptions and signed durable deliveries to operator-approved HTTPS origins; current sponsor authority, bounded retries/daily attempts, tests and explicit redelivery. Native test-job events; repository email remains separate.',
+  RepositoryEnvironmentService: 'One environment named preview, enforced on protected PR previews: head branches, lifetime under the operator ceiling and concurrent previews. Verified Access administrator, version-fenced saves and original receipts. No reviewers, wait timers, tag/commit selectors, environment secrets or deployment.',
   DiscussionCollaborationService: 'Current-authority reactions, own subscriptions and in-app inbox; transaction-bound timeline since schema14. Historical activity is not backfilled; templates and email remain separate.',
   RepositoryActivityService: 'Bounded resumable Connect JSON/protobuf invalidations from the workspace SQLite journal; current authority before each frame. External Artifacts writes need native ingress.',
   OperationsService: 'Current Access-enrolled workspace ops administrators; inventories and maintenance journal. Fleet provider analytics/billing not collected.',
@@ -49,7 +52,7 @@ const limitations = {
   RepositoryInvitationService: 'Enrolled Access users only; current issuer administration, expiring consent, atomic grant/decision and original receipt lookup. No email delivery or automatic enrollment.',
   RepositoryService: 'Bounded Git/read contract, immutable source pages and complete bounded filename/path indexes, overall reviews and same-repository PRs. Repository labels/milestones, issue/PR assignment and author/admin comment editing; no protected merge, inline review threads or organization labels. Pending overall drafts use PullReviewAuthoringService.',
 };
-const source = (await Promise.all(['core.mjs', 'file-index.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'owners.mjs', 'workspace-ui.mjs'].map(name => readFile(new URL('./src/' + name, import.meta.url), 'utf8')))).join('\n');
+const source = (await Promise.all(['core.mjs', 'file-index.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'owners.mjs', 'workspace-ui.mjs', 'environments.mjs'].map(name => readFile(new URL('./src/' + name, import.meta.url), 'utf8')))).join('\n');
 for (const methods of Object.values(supported)) for (const method of methods) if (!collaborationMethods.has(method) && !source.includes("'" + method + "'") && !source.includes("/" + method + "'")) throw Error('Native adapter declaration has no maintained implementation: ' + method);
 const inventory = [];
 for (const proto of protos) for (const service of proto.text.matchAll(/service\s+(\w+)\s*\{(.*?)\n\}/gs)) for (const method of service[2].matchAll(/rpc\s+(\w+)/g)) inventory.push({ service: service[1], method: method[1], contract: proto.name, adapter: supported[service[1]]?.has(method[1]) ? 'Bounded adapter' : 'Missing native adapter' });

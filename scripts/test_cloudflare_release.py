@@ -468,6 +468,35 @@ class ReleaseTests(unittest.TestCase):
             release.state['migration0022'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_public_schema([])
 
+    def test_environment_migration_resumes_without_replaying(self):
+        release = self.release()
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            db.executescript(schema[:schema.index('CREATE TABLE IF NOT EXISTS repository_environments')])
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith('PRAGMA'):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost environment migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0023'): release.check_environment_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost environment'): release.migrate_environment_schema([])
+            applied = []; release.migrate_environment_schema(applied)
+            self.assertEqual(applied, ['0023']); release.check_environment_schema()
+            self.assertEqual(db.execute('SELECT count(*) FROM repository_environments').fetchone()[0], 0)
+            applied = []; release.migrate_environment_schema(applied)
+            self.assertEqual(applied, [])
+            self.assertEqual(db.execute("SELECT sql FROM sqlite_master WHERE name='repository_environments_live'").fetchone()[0].split(' WHERE ')[1], 'deleted=0')
+            release.state['migration0023'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_environment_schema([])
+
     def test_uncertain_deployment_is_not_dispatched_twice(self):
         release = self.release(); release.check = lambda: 'previous'; release.retain = lambda: 1
         release.state['releases'][release.manifest['release']] = {'state':'dispatched'}

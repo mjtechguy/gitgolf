@@ -8,6 +8,7 @@ import { testPolicy } from './test-policy.mjs';
 import { appPolicy, appOrigin, appPolicyHash } from './app-policy.mjs';
 import { appBundle, provisionApp, appDispatch, purgeApp } from './apps.mjs';
 import { repositoryPackages } from './repository-settings.mjs';
+import { previewEnvironment, previewEnvironmentGuard, branchAllowed, previewSlots } from './environments.mjs';
 
 const now = () => new Date().toISOString();
 const tokenOK = value => typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
@@ -22,6 +23,12 @@ export function previewPolicy(env) {
       origin.origin !== env.PUBLIC_ORIGIN && Number.isInteger(Number(env.PREVIEW_TTL)) && Number(env.PREVIEW_TTL) >= 60 && Number(env.PREVIEW_TTL) <= 14400);
   } catch { return false; }
 }
+// Repository environments need both the preview allocation they govern and Access sign-in for their writes.
+export const environmentPolicy = env => previewPolicy(env) && Boolean(env.ACCESS_AUD);
+// Previews holding one of the repository's concurrent slots. Bind (repository id, current time).
+const live = "(SELECT count(*) FROM previews WHERE repository_id=? AND purged=0 AND state IN ('PUBLISHING','READY') AND expires_at>?)";
+const disallowed = () => { throw new Fault('failed_precondition', 412, 'The preview environment does not allow this pull request head branch.'); };
+const occupied = limit => { throw new Fault('resource_exhausted', 429, `The preview environment allows ${limit} concurrent preview${limit === 1 ? '' : 's'} for this repository; revoke one or let it expire.`); };
 const imageOf = row => row.selection ? JSON.parse(row.selection).imageDigest : undefined;
 const wire = (row, env) => ({ id: row.id, jobId: row.job_id, state: row.state, commitId: row.commit_id, treeId: row.tree_id,
   kind: imageOf(row) ? 'IMAGE_STATIC' : row.kind || 'STATIC', ...(imageOf(row) ? { imageDigest: imageOf(row) } : {}), url: row.kind === 'WORKER' ? appOrigin(env, row.id) + '/' : `${env.PREVIEW_ORIGIN}/${row.id}/`, expiresAt: row.expires_at, createdAt: row.created_at, sha256: row.bundle_hash,
@@ -51,6 +58,7 @@ async function current(db, env, person, row, artifact, preview) {
     const decision = await repositoryPackages(env, person, row, { repositoryId: String(row.id), action: 'policy', reference: selection.imageDigest });
     if (decision.digest !== selection.imageDigest || decision.allowed !== true) deny();
   }
+  return pr;
 }
 
 async function imageBundle(env, person, row, image, canonical) {
@@ -85,16 +93,21 @@ async function imageBundle(env, person, row, image, canonical) {
 export async function renewPreview(db, env, person, row, preview, body, authorize) {
   if (!['admin','write'].includes(row.role) || preview.repository_id !== row.id) deny();
   if (body.expectedExpiresAt !== preview.expires_at) throw new Fault('failed_precondition',412,'Preview expiry changed; inspect the current lease.');
-  const ttl = preview.kind === 'WORKER' ? appPolicy(env)?.ttl : Number(env.PREVIEW_TTL);
-  if (!Number.isInteger(ttl) || ttl < 60 || ttl > 14400) throw new Fault('failed_precondition',412,'An approved preview lifetime is required.');
-  await authorize(preview);
+  const ceiling = preview.kind === 'WORKER' ? appPolicy(env)?.ttl : Number(env.PREVIEW_TTL);
+  if (!Number.isInteger(ceiling) || ceiling < 60 || ceiling > 14400) throw new Fault('failed_precondition',412,'An approved preview lifetime is required.');
+  // The stored environment governs renewal too: head branch, lifetime under the operator ceiling and the repository's slots.
+  const pr = await authorize(preview), governed = await previewEnvironment(db,row), limit = governed.policy?.maxConcurrency;
+  if (governed.policy && !branchAllowed(governed.policy,pr?.head?.ref)) disallowed();
+  if (limit && (await db.prepare(`SELECT ${live} AS total`).bind(row.id,now()).first()).total > limit) occupied(limit);
+  const ttl = Math.min(ceiling,governed.policy?.previewTtlSeconds ?? ceiling);
   const deadline = env.DEMO_STOP_AT ? Date.parse(env.DEMO_STOP_AT) : Infinity;
   if (Number.isNaN(deadline) || deadline <= Date.now()) throw new Fault('failed_precondition',412,'The approved demo window is unavailable.');
   const expires = new Date(Math.min(Date.now()+ttl*1000,deadline)).toISOString();
   const result = await db.prepare(`UPDATE previews SET expires_at=? WHERE id=? AND repository_id=? AND expires_at=? AND state='READY' AND purged=0
-    AND EXISTS(SELECT 1 FROM users u JOIN grants g ON g.user_id=u.id WHERE u.id=? AND u.active=1 AND g.repository_id=previews.repository_id AND g.role IN ('admin','write'))`)
-    .bind(expires,preview.id,row.id,body.expectedExpiresAt,person.id).run();
-  if (!result.meta.changes) throw new Fault('failed_precondition',412,'Preview expiry or writer authority changed; inspect the current lease.');
+    AND EXISTS(SELECT 1 FROM users u JOIN grants g ON g.user_id=u.id WHERE u.id=? AND u.active=1 AND g.repository_id=previews.repository_id AND g.role IN ('admin','write'))
+    AND ${previewEnvironmentGuard}${limit ? ` AND ${live}<=?` : ''}`)
+    .bind(expires,preview.id,row.id,body.expectedExpiresAt,person.id,row.id,governed.revision,...(limit ? [row.id,now(),limit] : [])).run();
+  if (!result.meta.changes) throw new Fault('failed_precondition',412,'Preview expiry, writer authority or environment policy changed; inspect the current lease.');
   const renewed = {...preview,expires_at:expires};
   await authorize(renewed);
   return wire(renewed,env);
@@ -158,7 +171,10 @@ export async function previewAPI(db, env, person, row, artifact, body) {
       // A pending publication is inspected by original ID; never rebuilt on retry.
       return reply({ preview: wire(saved, env) });
     }
-    if ((await db.prepare("SELECT count(*) AS total FROM previews WHERE purged=0").first()).total >= 4) throw new Fault('resource_exhausted', 429, 'Clean up prior previews before allocating another.');
+    // Checked again inside the insert below, which commits only under this observed policy revision.
+    const governed = await previewEnvironment(db, row), limit = governed.policy?.maxConcurrency, lifetime = Math.min(ttl, governed.policy?.previewTtlSeconds ?? ttl);
+    if (limit && (await db.prepare(`SELECT ${live} AS total`).bind(row.id, now()).first()).total >= limit) occupied(limit);
+    if ((await db.prepare("SELECT count(*) AS total FROM previews WHERE purged=0").first()).total >= previewSlots) throw new Fault('resource_exhausted', 429, 'Clean up prior previews before allocating another.');
     const dailyLimit = Number(env.EVIDENCE_DAILY_LIMIT);
     if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 50 ||
         (await db.prepare('SELECT count(*) AS total FROM previews WHERE created_at>=?').bind(now().slice(0, 10)).first()).total >= Math.min(dailyLimit, 20)) {
@@ -169,6 +185,8 @@ export async function previewAPI(db, env, person, row, artifact, body) {
         evidence.report.execution?.policySha256 !== env.TEST_POLICY_SHA256 || evidence.report.pullRequest.state !== 'ISSUE_STATE_OPEN' || row.write_pending) {
       throw new Fault('failed_precondition', 412, 'Preview requires current passing canonical PR tests under the approved test policy.');
     }
+    // A pull request's head branch never changes; the report above was just proven current for this exact proposal.
+    if (governed.policy && !branchAllowed(governed.policy, evidence.report.pullRequest.head?.ref)) disallowed();
     const canonical = await artifact(repo => p ? appBundle(repo, evidence.job.selection.headCommitId, p) : previewBundle(repo, evidence.job.selection.headCommitId, sourcePath));
     const image = evidence.report.tests.image;
     if (kind === 'IMAGE_STATIC' && (!image || image.digest !== body.imageDigest)) throw new Fault('failed_precondition', 412, 'The passing test job did not publish this image digest.');
@@ -177,8 +195,10 @@ export async function previewAPI(db, env, person, row, artifact, body) {
     if (bytes > 2 * 1024 * 1024) invalid('Serialized preview exceeds its limit.');
     const id = crypto.randomUUID(), key = `native-previews/${env.WORKSPACE_SLUG}/${id}/${bundleHash}.json`;
     saved = await db.prepare(`INSERT INTO previews(id,repository_id,user_id,job_id,operation_key,input_hash,selection,pr_revision,commit_id,tree_id,source_path,bundle_key,bundle_hash,bundle_bytes,state,created_at,expires_at,kind,policy_hash)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'PUBLISHING',?,?,?,?) RETURNING *`).bind(id, row.id, person.id, body.jobId, body.idempotencyKey, hash,
-        JSON.stringify({ ...evidence.job.selection, ...(kind === 'IMAGE_STATIC' ? { imageDigest: image.digest } : {}) }), evidence.report.pullRequest.revision, bundle.commitId, bundle.treeId, sourcePath, key, bundleHash, bytes, now(), new Date(Date.now() + ttl * 1000).toISOString(), kind === 'IMAGE_STATIC' ? 'STATIC' : kind, policyHash).first();
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,'PUBLISHING',?,?,?,? WHERE ${previewEnvironmentGuard}${limit ? ` AND ${live}<?` : ''} RETURNING *`).bind(id, row.id, person.id, body.jobId, body.idempotencyKey, hash,
+        JSON.stringify({ ...evidence.job.selection, ...(kind === 'IMAGE_STATIC' ? { imageDigest: image.digest } : {}) }), evidence.report.pullRequest.revision, bundle.commitId, bundle.treeId, sourcePath, key, bundleHash, bytes, now(), new Date(Date.now() + lifetime * 1000).toISOString(), kind === 'IMAGE_STATIC' ? 'STATIC' : kind, policyHash,
+        row.id, governed.revision, ...(limit ? [row.id, now(), limit] : [])).first();
+    if (!saved) throw new Fault('failed_precondition', 412, 'The preview environment changed or its concurrent preview limit was reached; inspect current previews before publishing again.');
     await env.EVIDENCE_BUCKET.put(key, data, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/json' }, customMetadata: { sha256: bundleHash } });
     const stored = await env.EVIDENCE_BUCKET.get(key);
     if (!stored || stored.size !== bytes || await digest(await stored.text()) !== bundleHash) throw Error('Preview publication unconfirmed');

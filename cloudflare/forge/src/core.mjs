@@ -29,7 +29,8 @@ import { evidenceAPI, evidenceStep, evidencePolicy } from './evidence.mjs';
 import { agentPolicy } from './agent-policy.mjs';
 import { executionDiagnostic, testPolicy } from './test-policy.mjs';
 import { appPolicy } from './app-policy.mjs';
-import { previewAPI, previewPolicy, previewRequest, cleanupPreviews } from './delivery.mjs';
+import { previewAPI, previewPolicy, environmentPolicy, previewRequest, cleanupPreviews } from './delivery.mjs';
+import { repositoryEnvironments, environmentMethods } from './environments.mjs';
 import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user } from './common.mjs';
 export { digest } from './common.mjs';
 import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, remote, sha, validRef, GitProviderError } from './git.mjs';
@@ -355,7 +356,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const budget = await db.prepare('PRAGMA table_info(repository_index_budget)').all();
       const operations = await db.prepare('PRAGMA table_info(operations_maintenance)').all();
       const access = await db.prepare('PRAGMA table_info(repository_access_operations)').all();
-      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(repository_visibility)').all()).results.length ? 22 : (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
+      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(repository_environment_operations)').all()).results.length ? 23 : (await db.prepare('PRAGMA table_info(repository_visibility)').all()).results.length ? 22 : (await db.prepare('PRAGMA table_info(native_owners)').all()).results.length ? 21 : (await db.prepare('PRAGMA table_info(gitlab_runner_jobs)').all()).results.length ? 20 : (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
         configuration, runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG });
     }
     if (url.pathname === '/native/preview-resume') {
@@ -412,6 +413,13 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       return reply(await collaboration(db, env, person, 'ReportCheck', body, row, action => withArtifact(env, row, action)));
     }
     if (url.pathname === '/native/repository-grant') return reply(await grants(db, env, person, request, body));
+    const environment = /^\/rpc\/golf\.v1\.RepositoryEnvironmentService\/([A-Za-z]+)$/.exec(url.pathname);
+    if (environment) {
+      if (!environmentMethods.has(environment[1])) unsupported();
+      if (!environmentPolicy(env)) throw new Fault('failed_precondition', 412, 'Repository environments need protected previews and Access sign-in on this installation.');
+      const row = await authorizedRepository(db, person, body.target?.repository, env, body.target?.repositoryId);
+      return reply(await repositoryEnvironments(db, env, person, row, request, environment[1], body));
+    }
     const route = /^\/rpc\/golf\.v1\.(SessionService|RepositoryService|CapabilityService|ProfileService|OrganizationService|RepositorySettingsService|RepositoryAccessService|RepositoryInvitationService|RepositoryWebhookService|RepositoryRulesService|GitTransportService|PullReviewRequestService|PullReviewAuthoringService|PullMergeObservationService|DiscussionCollaborationService)\/([A-Za-z]+)$/.exec(url.pathname);
     if (!route) unsupported();
     const [, service, method] = route;
@@ -446,11 +454,11 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'settings.repository-access', label: 'Repository collaborators', state: 'CAPABILITY_STATE_READY', reason: 'Enrolled accounts; direct read/write/admin grants, revision-fenced changes and durable original receipts.' },
       { id: 'settings.repository-invitations', label: 'Repository invitations', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Access-authenticated enrolled accounts; expiring consent, current issuer authority and atomic acceptance receipts.' },
       { id: 'settings.repository-git', label: 'Git credentials', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Access-authenticated own-account HTTPS credentials scoped to one repository, read/write mode and at most one hour; current identity/grant generations, explicit revocation and Git rules. Access machine admission is separately required.' },
+      { id: 'settings.repository-environments', label: 'Environments', state: environmentPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: environmentPolicy(env) ? 'One environment named preview governs protected pull-request previews: allowed head branches, preview lifetime within the operator limit and concurrent previews. Required reviewers, wait timers, environment secrets and production deployment are not available. Changes need a verified Access sign-in.' : `Repository environments need ${[!previewPolicy(env) && 'an operator-approved protected preview allocation', !env.ACCESS_AUD && 'Cloudflare Access sign-in'].filter(Boolean).join(' and ')} on this installation.` },
       ...[
         ['settings.repository-teams', 'Repository team access', 'Team membership and inherited repository permissions are not implemented on Cloudflare native. Direct collaborators and invitations are available in Access.'],
         ['settings.repository-deploy-keys', 'SSH deploy keys', 'Cloudflare native serves Git over HTTPS. SSH transport and SSH deploy keys are not available.'],
         ['settings.repository-secrets', 'Secrets and variables', 'Repository secret and variable management for general workflows is not implemented on Cloudflare native. Operator-managed execution bindings do not provide this editor.'],
-        ['settings.repository-environments', 'Environments', 'Protected previews use operator-approved allocation policies. Repository environment configuration, approval rules and production promotion through this settings page are not implemented on Cloudflare native.'],
         ['settings.repository-workflows', 'Workflows', 'Cloudflare native supports operator-approved bounded PR test or single-job shell workflow profiles. The general workflow editor and full Actions/GitLab execution are not implemented on this runtime.'],
         ['settings.repository-lifecycle', 'Archive, transfer and deletion'],
         ['settings.repository-agents', 'Agent policy editor'],

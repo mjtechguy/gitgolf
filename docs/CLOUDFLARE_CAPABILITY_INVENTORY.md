@@ -46,7 +46,7 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | RunnerPoolService | 0 | 4 | Native migration required; portable service remains available on its own setup path. |
 | GitTransportService | 4 | 1 | Own Access-authenticated account; repository-only, identity/grant-bound HTTPS read/write credentials, one-time secrets, 5–60 minute expiry and revocation. Separate Access gate; SSH and receive-outcome RPC remain unavailable. |
 | OrganizationExecutionValueService | 0 | 5 | Native migration required; portable service remains available on its own setup path. |
-| RepositoryEnvironmentService | 0 | 4 | Native migration required; portable service remains available on its own setup path. |
+| RepositoryEnvironmentService | 4 | 0 | One environment named preview, enforced on protected PR previews: head branches, lifetime under the operator ceiling and concurrent previews. Verified Access administrator, version-fenced saves and original receipts. No reviewers, wait timers, tag/commit selectors, environment secrets or deployment. |
 | PullMergeObservationService | 1 | 0 | Exact current same-repository comparison, branch locks, retained source and current writer observations. No executable merge authority; all strategies remain disabled. |
 | StandardPullMergeService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
 | WorkflowArtifactService | 0 | 1 | Native migration required; portable service remains available on its own setup path. |
@@ -298,10 +298,10 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | OrganizationExecutionValueService/DeleteOrganizationExecutionValue | golf.proto | Missing native adapter |
 | OrganizationExecutionValueService/GetOrganizationExecutionVariable | golf.proto | Missing native adapter |
 | OrganizationExecutionValueService/GetOrganizationExecutionValueOperation | golf.proto | Missing native adapter |
-| RepositoryEnvironmentService/ListRepositoryEnvironments | golf.proto | Missing native adapter |
-| RepositoryEnvironmentService/SaveRepositoryEnvironment | golf.proto | Missing native adapter |
-| RepositoryEnvironmentService/DeleteRepositoryEnvironment | golf.proto | Missing native adapter |
-| RepositoryEnvironmentService/GetRepositoryEnvironmentOperation | golf.proto | Missing native adapter |
+| RepositoryEnvironmentService/ListRepositoryEnvironments | golf.proto | Bounded adapter |
+| RepositoryEnvironmentService/SaveRepositoryEnvironment | golf.proto | Bounded adapter |
+| RepositoryEnvironmentService/DeleteRepositoryEnvironment | golf.proto | Bounded adapter |
+| RepositoryEnvironmentService/GetRepositoryEnvironmentOperation | golf.proto | Bounded adapter |
 | PullMergeObservationService/GetPullRequestMergeObservation | golf.proto | Bounded adapter |
 | StandardPullMergeService/SubmitStandardPullMerge | golf.proto | Missing native adapter |
 | StandardPullMergeService/GetStandardPullMergeOperation | golf.proto | Missing native adapter |

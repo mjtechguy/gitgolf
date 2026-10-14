@@ -3846,6 +3846,9 @@ message RepositoryEnvironmentPolicy {
 enum RepositoryEnvironmentCapability {
   REPOSITORY_ENVIRONMENT_CAPABILITY_UNSPECIFIED = 0;
   REPOSITORY_ENVIRONMENT_CAPABILITY_CONFIGURATION_ONLY = 1;
+  // Cloudflare native: one environment named preview is enforced on protected
+  // pull-request previews. No deployment, reviewer or wait-timer consumer.
+  REPOSITORY_ENVIRONMENT_CAPABILITY_PREVIEW_POLICY = 2;
 }
 message RepositoryEnvironment {
   string id = 1;

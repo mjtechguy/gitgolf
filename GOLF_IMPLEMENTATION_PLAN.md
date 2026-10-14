@@ -1,5 +1,10 @@
 # Golf implementation plan
 
+Native Environments (2026-10-14): initial slice implemented — one `preview`
+environment enforced on protected-preview publication and renewal. Remaining
+acceptance: hosted browser acceptance with real Access, and revocation of
+non-conforming live previews on policy change.
+
 Agent workspace increment (2026-10-13): the [staged plan](docs/AGENT_WORKSPACE_PLAN.md)
 now has a read-only native PR/evidence/preview view and measured source-read
 concurrency baseline. Existing Git storage, execution and merge authority remain

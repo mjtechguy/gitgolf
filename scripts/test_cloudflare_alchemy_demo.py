@@ -157,8 +157,11 @@ class GuardedMigration(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, sqlite3.connect(':memory:') as db:
             directory=Path(temporary); db.row_factory=sqlite3.Row
             schema=(demo.ROOT/'cloudflare/forge/schema.sql').read_text()
-            migration=(demo.ROOT/'cloudflare/forge/migrations/0022_public_repositories.sql').read_text()
-            previous=schema[:-len('\n'+migration)]; db.executescript(previous)
+            files=sorted((path.name,path.read_text()) for path in (demo.ROOT/'cloudflare/forge/migrations').glob('*.sql') if path.name>='0022')
+            previous=schema
+            for _,migration in reversed(files): previous=previous[:-len('\n'+migration)]
+            self.assertTrue(schema.startswith(previous) and len(files)>=1)
+            db.executescript(previous)
             replace_private_json(directory/'forge.json',{'database':{'uuid':'database'}})
             replace_private_json(directory/'schema-receipt.json',{'database':'database','sha256':hashlib.sha256(previous.encode()).hexdigest()})
             def cf(config,*args):
@@ -175,34 +178,33 @@ class GuardedMigration(unittest.TestCase):
 
 
 class PublicMigration(unittest.TestCase):
-    def test_public_enable_requires_owned_database_and_reviewed_predecessor(self):
+    def test_public_enable_requires_owned_database_and_the_current_schema(self):
         import hashlib
         import sqlite3
         with tempfile.TemporaryDirectory() as temporary, sqlite3.connect(':memory:') as db:
             directory = Path(temporary)
             db.row_factory = sqlite3.Row
             schema = (demo.ROOT/'cloudflare/forge/schema.sql').read_text()
-            migration = (demo.ROOT/'cloudflare/forge/migrations/0022_public_repositories.sql').read_text()
-            previous = schema[:-len('\n'+migration)]
-            db.executescript(previous)
+            db.executescript(schema)
             value = {'name':'example','settings':{'access_team_domain':'https://example.cloudflareaccess.com'}}
             replace_private_json(directory/'forge.json', {'database':{'uuid':'database'}})
-            replace_private_json(directory/'schema-receipt.json', {'database':'database','sha256':'unknown'})
+            replace_private_json(directory/'schema-receipt.json', {'database':'database','sha256':'older'})
             calls = []
             def cf(config, *args):
                 if args[:2] == ('d1','get'): return {'name':'example','uuid':'database'}
                 sql = json.loads(args[-1])['sql']; calls.append(sql)
-                if sql.startswith('PRAGMA'): return [{'results':[dict(row) for row in db.execute(sql)]}]
-                db.executescript(sql); return [{'results':[]}]
+                return [{'results':[dict(row) for row in db.execute(sql)]}]
             with patch.object(demo,'cf',side_effect=cf):
-                with self.assertRaisesRegex(ValueError,'predecessor'): demo.enable_public(directory,value)
+                with self.assertRaisesRegex(ValueError,'migrate'): demo.enable_public(directory,value)
                 self.assertEqual(calls, [])
-                replace_private_json(directory/'schema-receipt.json', {'database':'database','sha256':hashlib.sha256(previous.encode()).hexdigest()})
+                self.assertFalse((directory/'alchemy-input.json').exists())
+                replace_private_json(directory/'schema-receipt.json', {'database':'database','sha256':hashlib.sha256(schema.encode()).hexdigest()})
+                with self.assertRaisesRegex(ValueError,'ownership'): demo.enable_public(directory,{**value,'name':'other'})
                 demo.enable_public(directory,value)
                 demo.enable_public(directory,value)
-                self.assertTrue(json.loads((directory/'alchemy-input.json').read_text())['settings']['public_repositories'])
-                self.assertEqual(db.execute('SELECT count(*) FROM repository_visibility').fetchone()[0],0)
-                self.assertEqual(json.loads((directory/'schema-receipt.json').read_text())['sha256'],hashlib.sha256(schema.encode()).hexdigest())
+            self.assertTrue(all(sql.startswith('PRAGMA') for sql in calls))
+            self.assertTrue(json.loads((directory/'alchemy-input.json').read_text())['settings']['public_repositories'])
+
 
 
 class RunnerIdentity(unittest.TestCase):

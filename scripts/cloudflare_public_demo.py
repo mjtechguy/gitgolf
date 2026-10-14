@@ -25,7 +25,7 @@ def publish(directory, root):
             'Authorization':'Bearer '+auth['token']})
         with opener.open(request, timeout=30) as response:
             observation = json.load(response)
-            if observation.get('schema') == 22 and observation.get('configuration') == response.headers.get('X-Golf-Worker-Configuration') and observation.get('release') == response.headers.get('X-Golf-Worker-Release'):
+            if observation.get('schema', 0) >= 22 and observation.get('configuration') == response.headers.get('X-Golf-Worker-Configuration') and observation.get('release') == response.headers.get('X-Golf-Worker-Release'):
                 break
         if time.monotonic() >= deadline: raise RuntimeError('Worker and workspace rollout did not converge; no content was published')
         time.sleep(5)

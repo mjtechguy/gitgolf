@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -121,6 +121,8 @@ class Release:
             self.check_owner_schema()
         if self.manifest['schema'] >= 22:
             self.check_public_schema()
+        if self.manifest['schema'] >= 23:
+            self.check_environment_schema()
         deployments = self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -195,7 +197,39 @@ class Release:
             self.migrate_owner_schema(applied)
         if self.manifest['schema'] >= 22:
             self.migrate_public_schema(applied)
+        if self.manifest['schema'] >= 23:
+            self.migrate_environment_schema(applied)
         return applied or 'already-applied'
+
+    def check_environment_schema(self):
+        required = {'repository_environments': {'id', 'repository_id', 'artifact_name', 'name', 'version', 'deleted'},
+                    'repository_environment_versions': {'environment_id', 'version', 'repository_id', 'name', 'deleted', 'policy', 'target', 'creator_id', 'actor_id', 'environment_created_at', 'created_at'},
+                    'repository_environment_operations': {'operation_id', 'repository_id', 'actor_id', 'environment_id', 'version', 'action', 'expected_version', 'input_hash', 'created_at'}}
+        for table, fields in required.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
+            if {row['name'] for row in columns} != fields:
+                raise ValueError('Apply reviewed 0023 repository environment migration before releasing')
+
+    def migrate_environment_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0023_repository_environments.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0023') not in (None, digest):
+            raise ValueError('Recorded repository environment migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        prefixes = ['CREATE TABLE IF NOT EXISTS repository_environments (', 'CREATE UNIQUE INDEX IF NOT EXISTS repository_environments_live ON repository_environments(',
+                    'CREATE TABLE IF NOT EXISTS repository_environment_versions (', 'CREATE TABLE IF NOT EXISTS repository_environment_operations (',
+                    'CREATE INDEX IF NOT EXISTS repository_environment_operations_repository ON repository_environment_operations(']
+        if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement, prefix in zip(statements, prefixes)):
+            raise ValueError('Environment migration must only add reviewed tables and indexes')
+        ready = False
+        try:
+            self.check_environment_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0023') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_environment_schema()
+            self.state['migration0023'] = digest; self.save(); applied.append('0023')
 
     def check_public_schema(self):
         required = {'repository_visibility': {'repository_id', 'is_public', 'version'},
