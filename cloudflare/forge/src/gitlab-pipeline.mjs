@@ -839,11 +839,13 @@ export function gitLabJobResponse({ env, job, run, repository, token, values, de
   put('CI_REPOSITORY_URL', gitURL.replace('://', '://gitlab-ci-token:[MASKED]@'), { public: false });
   put('CI_BUILD_TOKEN', token, { public: false, masked: true });
   const timeout = job.timeout_seconds;
+  // Like GitLab, the effective GIT_DEPTH variable sets the clone depth (0 = full clone); the default is 50.
+  const depthValue = ordered.get('GIT_DEPTH')?.value, depth = /^\d{1,6}$/.test(depthValue || '') ? Number(depthValue) : 50;
   return {
     id: job.id, token, allow_git_fetch: true,
     job_info: { id: job.id, name: job.name, stage: job.stage, project_id: repository.id, project_name: repository.name, project_full_path: projectPath, time_in_queue_seconds: 0 },
     git_info: { repo_url: gitURL.replace('://', '://gitlab-ci-token:' + token + '@'), repo_object_format: 'sha1', ref, sha: run.commit_id, before_sha: run.before_sha || '0'.repeat(40), ref_type: refType,
-      refspecs: [`+${run.commit_id}:refs/${refType === 'tag' ? 'tags' : 'remotes/origin'}/${ref}`], depth: 50 },
+      refspecs: [`+${run.commit_id}:refs/${refType === 'tag' ? 'tags' : 'remotes/origin'}/${ref}`], depth },
     runner_info: { timeout, runner_session_url: '' },
     variables: [...ordered.values()],
     steps: [

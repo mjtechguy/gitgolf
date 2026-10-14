@@ -198,6 +198,7 @@ test('stock GitLab Runner protocol: register, claim, trace, artifacts between st
   assert.match(job.token, /^golfjob_[a-f0-9]{64}$/);
   assert.equal(job.git_info.repo_url, `https://gitlab-ci-token:${job.token}@golf.example.invalid/alice/project.git`);
   assert.equal(job.git_info.sha, 'c'.repeat(40));
+  assert.equal(job.git_info.depth, 50);
   assert.deepEqual(job.steps.map(step => step.name), ['script']);
   const variable = name => job.variables.find(v => v.key === name)?.value;
   assert.equal(variable('CI_PIPELINE_ID'), String(created.runId));
@@ -245,8 +246,9 @@ test('stock GitLab Runner protocol: register, claim, trace, artifacts between st
 test('cancellation reaches the stock runner, oversize artifacts are refused and evidence credentials stay on the evidence path', async t => {
   const { f, call, json, runner } = await protocol(t);
   f.env.GITLAB_ARTIFACT_MAX_BYTES = String(1024 * 1024);
-  const created = await createRun(f, 'a:\n  script: [sleep 100]\n');
+  const created = await createRun(f, 'variables: { GIT_DEPTH: "1" }\na:\n  script: [sleep 100]\n');
   const job = await (await call('/api/v4/jobs/request', 'POST', { token: runner.token, info: { version: '18.5.0' } }, json)).json();
+  assert.equal(job.git_info.depth, 1);
   const big = multipart('artifacts.zip', new Uint8Array(1024 * 1024 + 10));
   assert.equal((await call(`/api/v4/jobs/${job.id}/artifacts?artifact_format=zip&artifact_type=archive`, 'POST', big.body, { 'Job-Token': job.token, ...big.headers })).status, 413);
   await cancelPipelineRun(f.db, f.env, { id: 1 }, created.runId);
