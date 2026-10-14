@@ -197,6 +197,21 @@ def enable_ai(directory, value, agent_path):
         +'; run renew-deploy for the gateway permission, then deploy. Inference is billed by Cloudflare.')
 
 
+def enable_workflow(directory, value, path):
+    from cloudflare_forge import ACTIONS_WORKFLOW_PATH
+    # Pull-request runs move to this one workflow path; the approved module stays for agent proposals.
+    tests = value['settings'].get('tests')
+    existing = tests.get('workflow') if isinstance(tests, dict) else None
+    if not isinstance(tests, dict) or not isinstance(tests.get('module'), str) or existing is not None and (not isinstance(existing, dict) or existing.get('format') != 'actions'):
+        raise ValueError('Enable a workflow on an installation whose tests approve a Python module')
+    if not isinstance(path, str) or not re.fullmatch(ACTIONS_WORKFLOW_PATH, path):
+        raise ValueError('Use --workflow-path .github/workflows/NAME.yml or NAME.yaml')
+    tests['workflow'] = {'format': 'actions', 'path': path}
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Pull-request runs prepared for '+path+'; deploy to apply. The policy hashes change, so jobs queued across the deploy are refused, '
+        'and every repository needs this file at each pull-request head.')
+
+
 def enable_dead_letter(directory, value):
     value['settings']['evidence']['dead_letter'] = value['name']+'-dead'
     replace_private_json(directory/'alchemy-input.json', value)
@@ -417,10 +432,11 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-dead-letter', 'enable-operations', 'migrate'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'migrate'])
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--days', type=int, default=7, help='lifetime for renew-credentials, 1 to 30 days')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
+    parser.add_argument('--workflow-path', help='the one approved Actions workflow path for enable-workflow, .github/workflows/NAME.yml')
     parser.add_argument('directory', nargs='?')
     args = parser.parse_args()
     os.umask(0o077)
@@ -435,6 +451,7 @@ def main():
     if args.action == 'enable-analytics': return enable_analytics(directory, value)
     if args.action == 'enable-webhooks': return enable_webhooks(directory, value, args.origin)
     if args.action == 'enable-ai': return enable_ai(directory, value, args.agent_path)
+    if args.action == 'enable-workflow': return enable_workflow(directory, value, args.workflow_path)
     if args.action == 'enable-dead-letter': return enable_dead_letter(directory, value)
     if args.action == 'enable-operations': return enable_operations(directory, value)
     if args.action == 'migrate': return migrate(directory, value)

@@ -11,6 +11,9 @@ from urllib.parse import urlsplit
 
 from cloudflare_setup import ROOT, hostname, private_write
 
+# The same pattern as nativeWorkflowPath in cloudflare/forge/src/native-workflow.mjs, which the build applies.
+ACTIONS_WORKFLOW_PATH = r'\.github/workflows/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml'
+
 
 def initialize(directory, account, host, worker, workspace, namespace, database_id, database_name, login, evidence=None, tests=None, analytics=None, agent_path=None, access_aud=None, owner_email=None, web_assets=None, previews=None, apps=None, automatic_ci=False, operations=None, webhooks=None):
     if operations is not None:
@@ -49,7 +52,7 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
         if workflow is not None:
             if not isinstance(workflow, dict) or set(workflow) != {'format', 'path'} or not (
                     workflow['format'] in ('actions', 'actions-act') and isinstance(workflow['path'], str) and
-                    re.fullmatch(r'\.github/workflows/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml', workflow['path']) or
+                    re.fullmatch(ACTIONS_WORKFLOW_PATH, workflow['path']) or
                     workflow['format'] == 'gitlab' and workflow['path'] == '.gitlab-ci.yml'):
                 raise ValueError('Choose one approved native Actions or GitLab workflow path')
             if 'module' in tests and workflow['format'] != 'actions':

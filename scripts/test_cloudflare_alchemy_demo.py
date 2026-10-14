@@ -112,6 +112,28 @@ class Observability(unittest.TestCase):
             self.assertEqual(saved['evidence']['dead_letter'],'golf-alchemy-20261013-0f2087f8-dead')
             with self.assertRaises(ValueError): demo.enable_ai(directory,{**value,'name':'Bad_Name'},None)
 
+    def test_enabling_a_workflow_keeps_the_module_and_accepts_only_a_path_the_build_accepts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            tests={'module':'test_calc','image':'golf-native-demo-python:repeatable','image_id':'sha256:'+'e'*64}
+            value={'name':'golf-alchemy-20261013-0f2087f8','settings':{'evidence':{'daily_limit':40,'allow_ai':True},'tests':dict(tests),'agent_path':'calc.py'}}
+            for refused in (None,'','ci.yml','.gitlab-ci.yml','.github/workflows/../ci.yml','.github/workflows/nested/ci.yml','.github/workflows/ci.json','.github/workflows/ci.yml\n','.github/workflows/-ci.yml','.github/workflows/'+'a'*97+'.yml'):
+                with self.assertRaises(ValueError): demo.enable_workflow(directory,value,refused)
+            for settings in ({}, {'tests':{'image':tests['image'],'image_id':tests['image_id']}}, {'tests':{**tests,'workflow':{'format':'gitlab','path':'.gitlab-ci.yml'}}}):
+                with self.assertRaises(ValueError): demo.enable_workflow(directory,{'name':value['name'],'settings':settings},'.github/workflows/ci.yml')
+            self.assertFalse((directory/'alchemy-input.json').exists())
+            self.assertEqual(value['settings']['tests'],tests)
+            demo.enable_workflow(directory,value,'.github/workflows/ci.yml')
+            saved=json.loads((directory/'alchemy-input.json').read_text())['settings']
+            self.assertEqual(saved,{'evidence':{'daily_limit':40,'allow_ai':True},'tests':{**tests,'workflow':{'format':'actions','path':'.github/workflows/ci.yml'}},'agent_path':'calc.py'})
+            # A later run replaces the one approved path; there is never a second.
+            demo.enable_workflow(directory,value,'.github/workflows/tests.yaml')
+            self.assertEqual(json.loads((directory/'alchemy-input.json').read_text())['settings']['tests']['workflow'],{'format':'actions','path':'.github/workflows/tests.yaml'})
+            # The shared setup validation accepts exactly what this step wrote.
+            from cloudflare_forge import initialize
+            initialize(directory/'native','a'*32,'golf.example.com','golf-native','team','golf-native','12345678-1234-4234-8234-123456789012','golf-native','owner',
+                {'bucket':'golf-evidence','queue':'golf-evidence','workflow':'golf-evidence','daily_limit':2,'allow_ai':True,'gateway':'golf-evidence'},saved['tests']|{'workflow':{'format':'actions','path':'.github/workflows/tests.yaml'}},agent_path='calc.py')
+
     def test_enabling_webhooks_approves_exact_origins_and_keeps_the_first_key(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory=Path(temporary)

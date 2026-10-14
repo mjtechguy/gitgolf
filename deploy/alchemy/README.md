@@ -258,6 +258,32 @@ container application for a Durable Object class in the same run that creates
 the class: the first deploy stops with `requires a resolved Durable Object
 namespace` after updating the Worker, and a second `deploy` completes it.
 
+Run pull-request tests from a workflow file while agent proposals keep the
+approved Python module:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-workflow NEW_DIRECTORY --workflow-path .github/workflows/ci.yml
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+`enable-workflow` records one approved Actions path for the whole installation
+beside the existing test module; it accepts only `.github/workflows/NAME.yml`
+or `NAME.yaml`, the form the build accepts, and a later run replaces the path.
+After the deploy, pull-request runs and automatic push tests execute that file
+and nothing else; the module only tests agent proposals. Two consequences:
+
+- The test and agent policy hashes change, so a job queued before the deploy is
+  refused after it. Jobs last at most ten minutes; start them again afterwards.
+- Every repository needs the file at each pull-request head, in the hosted
+  subset: `on: pull_request`, one job with `runs-on: golf-native-linux` and one
+  to ten `run` steps. A pull request without it is refused with "The selected PR
+  head needs a supported workflow at the approved path", and its automatic push
+  intake is marked refused. Add the file to the demo repositories, and to their
+  open pull-request branches, before or with the deploy.
+
+The repository's Workflows settings page lists the files on the default branch
+and marks this path. Jobs still have no Internet access.
+
 Add service probes and the Workers analytics feed to Operations:
 
 ```sh
