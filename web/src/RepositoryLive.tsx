@@ -5,6 +5,7 @@ import { Radio, RefreshCw, WifiOff } from 'lucide-react';
 import { repositoryActivityClient } from './api';
 import { forgetPrivateQueries } from './queryClient';
 import { usePageVisible } from './RepositoryUI';
+import { liveStreamConnected } from './focusPolicy';
 
 export const RepositoryLiveContext=createContext<'connecting'|'live'|'offline'|'unavailable'>('offline');
 export const useLiveStatus=()=>useContext(RepositoryLiveContext);
@@ -28,7 +29,7 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
   if(!enabled||!repositoryId||!visible){setStatus('offline');return;}
   const identity=JSON.stringify([userId,owner,name,repositoryId]);
   if(observation.current.identity!==identity)observation.current={identity,cursor:''};
-  const controller=new AbortController();let cursor=observation.current.cursor,live=true;let timer:ReturnType<typeof setTimeout>|undefined;let failures=0;
+  const controller=new AbortController();let cursor=observation.current.cursor,live=true;let timer:ReturnType<typeof setTimeout>|undefined;let failures=0;let connected:(()=>void)|undefined;
   setStatus('connecting');
   const scoped=(key:readonly unknown[])=>key[1]===userId&&key[2]===owner&&key[3]===name;
   const refresh=(topics:string[],revalidateMetadata=false)=>{
@@ -58,7 +59,7 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
     for await(const event of repositoryActivityClient.watchRepository({repository:{owner,name},repositoryId,cursor},{signal:controller.signal,timeoutMs:65000})){
      if(!live||controller.signal.aborted)return;
      if(event.repositoryId!==repositoryId||!['reset','change','heartbeat','reconnect'].includes(event.kind)||event.topics.some(t=>!allowedTopics.includes(t))||(!/^(0|[1-9][0-9]{0,18})$/.test(event.cursor)||BigInt(event.cursor)>9223372036854775807n)||cursor&&BigInt(event.cursor)<BigInt(cursor))throw new Error('Invalid live activity response.');
-     received=true;failures=0;setStatus('live');
+     received=true;failures=0;setStatus('live');connected??=liveStreamConnected();
      if(event.kind==='reset'){if(cursor)setNewSource(true);refresh(['issues','pulls','actions','agents'],true);}
      else if(event.kind==='change'){if(event.topics.includes('source')||pin.current&&event.topics.includes('pulls'))setNewSource(true);refresh(event.topics,true);}
      cursor=event.cursor;
@@ -68,6 +69,7 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
     if(!received||!rotate)throw new Error('Live stream ended unexpectedly.');
     await wait(200);
    }catch(error){
+    connected?.();connected=undefined;
     if(!live||controller.signal.aborted)return;
     if(error instanceof ConnectError&&error.code===Code.Unauthenticated){client.setQueryData(['session'],null);forgetPrivateQueries(client);return;}
     if(error instanceof ConnectError&&[Code.PermissionDenied,Code.NotFound].includes(error.code)){
@@ -83,7 +85,7 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
    }
   }}
   void run();const hide=()=>{live=false;controller.abort();};window.addEventListener('pagehide',hide);
-  return()=>{hide();clearTimeout(timer);window.removeEventListener('pagehide',hide);};
+  return()=>{hide();connected?.();clearTimeout(timer);window.removeEventListener('pagehide',hide);};
  },[client,userId,owner,name,repositoryId,enabled,attempt,available,visible]);
  return {status,newSource,reconnect:()=>setAttempt(v=>v+1),refreshComparison:()=>{setNewSource(false);void client.invalidateQueries({queryKey:['repository',userId,owner,name,'pull']});}};
 }
