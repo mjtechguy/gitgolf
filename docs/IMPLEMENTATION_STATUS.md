@@ -1,5 +1,22 @@
 # Golf implementation status
 
+## 2026-10-14 — First real one-command Cloudflare install
+
+`python3 scripts/golf_cloudflare.py install --yes` ran against a real account that already hosts a Golf installation,
+on fresh hostnames `golf-test.mjtechguy.com` and `golf-test-previews.mjtechguy.com`, with `--content example` and
+`--with ai,search,public,observability,analytics,operations,dead-letter`. `doctor --fix --remote` passed every
+required check first (Workers Paid, Zero Trust organization, existing Secrets Store reused).
+
+All 25 steps completed after two fixes and two resumes:
+- `OwnedBySomeoneElse` on the `Login` one-time PIN identity provider (one per account): fixed in #91; `init`
+  now reuses the account's existing one unmanaged.
+- Right after a deploy, the playground clone and the public publish each failed once while the Workspace Durable
+  Object still ran the previous release; both succeeded on resume. The installer now retries `seed` and
+  `seed-public` up to three times, 60 s apart, and seed Git failures include Git's last error lines.
+
+Verify: receipt `retained` with `ci_admitted` and `ci_verified`; `/auth/login` redirects to Cloudflare Access;
+the public example `example-org/click` and its profile verified. The installation is kept for manual testing.
+
 ## 2026-10-14 — One-command Cloudflare deploy (`golf_cloudflare.py`)
 
 `scripts/golf_cloudflare.py` (and `make cloudflare-doctor`/`cloudflare-install`)
