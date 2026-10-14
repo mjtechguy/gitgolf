@@ -134,7 +134,7 @@ export class RepositoryActivity {
 
 export async function activitySelection(event) {
   if (!(event instanceof Request)) {
-    if (event.preview || event.activity) return;
+    if (event.preview || event.activity || event.ai) return;
     if (event.notify) return { id: event.repositoryId, topics: event.topics || ['actions', 'agents', 'pulls'] };
     return { job: event.id, topics: ['actions', 'agents', 'pulls'] };
   }

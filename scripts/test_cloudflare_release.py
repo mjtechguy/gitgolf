@@ -821,7 +821,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0029_discussion_attachments.sql').read_text()
-            later = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()
+            later = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0032_ai_runs.sql').read_text()
             schema = schema[:-len('\n'+later)]
             self.assertTrue(schema.endswith(';\n\n'+migration))
             db.executescript(schema[:-len('\n'+migration)])
@@ -853,7 +853,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()
-            schema = schema[:-len('\n'+(ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text())]
+            schema = schema[:-len('\n'+(ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()+'\n'+(ROOT/'cloudflare/forge/migrations/0032_ai_runs.sql').read_text())]
             self.assertTrue(schema.endswith(';\n\n'+migration))
             db.executescript(schema[:-len('\n'+migration)])
             lost = True
@@ -886,6 +886,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0031_feature_policies.sql').read_text()
+            schema = schema[:-len('\n'+(ROOT/'cloudflare/forge/migrations/0032_ai_runs.sql').read_text())]
             self.assertTrue(schema.endswith(';\n\n'+migration))
             db.executescript(schema[:-len('\n'+migration)])
             db.execute("INSERT INTO users(id,login) VALUES(1,'alice')")
@@ -913,5 +914,34 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             self.assertEqual(applied, [])
             release.state['migration0031'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_feature_policy_schema([])
+
+    def test_ai_run_migration_is_the_schema_tail_resumes_without_replaying(self):
+        release = self.release(); release.manifest['schema'] = 32
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0032_ai_runs.sql').read_text()
+            self.assertTrue(schema.endswith(';\n\n'+migration))
+            db.executescript(schema[:-len('\n'+migration)])
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith('PRAGMA'):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost AI run migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0032'): release.check_ai_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost AI run'): release.migrate_ai_schema([])
+            applied = []; release.migrate_ai_schema(applied)
+            self.assertEqual(applied, ['0032']); release.check_ai_schema()
+            applied = []; release.migrate_ai_schema(applied)
+            self.assertEqual(applied, [])
+            release.state['migration0032'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_ai_schema([])
 
 if __name__ == '__main__': unittest.main()

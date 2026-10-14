@@ -74,6 +74,14 @@ if (mode === 'retire') {
     for (const [name, value] of Object.entries({ EVIDENCE_QUEUE_NAME: e.queue, EVIDENCE_WORKFLOW_NAME: e.workflow,
       EVIDENCE_DAILY_LIMIT: String(e.daily_limit), EVIDENCE_ALLOW_AI: String(e.allow_ai), EVIDENCE_GATEWAY: e.gateway || '' })) config.env[name] = { type: 'text', value };
     if (e.allow_ai) config.env.AI = { type: 'ai' };
+    // Workers AI runs infer in their own Workflow, outside the workspace write queue; the daily limit here is the installation ceiling.
+    if (e.allow_ai) {
+      const limit = e.ai_daily_limit ?? 100;
+      if (!Number.isInteger(limit) || limit < 1 || limit > 500 || (e.workflow + '-ai').length > 63) throw Error('Invalid Workers AI allocation');
+      config.exports.AiWorkflow = { type: 'workflow', name: e.workflow + '-ai', concurrency: { limit: 4 }, limits: { steps: 4 }, defaultRetention: { successRetention: '1 day', errorRetention: '1 day' } };
+      config.env.AI_WORKFLOW_NAME = { type: 'text', value: e.workflow + '-ai' };
+      config.env.AI_DAILY_LIMIT = { type: 'text', value: String(limit) };
+    }
   }
   if (settings.evidence && !settings.previews && !settings.automatic_ci) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '*/5 * * * *' }];
   if (settings.tests) {
