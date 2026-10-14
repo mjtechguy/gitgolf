@@ -12,8 +12,7 @@ code, repository list, pull request, settings and sign-in pages.
   keeps a title row; other pages put its controls beside the breadcrumb.
 - **Tiles.** One top line carries the breadcrumb, branch picker and Code. The
   repository root is three full-height tiles: files, README and About. The rail
-  lists the repository's sections with notifications and the account menu at
-  its foot. The repository list gains a filter tile; pull requests and settings
+  lists the repository's sections with notifications at its foot. The repository list gains a filter tile; pull requests and settings
   use the same edge-to-edge tiles.
 - **Console.** Flare takes Cloudflare's neutral scale and Inter. The top bar
   holds owner, repository and branch chips and the jump field; plain tabs sit
@@ -30,6 +29,10 @@ code, repository list, pull request, settings and sign-in pages.
 Deliberate differences from the study:
 
 - Manual refresh and live-status controls stay, shown as quiet icons.
+- The account menu, color-mode toggle and notifications stay in the top right in
+  every layout. The study drew the account menu at the foot of the rail in Tiles
+  and Console.
+- Tiles' top line leaves Branches and Tags to the branch picker, which lists both.
 - In Tiles the star control sits beside the breadcrumb and Code precedes the
   jump field, so keyboard order matches reading order.
 - The header has no global issue or pull request buttons; Golf has no such pages.
