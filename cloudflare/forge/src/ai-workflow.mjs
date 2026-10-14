@@ -2,13 +2,19 @@ import { digest, uuidOK, Fault, deny, invalid, reply } from './common.mjs';
 import { aiAllocation, aiDailyLimit, aiLimits, aiRun, aiUsage } from './ai.mjs';
 import { featureOff } from './feature-policy.mjs';
 import { reviewDraft } from './ai-review.mjs';
+import { triage } from './ai-triage.mjs';
+import { releaseNotes } from './ai-release-notes.mjs';
+import { aiModel, aiModelStillAllowed } from './ai-models.mjs';
 
 // One entry per kind; each AI track adds one line here. A kind is
-// { feature (a feature-policy id, such as 'advice'), model, roles, target(value, row) → bounded JSON target or invalid(),
+// { feature (a feature-policy id, such as 'advice'), use (an AI use case in ai-models.mjs, whose effective model the run records) or a fixed model, roles, target(value, row) → bounded JSON target or invalid(),
 //   prepare({ db, env, person, row, artifact, target }) → JSON input (in the workspace write queue: authority and exact bounded input only),
 //   infer({ env, input, model, run }) → JSON output (in the Workflow; `run(input, options)` makes the one gateway call),
-//   stale?({ db, env, person, row, artifact, target, input }) → boolean on status reads }.
+//   stale?({ db, env, person, row, artifact, target, input }) → boolean on status reads,
+//   admit?({ db, env, person, row, target }) → throws a Fault to refuse at admission (a short D1 check; prepare checks again) }.
 export const aiKinds = {
+  triage,
+  'release-notes': releaseNotes,
   'review-draft': reviewDraft,
 };
 
@@ -16,7 +22,10 @@ const time = () => new Date().toISOString();
 const bytes = value => new TextEncoder().encode(value).length;
 const refusals = { unclaimed: 'Inference never started; nothing was billed.', access: 'Your repository access changed before the run started; nothing was billed.',
   expired: 'The run expired before inference; nothing was billed.', input: 'The input for this run exceeds its limit; nothing was billed.',
-  start: 'The AI workflow could not be started; nothing was billed.', kind: 'This kind of AI run is no longer offered; nothing was billed.' };
+  start: 'The AI workflow could not be started; nothing was billed.', kind: 'This kind of AI run is no longer offered; nothing was billed.',
+  model: 'The model this run was admitted with is no longer allowed on this installation; nothing was billed.' };
+// A kind with a use case runs the model chosen for it (installation default or this repository's allowed choice), checked again before inference.
+const modelAllowed = (db, env, kind, model) => kind.use ? aiModelStillAllowed(db, env, kind.use, model) : true;
 
 // AI gating hook, asked at admission, at prepare and again at infer; '' allows, anything else is the reason it is refused.
 // Each caller passes the env with the installation policy in force at that moment: the editable `advice` key overlays EVIDENCE_ALLOW_AI,
@@ -57,13 +66,15 @@ export async function aiAPI(db, env, person, row, artifact, body) {
     if (run) return reply({ run: view(run) });
     const gate = await aiGate(db, env, kind, row.id);
     if (gate) throw new Fault('failed_precondition', 412, gate);
+    if (kind.admit) await kind.admit({ db, env, person, row, target: JSON.parse(target) });
     await reconcileAi(db);
     const day = await db.prepare('SELECT count(*) AS total FROM ai_runs WHERE created_at>=?').bind(time().slice(0, 10)).first();
     if (day.total >= aiDailyLimit(env)) throw new Fault('resource_exhausted', 429, "The installation's daily AI allocation is used.");
     const hour = await db.prepare('SELECT count(*) AS total FROM ai_runs WHERE user_id=? AND created_at>=?').bind(person.id, new Date(Date.now() - 3600_000).toISOString()).first();
     if (hour.total >= aiLimits.hourlyPerUser) throw new Fault('resource_exhausted', 429, `You can start ${aiLimits.hourlyPerUser} AI runs an hour.`);
+    const model = kind.use ? (await aiModel(db, env, kind.use, row.id)).model : kind.model;
     run = await db.prepare(`INSERT INTO ai_runs(id,kind,repository_id,user_id,operation_key,input_hash,target,model,state,created_at,updated_at,expires_at)
-      VALUES(?,?,?,?,?,?,?,?,'REQUESTED',?,?,?) RETURNING *`).bind(crypto.randomUUID(), body.kind, row.id, person.id, body.idempotencyKey, hash, target, kind.model,
+      VALUES(?,?,?,?,?,?,?,?,'REQUESTED',?,?,?) RETURNING *`).bind(crypto.randomUUID(), body.kind, row.id, person.id, body.idempotencyKey, hash, target, model,
       time(), time(), new Date(Date.now() + aiLimits.runMinutes * 60_000).toISOString()).first();
     try { await env.AiWorkflow.create({ id: run.id, params: { runId: run.id } }); }
     catch {
@@ -105,6 +116,7 @@ export async function aiStep(db, env, run, context, phase, result) {
     if (!context || !kind.roles.includes(context.row.role)) return refuse(refusals.access);
     const gate = await aiGate(db, env, kind, run.repository_id);
     if (gate) return refuse(unbilled(gate));
+    if (!await modelAllowed(db, env, kind, run.model)) return refuse(refusals.model);
     let input;
     try { input = JSON.stringify(await kind.prepare({ db, env, ...context, target: JSON.parse(run.target) })); }
     catch (error) { if (error instanceof Fault) return refuse(error.message.slice(0, 300)); throw error; }
@@ -133,6 +145,7 @@ export async function aiInfer(env, id) {
   const gate = await aiGate(db, env, kind, run.repository_id);
   if (gate) return { state: 'REFUSED', refusal: unbilled(gate) };
   if (run.expires_at <= time()) return { state: 'REFUSED', refusal: refusals.expired };
+  if (!await modelAllowed(db, env, kind, run.model)) return { state: 'REFUSED', refusal: refusals.model };
   const claimed = await db.prepare('UPDATE ai_runs SET infer_started_at=? WHERE id=? AND state=? AND infer_started_at IS NULL').bind(time(), id, 'RESERVED').run();
   // A retried or replayed step never bills a second call.
   if (claimed.meta.changes !== 1) return { state: 'UNKNOWN' };

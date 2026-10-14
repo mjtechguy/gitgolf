@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32, 34) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -139,6 +139,8 @@ class Release:
             self.check_installation_schema()
         if self.manifest['schema'] >= 32:
             self.check_ai_schema()
+        if self.manifest['schema'] >= 34:
+            self.check_search_schema()
         deployments =self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -233,7 +235,48 @@ class Release:
             self.migrate_feature_policy_schema(applied)
         if self.manifest['schema'] >= 32:
             self.migrate_ai_schema(applied)
+        if self.manifest['schema'] >= 34:
+            self.migrate_search_schema(applied)
         return applied or 'already-applied'
+
+    SEARCH_COLUMNS = {
+        'search_state': {'repository_id', 'state', 'model', 'dimensions', 'commit_id', 'target_model', 'target_dimensions', 'target_commit', 'generation', 'files', 'chunks',
+                         'skipped', 'total', 'calls', 'error', 'requested_by', 'indexed_at', 'verified_at', 'checked_at', 'updated_at'},
+        'search_files': {'repository_id', 'served', 'path', 'blob'},
+        'search_chunks': {'id', 'repository_id', 'kind', 'source_id', 'path', 'start_line', 'end_line', 'source_version', 'state'},
+        'search_outbox': {'repository_id', 'kind', 'source', 'version', 'queued_at'},
+        'search_usage': {'day', 'user_id', 'calls'}}
+
+    def check_search_schema(self):
+        for table, expected in self.SEARCH_COLUMNS.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
+            if {row['name'] for row in columns} != expected:
+                raise ValueError('Apply reviewed 0034 semantic search migration before releasing')
+        triggers = self.command('d1', 'query', self.manifest['database'], '--sql', "SELECT name FROM sqlite_master WHERE type='trigger' AND name IN ('search_discussion_insert','search_discussion_update')")[0]['results']
+        if {row['name'] for row in triggers} != {'search_discussion_insert', 'search_discussion_update'}:
+            raise ValueError('Apply reviewed 0034 semantic search migration before releasing')
+
+    def migrate_search_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0034_semantic_search.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0034') not in (None, digest):
+            raise ValueError('Recorded semantic search migration differs from reviewed source')
+        statements = [s.strip() for s in re.split(r';\s*(?=CREATE\b)', re.sub(r'--[^\n]*', '', sql)) if s.strip()]
+        prefixes = ['CREATE TABLE IF NOT EXISTS search_state (', 'CREATE TABLE IF NOT EXISTS search_files (', 'CREATE TABLE IF NOT EXISTS search_chunks (',
+                    'CREATE INDEX IF NOT EXISTS search_chunks_repository ON search_chunks(', 'CREATE INDEX IF NOT EXISTS search_chunks_source ON search_chunks(',
+                    'CREATE TABLE IF NOT EXISTS search_outbox (', 'CREATE TABLE IF NOT EXISTS search_usage (',
+                    'CREATE TRIGGER IF NOT EXISTS search_discussion_insert AFTER INSERT ON discussions ', 'CREATE TRIGGER IF NOT EXISTS search_discussion_update AFTER UPDATE OF title,body ON discussions ']
+        if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement, prefix in zip(statements, prefixes)):
+            raise ValueError('Semantic search migration must only add the reviewed tables, indexes and triggers')
+        ready = False
+        try:
+            self.check_search_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0034') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_search_schema()
+            self.state['migration0034'] = digest; self.save(); applied.append('0034')
 
     def check_ai_schema(self):
         columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info(ai_runs)')[0]['results']

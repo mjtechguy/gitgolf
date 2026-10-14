@@ -35,6 +35,10 @@ import { collaboration, collaborationMethods, operationRepository } from './coll
 import { evidenceAPI, evidenceStep, evidencePolicy } from './evidence.mjs';
 import { aiAPI, aiStep, aiKinds } from './ai-workflow.mjs';
 import { aiAllocation } from './ai.mjs';
+import { aiModelsAPI, withAgentModel } from './ai-models.mjs';
+import { aiUsageAPI } from './ai-usage.mjs';
+import { searchAPI, searchCapability, searchFeature } from './search.mjs';
+import { searchMaintenance } from './search-index.mjs';
 import { agentPolicy } from './agent-policy.mjs';
 import { executionDiagnostic, testPolicy } from './test-policy.mjs';
 import { appPolicy } from './app-policy.mjs';
@@ -74,7 +78,7 @@ export function serialize(handler, isRead = () => false) {
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
-  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read'].includes(new URL(request.url).pathname)) return true;
+  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/search/read'].includes(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
   if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
   if (/^\/rpc\/golf\.v1\.(?:FeaturePolicyService\/GetFeaturePolicy|RepositoryFeatureService\/GetRepositoryFeatures)$/.test(new URL(request.url).pathname)) return true;
@@ -83,7 +87,7 @@ export function concurrentRead(request) {
   if (/^\/rpc\/golf\.v1\.(?:DiscussionAttachmentService\/(?:ListDiscussionAttachments|DownloadDiscussionAttachment)|DiscussionAttachmentUploadService\/GetDiscussionAttachmentUploadState)$/.test(new URL(request.url).pathname)) return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
-const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume|ai)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
+const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume|ai|ai-models|ai-usage|search)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
 async function input(request) {
   if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') invalid('Use JSON.');
@@ -396,6 +400,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) || 0, previewTTL: Number(env.PREVIEW_TTL) || 0, appTTL: appPolicy(env)?.ttl || 0 });
     if (url.pathname === '/native/installation' || url.pathname === '/native/installation/read') return await installationAPI(db, env, person, request, body, url.pathname.endsWith('/read'));
     if (url.pathname === '/native/runner-admin') return await nativeRunnerAdmin(db, env, person, request, body);
+    if (url.pathname === '/native/ai-models' || url.pathname === '/native/ai-models/read') return await aiModelsAPI(db, env, person, request, body, url.pathname.endsWith('/read'), () => authorizedRepository(db, person, body.repository, env, body.repositoryId));
+    if (url.pathname === '/native/ai-usage/read') return await aiUsageAPI(db, env, person, request, body, providerFetch);
     if (url.pathname === '/native/runner-placement') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'actions');
       if (body.repositoryId !== String(row.id)) deny();
@@ -430,7 +436,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const id = body.action === 'create' ? body.selection?.repositoryId : body.repositoryId;
       const row = await authorizedRepository(db, person, key, env, id, 'pull-requests');
       if (id !== String(row.id)) deny();
-      return await evidenceAPI(db, env, person, row, action => withArtifact(env, row, action), body);
+      // The repository's agent model is bound into the agent policy identity recorded at admission.
+      return await evidenceAPI(db, await withAgentModel(db, env, row.id), person, row, action => withArtifact(env, row, action), body);
     }
     if (url.pathname === '/native/ai' || url.pathname === '/native/ai/read') {
       if (url.pathname.endsWith('/read') !== ['status', 'list'].includes(body.action)) invalid(url.pathname.endsWith('/read') ? 'This route only reads AI runs.' : 'This route only creates AI runs.');
@@ -438,6 +445,12 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, body.action === 'create' && Object.hasOwn(aiKinds, body.kind) ? aiKinds[body.kind].feature : undefined);
       if (body.repositoryId !== String(row.id)) deny();
       return await aiAPI(db, env, person, row, action => withArtifact(env, row, action), body);
+    }
+    if (url.pathname === '/native/search' || url.pathname === '/native/search/read') {
+      if (url.pathname.endsWith('/read') !== ['status', 'query'].includes(body.action)) invalid(url.pathname.endsWith('/read') ? 'This route only reads search.' : 'This route only changes the search index.');
+      // Status and removal stay available while the feature is off; queries and builds are refused by its policy.
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, ['query', 'index'].includes(body.action) ? searchFeature : undefined);
+      return await searchAPI(db, env, person, row, action => withArtifact(env, row, action), body, readTree);
     }
     if (url.pathname === '/rpc/golf.v1.WorkflowService/InspectWorkflows') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
@@ -529,6 +542,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'settings.repository-git', label: 'Git credentials', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Access-authenticated own-account HTTPS credentials scoped to one repository, read/write mode and at most one hour; current identity/grant generations, explicit revocation and Git rules. Access machine admission is separately required.' },
       { id: 'settings.repository-environments', label: 'Environments', state: environmentPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: environmentPolicy(env) ? 'One environment named preview governs protected pull-request previews: allowed head branches, preview lifetime within the operator limit and concurrent previews. Required reviewers, wait timers, environment secrets and production deployment are not available. Changes need a verified Access sign-in.' : `Repository environments need ${[!previewPolicy(env) && 'an operator-approved protected preview allocation', !env.ACCESS_AUD && 'Cloudflare Access sign-in'].filter(Boolean).join(' and ')} on this installation.` },
       executionValueCapability(env),
+      await searchCapability(db, env),
       ...[
         ['settings.repository-teams', 'Repository team access', 'Team membership and inherited repository permissions are not implemented on Cloudflare native. Direct collaborators and invitations are available in Access.'],
         ['settings.repository-deploy-keys', 'SSH deploy keys', 'Cloudflare native serves Git over HTTPS. SSH transport and SSH deploy keys are not available.'],
@@ -542,6 +556,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'settings.repository-workflows', label: 'Workflows', state: 'CAPABILITY_STATE_READY', reason: workflowCapability(env, Boolean(testPolicy(env)) && evidencePolicy(env)) },
       { id: 'settings.repository-execution-policy', label: 'Repository execution switch', state: testPolicy(env) && evidencePolicy(env) && env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: executionPolicyCapability(Boolean(testPolicy(env)) && evidencePolicy(env), Boolean(env.ACCESS_AUD)) },
       { id: 'settings.native', label: 'Cloudflare allocation settings', state: 'CAPABILITY_STATE_READY', reason: "Operations administrators signed in through Access see every installation setting the Worker holds: allocations, approved origins, sender, limits and today's use. Secret values are never shown. " + (env.INSTALLATION_POLICY_EDITING === 'false' ? 'Installation policy is locked at deploy.' : 'Webhook origins and limits, email, AI advice, agent proposals, preview lifetime and slots, anonymous rate limiting and daily evidence admissions are editable within the deploy allocation; widening needs typed confirmation and a recent Access sign-in.') },
+      { id: 'settings.ai-models', label: 'AI models', state: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'Operations administrators choose the Workers AI model for each AI use case within the deploy list, from the account catalog; repositories choose only where allowed. Clef stays fixed for advice and triage.' : 'Workers AI is not allocated on this installation (enable-ai).' },
+      { id: 'operations.ai-usage', label: 'AI usage', state: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'Golf’s own run ledger by feature, model and day against the daily AI limit; AI Gateway analytics when an Account Analytics Read token is bound. Cloudflare billing is authoritative.' : 'Workers AI is not allocated on this installation (enable-ai).' },
       { id: 'settings.installation-audit', label: 'Installation audit log', state: env.installationSchema ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.installationSchema ? 'Append-only record of installation policy changes, readable by operations administrators signed in through Access.' : 'Apply the schema 30 migration to keep an installation audit log.' },
       // The portable administration pages these name have no native service; the specific reason replaces a generic blocked page.
       { id: 'settings.execution', label: 'Installation execution policy', state: 'CAPABILITY_STATE_DISABLED', reason: 'Cloudflare native has no installation-wide execution policy service. Repository administrators switch pull-request runs per repository; the approved workflow is fixed at deploy.' },
@@ -553,8 +569,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'discussion.templates', label: 'Issue templates', state: 'CAPABILITY_STATE_READY', reason: 'Markdown and YAML issue forms read from the default branch. At most 50 templates of 6,000 bytes; unsupported or oversized templates are counted, not rendered.' },
       { id: 'discussion.comments', label: 'Comment editing', state: 'CAPABILITY_STATE_READY', reason: 'Authors and current administrators can edit or delete an exact discussion comment; atomic original receipts and revision checks.' },
       { id: 'discussion.resources', label: 'Labels, milestones and assignees', state: 'CAPABILITY_STATE_READY', reason: 'Repository resources and issue/PR assignment with version-fenced D1 writes and original receipts. Organization labels remain separate.' },
+      { id: 'discussion.ai-triage', label: 'Label suggestions', state: aiAllocation(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: aiAllocation(env) ? "Repository administrators can ask Clef which of up to 20 of the repository's own labels fit an issue, from its title and description. Suggestions are probabilities, not decisions; labels change only when you apply them." : 'The operator has not allocated Workers AI runs (approved Workers AI, its private gateway and the AI workflow) on this installation.' },
+      { id: 'repository.ai-release-notes', label: 'Release notes drafts', state: aiAllocation(env) && env.EVIDENCE_BUCKET ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: aiAllocation(env) && env.EVIDENCE_BUCKET ? "Repository administrators can ask Workers AI to draft notes for an existing tag from its first-parent history back to the previous tag (at most 500 commits). Merged pull requests are Golf merges only; other commits are listed by subject. The draft fills the release form; nothing is published until you publish it." : 'Needs releases and the operator\'s Workers AI allocation (approved Workers AI, its private gateway and the AI workflow) on this installation.' },
       { id: 'pull.pending-reviews', label: 'Pending review summaries', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Requires verified human Access identity. Private own-account pending summaries, editing, exact-source publication and discard. Inline and saved-diff drafts remain separate.' },
-      { id: 'pull.ai-review-drafts', label: 'AI review drafts', state: aiAllocation(env) && env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: aiAllocation(env) && env.ACCESS_AUD ? "Writers can ask Workers AI (@cf/zai-org/glm-5.3, through this installation's private AI Gateway) to read up to 96 KiB of a pull request's diff and draft a summary and review notes that only they see. Nothing is posted: you edit the text and publish it as your own pending review. Drafts can be wrong or miss problems and never approve or block a merge." : `AI review drafts need ${[!aiAllocation(env) && 'operator-approved Workers AI runs (Workers AI, the private AI Gateway and the AI workflow)', !env.ACCESS_AUD && 'Cloudflare Access sign-in for pending reviews'].filter(Boolean).join(' and ')} on this installation.` },
+      { id: 'pull.ai-review-drafts', label: 'AI review drafts', state: aiAllocation(env) && env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: aiAllocation(env) && env.ACCESS_AUD ? "Writers can ask Workers AI (the selected model, through this installation's private AI Gateway) to read up to 96 KiB of a pull request's diff and draft a summary and review notes that only they see. Nothing is posted: you edit the text and publish it as your own pending review. Drafts can be wrong or miss problems and never approve or block a merge." : `AI review drafts need ${[!aiAllocation(env) && 'operator-approved Workers AI runs (Workers AI, the private AI Gateway and the AI workflow)', !env.ACCESS_AUD && 'Cloudflare Access sign-in for pending reviews'].filter(Boolean).join(' and ')} on this installation.` },
       { id: 'pull.review-requests', label: 'Review assignments', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Requires verified human Access identity. Current enrolled repository accounts; request/cancel, versioned receipts and live activity. Teams and CODEOWNERS are separate.' },
       { id: 'pull.review-lifecycle', label: 'Review dismissal and restoration', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Requires verified human Access identity. Repository administrators can dismiss reviews and restore only the latest non-stale review. These decisions do not authorize protected merge.' },
       { id: 'pull.codeowners', label: 'CODEOWNERS routing', state: 'CAPABILITY_STATE_READY', reason: 'Bounded GitHub-format CODEOWNERS suggestions from the exact PR base. No automatic requests or protected approval authority; unsupported patterns are explicit.' },
@@ -825,6 +843,8 @@ export async function advanceEvidence(env, id, phase, workflows) {
   // Each step reads the installation policy in force now, so a feature turned off refuses work that is still queued.
   env = await withInstallationPolicy(env, db);
   const job = await db.prepare('SELECT * FROM evidence_jobs WHERE id=?').bind(id).first();
+  // The agent model in force now: a change since admission changes the policy identity, so the step below refuses the job.
+  if (job) env = await withAgentModel(db, env, job.repository_id);
   let context;
   if (job) {
     const person = await db.prepare('SELECT * FROM users WHERE id=? AND active=1').bind(job.user_id).first();
@@ -853,6 +873,10 @@ export async function advanceEvidence(env, id, phase, workflows) {
   return result;
 }
 
+// Semantic search indexing from the maintenance schedule, with the installation policy in force at its start.
+export async function advanceSearch(env) {
+  return searchMaintenance(await withInstallationPolicy(env), (row, action) => withArtifact(env, row, action, true), readTree);
+}
 // Workspace-side AI steps: the run's requester must still hold a current grant; the kind re-checks its own roles.
 export async function advanceAi(env, id, phase, result) {
   if (!uuidOK(id) || !['prepare', 'settle'].includes(phase)) throw Error('Invalid internal AI dispatch');

@@ -227,7 +227,7 @@ async function stale({ db, env, person, row, artifact, target, input }) {
   } catch (error) { if (error instanceof Fault) return true; throw error; }
 }
 
-export const reviewDraft = { feature: 'ai-review-drafts', model: '@cf/zai-org/glm-5.3', roles: ['admin', 'write'], target, prepare, stale,
+export const reviewDraft = { feature: 'ai-review-drafts', use: 'review-drafts', roles: ['admin', 'write'], target, prepare, stale,
   async infer({ input, run }) {
     const answer = await run({ messages: reviewMessages(input), response_format: { type: 'json_schema', json_schema: { name: 'review_draft', strict: true, schema: reviewSchema } },
       reasoning_effort: 'low', max_completion_tokens: 3000 });

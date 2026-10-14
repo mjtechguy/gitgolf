@@ -20,6 +20,8 @@ aiKinds.probe = { feature: 'ai-probe', model: '@cf/local/stub', roles: ['admin',
   target: value => ({ number: Number(value?.number) || 1 }),
   prepare: async ({ row, target }) => ({ text: 'Issue ' + target.number + ' in ' + row.name }),
   infer: async ({ input, run }) => (await run({ prompt: untrusted('issue', input.text) })).echo };
+// A kind with a use case runs the model chosen for it (here the deploy default from AI_MODELS).
+aiKinds.modelProbe = { ...aiKinds.probe, model: undefined, use: 'review-drafts' };
 export class AiWorkflow extends Production {
   run(event, step) {
     this.env = { ...this.env, AI: { async run(model, input, options) {
@@ -35,7 +37,8 @@ const origin = 'https://golf.example.com', token = 'golf_native_' + 'a'.repeat(4
 const runtime = new Miniflare(convertV4MiniflareOptions({
   host: '127.0.0.1', port: 0, modules: [{ type: 'ESModule', path: 'worker.mjs', contents: built.outputFiles[0].text }], compatibilityDate: '2026-10-08', compatibilityFlags: ['nodejs_compat'],
   bindings: { PUBLIC_ORIGIN: origin, WORKSPACE_SLUG: 'alice', ARTIFACTS_NAMESPACE: 'local-ai-proof', ACCOUNT_ID: 'a'.repeat(32),
-    EVIDENCE_ALLOW_AI: 'true', EVIDENCE_GATEWAY: 'local-gateway', AI_WORKFLOW_NAME: 'local-ai', AI_DAILY_LIMIT: '3' },
+    EVIDENCE_ALLOW_AI: 'true', EVIDENCE_GATEWAY: 'local-gateway', AI_WORKFLOW_NAME: 'local-ai', AI_DAILY_LIMIT: '3',
+    AI_MODELS: JSON.stringify({ 'review-drafts': { default: '@cf/zai-org/glm-5.3', allowed: ['@cf/zai-org/glm-5.3', '@cf/zai-org/glm-5.3-flash'] } }) },
   // The workspace only checks that an AI binding is allocated; it never calls it.
   serviceBindings: { AI: () => new Response('The workspace must not call the model.', { status: 500 }) },
   workflows: { AiWorkflow: { name: 'local-ai', className: 'AiWorkflow' } },
@@ -54,7 +57,7 @@ try {
       body: JSON.stringify({ repository: { owner: 'alice', name: 'project' }, repositoryId: '1', ...body }) });
     return { status: response.status, value: await response.json() };
   };
-  assert.equal((await call('/native/diagnostics', {})).value.schema, 32);
+  assert.equal((await call('/native/diagnostics', {})).value.schema, 34);
   const settled = async id => {
     for (let i = 0; i < 200; i++) {
       const { value } = await call('/native/ai/read', { action: 'status', runId: id });
@@ -78,8 +81,13 @@ try {
   const unknown = await settled(failed.value.run.id);
   assert.equal(unknown.state, 'UNKNOWN'); assert.equal(unknown.output, undefined);
   assert.equal((await db.prepare('SELECT count(*) AS n FROM ai_runs WHERE infer_started_at IS NOT NULL').first()).n, 2);
-  await call('/native/ai', { action: 'create', kind: 'probe', target: { number: 3 }, idempotencyKey: crypto.randomUUID() });
+  const chosen = await call('/native/ai', { action: 'create', kind: 'modelProbe', target: { number: 3 }, idempotencyKey: crypto.randomUUID() });
+  assert.equal(chosen.value.run.model, '@cf/zai-org/glm-5.3', JSON.stringify(chosen.value));
+  assert.equal((await settled(chosen.value.run.id)).output.model, '@cf/zai-org/glm-5.3');
+  const models = await call('/native/ai-models/read', { action: 'repository' });
+  assert.equal(models.status, 200, JSON.stringify(models.value));
+  assert.deepEqual(models.value.uses.map(use => [use.use, use.model, use.source]), [['advice', '@cf/cloudflare/clef', 'fixed'], ['review-drafts', '@cf/zai-org/glm-5.3', 'deploy'], ['triage', '@cf/cloudflare/clef', 'fixed']]);
   const limited = await call('/native/ai', { action: 'create', kind: 'probe', target: { number: 4 }, idempotencyKey: crypto.randomUUID() });
   assert.equal(limited.status, 429);
-  console.log('Real workerd/D1/DO/Workflows AI runs: admission, prepare in the workspace, one gateway-shaped call in the Workflow, settle, unknown outcome and the daily limit passed');
+  console.log('Real workerd/D1/DO/Workflows AI runs: admission, prepare in the workspace, one gateway-shaped call in the Workflow, settle, unknown outcome, the chosen model per use case and the daily limit passed');
 } finally { await runtime.dispose(); }

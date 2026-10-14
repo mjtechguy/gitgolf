@@ -115,6 +115,13 @@ const canonicalRepositoryWorkflowsRoute = createRoute({
   beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
   staticData: { golfLocation: (match) => { const { owner, name } = match.params; return { kind: 'repository-workflows', owner, name }; } },
 });
+// Semantic search: the repository key is nested so the page is not wrapped in the repository settings layout.
+const repositorySearchRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/$owner/$name/search',
+  beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
+  validateSearch: (search: Record<string, unknown>): { q?: string } => ({ q: typeof search.q === 'string' && search.q.trim() ? search.q.slice(0, 500) : undefined }),
+  staticData: { golfLocation: (match) => ({ kind: 'repository-search', repository: { owner: match.params.owner, name: match.params.name }, q: match.search.q }) },
+});
 // Old links normalize without probing repository data or changing page authority.
 const repositorySettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/repositories/$owner/$name/settings',
@@ -150,6 +157,8 @@ const instanceAuditRoute = createRoute({ getParentRoute: () => rootRoute, path: 
 const instanceCapabilitiesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/capabilities', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'capabilities' }) } });
 const instanceOperationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/operations', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'operations' }) } });
 const instanceFeaturesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/features', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'features' }) } });
+const instanceAiModelsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/ai', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'ai-models' }) } });
+const instanceAiUsageRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/ai-usage', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'ai-usage' }) } });
 const instanceOverviewRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin', staticData: { golfLocation: () => ({ kind: 'instance-settings', view: 'overview' }) } });
 const instanceSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings', staticData: { golfLocation: () => ({ kind: 'instance-settings' }) } });
 const organizationRoute = createRoute({
@@ -341,7 +350,7 @@ function OrganizationPage(match: LocationMatch): Location {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, publicProfileRoute, exploreRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOperationsRoute, instanceCapabilitiesRoute, instanceAuditRoute, instanceFeaturesRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountConnectionsRoute,accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, publicProfileRoute, exploreRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositorySearchRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOperationsRoute, instanceCapabilitiesRoute, instanceAuditRoute, instanceFeaturesRoute, instanceAiModelsRoute, instanceAiUsageRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountConnectionsRoute,accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => {

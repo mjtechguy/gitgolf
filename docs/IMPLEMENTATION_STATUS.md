@@ -1,5 +1,71 @@
 # Golf implementation status
 
+## 2026-10-14 — Semantic search with Workers AI embeddings and Vectorize (AI-E)
+
+Repository administrators build a per-repository index that the maintenance
+schedule fills with Workers AI embeddings (model from AI model selection) of
+default-branch code and issue/PR titles and descriptions, in paced batches
+(schema 34). Vectorize holds only ids, vectors and repository/kind metadata.
+Every search re-checks the reader's grant in D1 and reads excerpts live, so
+revocations, deletions and edits apply immediately; results name the indexed
+commit. A changed embedding model rebuilds the index while the old one keeps
+serving; the feature sits under the `semantic-search` policy.
+
+Verified locally with Worker tests (468), a workerd check against stub
+AI/Vectorize/Artifacts, script and deploy-config tests and Playwright specs.
+Still unverified live: the embedding dimension, Vectorize filtering and upsert
+visibility, gateway limits during indexing, and CPU per maintenance run.
+
+## 2026-10-14 — Analytics reads failed because Workers reject `redirect: 'error'`
+
+The Operations analytics feed (failing inside the Worker since 2026-10-13 although
+the same token and query worked outside it) and the new AI Gateway usage panel
+both called the GraphQL API with `fetch(..., { redirect: 'error' })`. Workers
+accept only `follow` or `manual`, so every read threw before any request was sent;
+the AI usage panel surfaced the message. Both now use `redirect: 'manual'`, and a
+redirect response still fails the read because it is not a 2xx JSON answer.
+Verified by Worker tests; hosted confirmation follows the deploy.
+
+## 2026-10-14 — Clef label suggestions and Workers AI release notes drafts (AI-C, AI-D)
+
+Repository administrators can ask Clef (`@cf/cloudflare/clef`, fixed) which of up
+to 20 of the repository's labels fit an issue, from its title and description.
+Suggestions are ranked probabilities (at most three at 15% or more) and apply only
+when a person saves them in the labels editor; a suggestion is marked out of date
+when the title, description or labels change. Administrators can also draft
+release notes for an existing tag from its first-parent history back to the
+previous tag (at most 500 commits): Golf merges count as merged pull requests,
+other commits are listed by subject, every item must cite its input, and the
+Worker writes the links. The draft fills the release form; nothing is published.
+Release notes use the installation's chosen model for that use case (default
+`@cf/zai-org/glm-5.3`). Both are under feature policies `ai-triage` and
+`ai-release-notes`.
+
+Verified locally with Worker tests (462, 461 pass, 1 skipped), a workerd run with
+stub models (`ai-kinds-runtime-check.mjs`) and mocked Playwright specs (17).
+Unverified live: Clef with more than three options, and GLM `json_schema`
+adherence and latency.
+
+## 2026-10-14 — AI model selection per use case and AI usage (AI-G, AI-F)
+
+Administrators choose the default and allowed Workers AI models for agents,
+summaries and review drafts, release notes and search embeddings at `/admin/ai`,
+from the account's model catalog (cached 6 hours) filtered by task and capability
+and bounded by the deploy list `AI_MODELS`; review advice and triage stay on Clef.
+A per-use-case switch lets repository administrators pick from the allowed list in
+repository settings. Writes are revision-fenced and audited; widening needs the
+typed key and a recent Access sign-in; `policy_editing: false` locks it (schema
+33). Every AI run records the model it used; the agent model is part of the agent
+policy identity, so a change refuses queued proposals at their next step.
+`/admin/ai-usage` shows Golf's own ledger by feature, model and day against the
+daily AI limit, and an AI Gateway analytics panel that stays "Degraded" until a
+live read succeeds.
+
+Verified locally: Worker tests (448, 447 pass, 1 skipped), agents package (4),
+real workerd AI/runtime/UI/environments checks, web typecheck and builds, and the
+model-selection Playwright specs. Unverified live: the catalog's property names
+and whether the analytics token reads the AI Gateway dataset.
+
 ## 2026-10-14 — Workers AI run foundation and the Clef recommendation card (AI-0, AI-A)
 
 Workers AI runs (AI-0) are admitted and prepared in the workspace, inferred once

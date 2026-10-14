@@ -52,3 +52,12 @@ test('the email binding is restricted to one sender and refuses any other shape'
     { allowedSenderAddresses: [sender], destinationAddress: 'someone@example.com' }, { allowedSenderAddresses: [sender], allowedDestinationAddresses: ['someone@example.com'] }, { allowedSenderAddresses: [sender], dev: {} }])
     assert.throws(() => bindings({ env: { EMAIL: { type: 'send-email', ...value } } }), /Unqualified Alchemy email binding/, JSON.stringify(value));
 });
+
+test('the search binding names one Vectorize index and refuses any other shape', () => {
+  assert.deepEqual(bindings({ env: { SEARCH_INDEX: { type: 'vectorize', name: 'demo-search' }, SEARCH_DIMENSIONS: { type: 'text', value: '1024' } } }), [
+    { name: 'SEARCH_INDEX', type: 'vectorize', indexName: 'demo-search' },
+    { name: 'SEARCH_DIMENSIONS', type: 'plain_text', text: '1024' },
+  ]);
+  for (const value of [{}, { name: '' }, { name: 'Demo_Search' }, { name: 'demo-search', dev: { remote: true } }, { name: 7 }])
+    assert.throws(() => bindings({ env: { SEARCH_INDEX: { type: 'vectorize', ...value } } }), /Unqualified Alchemy Vectorize binding/, JSON.stringify(value));
+});
