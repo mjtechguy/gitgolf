@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 from unittest.mock import patch
 
 import cloudflare_alchemy_demo as demo
@@ -103,6 +104,18 @@ class FreshInstall(unittest.TestCase):
         with self.assertRaises(ValueError): demo.init_input(*self.args, self.who, 'store')
         with self.assertRaises(ValueError): demo.init_input(*self.args, self.who, daily_limit=0)
         with self.assertRaises(ValueError): demo.init_input(*self.args, {**self.who, 'gitAuthorName': 'Jane <x>'})
+
+    def test_init_reuses_an_existing_one_time_pin_login_unmanaged(self):
+        self.assertNotIn('accessIdentityProviderId', demo.init_input(*self.args, self.who))
+        idp = '2378d67f-60bb-4bd4-9fca-b51bdd79b04d'
+        self.assertEqual(demo.init_input(*self.args, self.who, identity_provider=idp)['accessIdentityProviderId'], idp)
+        with self.assertRaises(ValueError): demo.init_input(*self.args, self.who, identity_provider='Login')
+        listed = [{'type': 'google', 'id': '80d92551-4620-4653-8f56-7e18a71c8245'}, {'type': 'onetimepin', 'id': idp}]
+        with mock.patch.object(demo, 'cf', return_value=listed) as call:
+            self.assertEqual(demo.existing_one_time_pin({'profile': 'golf', 'account': 'a'*32}), idp)
+            self.assertEqual(call.call_args.args[1:], ('zero-trust', 'identity-providers', 'list'))
+        with mock.patch.object(demo, 'cf', return_value={'result': [listed[0]]}):
+            self.assertIsNone(demo.existing_one_time_pin({'profile': 'golf', 'account': 'a'*32}))
 
     def test_identity_is_derived_from_the_email_and_never_a_fixed_owner(self):
         self.assertEqual(demo.admin_identity('Jane.Doe+golf@example.com'),

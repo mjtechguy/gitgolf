@@ -54,7 +54,9 @@ export default Alchemy.Stack('GolfDemo', {
   const mail = input.settings.email ? yield* Cloudflare.Email.SendingSubdomain('Mail', {
     zoneId: input.zone, name: input.settings.email.sender.split('@')[1], previewEnabled: false }) : undefined;
   const machine = yield* Cloudflare.Access.ServiceToken('Operator', { name: name + '-operator', duration: '5h' });
-  const idp = yield* Cloudflare.Access.IdentityProvider('Login', { name, type: 'onetimepin', config: {} });
+  // Zero Trust allows one one-time PIN login method per account: reuse an existing one unmanaged (set by init), else own it.
+  const identityProviderId = input.accessIdentityProviderId
+    ?? (yield* Cloudflare.Access.IdentityProvider('Login', { name, type: 'onetimepin', config: {} })).identityProviderId;
   const policies = [
     { name: 'Approved demo owner', decision: 'allow' as const, include: [{ email: { email: input.email } }] },
     { name: 'Demo operator', decision: 'non_identity' as const, include: [{ serviceToken: { tokenId: machine.serviceTokenId } }] },
@@ -62,12 +64,12 @@ export default Alchemy.Stack('GolfDemo', {
   const controlAccess = yield* Cloudflare.Access.Application('ControlAccess', {
     name: name + '-control', type: 'self_hosted', domain: input.hostname + (input.settings.public_repositories ? '/auth/login' : ''),
     pathCookieAttribute: false,
-    sessionDuration: '4h', allowedIdps: [idp.identityProviderId], autoRedirectToIdentity: true, policies,
+    sessionDuration: '4h', allowedIdps: [identityProviderId], autoRedirectToIdentity: true, policies,
   });
   const previewAccess = yield* Cloudflare.Access.Application('PreviewAccess', {
     name: name + '-preview', type: 'self_hosted', domain: input.previewHostname,
     destinations: [input.previewHostname, '*.' + input.previewHostname].map(uri => ({ type: 'public' as const, uri })),
-    sessionDuration: '4h', allowedIdps: [idp.identityProviderId], autoRedirectToIdentity: true, policies,
+    sessionDuration: '4h', allowedIdps: [identityProviderId], autoRedirectToIdentity: true, policies,
   });
   const policy = (permissionGroups: Cloudflare.ApiToken.PermissionGroupRef[]) => [{ effect: 'allow' as const,
     resources: { ['com.cloudflare.api.account.' + input.account]: '*' }, permissionGroups }];
