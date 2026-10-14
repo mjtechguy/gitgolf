@@ -1,5 +1,10 @@
 export const release = typeof GOLF_NATIVE_RELEASE === 'undefined' ? 'development' : GOLF_NATIVE_RELEASE;
 export const configuration = typeof GOLF_NATIVE_CONFIGURATION === 'undefined' ? 'development' : GOLF_NATIVE_CONFIGURATION;
+// When this bundle was built (ms). The edge stamps it on every request it forwards so an older Workspace instance can retire.
+export const builtAt = typeof GOLF_NATIVE_BUILT_AT === 'undefined' ? 0 : GOLF_NATIVE_BUILT_AT;
+// A Workspace kept warm by open streams and runner polling can keep serving an old bundle long after a deploy; it retires
+// itself once it sees a request from a newer edge build. Unbuilt (local) bundles never retire.
+export const newerEdge = (request, own = builtAt) => { const edge = Number(request.headers.get('X-Golf-Edge-Built-At')); return own > 0 && Number.isSafeInteger(edge) && edge > own; };
 
 export function timings() {
   const stages = new Map();
