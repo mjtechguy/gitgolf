@@ -1,5 +1,25 @@
 # Golf implementation status
 
+## 2026-10-14 — Workers AI run foundation and the Clef recommendation card (AI-0, AI-A)
+
+Workers AI runs (AI-0) are admitted and prepared in the workspace, inferred once
+in `AiWorkflow` outside the workspace's write queue through the private AI
+Gateway, and settled only while reserved (schema 32, `ai_runs`). A retried or
+replayed infer step never makes a second model call; a lost settle becomes
+UNKNOWN through maintenance; repository text never enters Workflow state, and
+input snapshots are deleted after 7 days. Runs are gated by the deploy
+allocation, the installation AI advice switch and each kind's feature policy,
+with 100 runs a day (deploy ceiling 500) and 20 per person per hour. Verified with
+node tests (438, 437 pass, 1 skipped) and a real workerd Workflow run against a
+stub model; no feature uses it yet, and nothing has run live.
+
+The Clef recommendation card (AI-A) puts the latest stored Clef advice on the
+pull request Conversation tab: a sentence with a probability per next step, the
+model, what Clef read, the commit and whether it is out of date. Writers can ask
+again through the existing advice-only evidence job, which counts against the
+daily evidence limit. Verified with mocked Playwright tests in Classic, Golf and
+Flare, light and dark, at 1440 and 390 px; not yet seen against live advice.
+
 ## 2026-10-14 — First hosted customer-runner run; runner finish receipt fixed
 
 A Golf native runner on a Linux Docker host was enrolled against the retained
