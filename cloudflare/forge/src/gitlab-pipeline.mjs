@@ -16,6 +16,7 @@
 // anything else refuses pipeline creation with a visible reason. Nothing here touches D1 or R2.
 import { parseDocument, YAMLSeq } from '../../agents/node_modules/yaml/browser/index.js';
 import { Fault } from './common.mjs';
+import { registerPipelinePlanner } from './actions-intake.mjs';
 
 export const gitLabPipelinePath = '.gitlab-ci.yml';
 export const gitLabSpecVersion = 1;
@@ -798,6 +799,9 @@ export async function gitLabPipelinePlan(input) {
   for (const key of order.keys()) visit(key);
   return { workflowName: workflowName || 'GitLab CI', jobs, notes: [...notes] };
 }
+
+// Trigger intake (actions-intake.mjs) plans `.gitlab-ci.yml` with this module for every push, merge request and web run.
+registerPipelinePlanner('gitlab-ci', gitLabPipelinePath, gitLabPipelinePlan);
 
 // ---------- runner payload ----------
 const failureReasons = ['unknown_failure', 'script_failure', 'api_failure', 'stuck_or_timeout_failure', 'runner_system_failure', 'missing_dependency_failure', 'runner_unsupported',
