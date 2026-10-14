@@ -117,6 +117,19 @@ class Observability(unittest.TestCase):
             saved=json.loads((directory/'alchemy-input.json').read_text())['settings']
             self.assertEqual(saved,{'evidence':{'daily_limit':40},'analytics_dataset':'golf_alchemy_20261013_0f2087f8'})
 
+    def test_enabling_pipelines_needs_the_evidence_allocation_and_keeps_other_settings(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            with self.assertRaises(ValueError): demo.enable_pipelines(directory,{'name':'golf-alchemy-20261013-0f2087f8','settings':{}})
+            for refused in ('http://code.forgejo.org','https://code.forgejo.org/x','code.forgejo.org','https://Code.Forgejo.org'):
+                with self.assertRaises(ValueError): demo.enable_pipelines(directory,{'name':'golf-alchemy-20261013-0f2087f8','settings':{'evidence':{'daily_limit':40}}},refused)
+            self.assertFalse((directory/'alchemy-input.json').exists())
+            value={'name':'golf-alchemy-20261013-0f2087f8','settings':{'evidence':{'daily_limit':40}}}
+            demo.enable_pipelines(directory,value)
+            self.assertEqual(json.loads((directory/'alchemy-input.json').read_text())['settings'],{'evidence':{'daily_limit':40},'pipelines':{}})
+            demo.enable_pipelines(directory,value,'https://code.forgejo.org')
+            self.assertEqual(json.loads((directory/'alchemy-input.json').read_text())['settings']['pipelines'],{'default_actions_url':'https://code.forgejo.org'})
+
     def test_enabling_ai_names_one_gateway_and_agents_only_on_request(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory=Path(temporary)

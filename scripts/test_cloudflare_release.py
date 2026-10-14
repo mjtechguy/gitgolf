@@ -958,7 +958,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
         release = self.release(); release.manifest['schema'] = 34
         with sqlite3.connect(':memory:') as db:
             db.row_factory = sqlite3.Row
-            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            schema = schema_through('0034_semantic_search.sql')
             migration = (ROOT/'cloudflare/forge/migrations/0034_semantic_search.sql').read_text()
             self.assertTrue(schema.endswith(';\n\n'+migration))
             db.executescript(schema_through('0032_ai_runs.sql'))
@@ -988,5 +988,35 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             self.assertEqual(applied, [])
             release.state['migration0034'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_search_schema([])
+
+    def test_pipeline_migration_is_the_schema_tail_resumes_without_replaying(self):
+        release = self.release(); release.manifest['schema'] = 35
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0035_actions_pipelines.sql').read_text()
+            self.assertTrue(schema.endswith(';\n\n'+migration))
+            db.executescript(schema_through('0034_semantic_search.sql'))
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith('PRAGMA') or sql.startswith('SELECT'):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost pipeline migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0035'): release.check_pipeline_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost pipeline'): release.migrate_pipeline_schema([])
+            applied = []; release.migrate_pipeline_schema(applied)
+            self.assertEqual(applied, ['0035']); release.check_pipeline_schema()
+            applied = []; release.migrate_pipeline_schema(applied)
+            self.assertEqual(applied, [])
+            release.state['migration0035'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_pipeline_schema([])
+
 
 if __name__ == '__main__': unittest.main()

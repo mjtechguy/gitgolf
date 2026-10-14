@@ -20,6 +20,9 @@ import { installationAPI, schemaVersion, installationOverlay, installationSettin
 import { audited, auditAPI } from './audit.mjs';
 import { nativeRunnerAdmin, nativeRunnerPlacement, nativeRunnerMachine } from './native-runners.mjs';
 import { gitLabRunner } from './gitlab-runner.mjs';
+import { pipelinePolicy, pipelineCapabilities } from './pipeline-policy.mjs';
+import { pipelineAPI, pipelineRunnerAPI } from './pipeline-api.mjs';
+import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
@@ -144,7 +147,7 @@ export async function activityAuthority(request, env, input) {
   return String(person.id);
 }
 
-async function withArtifact(env, row, action, defaultHead = false) {
+export async function withArtifact(env, row, action, defaultHead = false) {
   const measure = (name, action) => env.timings ? env.timings.measure('artifacts', () => env.timings.measure('artifact_' + name, action)) : action();
   const repo = await measure('open', () => env.ARTIFACTS.get(row.artifact_name));
   try {
@@ -266,6 +269,11 @@ async function git(db, env, person, request, url, providerFetch) {
         db.prepare("UPDATE git_operations SET state='APPLIED',ci_state=? WHERE id=? AND state='DISPATCHED'").bind(env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE', operation),
         db.prepare('UPDATE repositories SET write_pending=NULL WHERE id=? AND write_pending=?').bind(row.id, operation),
       ]);
+      // Actions/CI: the confirmed push is recorded before the response; discovery runs after it.
+      if (pipelinePolicy(env) && command.next !== '0'.repeat(40)) {
+        try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'push', { ref: command.ref, before: command.old, after: command.next, actorId: person.id, operationId: operation }, 'push:' + operation), withArtifact); }
+        catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
+      }
     }
     await confirmGitCredential(db,person,row);
     let bytes=result.bytes;
@@ -399,10 +407,22 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       advice: env.EVIDENCE_ALLOW_AI === 'true', previews: previewPolicy(env), apps: Boolean(appPolicy(env)), automaticCI: env.CI_AUTO === 'true', appPath: appPolicy(env)?.entry || '',
       browser: Boolean(env.BROWSER && env.PREVIEW_BROWSER === 'true'), previewPath: env.PREVIEW_PATH || '', agentPath: env.AGENT_PATH || '',
       testModule: env.TEST_MODULE || '', testWorkflowFormat: env.TEST_WORKFLOW_FORMAT || '', testWorkflowPath: env.TEST_WORKFLOW_PATH || '',
-      dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) || 0, previewTTL: Number(env.PREVIEW_TTL) || 0, appTTL: appPolicy(env)?.ttl || 0 });
+      dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) || 0, previewTTL: Number(env.PREVIEW_TTL) || 0, appTTL: appPolicy(env)?.ttl || 0, pipelines: pipelinePolicy(env) });
     if (url.pathname === '/native/installation' || url.pathname === '/native/installation/read') return await installationAPI(db, env, person, request, body, url.pathname.endsWith('/read'));
     if (url.pathname === '/native/audit/read') return await auditAPI(db, env, person, request, body, () => authorizedRepository(db, person, body.repository, env, body.repositoryId));
     if (url.pathname === '/native/runner-admin') return await nativeRunnerAdmin(db, env, person, request, body);
+    if (url.pathname === '/native/pipelines') {
+      // History stays readable when Actions are off; pipelineAPI refuses mutations then.
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
+      const result = await pipelineAPI(db, env, person, row, request, body, withArtifact);
+      return result instanceof Response ? result : reply(result);
+    }
+    if (url.pathname === '/native/pipeline-runners') return reply(await pipelineRunnerAPI(db, env, person, request, body, async () => {
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (body.repositoryId !== String(row.id)) deny();
+      return row;
+    }));
     if (url.pathname === '/native/ai-models' || url.pathname === '/native/ai-models/read') return await aiModelsAPI(db, env, person, request, body, url.pathname.endsWith('/read'), () => authorizedRepository(db, person, body.repository, env, body.repositoryId));
     if (url.pathname === '/native/ai-usage/read') return await aiUsageAPI(db, env, person, request, body, providerFetch);
     if (url.pathname === '/native/runner-placement') {
@@ -537,6 +557,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'ci.registry-publish', label: 'Job-scoped image publishing', state: env.REGISTRY && env.REGISTRY_CI_ENABLED === 'true' && testPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Operator-enabled OCI publishing from approved PR jobs. Job-only tags, current source/access checks and immutable digest receipts; general Docker build workflows remain separate.' },
       { id: 'repository.packages', label: 'OCI packages', state: env.REGISTRY && env.REGISTRY_ORIGIN ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.REGISTRY_PROVIDER === 'cloudflare' ? 'Cloudflare managed image storage; repository-scoped inventory and trusted CI publishing. Direct user credentials, scanning and registry policy are unavailable.' : 'Separate CFCR service; administrator enablement, current Git access and repository-scoped registry credentials.' },
       { id: 'repository.live', label: 'Live activity stream', state: env.watchRepository ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.watchRepository ? 'Authorized, resumable Connect streams; source snapshots stay pinned.' : 'No live stream coordinator is installed.' },
+      ...pipelineCapabilities(env),
       { id: 'settings.repository-rules', label: 'Rules and merge policy', state: 'CAPABILITY_STATE_READY', reason: 'Enforced branch locks and tag account restrictions on Golf-brokered Git writes, including administrators. Literal and trailing-prefix patterns; protected merge, review/check requirements and direct provider writes are not covered.' },
       { id: 'settings.repository-webhooks', label: 'Webhooks', state: webhookPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: webhookPolicy(env) ? 'Encrypted subscriptions, signed delivery and retries to operator-approved HTTPS origins; current sponsor authority, delivery history and daily attempt limits. Actions events cover native test jobs.' : 'Configure a dedicated Secrets Store encryption key and approved HTTPS webhook origins.' },
       await emailCapability(db, env),
@@ -633,7 +654,16 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (service === 'RepositoryService' && resourceMethods.has(method)) return reply(await discussionResources(db, env, person, row, method, body));
     if (service === 'RepositoryWebhookService') { await requireFeature(db, env, row, 'webhooks'); return reply(await repositoryWebhooks(db, env, person, row, method, body)); }
     if (service === 'RepositoryService' && releaseReadMethods.has(method)) { await requireFeature(db, env, row, 'releases'); return reply(await releases(db, env, person, row, method, body)); }
-    if (collaborationMethods.has(method)) return reply(await collaboration(db, env, person, method, body, row, action => withArtifact(env, row, action)));
+    if (collaborationMethods.has(method)) {
+      const value = await collaboration(db, env, person, method, body, row, action => withArtifact(env, row, action));
+      // Actions pull_request opened/reopened; the mutation receipt keys the intake, so a replayed request records nothing.
+      const reopened = method === 'UpdatePullRequest' && (body.state === 'ISSUE_STATE_OPEN' || body.state === 1);
+      if (pipelinePolicy(env) && (method === 'CreatePullRequest' || reopened) && value?.mutation?.id && value.pullRequest) {
+        try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'pull_request', { number: value.mutation.number, action: reopened ? 'reopened' : 'opened', headCommitId: value.pullRequest.head?.commitId, actorId: person.id }, 'pull:' + value.mutation.id), withArtifact); }
+        catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
+      }
+      return reply(value);
+    }
     if (method === 'GetRepository') return reply(await withArtifact(env, row, async (_repo, _info, commits) => {
       const head = commits[0]?.hash;
       if (head && !sha(head)) throw Error('Invalid default branch identity');

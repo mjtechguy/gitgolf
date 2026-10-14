@@ -1,5 +1,42 @@
 # Golf implementation status
 
+## 2026-10-14 — Native Actions pipelines on the stock Forgejo Runner, and GitLab CI pipelines on the stock GitLab Runner (RUN-A/B/C)
+
+Implemented and verified locally; migration 0035 (schema 35); not yet hosted.
+The Cloudflare-native Worker speaks the stock Forgejo Runner protocol (pinned
+v13.2.0, sha256 `fadaec89…cad1`) and the stock GitLab Runner API (pinned 18.5.0,
+sha256 `4f84c299…6762`) on a shared pipeline core (D1 model, per-run Durable
+Object, R2 logs and artifacts, optional intake Queue, scheduled sweep driven by
+maintenance). GitHub Actions workflows from `.github/workflows` and
+`.forgejo/workflows` run on push, same-repository pull_request and
+workflow_dispatch; `.gitlab-ci.yml` pipelines support stages, needs, rules, extends,
+parallel and matrix, services, artifacts, cache and manual jobs. Both support
+environments with required reviewers, environment-scoped secrets released after
+approval and deployment history; secrets reach same-repository runs only and are
+redacted in stored logs. The web UI adds an Actions tab (runs, job graph, folded
+logs, dispatch, re-run, cancel, artifacts, approvals, environments) and runner
+administration at repository and installation scope. `enable-pipelines` switches it
+on; unsupported syntax refuses the run with a visible reason.
+
+Local proof used the real pinned runner binaries with Docker against the Worker on
+workerd/D1/R2 (Artifacts is a local `git http-backend` fixture), and unmodified
+upstream files:
+- GitHub: demo workflow, `chalk/chalk`, `pallets/itsdangerous` (`pre-commit` and 5
+  of 7 `tests` jobs pass; Windows and macOS jobs wait for a matching label; `typing`
+  fails upstream), `brianc/node-postgres` (`lint` passes; 11 matrix jobs fail one
+  upstream SCRAM test under host networking).
+- GitLab: `inkscape/extensions` (five Python jobs, `codestyle`, `mypy`, `sphinx`,
+  `archive` pass; Windows jobs stay queued), `pages/hugo` (refused on `main` because
+  Pages is unsupported; the feature-branch test fails upstream), and a synthetic
+  pipeline with artifacts, cache, a Postgres service, approvals and cancellation;
+  the Kubernetes executor ran job pods with a service sidecar in kind.
+
+Not done: hosted verification, `schedule` triggers, reusable workflows, org-scope
+runner UI, WebSocket log streaming, v3 artifacts, distributed runner cache,
+in-cluster Helm runner. Unmodified `actions/upload-artifact@v4` refuses
+non-github.com servers (use the Forgejo fork). Pipeline dispatch, cancel and
+approval are not yet in the audit log.
+
 ## 2026-10-14 — Audit log for privileged and state-changing actions
 
 `/admin/audit` was empty after a day of runner pool, enrollment and placement

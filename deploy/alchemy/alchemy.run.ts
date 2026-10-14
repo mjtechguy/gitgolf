@@ -36,6 +36,11 @@ export default Alchemy.Stack('GolfDemo', {
     rateLimitingInterval: 60, rateLimitingLimit: 60, rateLimitingTechnique: 'fixed',
     spendLimits: { enabled: true, rules: [{ limitType: 'cost', limit: 500, window: '1 day' }] },
   });
+  // Actions/CI pipelines (docs/NATIVE_ACTIONS_PIPELINES.md): logs and artifacts in their own R2 bucket, durable trigger intake on a Queue.
+  const pipelines = input.settings.pipelines !== undefined;
+  const pipelineBucket = pipelines ? yield* Cloudflare.R2.Bucket('Pipelines', { name: name + '-pipelines', forceDestroy: true, publicAccess: false }) : undefined;
+  const pipelineQueue = pipelines ? yield* Cloudflare.Queues.Queue('PipelineQueue', { name: name + '-pipeline-intake' }) : undefined;
+  const pipelineDeadLetter = pipelines ? yield* Cloudflare.Queues.Queue('PipelineDeadLetter', { name: name + '-pipeline-intake-failed' }) : undefined;
   // Semantic search (enable-search): vectors carry only { repository, kind }. The repository metadata index exists before the Worker
   // binds the index, so no vector is ever inserted unfilterable. A new dimension replaces the index and the Worker rebuilds every repository.
   const search = input.settings.search ? yield* Cloudflare.Vectorize.Index('SearchIndex', {
@@ -97,6 +102,7 @@ export default Alchemy.Stack('GolfDemo', {
       ...(input.webhookKey ? { webhooks: { ...input.settings.webhooks, key: { store: storeId, name: name + '-webhook' } } } : {}),
       ...(analytics ? { operations: { ...input.settings.operations, analytics_secret: { store: storeId, name: name + '-analytics' } } } : {}),
       ...(input.executionValueKey ? { execution_values: { key: { store: storeId, name: name + '-execution-values' } } } : {}),
+      ...(pipelines ? { pipelines: { ...input.settings.pipelines, bucket: name + '-pipelines', queue: name + '-pipeline-intake', dead_letter: name + '-pipeline-intake-failed' } } : {}),
   })));
   const build = yield* Command.Build('NativeBuild', {
     command: 'python3 scripts/cloudflare_alchemy_demo.py build', cwd: root, outdir: resolve(directory, '.cloudflare'),
@@ -128,6 +134,7 @@ export default Alchemy.Stack('GolfDemo', {
       // Both task classes start the image under the key `agent`, so they share one container definition.
       ...(agents ? { PRAgentTask: Cloudflare.DurableObject('PRAgentTask', { containers: [agent] }) } : {}),
       EvidenceWorkflow: Cloudflare.Workflow('EvidenceWorkflow', { workflowName: name, limits: { steps } }),
+      ...(pipelines ? { PipelineRun: Cloudflare.DurableObject('PipelineRun'), ALCHEMY_PIPELINE_DEPENDENCY: Output.all(pipelineBucket!.bucketName, pipelineDeadLetter!.queueName).pipe(Output.map(values => values.join(','))) } : {}),
       // Workers AI runs: prepare and settle in the workspace, inference in this Workflow (see cloudflare/forge/prepare.mjs).
       ...(evidence.allow_ai ? { AiWorkflow: Cloudflare.Workflow('AiWorkflow', { workflowName: name + '-ai', limits: { steps: aiSteps } }) } : {}),
       ALCHEMY_OUTBOUND_DEPENDENCY: outbound.workerName,
@@ -154,6 +161,10 @@ export default Alchemy.Stack('GolfDemo', {
   if (deadLetter) yield* Cloudflare.Queues.Consumer('EvidenceDeadLetterConsumer', {
     queueId: deadLetter.queueId, scriptName: control.workerName,
     settings: { batchSize: 10, maxConcurrency: 1, maxRetries: 10, maxWaitTimeMs: 5000 },
+  });
+  if (pipelineQueue) yield* Cloudflare.Queues.Consumer('PipelineConsumer', {
+    queueId: pipelineQueue.queueId, scriptName: control.workerName,
+    settings: { batchSize: 10, maxConcurrency: 2, maxRetries: 5, maxWaitTimeMs: 2000 }, deadLetterQueue: pipelineDeadLetter!.queueName,
   });
   const workflow = yield* WorkflowSettings('WorkflowLimits', { accountId: input.account,
     workflowName: control.env.EvidenceWorkflow.workflowName, scriptName: control.workerName, steps });

@@ -237,6 +237,8 @@ class Release:
             self.migrate_ai_schema(applied)
         if self.manifest['schema'] >= 34:
             self.migrate_search_schema(applied)
+        if self.manifest['schema'] >= 35:
+            self.migrate_pipeline_schema(applied)
         return applied or 'already-applied'
 
     SEARCH_COLUMNS = {
@@ -364,6 +366,45 @@ class Release:
             self.command('d1', 'query', self.manifest['database'], '--sql', sql)
             self.check_feature_policy_schema()
             self.state['migration0031'] = digest; self.save(); applied.append('0031')
+
+    pipeline_tables = {
+        'pipeline_registration_tokens': {'id', 'engine', 'scope', 'scope_id', 'labels', 'token_digest', 'expires_at', 'uses_left', 'revoked', 'created_by', 'created_at'},
+        'pipeline_runners': {'id', 'uuid', 'engine', 'scope', 'scope_id', 'name', 'labels', 'token_digest', 'state', 'version', 'info', 'ephemeral', 'registration_id', 'created_by', 'created_at', 'last_seen_at', 'deleted'},
+        'pipeline_runs': {'id', 'repository_id', 'artifact_name', 'engine', 'number', 'workflow_path', 'workflow_name', 'workflow_blob', 'event', 'ref', 'commit_id', 'before_sha', 'pull_number', 'head_ref', 'base_ref', 'actor_id', 'trusted', 'inputs', 'event_payload', 'title', 'state', 'reason', 'attempt', 'concurrency_group', 'concurrency_cancel', 'cancel_requested', 'intake_id', 'created_at', 'started_at', 'finished_at', 'updated_at'},
+        'pipeline_jobs': {'id', 'run_id', 'attempt', 'engine', 'job_key', 'name', 'stage', 'stage_index', 'needs', 'runs_on', 'payload', 'state', 'environment', 'when_mode', 'allow_failure', 'timeout_seconds', 'retry_max', 'retry_count', 'runner_id', 'request_key', 'token_digest', 'token_expires_at', 'outputs', 'exit_code', 'failure_reason', 'log_lines', 'log_bytes', 'log_chunks', 'log_complete', 'created_at', 'queued_at', 'started_at', 'finished_at', 'updated_at'},
+        'pipeline_steps': {'job_id', 'number', 'name', 'state', 'started_at', 'finished_at', 'log_index', 'log_length'},
+        'pipeline_log_chunks': {'job_id', 'seq', 'first_line', 'lines', 'first_byte', 'bytes', 'created_at'},
+        'pipeline_artifacts': {'id', 'run_id', 'job_id', 'name', 'kind', 'state', 'size', 'sha256', 'blocks', 'content_type', 'created_at', 'finalized_at', 'expires_at'},
+        'pipeline_intake': {'id', 'repository_id', 'kind', 'payload', 'state', 'reason', 'attempts', 'created_at', 'updated_at'},
+        'pipeline_environments': {'id', 'repository_id', 'artifact_name', 'name', 'reviewers', 'prevent_self_review', 'branches', 'url', 'version', 'created_by', 'created_at', 'updated_at', 'deleted'},
+        'pipeline_environment_values': {'environment_id', 'name', 'kind', 'version', 'value_bytes', 'encrypted', 'key_id', 'updated_by', 'updated_at'},
+        'pipeline_approvals': {'job_id', 'environment_id', 'reviewer_id', 'decision', 'comment', 'created_at'},
+        'pipeline_deployments': {'id', 'environment_id', 'run_id', 'job_id', 'action', 'commit_id', 'ref', 'url', 'state', 'actor_id', 'created_at'},
+    }
+
+    def check_pipeline_schema(self):
+        for table, fields in self.pipeline_tables.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
+            if {row['name'] for row in columns} != fields:
+                raise ValueError('Apply reviewed 0035 Actions pipeline migration before releasing')
+
+    def migrate_pipeline_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0035_actions_pipelines.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0035') not in (None, digest):
+            raise ValueError('Recorded Actions pipeline migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        if not statements or any(not (s.startswith('CREATE TABLE IF NOT EXISTS pipeline_') or s.startswith('CREATE INDEX IF NOT EXISTS pipeline_') or s.startswith('CREATE UNIQUE INDEX IF NOT EXISTS pipeline_')) for s in statements):
+            raise ValueError('Actions pipeline migration must only add reviewed pipeline tables and indexes')
+        ready = False
+        try:
+            self.check_pipeline_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0035') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_pipeline_schema()
+            self.state['migration0035'] = digest; self.save(); applied.append('0035')
 
     def check_attachment_schema(self):
         required = {'discussion_attachments': {'id', 'repository_id', 'discussion_id', 'comment_id', 'name', 'size', 'sha256', 'r2_key', 'author_id', 'created_at'},

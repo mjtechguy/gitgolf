@@ -370,3 +370,16 @@ Use `cloudflare/forge/browser-benchmark.mjs` in an authenticated browser for
 bounded source-read comparisons (up to eight fixed repositories, eight passes,
 and 16 concurrent requests). First pass is not proof of an empty cache. Preserve
 raw scope, exact commits, errors, payload bytes and cache state when comparing.
+
+## Actions and CI pipelines
+
+`enable-pipelines [--actions-url https://code.forgejo.org]` requires the evidence
+allocation. After `migrate`, `deploy` creates the `<name>-pipelines` bucket (logs and
+artifacts), the `<name>-pipeline-intake` queue with its dead-letter queue and consumer,
+and the `PipelineRun` coordinator class; a second `deploy` may be needed because
+Alchemy cannot resolve a new Durable Object class in the run that creates it. Runners
+register from Settings > Runners; the page shows the exact `forgejo-runner` or
+`gitlab-runner` commands. Pipelines follow the `actions` feature policy. The sweep
+that retries lost intakes runs in maintenance, driven by the Durable Object alarm, so
+it does not depend on Cron Triggers.
+
