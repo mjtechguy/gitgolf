@@ -34,10 +34,17 @@ for (const [appearance, layouts] of Object.entries(presets)) for (const layout o
     else await expect(page.getByLabel('Loaded repositories summary')).toHaveCount(0);
     expect(await fits(page)).toBe(true);
     await expect(page.getByRole('navigation', { name: 'Repository filters', exact: true })).toHaveCount(content === 'panes' ? 1 : 0);
+    // The account menu and its neighbours stay in the top right in every layout.
+    const account = (await page.getByLabel('Your account', { exact: true }).boundingBox())!, toggle = (await page.locator('.topbar .theme-toggle').boundingBox())!;
+    // Classic's other layouts center the header on the page frame, so the edge is the top bar's content edge.
+    const edge = await page.locator('.topbar').evaluate(element => element.getBoundingClientRect().right - parseFloat(getComputedStyle(element).paddingRight));
+    expect(Math.abs(account.x + account.width - edge)).toBeLessThan(2); expect(account.y + account.height).toBeLessThan(64); expect(toggle.x).toBeLessThan(account.x); expect(Math.abs(toggle.y + toggle.height / 2 - (account.y + account.height / 2))).toBeLessThan(4);
     await page.screenshot({ path: `test-results/layout-${appearance}-${layout}-home.png` });
 
     await page.goto('/alex/demo');
     const sections = page.getByRole('navigation', { name: 'Repository', exact: true });
+    const onRepository = (await page.getByLabel('Your account', { exact: true }).boundingBox())!;
+    expect(Math.abs(onRepository.x + onRepository.width - await page.locator('.topbar').evaluate(element => element.getBoundingClientRect().right - parseFloat(getComputedStyle(element).paddingRight)))).toBeLessThan(2); expect(onRepository.y + onRepository.height).toBeLessThan(64);
     await expect(sections.getByRole('link', { name: 'Code', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('region', { name: 'Repository README' })).toContainText('A repository for arranging layouts.');
     // Rail and sidebar layouts lift the heading into the top bar; side-navigation layouts also lift the sections.
@@ -174,6 +181,10 @@ test('the three designs keep their drawn structure on a repository', async ({ pa
   expect(Math.abs(readme.y - (line.y + line.height))).toBeLessThan(2); expect(Math.abs(about.y - readme.y)).toBeLessThan(2);
   expect(about.x + about.width).toBeGreaterThan(1438);
   await expect(page.locator('.topbar').getByRole('link', { name: 'Repositories', exact: true })).toBeVisible();
+  // Nothing in the top line wraps: every control keeps one line's height.
+  expect((await box(page, '.topbar .branch-picker > summary')).height).toBeLessThan(34);
+  for (const width of [1280, 1100]) { await page.setViewportSize({ width, height: 900 }); expect(await fits(page)).toBe(true); expect((await box(page, '.topbar .branch-picker > summary')).height).toBeLessThan(34); expect((await box(page, '.topbar')).height).toBeLessThan(50); }
+  await page.setViewportSize({ width: 1440, height: 900 });
   const rail = page.getByRole('complementary', { name: 'Workspace shortcuts' });
   await expect(rail.getByRole('link', { name: 'Code', exact: true })).toBeVisible();
   await expect(rail.getByRole('link', { name: 'Organizations', exact: true })).toBeHidden();

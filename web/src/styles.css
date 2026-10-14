@@ -1811,13 +1811,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
   :root[data-layout=console] .context-crumb-switch:hover { background:var(--hover); color:var(--text); }
   :root[data-layout=console] .context-crumb .visibility { margin-inline:4px; }
   :root[data-layout=console] .context-crumb .repository-identity-actions > .visibility { display:none; }
-  /* The account menu and settings sit at the foot of the rail. */
-  :root:is([data-layout=console],[data-layout=tiles]) .appearance-sidebar { padding-bottom:60px; }
-  :root:is([data-layout=console],[data-layout=tiles]) .topbar-controls > .account-menu { position:fixed; bottom:12px; z-index:6; }
+  /* Settings sits at the foot of the rail; the account menu and its neighbours stay in the top right in every layout. */
   :root:is([data-layout=console],[data-layout=tiles]) .topbar-controls > .account-menu > summary { width:32px; height:32px; }
-  :root:is([data-layout=console],[data-layout=tiles]) .topbar-controls > .account-menu > .account-dropdown { top:auto; right:auto; bottom:0; left:calc(100% + 12px); }
-  :root[data-layout=console] .topbar-controls > .account-menu { left:12px; }
-  :root[data-layout=tiles] .topbar-controls > .account-menu { left:22px; }
   :root[data-layout=console] .appearance-sidebar > nav:last-of-type { display:grid; margin-top:auto; }
   :root[data-layout=console] .appearance-sidebar > nav:last-of-type > a:not(:first-child) { display:none; }
 
@@ -1863,10 +1858,13 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
   :root[data-layout=tiles] .context-heading .live-status > span { display:none; }
   :root[data-layout=tiles] .context-tools .ref-controls { flex:1; flex-wrap:nowrap; gap:10px; min-width:0; margin:0; padding-left:10px; border-left:1px solid var(--line); }
   :root[data-layout=tiles] .context-tools .ref-picker > summary { min-height:28px; padding:3px 10px; font-size:.8125rem; }
+  /* The branch picker already lists branches and tags; the top line has no room to repeat them. */
+  :root[data-layout=tiles] .context-tools .ref-inventory-button { display:none; }
+  :root[data-layout=tiles] .context-tools .ref-picker > summary > span { white-space:nowrap; }
   :root[data-layout=tiles] .jump-field { order:1; width:260px; background:var(--bg); }
   :root[data-layout=tiles] .context-tools .clone-picker { order:2; }
   :root[data-layout=tiles] .context-tools .clone-picker > summary { border-color:#101010; }
-  :root[data-layout=tiles] .topbar-controls > :is(a,button) { order:3; }
+  :root[data-layout=tiles] .topbar-controls > * { order:3; }
   :root[data-layout=tiles] .workspace-content main { padding:0; }
   :root[data-layout=tiles] .workspace-content main > :not(.repository-browser) { margin-inline:24px; }
   :root[data-layout=tiles] .repository-browser > :not(.repository-authorized-content),:root[data-layout=tiles] .repository-authorized-content > :not(.repository-source-layout) { margin-inline:24px; }
