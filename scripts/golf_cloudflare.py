@@ -43,6 +43,7 @@ AMBIENT = ['CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'CLOUDFLARE_API_KEY', 'CF_API
 # Alchemy beta.83 cannot resolve a Durable Object class or Workflow in the run that creates it;
 # a second deploy completes it (deploy/alchemy/README.md). Only these errors are retried, once.
 KNOWN_RETRY = ('requires a resolved Durable Object namespace', 'WorkflowNotFound')
+SETTLE_RETRY, SETTLE_ATTEMPTS, SETTLE_DELAY = ('seed', 'seed-public'), 3, 60
 EXAMPLE = 'deploy/demo/example.json'
 EXAMPLE_PUBLIC = 'deploy/demo/example-public.json'
 DEPLOY_TOKEN_STALE = 7.5*3600     # the deployment token lasts eight hours
@@ -706,6 +707,17 @@ class Runner:
         if s['id'] == 'init':
             return self.init(s)
         self.freshen(s)
+        if s['kind'] in SETTLE_RETRY:
+            # Seeding is journaled. Right after a deploy the Workspace Durable Object can still run the
+            # previous release for about two minutes, so a clone or publish may fail once; wait and continue.
+            for attempt in range(SETTLE_ATTEMPTS):
+                try:
+                    return self.execute(s['argv'], s['kind'])
+                except StepFailed:
+                    if attempt == SETTLE_ATTEMPTS - 1: raise
+                    self.out('    The new release is still reaching the workspace; retrying in '+str(SETTLE_DELAY)+'s ('+str(attempt+2)+'/'+str(SETTLE_ATTEMPTS)+').')
+                    self.sleep(SETTLE_DELAY)
+                    self.freshen(s)
         try:
             self.execute(s['argv'], s['kind'])
         except StepFailed as failure:

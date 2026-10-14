@@ -250,7 +250,7 @@ class Execution(Fixture):
 
     def test_failure_records_the_step_and_resume_continues_there(self):
         o = {**OPTIONS, 'services': ['ai']}
-        self.assertEqual(self.runner(o, {'seed': ['FAIL: import timed out']}).execute_all(gc.install_steps(o, None)), 1)
+        self.assertEqual(self.runner(o, {'seed': ['FAIL: import timed out']*gc.SETTLE_ATTEMPTS}).execute_all(gc.install_steps(o, None)), 1)
         progress = json.loads((self.directory/gc.PROGRESS).read_text())
         self.assertEqual(progress['done'], ['build-image', 'init', 'plan', 'deploy'])
         self.assertEqual(progress['failed']['step'], 'seed')
@@ -268,6 +268,16 @@ class Execution(Fixture):
             script = {'deploy': ['ok\n', 'FAIL ... '+marker+' ...\n', 'ok\n']}
             self.assertEqual(self.runner(o, script).execute_all(gc.install_steps(o, None)), 0, marker)
             self.assertEqual(self.wrapper_actions()[-4:], ['enable-ai', 'renew-deploy', 'deploy', 'deploy'])
+
+    def test_seeding_waits_for_the_release_and_retries(self):
+        o = dict(OPTIONS)
+        self.assertEqual(self.runner(o, {'seed': ['FAIL clone retained repository failed']}).execute_all(gc.install_steps(o, None)), 0)
+        self.assertEqual(self.wrapper_actions().count('seed'), 2)
+        shutil_rm(self.directory); self.calls.clear()
+        runner = self.runner(o, {'seed': ['FAIL x']*gc.SETTLE_ATTEMPTS})
+        self.assertEqual(runner.execute_all(gc.install_steps(o, None)), 1)
+        self.assertEqual(self.wrapper_actions().count('seed'), gc.SETTLE_ATTEMPTS)
+        self.assertEqual(runner.sleeps, [gc.SETTLE_DELAY]*(gc.SETTLE_ATTEMPTS-1))
 
     def test_other_errors_and_a_second_known_error_are_not_retried(self):
         o = dict(OPTIONS)

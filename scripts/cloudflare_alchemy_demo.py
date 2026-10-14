@@ -565,7 +565,10 @@ def seed(directory, value, manifest=None):
             env['GIT_CONFIG_KEY_'+str(i)], env['GIT_CONFIG_VALUE_'+str(i)] = key, val
         def git(label, *args):
             result = subprocess.run(['git', *map(str, args)], env=env, capture_output=True, timeout=120)
-            if result.returncode: raise RuntimeError(label+' failed')
+            if result.returncode:
+                # Git never prints http.extraHeader values; its last lines name the failing step.
+                detail = result.stderr.decode(errors='replace').strip().splitlines()[-3:]
+                raise RuntimeError(label+' failed: '+' | '.join(detail))
             return result
         def record(label, data):
             state.setdefault('checks', {})[label] = data
