@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
-import { digest, handle, serialize, concurrentRead, advanceEvidence, testGit, agentGit, servePreview, cleanupPreviews, runCI } from './src/core.mjs';
+import { digest, handle, serialize, concurrentRead, advanceEvidence, testGit, agentGit, servePreview, cleanupPreviews, runCI, withArtifact } from './src/core.mjs';
+import { settleRefWrites } from './src/ref-writes.mjs';
 import { allocateApps } from './app-fixture.mjs';
 import { previewBundle } from './src/delivery.mjs';
 import { deny, bodyLimit } from './src/common.mjs';
@@ -256,7 +257,7 @@ test('admission bounds pending work and preserves the revocation fence under ove
   let finish; const barrier = new Promise(resolve => { finish = resolve; });
   const request = () => new Request('https://golf.example.com/rpc/golf.v1.SessionService/GetSession', { method: 'POST' });
   const run = serialize(async () => { await barrier; return new Response('ok'); }, concurrentRead);
-  const admitted = Array.from({ length: 136 }, () => run(request()));
+  const admitted = Array.from({ length: 8 + 512 }, () => run(request()));
   const refused = await run(request()); assert.equal(refused.status, 429); assert.equal(refused.headers.get('Retry-After'), '1');
   finish(); assert.ok((await Promise.all(admitted)).every(response => response.status === 200));
 });
@@ -295,6 +296,76 @@ test('ambiguous Git effects are durably fenced and never automatically redispatc
   assert.equal((await f.sendPush()).status, 412); assert.equal(f.counts().effects, 1);
   assert.equal(f.sql.prepare('SELECT state FROM git_operations').get().state, 'DISPATCHED');
   assert.equal(f.tokens.size, 0);
+});
+
+test('the ref fence: a push to another branch proceeds, one to the same branch conflicts, a held repository refuses both', async t => {
+  const f = await fixture(t); await f.create();
+  let entered, release; const inFlight = new Promise(resolve => { entered = resolve; }), gate = new Promise(resolve => { release = resolve; });
+  const providerFetch = async (url, options) => {
+    // The fixture issues one write token string, which the overlapping push revokes; the provider issues distinct tokens.
+    if (options.method === 'POST' && receiveCommand(options.body).ref === 'refs/heads/main') { entered(); await gate; f.tokens.add(options.headers.Authorization.slice(7)); }
+    return f.providerFetch(url, options);
+  };
+  const send = (ref, old = zero, next = commit) => handle(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + ownerToken, 'Content-Type': 'application/x-git-receive-pack-request' }, body: push(ref, old, next) }), f.env, providerFetch);
+  const main = send('refs/heads/main'); await inFlight;
+  // In flight, the push holds its ref only.
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending, null);
+  assert.deepEqual({ ...f.sql.prepare('SELECT ref,outcome FROM git_ref_writes').get() }, { ref: 'refs/heads/main', outcome: null });
+  assert.equal((await send('refs/heads/main')).status, 412);
+  assert.equal((await send('refs/heads/topic')).status, 200);
+  // A merge journals through its own statement; onto a fenced ref it is not journaled at all.
+  const journal = ref => f.sql.prepare("INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) VALUES(?,1,1,?,?,?,'DISPATCHED','t')").run(crypto.randomUUID(), ref, zero, commit).changes;
+  assert.equal(journal('refs/heads/main'), 0);
+  release(); assert.equal((await main).status, 200);
+  assert.deepEqual(f.sql.prepare('SELECT ref,state FROM git_operations ORDER BY ref').all().map(row => ({ ...row })), [{ ref: 'refs/heads/main', state: 'APPLIED' }, { ref: 'refs/heads/topic', state: 'APPLIED' }]);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_ref_writes').get().n, 0);
+  assert.equal(journal('refs/heads/main'), 1);
+  f.sql.exec("DELETE FROM git_operations WHERE state='DISPATCHED'; UPDATE repositories SET write_pending='unresolved'");
+  assert.equal((await send('refs/heads/other')).status, 412); assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_operations').get().n, 2);
+});
+
+test('maintenance settles unknown push outcomes by reading the ref back, once, with an audit row', async t => {
+  const f = await fixture(t); await f.create();
+  const sent = [], env = { ...f.env, providerFetch: f.providerFetch, PIPELINES_ENABLED: 'true', PIPELINE_BUCKET: {}, PIPELINE_QUEUE: { async send(message) { sent.push(message); } } };
+  const settle = () => settleRefWrites(env, withArtifact), age = () => f.sql.exec("UPDATE git_operations SET created_at='2026-01-01T00:00:00.000Z' WHERE state='DISPATCHED'");
+  const pending = () => f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending;
+  // The provider loses the reply; the push lands later.
+  f.losePush(); assert.equal((await f.sendPush()).status, 503);
+  const first = f.sql.prepare('SELECT * FROM git_operations').get();
+  assert.equal(first.state, 'DISPATCHED'); assert.equal(pending(), first.id);
+  assert.deepEqual(await settle(), { processed: 0 });
+  age(); f.land();
+  assert.deepEqual(await settle(), { processed: 1 });
+  assert.equal(f.sql.prepare('SELECT state FROM git_operations WHERE id=?').get(first.id).state, 'APPLIED'); assert.equal(pending(), null);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_ref_writes').get().n, 0);
+  assert.deepEqual(f.sql.prepare('SELECT id,kind FROM pipeline_intake').all().map(row => ({ ...row })), [{ id: 'push:' + first.id, kind: 'push' }]); assert.deepEqual(sent, [{ intake: 'push:' + first.id }]);
+  assert.deepEqual(await settle(), { processed: 0 });
+  // The next lost push never lands: NOT_APPLIED, and the ref and the repository are released.
+  const lost = await f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', { method: 'POST',
+    headers: { Authorization: 'Bearer ' + ownerToken, 'Content-Type': 'application/x-git-receive-pack-request' }, body: push('refs/heads/main', commit, 'b'.repeat(40)) }));
+  assert.equal(lost.status, 503);
+  const second = f.sql.prepare("SELECT * FROM git_operations WHERE state='DISPATCHED'").get();
+  age(); assert.deepEqual(await settle(), { processed: 1 });
+  assert.equal(f.sql.prepare('SELECT state FROM git_operations WHERE id=?').get(second.id).state, 'DISPATCHED');
+  assert.equal(f.sql.prepare('SELECT outcome FROM git_ref_writes WHERE operation_id=?').get(second.id).outcome, 'NOT_APPLIED'); assert.equal(pending(), null);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM pipeline_intake').get().n, 1);
+  const audit = f.sql.prepare("SELECT scope,scope_id,subject,after FROM installation_audit WHERE action='git_write.settle' ORDER BY id").all();
+  assert.deepEqual(audit.map(row => [row.scope, row.scope_id, row.subject, JSON.parse(row.after).outcome]), [['repository', '1', 'refs/heads/main', 'APPLIED'], ['repository', '1', 'refs/heads/main', 'NOT_APPLIED']]);
+  const { describe } = await import('./src/audit.mjs');
+  assert.equal(describe({ action: 'git_write.settle', subject: 'refs/heads/main', after: JSON.parse(audit[1].after), outcome: 'success' }), 'settled the unconfirmed push to refs/heads/main as not applied');
+  assert.deepEqual(await settle(), { processed: 0 });
+  // A legacy unknown write holds only write_pending; a merge's own write is left to the merge.
+  const legacy = crypto.randomUUID(), merge = crypto.randomUUID();
+  f.sql.prepare("INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) VALUES(?,1,1,'refs/heads/main',?,?,'DISPATCHED','2026-01-01T00:00:00.000Z')").run(legacy, commit, 'c'.repeat(40));
+  f.sql.prepare('UPDATE repositories SET write_pending=?').run(legacy);
+  assert.deepEqual(await settle(), { processed: 1 }); assert.equal(pending(), null);
+  f.sql.exec(`INSERT INTO discussions(id,repository_id,number,kind,author_id,title,body,state,created_at,updated_at) VALUES(1,1,1,'pull',1,'One','','OPEN','t','t');
+    INSERT INTO pull_requests(id,discussion_id,base_branch,head_branch,base_commit,head_commit,draft) VALUES(1,1,'main','one','a','b',0)`);
+  f.sql.prepare("INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) VALUES(?,1,1,'refs/heads/main',?,?,'DISPATCHED','2026-01-01T00:00:00.000Z')").run(merge, commit, 'c'.repeat(40));
+  f.sql.prepare("INSERT INTO pull_merge_operations(actor_id,operation_id,repository_id,pull_request_id,input_hash,original,phase,git_operation_id,created_at,updated_at) VALUES(1,'m',1,1,'h','{}','DISPATCH_UNKNOWN',?,'t','t')").run(merge);
+  f.sql.prepare('UPDATE repositories SET write_pending=?').run(merge);
+  assert.deepEqual(await settle(), { processed: 0 }); assert.equal(pending(), merge);
 });
 
 test('Git grammar rejects extra commands, traversal and unsupported effects before dispatch', () => {
@@ -2951,7 +3022,7 @@ test('native merge writes one verified merge commit through the push journal and
   const again=(await value(await f.submit(f.input({selection:compared,expectedPullRevision:merged.revision})))).operation;
   assert.equal(again.phase,mergePhase('REJECTED'));assert.equal(again.failureCode,'preflight_refused');assert.equal(f.journal()[1].detail,'pull_request_not_open');
   assert.equal(f.counts().effects,1);
-  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,36);
+  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,37);
   const capability=(await value(await f.call('',{},ownerToken,'/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c=>c.id==='pull.merge');
   assert.equal(capability.length,1);assert.equal(capability[0].state,'CAPABILITY_STATE_READY');
 });

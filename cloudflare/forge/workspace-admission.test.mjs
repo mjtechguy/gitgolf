@@ -1,20 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
-import { serialize, concurrentRead } from './src/core.mjs';
+import { serialize, admission, concurrentRead } from './src/core.mjs';
 
-globalThis.golfAdmissionTest = { serialize, concurrentRead };
+globalThis.golfAdmissionTest = { serialize, admission, concurrentRead };
 const hooks = registerHooks({ resolve(specifier, context, next) {
   let source;
   if (specifier === 'cloudflare:workers') source = 'export class DurableObject {constructor(ctx,env){this.ctx=ctx;this.env=env}} export class WorkerEntrypoint extends DurableObject{} export class WorkflowEntrypoint extends DurableObject{}';
   if (specifier === './core.mjs' && context.parentURL.endsWith('/src/worker.mjs')) source = `
-    export const {serialize,concurrentRead}=globalThis.golfAdmissionTest;
+    export const {serialize,admission,concurrentRead}=globalThis.golfAdmissionTest;
     export const handle=(request,env)=>env.handle(request);
     export const advanceEvidence=(env,id,phase,workflows)=>env.background(id,phase,workflows);
     export const advanceAi=()=>{};
     export const advanceSearch=()=>{};
     export const activityAuthority=(request,env,input)=>env.handle(request);
-    export const testGit=()=>{},testRegistry=()=>{},registryExecution=()=>{},agentGit=()=>{},servePreview=()=>{},cleanupPreviews=()=>{},runCI=()=>{};`;
+    export const testGit=()=>{},testRegistry=()=>{},registryExecution=()=>{},agentGit=()=>{},servePreview=()=>{},cleanupPreviews=()=>{},runCI=env=>env.ci?.();`;
   return source ? { url: 'data:text/javascript,' + encodeURIComponent(source), shortCircuit: true } : next(specifier, context);
 } });
 const { Workspace } = await import('./src/worker.mjs');
@@ -101,11 +101,71 @@ test('authority admission remains bounded under slow readers and preserves write
   f.workspace.configured.handle = async req => { if (new URL(req.url).pathname.endsWith('/GetRepositoryAccess')) { reads++; await hold.promise; } return original(req); };
   const active = Array.from({length:8},()=>f.workspace.fetch(request('GetRepositoryAccess'))); await tick(); assert.equal(reads,8);
   const write = f.workspace.fetch(request('RevokeRepositoryCollaborator'));
-  const queued = Array.from({length:127},()=>f.workspace.fetch(request('GetRepositoryAccess')));
+  const queued = Array.from({length:511},()=>f.workspace.fetch(request('GetRepositoryAccess')));
   assert.equal((await f.workspace.fetch(request('GetRepositoryAccess'))).status,429);
   hold.resolve(); await Promise.all(active); await write;
   assert.ok((await Promise.all(queued)).every(r=>r.status===200));
   assert.equal(await (await f.workspace.fetch(request('GetRepositoryAccess'))).text(),'denied');
+});
+
+test('admission classes: transfers overlap reads and each other within their limits; an exclusive waits for all and fences later ones', async () => {
+  const hold = deferred(), started = [], active = { read: 0, transfer: 0, exclusive: 0 }, peak = { read: 0, transfer: 0 };
+  let alone;
+  const run = serialize(async item => {
+    started.push(item.name); active[item.kind]++;
+    if (item.kind === 'exclusive') alone = active.read + active.transfer === 0;
+    else peak[item.kind] = Math.max(peak[item.kind], active[item.kind]);
+    if (item.name.startsWith('held')) await hold.promise;
+    active[item.kind]--; return item.name;
+  }, item => item.kind);
+  const held = [...Array.from({ length: 25 }, (_, i) => ({ kind: 'transfer', name: 'held-t' + i })), ...Array.from({ length: 9 }, (_, i) => ({ kind: 'read', name: 'held-r' + i }))].map(run);
+  await tick(); assert.equal(started.length, 32); assert.deepEqual([active.transfer, active.read], [24, 8]);
+  const exclusive = run({ kind: 'exclusive', name: 'revoke' }), later = [run({ kind: 'transfer', name: 'push' }), run({ kind: 'read', name: 'read' })];
+  await tick(); assert.equal(started.length, 32);
+  hold.resolve(); await Promise.all([...held, exclusive, ...later]);
+  assert.equal(alone, true); assert.deepEqual(peak, { read: 8, transfer: 24 });
+  assert.deepEqual(started.slice(-3).sort(), ['push', 'read', 'revoke'].sort()); assert.equal(started.at(-3), 'revoke');
+  // A boolean classifier still means read or exclusive; the queue holds 512 before refusing.
+  const gate = deferred(), legacy = serialize(async () => { await gate.promise; }, item => item === 'read');
+  const first = Array.from({ length: 9 }, () => legacy('read')), blocked = legacy('write');
+  const queued = Array.from({ length: 510 }, () => legacy('read'));
+  await assert.rejects(legacy('read'), /busy/);
+  gate.resolve(); await Promise.all([...first, blocked, ...queued]);
+});
+
+test('admission classifies Smart HTTP Git as a transfer and nothing else', () => {
+  const git = (path, method = 'POST') => admission(new Request('https://golf.test' + path, { method, ...(method === 'POST' ? { body: '' } : {}) }));
+  assert.equal(git('/git/alice/project.git/info/refs?service=git-upload-pack', 'GET'), 'transfer');
+  assert.equal(git('/git/alice/project.git/git-upload-pack'), 'transfer');
+  assert.equal(git('/git/alice/project.git/git-receive-pack'), 'transfer');
+  assert.equal(git('/native/agent-host/tasks/' + crypto.randomUUID() + '/git/git-receive-pack'), 'transfer');
+  assert.equal(git('/git/alice/project.git/info/refs'), 'exclusive');
+  assert.equal(git('/git/alice/project.git/git-receive-pack', 'GET'), 'exclusive');
+  assert.equal(git('/git/alice/project.git/other'), 'exclusive');
+  assert.equal(admission(request('GetRepositoryAccess')), 'read');
+  assert.equal(admission(request('RevokeRepositoryCollaborator')), 'exclusive');
+  assert.equal(admission({ ci: true }), 'exclusive');
+});
+
+test('pushes overlap each other and reads in both workspace queues; revocations and background work never overlap a push', async () => {
+  const f = fixture(), hold = deferred(), entered = [], waits = [];
+  let ci = 0;
+  f.workspace.env.CI_AUTO = 'true'; f.workspace.ctx.waitUntil = promise => waits.push(promise); f.workspace.configured.ci = () => { ci++; };
+  const original = f.workspace.configured.handle;
+  f.workspace.configured.handle = async req => {
+    if (new URL(req.url).pathname.startsWith('/git/')) { entered.push(new URL(req.url).pathname.split('/')[3]); f.events.push('push'); await hold.promise; f.events.push('pushed'); return new Response('ok'); }
+    return original(req);
+  };
+  const push = name => f.workspace.fetch(new Request(`https://golf.test/git/alice/${name}.git/git-receive-pack`, { method: 'POST', body: 'x' }));
+  const pushes = [push('one'), push('two'), f.workspace.fetch(new Request('https://golf.test/git/alice/three.git/info/refs?service=git-upload-pack'))];
+  await tick(); assert.deepEqual(entered, ['one.git', 'two.git', 'three.git']);
+  assert.equal(await (await f.workspace.fetch(request('GetRepositoryAccess'))).text(), 'allowed');
+  const revoke = f.workspace.fetch(request('RevokeRepositoryCollaborator')), background = f.workspace.evidence('job', 'advice'), late = push('four');
+  await tick(); assert.equal(entered.length, 3); assert.equal(f.events.includes('RevokeRepositoryCollaborator'), false); assert.equal(f.events.includes('background'), false);
+  hold.resolve(); f.background.resolve(); await Promise.all([...pushes, revoke, background, late]);
+  assert.deepEqual(f.events, ['push', 'push', 'push', 'GetRepositoryAccess', 'pushed', 'pushed', 'pushed', 'background', 'RevokeRepositoryCollaborator', 'push', 'pushed']);
+  // CI_AUTO still runs CI after every receive-pack response.
+  await Promise.all(waits); assert.equal(ci, 3);
 });
 
 // cf exposes workflows through ctx.exports; Alchemy emits an environment binding.

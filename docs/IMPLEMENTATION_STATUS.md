@@ -1,5 +1,50 @@
 # Golf implementation status
 
+## 2026-10-14 — Concurrent Git traffic (agentic mode AM-1, schema 37)
+
+The Workspace admission queue (`core.mjs` `serialize`) now has three classes. Reads
+overlap, up to 8. Transfers overlap reads and each other, up to 24: clone, fetch and
+push on `/git/` and on the agent task Git route. Everything else is exclusive: it
+waits for every running request, transfers included, and fences later admissions. The
+queue holds 512. A transfer is a transfer in both Workspace queues (`authority` and
+`dispatch`), so a revocation, a settings change or a background job never overlaps a
+push, as before.
+
+Migration `0037_ref_write_fence.sql` adds `git_ref_writes`: a push reserves its ref
+in the same D1 batch that journals its `git_operations` row, under the same authority
+guard. Two unsettled pushes to one branch conflict (412, as before); pushes to
+different branches proceed. A plain push no longer sets `repositories.write_pending`
+while in flight, and still refuses to start while it is set. A provider failure or a
+wrong read-back sets it, as before. Merges still reserve the whole repository; a
+trigger keeps a merge from journaling onto a ref with an unsettled push.
+`ref-writes.mjs` (`reserveRefWrite`, `finishRefWrite`) is shared by `/git/` pushes
+and agent task pushes. The outcome lives in this table, not in a `git_operations`
+column, because SQLite cannot add a column in a migration that is safe to replay.
+
+The maintenance `indexes` stage settles unknown outcomes (`settleRefWrites`). It picks
+writes older than 2 minutes that still hold their ref or `write_pending`, skipping
+merge writes, at most 20 a sweep, and reads the ref. If the ref holds the new commit,
+the write becomes `APPLIED`, with one pipeline push intake (an agent task commit is
+recorded on the task instead). Otherwise the outcome is `NOT_APPLIED`. Either way it
+releases the ref and `write_pending`, writes a `git_write.settle` audit row and logs
+`golf.ref_write_settled`.
+
+Verified locally: the forge suite (530 tests, 529 pass, 1 skipped; before: 524, 523,
+1). New tests cover the admission classes, limits, the 512 cap and boolean
+compatibility, Workspace ordering (pushes overlap each other and reads; revocations and
+background jobs wait; `CI_AUTO` still runs), the ref fence and the merge trigger, both
+sweep outcomes, and an agent task push against the fence and the sweep.
+On real workerd and D1, three runtime checks pass: `agent-hosts-runtime-check.mjs`
+(a real `git push` through the task route, and the scheduled sweep),
+`merge-runtime-check.mjs`, and `actions-runtime-check.mjs --repos=demo` (a real
+`git push` through `/git/` that starts its workflows on the stock Forgejo Runner).
+
+Not verified: hosted throughput and the AM-1 exit numbers (S2/S3 at concurrency 16,
+S4 latency), which wait for the AM-0 bench. A write settled by the sweep sets
+`ci_state` `NONE`: the legacy `CI_AUTO` path does not run for it; Actions intake does.
+`runtime-check.mjs` and `ui-check.mjs` do not start here for unrelated reasons: a stale
+module list (no `agent-hosts.mjs`) and unbuilt `web/dist-native`.
+
 ## 2026-10-14 — Agent hosts verified on the hosted demo (phase 1a end to end)
 
 On `https://demo.gitgolf.mjtechguy.com` (schema 36, with #67 Worker, #68 host binary, #70 UI):

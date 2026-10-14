@@ -6,7 +6,7 @@ import { runMaintenance } from './operations.mjs';
 import { withInstallationPolicy } from './installation.mjs';
 import { publicFetch } from './public.mjs';
 import { DurableObject, WorkflowEntrypoint, WorkerEntrypoint } from 'cloudflare:workers';
-import { handle, serialize, concurrentRead, advanceEvidence, advanceAi, advanceSearch, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI } from './core.mjs';
+import { handle, serialize, admission, concurrentRead, advanceEvidence, advanceAi, advanceSearch, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI } from './core.mjs';
 import { consumeEvidence, consumeEvidenceDeadLetters, reconcileEvidence } from './evidence.mjs';
 import { Fault, deny } from './common.mjs';
 import { reconcileIndexes } from './repository-indexes.mjs';
@@ -24,6 +24,7 @@ import { advanceRunNow, advancePipelineRun } from './pipelines.mjs';
 import { processPipelineIntake, sweepPipelines } from './actions-intake.mjs';
 import { reconcileAi, runAiWorkflow } from './ai-workflow.mjs';
 import { sweepAgentTasks } from './agent-hosts.mjs';
+import { settleRefWrites } from './ref-writes.mjs';
 
 
 const heartbeat = 5 * 60_000;
@@ -67,11 +68,12 @@ export class Workspace extends DurableObject {
           } catch { console.log(JSON.stringify({ event: 'golf.activity_publication_failed' })); }
         }
       }
-    }, concurrentRead);
+    }, admission);
     // Client mutations fence authority reads; background jobs cannot change membership.
+    // A Git transfer is a transfer in both queues: it overlaps reads and other transfers, and an exclusive request waits for it in each.
     this.authority = serialize(event => event.activity ? activityAuthority(event.request, configured, event.input)
       : new URL(event.url).pathname === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' ? handle(event, configured) : this.dispatch(event),
-    event => event?.activity || concurrentRead(event));
+    event => event?.activity ? 'read' : admission(event));
   }
   // Drains read the installation policy in force at their start: removed origins, limits and email turned off.
   async deliverWebhooks() { return drainWebhooks(await withInstallationPolicy(this.configured)); }
@@ -298,13 +300,13 @@ async function maintain(env, exports, owner) {
           await exports.PRAgentTask.getByName(job.id).cancel();
         }
       }); if (env.EVIDENCE_ALLOW_AI === 'true') Object.assign(result, await reconcileAi(env.DB.withSession('first-primary'))); await owner.activityChanged(); return result; }],
-      // Semantic search, the Actions pipeline sweep and the agent task sweep share the read-index stage: the maintenance journal only names the four original stages.
+      // Semantic search, the Actions pipeline sweep, the agent task sweep and push settlement share the read-index stage: the maintenance journal only names the four original stages.
       ['indexes', async () => { const pipelines = pipelinePolicy(env) ? { ...env, pipelineCoordinator: exports.PipelineRun } : null;
         const settled = await Promise.allSettled([reconcileIndexes(env), env.SEARCH_INDEX ? advanceSearch(env) : { processed: 0 },
           pipelines ? sweepPipelines(pipelines, (await import('./core.mjs')).withArtifact, id => advancePipelineRun(pipelines, id)).then(r => ({ processed: r.intakes + r.runs })) : { processed: 0 },
-          sweepAgentTasks(env.DB.withSession('first-primary'))]);
+          sweepAgentTasks(env.DB.withSession('first-primary')), settleRefWrites(pipelines || env, (await import('./core.mjs')).withArtifact)]);
         for (const result of settled) if (result.status === 'rejected') throw result.reason;
-        return { ...settled[0].value, processed: settled[1].value.processed + settled[2].value.processed + settled[3].value.processed }; }],
+        return { ...settled[0].value, processed: settled.slice(1).reduce((sum, result) => sum + result.value.processed, 0) }; }],
 
     ]); } finally { try { await collectWorkerMetrics(env); } finally { await collectServiceHealth(env); } }
 }

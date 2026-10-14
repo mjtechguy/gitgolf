@@ -116,7 +116,7 @@ try {
 
   const capability = (await person('/rpc/golf.v1.CapabilityService/ListCapabilities', {})).capabilities.find(c => c.id === 'agents.hosts');
   assert.equal(capability.state, 'CAPABILITY_STATE_READY');
-  assert.equal((await person('/native/diagnostics', {})).schema, 36);
+  assert.equal((await person('/native/diagnostics', {})).schema, 37);
   const created = await person('/native/agent-hosts', { action: 'createToken', scope: 'personal', ttlHours: 1, uses: 1 });
   const registered = await host('register', { registrationToken: created.token, name: 'proof-box', hostVersion: '0.1.0', os: 'linux', arch: 'amd64' });
   await host('register', { registrationToken: created.token, name: 'again' }, undefined, 401);

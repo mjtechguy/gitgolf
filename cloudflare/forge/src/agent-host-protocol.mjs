@@ -6,6 +6,7 @@
 import { digest, Fault, invalid, reply, uuidOK, conflict } from './common.mjs';
 import { advertisedRefs, bounded, defaultBranchAdvertisement, defaultBranchRefsV2, gitRequest, gitV2Command, receiveCommand, sha } from './git.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
+import { reserveRefWrite, finishRefWrite } from './ref-writes.mjs';
 import { ownerSlug } from './owners.mjs';
 import { admissionRefusal, agentSchema, agentTools, byteLength, maxDuration, now, parse, random, refuse, repositoryRow, scrub, targetURL, terminalStates } from './agent-hosts.mjs';
 
@@ -268,31 +269,26 @@ async function taskGit(db, env, request, url, id, route, withArtifact, providerF
       try { await enforceGitRules(db, repository, { id: task.requested_by }, command.ref); } catch (error) { if (error instanceof Fault) return text(error.message, 403); throw error; }
     }
     return await withArtifact(env, repository, async repo => {
-      let operation;
+      let operation, result, applied = !command;
       if (command) {
         if (((await refsOf(repo)).get(command.ref) || zero) !== command.old) return text('The branch moved; fetch and push again.', 409);
         operation = crypto.randomUUID();
-        // The same fenced journal as /git/ pushes, admitted only while the requester still writes and the task still runs.
-        const reserved = await db.batch([
-          db.prepare(`INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) SELECT ?,?,?,?,?,?,'DISPATCHED',?
-            WHERE EXISTS(SELECT 1 FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id WHERE r.id=? AND r.artifact_name=? AND r.state='ACTIVE' AND r.write_pending IS NULL
+        // The same ref fence as /git/ pushes, admitted only while the requester still writes and the task still runs.
+        if (!await reserveRefWrite(db, { id: operation, repositoryId: repository.id, userId: task.requested_by, command, time: now(), guard: {
+          sql: `EXISTS(SELECT 1 FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id WHERE r.id=? AND r.artifact_name=? AND r.state='ACTIVE'
               AND g.user_id=? AND g.role IN ('write','admin') AND u.active=1)
-            AND EXISTS(SELECT 1 FROM agent_tasks WHERE id=? AND token_digest=? AND state='RUNNING' AND cancel_requested=0)`)
-            .bind(operation, repository.id, task.requested_by, command.ref, command.old, command.next, now(), repository.id, repository.artifact_name, task.requested_by, task.id, task.token_digest),
-          db.prepare('UPDATE repositories SET write_pending=? WHERE id=? AND write_pending IS NULL AND changes()=1 AND EXISTS(SELECT 1 FROM git_operations WHERE id=?)').bind(operation, repository.id, operation),
-        ]);
-        if (reserved[1].meta.changes !== 1) return text('The push was not admitted: the task or the repository changed.', 409);
+            AND EXISTS(SELECT 1 FROM agent_tasks WHERE id=? AND token_digest=? AND state='RUNNING' AND cancel_requested=0)`,
+          values: [repository.id, repository.artifact_name, task.requested_by, task.id, task.token_digest] } }))
+          return text('The push was not admitted: the task or the repository changed, or another push to the branch is in flight.', 409);
       }
-      const result = await gitRequest(env, repo, repository.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
-      if (operation) {
-        // An unconfirmed write keeps the repository fenced, exactly as /git/ does.
-        if (((await refsOf(repo)).get(command.ref) || zero) !== command.next) conflict();
-        await db.batch([
-          db.prepare("UPDATE git_operations SET state='APPLIED' WHERE id=? AND state='DISPATCHED'").bind(operation),
-          db.prepare('UPDATE repositories SET write_pending=NULL WHERE id=? AND write_pending=?').bind(repository.id, operation),
-          db.prepare('UPDATE agent_tasks SET commit_id=?,updated_at=? WHERE id=?').bind(command.next, now(), task.id),
-        ]);
+      try {
+        result = await gitRequest(env, repo, repository.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
+        if (operation) applied = ((await refsOf(repo)).get(command.ref) || zero) === command.next;
+      } finally {
+        if (operation) await finishRefWrite(db, { id: operation, repositoryId: repository.id, applied, statements: [db.prepare('UPDATE agent_tasks SET commit_id=?,updated_at=? WHERE id=?').bind(command.next, now(), task.id)] });
       }
+      // An unconfirmed write keeps the branch and the repository fenced, exactly as /git/ does.
+      if (!applied) conflict();
       let bytes = result.bytes;
       if (service === 'git-upload-pack') {
         // A v2 advertisement carries only capabilities; HEAD is answered by ls-refs.

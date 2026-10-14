@@ -4,7 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { objectFixture, origin, repository } from './object-fixture.mjs';
-import { handle, serialize, concurrentRead, digest } from './src/core.mjs';
+import { handle, serialize, concurrentRead, digest, withArtifact } from './src/core.mjs';
+import { settleRefWrites } from './src/ref-writes.mjs';
 import { packetLine } from './src/git.mjs';
 import { sweepAgentTasks, buildPrompt } from './src/agent-hosts.mjs';
 
@@ -71,7 +72,7 @@ async function fixture(t) {
     const { scope, organization, ...fields } = change;
     return hosts({ action: 'update', id: host.hostId, expectedVersion: current.version, ...fields }, who);
   };
-  return { ...f, refs, commits, pushes, dispatch, signed, machine, git, push, hosts, tasks, connect, assign, update };
+  return { ...f, refs, commits, pushes, providerFetch, dispatch, signed, machine, git, push, hosts, tasks, connect, assign, update };
 }
 
 test('a personal host registers with a one-time token; only digests are stored and the credential works until deleted', async t => {
@@ -199,6 +200,7 @@ test('assign an issue: claim, live log, push the proposal branch through the tas
   assert.deepEqual(f.pushes, [{ name: 'repo-' + 'b'.repeat(32), old: zero, next: proposal, ref: 'refs/heads/' + task.branch }]);
   assert.deepEqual(f.sql.prepare('SELECT user_id,ref,state FROM git_operations').all().map(row => ({ ...row })), [{ user_id: 1, ref: 'refs/heads/' + task.branch, state: 'APPLIED' }]);
   assert.equal(f.sql.prepare('SELECT write_pending FROM repositories WHERE id=1').get().write_pending, null);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_ref_writes').get().n, 0);
   // Finish succeeded: the branch points at the commit and the base is its first parent.
   const finished = await f.machine(`tasks/${task.id}/finish`, { state: 'succeeded', exitCode: 0, commitId: proposal, summary: 'Handled empty input.', changedFiles: ['src/parse.js'], usage: { inputTokens: 1200, outputTokens: 300 } }, token);
   assert.deepEqual(finished, { status: 200, ok: true, state: 'SUCCEEDED' });
@@ -248,6 +250,28 @@ test('cancel: queued at once, claimed and running through heartbeat, log and Git
   assert.equal((await f.push(first.id, first.token, zero, proposal, 'refs/heads/' + first.branch)).status, 403);
   assert.equal((await f.machine(`tasks/${first.id}/finish`, { state: 'cancelled' }, first.token)).state, 'CANCELLED');
   assert.equal((await f.tasks({ action: 'cancel', id: running.id }, 'bob')).status, 412);
+});
+
+test('a task push takes the same ref fence; settling its unknown outcome records the task commit and no pipeline intake', async t => {
+  const f = await fixture(t), host = await f.connect(), task = (await f.assign(host)).task;
+  const { token } = (await f.machine('claim', { claimId: uuid() }, host.credential)).task, ref = 'refs/heads/' + task.branch;
+  await f.machine(`tasks/${task.id}/start`, {}, token);
+  // A write to the task branch whose outcome is unknown fences the branch; the provider turns out to hold the commit.
+  const unknown = uuid();
+  f.sql.prepare("INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) VALUES(?,1,1,?,?,?,'DISPATCHED','2026-01-01T00:00:00.000Z')").run(unknown, ref, zero, proposal);
+  f.sql.prepare('INSERT INTO git_ref_writes(operation_id,repository_id,ref) VALUES(?,1,?)').run(unknown, ref);
+  const pushed = await f.push(task.id, token, zero, proposal, ref);
+  assert.equal(pushed.status, 409); assert.match(await pushed.text(), /another push to the branch is in flight/); assert.deepEqual(f.pushes, []);
+  f.refs.get('repo-' + 'b'.repeat(32)).set(ref, proposal);
+  const env = { ...f.env, providerFetch: f.providerFetch, PIPELINES_ENABLED: 'true', PIPELINE_BUCKET: {}, PIPELINE_QUEUE: { send() { throw Error('no intake for task branches'); } } };
+  assert.deepEqual(await settleRefWrites(env, withArtifact), { processed: 1 });
+  assert.equal(f.sql.prepare('SELECT state FROM git_operations WHERE id=?').get(unknown).state, 'APPLIED');
+  assert.equal(f.sql.prepare('SELECT commit_id FROM agent_tasks WHERE id=?').get(task.id).commit_id, proposal);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM pipeline_intake').get().n, 0);
+  // The task continues from the settled commit.
+  f.commits.set(stray, [proposal]);
+  assert.equal((await f.push(task.id, token, proposal, stray, ref)).status, 200);
+  assert.equal(f.sql.prepare('SELECT commit_id FROM agent_tasks WHERE id=?').get(task.id).commit_id, stray);
 });
 
 test('the sweep marks lost hosts and passed deadlines; deleting a host cancels its work', async t => {
