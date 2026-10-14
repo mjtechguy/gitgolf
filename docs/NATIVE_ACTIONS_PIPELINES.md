@@ -358,10 +358,91 @@ workspace Durable Object queue. Run advancement is serialized per run by the `Pi
 
 ## UI routes (Access; repository authority)
 
-`POST /native/pipelines` with `action` ∈ `listRuns`, `getRun`, `jobLog`, `cancel`, `rerun`, `dispatch`,
-`workflows`, `artifacts`, `play`; `GET /native/pipelines/artifact/<id>` (download). `POST /native/pipeline-runners`
+`POST /native/pipelines` with `action` ∈ `listRuns`, `getRun`, `jobLog`, `cancel`, `rerun`, `play`, `dispatch`,
+`workflows`, `approve`, `environments`, `saveEnvironment`, `saveEnvironmentValue`, `downloadArtifact` (streams the
+artifact). Reads need repository read access; cancel, re-run, play and dispatch need write; approve needs to be a required
+reviewer; environment changes need admin. `POST /native/pipeline-runners`
 with `action` ∈ `list`, `createToken`, `revokeToken`, `update`, `delete` at `installation` (operations
 administrators), `organization` (organization owners) or `repository` (repository administrators) scope.
+
+## RUN-A / RUN-B implementation notes (GitHub/Forgejo Actions on the stock Forgejo Runner)
+
+Modules: `pipeline-policy.mjs` (allocation, capabilities, pins), `pipelines.mjs` (core), `actions-workflow.mjs` +
+`actions-expressions.mjs` (discovery, `on:` filters, expansion), `actions-intake.mjs` (triggers), `protobuf.mjs` +
+`forgejo-runner.mjs` (connect-rpc and the job-token Git source), `actions-artifacts.mjs` (artifacts v4),
+`pipeline-api.mjs` (Actions tab and runner administration), `PipelineRun` in `worker.mjs`. Web: `NativeActions.tsx`,
+`NativePipelineRunners.tsx`.
+
+Coordination choice: a **Durable Object per run** (`PipelineRun`), not a Workflow. Runs are driven by runner callbacks
+and can wait indefinitely on manual jobs and approvals; the object serializes DAG advancement, and its alarm (60 s)
+times out lost and overdue jobs. Runner traffic (`/api/actions/*`, artifacts, job-token Git) is handled by the stateless
+Worker against D1 and R2 and never enters the workspace object's queue. Trigger intake is recorded in D1 first, then
+fanned out on `PIPELINE_QUEUE` when bound, else after the response (`waitUntil`); the scheduled sweep retries intakes
+left PENDING and advances runs whose alarm was lost.
+
+Triggers: `push` (branches and tags; the commit Golf just confirmed), `pull_request` `opened` (CreatePullRequest),
+`reopened` (UpdatePullRequest to open) and `synchronize` (a push to the head branch of an open same-repository pull
+request), `workflow_dispatch` with typed inputs (string, boolean, number, choice, environment) from the Actions tab.
+`.forgejo/workflows` wins over `.github/workflows` when both exist (Forgejo rule). At most 32 workflow files of 256 KiB
+each are read per commit. Not triggered (never matched, no refusal): `schedule`, `pull_request_target`, `release`,
+`workflow_call`, `issues` and other events. Fork pull requests do not exist on native.
+
+`on:` filter subset: `branches`, `branches-ignore`, `tags`, `tags-ignore`, `paths`, `paths-ignore` (GitHub glob
+semantics with `*`, `**`, `?`, `+`, `[]` and `!`), pull_request `types`. Other filter keys refuse the run with the key
+named. Path filters use the changed files between the push's before/after (or PR base/head); a new branch, a missing
+base or more than 256 changed files runs the workflow, as GitHub does past its file limit.
+
+Expansion: matrices with `include`/`exclude` (GitHub algorithm, YAML anchors and merge keys allowed), job names and
+`runs-on` evaluated server-side with the expression subset (literals, `github.*`, `inputs.*`, `vars.*`, `matrix.*`,
+`!`, comparisons, `&&`, `||`, `contains`, `startsWith`, `endsWith`, `format`, `join`, `toJSON`, `fromJSON`). Each
+combination becomes one job whose payload is a single-job workflow with a one-value matrix, as Forgejo's jobparser does.
+`if:` on a job makes it `conditional` (the runner evaluates it with the `needs` context). Refused with a visible reason:
+reusable workflows (`jobs.<id>.uses`), runner groups, matrices built from `needs` outputs. Job-level `concurrency` is
+recorded as a note and not applied. Workflow `concurrency` groups cancel earlier unstarted runs (and running ones with
+`cancel-in-progress`); a later run waits for an earlier running one.
+
+Task payload: single-job YAML, a `github` context Struct like Forgejo's (`server_url` = the public origin,
+`repository`, `ref`, `sha`, `event`, `run_id`, `run_number`, `run_attempt`, `token`, `forgejo_runtime_token`,
+`forgejo_default_actions_url`), `secrets` (repository secrets only for trusted, same-repository runs, plus
+`GITHUB_TOKEN`/`GITEA_TOKEN`/`FORGEJO_TOKEN` = the job token), `vars`, and `needs` (merged outputs and aggregate result).
+`uses: owner/action@ref` resolves from `ACTIONS_DEFAULT_URL` (default `https://github.com`).
+
+Checkout: `actions/checkout` fetches `${server_url}/${owner}/${repo}` with `AUTHORIZATION: basic x-access-token:<job
+token>`. Golf serves `GET …/info/refs?service=git-upload-pack` and `POST …/git-upload-pack` (with or without `.git`) for
+exactly the run's repository, read-only, while the job is RUNNING. Protocol v2 and gzip request bodies pass through.
+
+Artifacts: the v4 Twirp `ArtifactService` (`CreateArtifact`, signed block `UploadArtifact` with `comp=block|blocklist`,
+`FinalizeArtifact`, `ListArtifacts`, `GetSignedArtifactURL`, `DeleteArtifact`, signed `DownloadArtifact`) into R2 for 30
+days. Signed URLs are HMAC'd with the requesting job's stored token digest, so they end with the job. **The unmodified
+`actions/upload-artifact@v4` and `download-artifact@v4` refuse every server that is not github.com, *.ghe.com or
+*.localhost** (their `isGhes()` check in `@actions/artifact` 2.x). That is the same on Forgejo; use
+`https://code.forgejo.org/forgejo/upload-artifact@v4` and `…/download-artifact@v4`, which differ only by that check. The
+v3 artifact API (`ACTIONS_RUNTIME_URL=/api/actions_pipeline/`) is not implemented. Cache: the runner's own cache server
+(`ACTIONS_CACHE_URL`, Forgejo Runner default); Golf stores no caches.
+
+Logs: `UpdateLog` rows are stored as immutable R2 chunks indexed in D1, with exact secret values (and each line of a
+multi-line secret) of 4 or more characters replaced by `***` before storage (the runner masks too). The Actions tab polls
+the job log from the last line every 1.5 s while a job runs and folds it by step using the runner's step log ranges;
+WebSocket fan-out is not implemented. Step summaries (`UpdateStepSummary`) are stored in R2 but not yet shown.
+
+Runner registration: `forgejo-runner register --no-interactive --instance <origin> --token <golfreg_…> --name … --labels …`
+then `forgejo-runner daemon`. v13 prints a deprecation notice for `register` (it prefers connections declared in the
+runner configuration) but registers normally. Runners declare their labels at start; Golf stores what the runner
+declares. A job runs only on a runner carrying all of its `runs-on` labels; jobs for labels no runner carries
+(windows-latest, macos-latest) stay QUEUED with "Waiting for a runner with …" and are cancelled with `no_runner` after
+24 h. Running the stock runner as a Kubernetes Deployment with a DinD sidecar uses the same protocol: the runner needs
+outbound HTTPS to the Golf origin; job containers need to reach the origin too (checkout, artifacts) and the runner's
+cache server, so the DinD network must route to the origin and to the runner pod.
+
+Deploy: `forge.json` `"pipelines": { "bucket": …, "queue": …, "dead_letter": …, "default_actions_url"?: … }` (the
+Alchemy stack creates `<name>-pipelines`, `<name>-pipeline-intake` and `<name>-pipeline-intake-failed` and the
+`PipelineRun` class when `settings.pipelines` is present), then apply migration 0035 (`cloudflare_release.py` applies
+it after 0034 and checks the columns). Repository secrets for pipelines reuse `execution_values.key`.
+
+Proof: `node cloudflare/forge/actions-runtime-check.mjs "$(command -v cf)" --repos=demo,chalk,node-postgres,itsdangerous`
+runs the real Worker in workerd with D1, R2 and Durable Objects, downloads and checksums the pinned runner, registers
+it through the registration-token API, pushes each repository's real HEAD through Golf's Smart HTTP push and waits for
+the runs (only the Artifacts binding is a local `git http-backend` fixture). `--image=` maps `ubuntu-latest`.
 
 ## Pinned runners
 
