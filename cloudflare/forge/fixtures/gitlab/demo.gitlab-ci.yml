@@ -1,0 +1,92 @@
+# Golf RUN-C runtime proof: build → test → deploy on the stock GitLab Runner (Docker executor).
+stages: [build, test, deploy]
+
+variables:
+  APP_NAME: golf-demo
+
+default:
+  image: alpine:3.23
+  before_script:
+    - echo "job $CI_JOB_NAME in stage $CI_JOB_STAGE of pipeline $CI_PIPELINE_ID ($CI_COMMIT_REF_NAME@$CI_COMMIT_SHORT_SHA)"
+
+.cache: &cache
+  key: golf-demo-$CI_COMMIT_REF_SLUG
+  paths: [.cache/]
+
+build:
+  stage: build
+  script:
+    - mkdir -p dist .cache
+    - echo "built $APP_NAME at $CI_COMMIT_SHA" > dist/app.txt
+    - date +%s > .cache/stamp
+    - echo "BUILD_VERSION=1.0.$CI_PIPELINE_IID" > build.env
+  cache: *cache
+  artifacts:
+    paths: [dist/]
+    expire_in: 1 week
+    reports:
+      dotenv: build.env
+
+package:
+  stage: deploy
+  needs: [build]
+  script:
+    - tar czf package.tgz dist
+    - ls -l package.tgz
+  artifacts:
+    paths: [package.tgz]
+
+unit:
+  stage: test
+  cache:
+    <<: *cache
+    policy: pull
+  script:
+    - cat dist/app.txt
+    - grep -q "built golf-demo at $CI_COMMIT_SHA" dist/app.txt
+    - test "$BUILD_VERSION" = "1.0.$CI_PIPELINE_IID"
+    - 'if test -f .cache/stamp; then echo "cache hit: stamp $(cat .cache/stamp)"; else echo "cache miss"; exit 1; fi'
+    - echo "TOTAL 87.5%"
+  coverage: '/TOTAL\s+(\d+\.\d+)%/'
+
+postgres-service:
+  stage: test
+  image: postgres:16-alpine
+  services:
+    - name: postgres:16-alpine
+      alias: db
+  variables:
+    POSTGRES_PASSWORD: golf
+    POSTGRES_DB: golf
+    PGPASSWORD: golf
+  script:
+    - for i in $(seq 1 60); do pg_isready -h db -U postgres && break; sleep 1; done
+    - psql -h db -U postgres -d golf -c "CREATE TABLE t(x int); INSERT INTO t VALUES (42);"
+    - test "$(psql -h db -U postgres -d golf -tAc 'SELECT x FROM t')" = 42
+    - echo "postgres service answered 42"
+
+flaky-check:
+  stage: test
+  allow_failure: true
+  script:
+    - echo "this job fails on purpose"
+    - exit 3
+
+report:
+  stage: test
+  parallel: 2
+  script:
+    - echo "node $CI_NODE_INDEX of $CI_NODE_TOTAL"
+  after_script:
+    - echo "after_script ran with $CI_JOB_STATUS"
+
+deploy:
+  stage: deploy
+  when: manual
+  environment:
+    name: production
+    url: https://golf-demo.example.invalid
+  script:
+    - echo "deploying $APP_NAME $BUILD_VERSION to $CI_ENVIRONMENT_NAME ($CI_ENVIRONMENT_URL)"
+    - echo "DEPLOY_TOKEN length ${#DEPLOY_TOKEN}"
+    - echo "token value $DEPLOY_TOKEN"

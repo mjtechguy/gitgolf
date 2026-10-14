@@ -1,0 +1,28 @@
+# Golf RUN-C runtime proof on the stock GitLab Runner Kubernetes executor: job pods, services as sidecars, artifacts between stages.
+stages: [build, test]
+
+default:
+  image: alpine:3.23
+
+build:
+  stage: build
+  script:
+    - mkdir -p dist
+    - echo "built in pod $HOSTNAME for $CI_PROJECT_PATH@$CI_COMMIT_SHORT_SHA" > dist/app.txt
+  artifacts:
+    paths: [dist/]
+
+service-sidecar:
+  stage: test
+  image: postgres:16-alpine
+  services:
+    - name: postgres:16-alpine
+      alias: db
+  variables:
+    POSTGRES_PASSWORD: golf
+    PGPASSWORD: golf
+  script:
+    - cat dist/app.txt
+    - for i in $(seq 1 60); do pg_isready -h db -U postgres && break; sleep 1; done
+    - test "$(psql -h db -U postgres -tAc 'SELECT 6*7')" = 42
+    - echo "sidecar postgres answered 42 from pod $HOSTNAME"
