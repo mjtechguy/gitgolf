@@ -39,17 +39,19 @@ export async function collectWorkerMetrics(env, providerFetch = fetch) {
     }`;
     const response = await providerFetch('https://api.cloudflare.com/client/v4/graphql', { method:'POST',redirect:'error',signal:AbortSignal.timeout(5000),
       headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({query,variables:{accountTag:env.ACCOUNT_ID,start,end,scriptName:env.OPERATIONS_WORKER}}) });
-    if (!response.ok || !response.headers.get('Content-Type')?.startsWith('application/json')) throw Error('Analytics observation unavailable');
+    if (!response.ok || !response.headers.get('Content-Type')?.startsWith('application/json')) throw Error('Analytics response refused: HTTP ' + response.status);
     const data = JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(await bounded(response.body,64*1024)));
     const accounts = data?.data?.viewer?.accounts;
-    if (data.errors != null && (!Array.isArray(data.errors) || data.errors.length) || !Array.isArray(accounts) || accounts.length !== 1) throw Error('Analytics observation unavailable');
+    if (data.errors != null && (!Array.isArray(data.errors) || data.errors.length) || !Array.isArray(accounts) || accounts.length !== 1) throw Error('Analytics query refused');
     const rows = accounts[0].workersInvocationsAdaptive;
     // Empty datasets are not proof of zero traffic, and grouped rows must not be truncated.
-    if (!Array.isArray(rows) || rows.length !== 1 || rows[0].dimensions?.scriptName !== env.OPERATIONS_WORKER) throw Error('Analytics observation unavailable');
+    if (!Array.isArray(rows) || rows.length !== 1 || rows[0].dimensions?.scriptName !== env.OPERATIONS_WORKER) throw Error('Analytics rows unexpected');
     const sum = rows[0].sum;
-    if (!sum || !['requests','errors','subrequests'].every(key => Number.isSafeInteger(sum[key]) && sum[key] >= 0) || sum.errors > sum.requests) throw Error('Analytics observation unavailable');
+    if (!sum || !['requests','errors','subrequests'].every(key => Number.isSafeInteger(sum[key]) && sum[key] >= 0) || sum.errors > sum.requests) throw Error('Analytics totals invalid');
     await db.prepare("UPDATE operations_provider SET observed_at=?,window_start=?,window_end=?,state='succeeded',requests=?,errors=?,subrequests=? WHERE service='workers' AND attempted_at=?").bind(stamp,start,end,sum.requests,sum.errors,sum.subrequests,stamp).run();
-  } catch {
+  } catch (error) {
+    // Reasons are fixed texts or runtime error names; the credential never appears in them.
+    console.log(JSON.stringify({ event: 'golf.worker_analytics_failed', reason: String(error?.name === 'Error' ? error.message : error?.name).slice(0, 80) }));
     await db.prepare("UPDATE operations_provider SET state='failed' WHERE service='workers' AND attempted_at=?").bind(stamp).run();
     throw Error('Worker analytics collection failed. Last successful observations are retained.');
   }
