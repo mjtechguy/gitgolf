@@ -1,5 +1,28 @@
 # Golf implementation status
 
+## 2026-10-14 — Native issue templates; anonymous read throttling
+
+Cloudflare native serves `ListIssueTemplates` (`discussion.templates` ready):
+Markdown templates and YAML issue forms from the default-branch head with the
+portable sources and limits (50 files of 6,000 bytes; aliases, anchors and
+unsupported fields counted, not rendered). A 140-input comparison with the
+portable parser matched 134 cases; the six differences are documented in
+`cloudflare/forge/src/issue-templates.mjs`.
+
+Optional anonymous read throttling (`anonymous_rate_limit`; Alchemy
+`enable-rate-limit`) uses the Workers rate limiting binding for credential-less
+public reads and clones, per client network and Cloudflare location, with
+approximate counts; signed-in, credentialed and runner requests are never
+counted, and a limiter error lets the request through.
+
+The four portable-only settings rows stay in the native capability list:
+blocked routes and settings diagnostics show their label and reason, and
+removing them would replace that with a generic "has not been set up" message.
+
+Evidence: `issue-templates.test.mjs`, `rate-limit.test.mjs`, a mocked-backend
+browser test, and `rate-limit-check.mjs` on workerd with the local simulator.
+Hosted acceptance is recorded separately.
+
 ## 2026-10-14 — Native workflow settings, repository run switch and recent runs
 
 The Cloudflare-native repository page `/:owner/:name/settings/workflows` is
