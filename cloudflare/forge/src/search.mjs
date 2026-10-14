@@ -109,7 +109,7 @@ export async function searchCapability(db, env) {
   try {
     verified = await db.prepare('SELECT 1 AS ok FROM search_state WHERE verified_at IS NOT NULL LIMIT 1').first();
     failure = await db.prepare("SELECT error FROM search_state WHERE state='FAILED' AND error IS NOT NULL ORDER BY updated_at DESC LIMIT 1").first();
-  } catch { return { ...capability, state: 'CAPABILITY_STATE_DEGRADED', reason: 'Apply the schema 35 migration to keep search indexes. ' + capabilityReason }; }
+  } catch { return { ...capability, state: 'CAPABILITY_STATE_DEGRADED', reason: 'Apply the schema 34 migration to keep search indexes. ' + capabilityReason }; }
   if (verified) return { ...capability, state: 'CAPABILITY_STATE_READY', reason: capabilityReason };
   return { ...capability, state: 'CAPABILITY_STATE_DEGRADED', reason: capabilityReason + ' Degraded until a first index completes and its vectors read back from Vectorize.' + (failure ? ' Last failure: ' + failure.error : '') };
 }

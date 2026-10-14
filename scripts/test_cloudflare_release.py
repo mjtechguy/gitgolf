@@ -955,11 +955,11 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_ai_schema([])
 
     def test_search_migration_is_the_schema_tail_resumes_without_replaying(self):
-        release = self.release(); release.manifest['schema'] = 35
+        release = self.release(); release.manifest['schema'] = 34
         with sqlite3.connect(':memory:') as db:
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
-            migration = (ROOT/'cloudflare/forge/migrations/0035_semantic_search.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0034_semantic_search.sql').read_text()
             self.assertTrue(schema.endswith(';\n\n'+migration))
             db.executescript(schema_through('0032_ai_runs.sql'))
             lost = True
@@ -974,10 +974,10 @@ class ExecutionValueMigrationTest(unittest.TestCase):
                     raise RuntimeError('Lost search migration response')
                 return [{'results': []}]
             release.command = command
-            with self.assertRaisesRegex(ValueError, '0035'): release.check_search_schema()
+            with self.assertRaisesRegex(ValueError, '0034'): release.check_search_schema()
             with self.assertRaisesRegex(RuntimeError, 'Lost search'): release.migrate_search_schema([])
             applied = []; release.migrate_search_schema(applied)
-            self.assertEqual(applied, ['0035']); release.check_search_schema()
+            self.assertEqual(applied, ['0034']); release.check_search_schema()
             # Discussions are queued only for repositories that have an index.
             db.executescript("""INSERT INTO users(id,login) VALUES(1,'alice');
               INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at) VALUES(1,'a','','repo-1',1,'k','h','ACTIVE','t'),(2,'b','','repo-2',1,'l','h','ACTIVE','t');
@@ -986,7 +986,7 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             self.assertEqual([tuple(row) for row in db.execute('SELECT repository_id,kind,source FROM search_outbox')], [(1, 'discussion', '1')])
             applied = []; release.migrate_search_schema(applied)
             self.assertEqual(applied, [])
-            release.state['migration0035'] = 'changed'
+            release.state['migration0034'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_search_schema([])
 
 if __name__ == '__main__': unittest.main()
