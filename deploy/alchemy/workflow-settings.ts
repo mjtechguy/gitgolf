@@ -8,7 +8,7 @@ import { CloudflareApiLive } from 'alchemy/Cloudflare';
 // Alchemy beta.83's Workflow resource omits concurrency and retention props.
 // Apply these to the workflow it already owns; never provision a second one.
 interface Settings extends Resource<'Golf.WorkflowSettings', {
-  accountId: string; workflowName: string; scriptName: string;
+  accountId: string; workflowName: string; scriptName: string; steps: number;
 }, { versionId: string }> {}
 export const WorkflowSettings = Resource<Settings>('Golf.WorkflowSettings');
 export const workflowSettingsProvider = () => Provider.succeed(WorkflowSettings, {
@@ -17,8 +17,9 @@ export const workflowSettingsProvider = () => Provider.succeed(WorkflowSettings,
     const observed = yield* Workflows.getWorkflow({ accountId: news.accountId, workflowName: news.workflowName });
     if (observed.scriptName !== news.scriptName || observed.className !== 'EvidenceWorkflow')
       return yield* Effect.fail(new Error('Workflow ownership differs'));
-    const result = yield* Workflows.putWorkflow({ ...news, className: 'EvidenceWorkflow',
-      limits: { steps: 87 }, concurrency: { limit: 2 },
+    const { steps, ...workflow } = news;
+    const result = yield* Workflows.putWorkflow({ ...workflow, className: 'EvidenceWorkflow',
+      limits: { steps }, concurrency: { limit: 2 },
       defaultRetention: { successRetention: '1 day', errorRetention: '1 day' } });
     return { versionId: result.versionId };
   }),

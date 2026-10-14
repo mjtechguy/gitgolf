@@ -201,6 +201,36 @@ keep the key, because saved subscriptions are encrypted with it. Receiver URLs
 and signing secrets are entered in the repository's Webhooks settings, never in
 this directory. Retries ride the stack's five-minute schedule.
 
+Enable Workers AI, and optionally agent proposals, on a retained installation:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-ai NEW_DIRECTORY --agent-path calc.py
+python3 scripts/cloudflare_alchemy_demo.py renew-deploy NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+`enable-ai` admits inference through one private AI Gateway named after the
+installation; the stack creates it with authentication required, prompt and
+response logging off, no cache, 60 requests a minute and a spend limit of 500
+cents a day. Inference is billed by Cloudflare. `renew-deploy` is needed once
+because the deployment token gains `AI Gateway Write` only when AI is enabled.
+`--agent-path` names the one source file agents may change, for the whole
+installation; without it only review advice uses AI. It adds a second container
+application running the same image, the `PRAgentTask` Durable Object and the
+`AgentOutbound` export,
+and raises the evidence workflow to 100 steps. The approved test image must
+contain the maintained OpenCode controller. Alchemy beta.83 cannot create a
+container application for a Durable Object class in the same run that creates
+the class: the first deploy stops with `requires a resolved Durable Object
+namespace` after updating the Worker, and a second `deploy` completes it.
+
+Retain failed evidence deliveries with a dead-letter queue:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-dead-letter NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
 Use `cloudflare/forge/browser-benchmark.mjs` in an authenticated browser for
 bounded source-read comparisons (up to eight fixed repositories, eight passes,
 and 16 concurrent requests). First pass is not proof of an empty cache. Preserve

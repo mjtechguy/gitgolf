@@ -20,12 +20,14 @@ test('the native build keeps credentials as secret references and restricts app 
     APP_DISPATCH: { type: 'dispatch-namespace', namespace: 'demo', outbound: { worker: 'demo-outbound' } },
     FORGE: { type: 'worker', worker: 'demo', exportName: 'PreviewBroker' },
     USAGE_ANALYTICS: { type: 'analytics-engine-dataset', name: 'demo_evidence' },
+    AI: { type: 'ai' },
   } }), [
     { name: 'DB', type: 'd1', id: 'db-id', databaseId: 'db-id' },
     { name: 'SIGNING', type: 'secrets_store_secret', storeId: 'store-id', secretName: 'signing' },
     { name: 'APP_DISPATCH', type: 'dispatch_namespace', namespace: 'demo', outbound: { worker: { service: 'demo-outbound' } } },
     { name: 'FORGE', type: 'service', service: 'demo', entrypoint: 'PreviewBroker' },
     { name: 'USAGE_ANALYTICS', type: 'analytics_engine', dataset: 'demo_evidence' },
+    { name: 'AI', type: 'ai' },
   ]);
   assert.throws(() => bindings({ env: { FUTURE: { type: 'unknown' } } }), /Unqualified/);
 });
