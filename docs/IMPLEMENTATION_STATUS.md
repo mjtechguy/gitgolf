@@ -1,5 +1,115 @@
 # Golf implementation status
 
+## 2026-10-14 — Semantic search with Workers AI embeddings and Vectorize (AI-E)
+
+Repository administrators build a per-repository index that the maintenance
+schedule fills with Workers AI embeddings (model from AI model selection) of
+default-branch code and issue/PR titles and descriptions, in paced batches
+(schema 34). Vectorize holds only ids, vectors and repository/kind metadata.
+Every search re-checks the reader's grant in D1 and reads excerpts live, so
+revocations, deletions and edits apply immediately; results name the indexed
+commit. A changed embedding model rebuilds the index while the old one keeps
+serving; the feature sits under the `semantic-search` policy.
+
+Verified locally with Worker tests (468), a workerd check against stub
+AI/Vectorize/Artifacts, script and deploy-config tests and Playwright specs.
+Still unverified live: the embedding dimension, Vectorize filtering and upsert
+visibility, gateway limits during indexing, and CPU per maintenance run.
+
+## 2026-10-14 — Analytics reads failed because Workers reject `redirect: 'error'`
+
+The Operations analytics feed (failing inside the Worker since 2026-10-13 although
+the same token and query worked outside it) and the new AI Gateway usage panel
+both called the GraphQL API with `fetch(..., { redirect: 'error' })`. Workers
+accept only `follow` or `manual`, so every read threw before any request was sent;
+the AI usage panel surfaced the message. Both now use `redirect: 'manual'`, and a
+redirect response still fails the read because it is not a 2xx JSON answer.
+Verified by Worker tests; hosted confirmation follows the deploy.
+
+## 2026-10-14 — Clef label suggestions and Workers AI release notes drafts (AI-C, AI-D)
+
+Repository administrators can ask Clef (`@cf/cloudflare/clef`, fixed) which of up
+to 20 of the repository's labels fit an issue, from its title and description.
+Suggestions are ranked probabilities (at most three at 15% or more) and apply only
+when a person saves them in the labels editor; a suggestion is marked out of date
+when the title, description or labels change. Administrators can also draft
+release notes for an existing tag from its first-parent history back to the
+previous tag (at most 500 commits): Golf merges count as merged pull requests,
+other commits are listed by subject, every item must cite its input, and the
+Worker writes the links. The draft fills the release form; nothing is published.
+Release notes use the installation's chosen model for that use case (default
+`@cf/zai-org/glm-5.3`). Both are under feature policies `ai-triage` and
+`ai-release-notes`.
+
+Verified locally with Worker tests (462, 461 pass, 1 skipped), a workerd run with
+stub models (`ai-kinds-runtime-check.mjs`) and mocked Playwright specs (17).
+Unverified live: Clef with more than three options, and GLM `json_schema`
+adherence and latency.
+
+## 2026-10-14 — AI model selection per use case and AI usage (AI-G, AI-F)
+
+Administrators choose the default and allowed Workers AI models for agents,
+summaries and review drafts, release notes and search embeddings at `/admin/ai`,
+from the account's model catalog (cached 6 hours) filtered by task and capability
+and bounded by the deploy list `AI_MODELS`; review advice and triage stay on Clef.
+A per-use-case switch lets repository administrators pick from the allowed list in
+repository settings. Writes are revision-fenced and audited; widening needs the
+typed key and a recent Access sign-in; `policy_editing: false` locks it (schema
+33). Every AI run records the model it used; the agent model is part of the agent
+policy identity, so a change refuses queued proposals at their next step.
+`/admin/ai-usage` shows Golf's own ledger by feature, model and day against the
+daily AI limit, and an AI Gateway analytics panel that stays "Degraded" until a
+live read succeeds.
+
+Verified locally: Worker tests (448, 447 pass, 1 skipped), agents package (4),
+real workerd AI/runtime/UI/environments checks, web typecheck and builds, and the
+model-selection Playwright specs. Unverified live: the catalog's property names
+and whether the analytics token reads the AI Gateway dataset.
+
+## 2026-10-14 — Workers AI run foundation and the Clef recommendation card (AI-0, AI-A)
+
+Workers AI runs (AI-0) are admitted and prepared in the workspace, inferred once
+in `AiWorkflow` outside the workspace's write queue through the private AI
+Gateway, and settled only while reserved (schema 32, `ai_runs`). A retried or
+replayed infer step never makes a second model call; a lost settle becomes
+UNKNOWN through maintenance; repository text never enters Workflow state, and
+input snapshots are deleted after 7 days. Runs are gated by the deploy
+allocation, the installation AI advice switch and each kind's feature policy,
+with 100 runs a day (deploy ceiling 500) and 20 per person per hour. Verified with
+node tests (438, 437 pass, 1 skipped) and a real workerd Workflow run against a
+stub model; no feature uses it yet, and nothing has run live.
+
+The Clef recommendation card (AI-A) puts the latest stored Clef advice on the
+pull request Conversation tab: a sentence with a probability per next step, the
+model, what Clef read, the commit and whether it is out of date. Writers can ask
+again through the existing advice-only evidence job, which counts against the
+daily evidence limit. Verified with mocked Playwright tests in Classic, Golf and
+Flare, light and dark, at 1440 and 390 px; not yet seen against live advice.
+
+## 2026-10-14 — First hosted customer-runner run; runner finish receipt fixed
+
+A Golf native runner on a Linux Docker host was enrolled against the retained
+installation (Admin → Runners: untrusted pool `mj-workstation`, machine
+`mj-linux-docker`, 4-hour credential) and selected for `mj/review-playground`.
+"Run approved workflow" on pull request 1 ran the approved `.github/workflows/ci.yml`
+shell job on the host (Docker, no network, approved image
+`sha256:81188fb3…`) and the report shows "Customer-hosted runner … attempt 2",
+exit 0 and the unittest output. This is the first hosted customer-runner run.
+
+The first attempt exposed a runner bug: it decoded `/finish` strictly and
+expected only `{"result":{"state"}}`, but the Worker returns the whole stored
+result, so every hosted completion failed to decode after the server had
+accepted it. The runner now reads only the state from the receipt; the test
+fakes return the Worker's real shape. The interrupted attempt's journal replayed
+the exact payload and was accepted. Also fixed: the repository Runners settings
+page unmounted its chooser on every background access check (#44).
+
+Verified: `go test ./cmd/golf-native-runner` with the real Docker image, and the
+two hosted runs above. Still open from the hosted trial list: failing job,
+cancellation, runner restart mid-job, credential revocation; and the bounded
+shell profile is not real GitHub Actions or GitLab CI (see
+`docs/NATIVE_ACTIONS_PIPELINES.md`, in progress).
+
 ## 2026-10-14 — Native feature policies and repository Features (admin slices 3–4)
 
 Installation administrators set each of 15 governed features (pull requests,

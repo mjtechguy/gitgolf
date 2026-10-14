@@ -13,7 +13,7 @@ for (const entry of ['worker', 'test-entry', 'agent-entry']) {
       define: { GOLF_NATIVE_ASSETS: 'null' },
     });
     const exported = Object.values(built.metafile.outputs).flatMap(output => output.exports);
-    const expected = ['default', 'Workspace', 'RepositoryReads', 'EvidenceWorkflow', 'PreviewBroker', 'PackagesAuthority'];
+    const expected = ['default', 'Workspace', 'RepositoryReads', 'EvidenceWorkflow', 'AiWorkflow', 'PreviewBroker', 'PackagesAuthority'];
     if (entry !== 'worker') expected.push('PRTestTask', 'TestOutbound');
     if (entry === 'agent-entry') expected.push('PRAgentTask', 'AgentOutbound');
     for (const name of expected) assert.ok(exported.includes(name), `${entry} missing ${name}`);

@@ -381,10 +381,9 @@ func journal(file string, value any) error {
 }
 
 func (c *client) finish(ctx context.Context, file string, record attemptJournal) error {
+	// The Worker returns the whole stored test result; only its state is compared here.
 	var completed struct {
-		Result struct {
-			State string `json:"state"`
-		} `json:"result"`
+		Result map[string]any `json:"result"`
 	}
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {
@@ -398,7 +397,7 @@ func (c *client) finish(ctx context.Context, file string, record attemptJournal)
 	if err != nil {
 		return err
 	}
-	if completed.Result.State != record.Finish["state"] {
+	if state, _ := completed.Result["state"].(string); state == "" || state != record.Finish["state"] {
 		return errors.New("runner completion receipt differs")
 	}
 	return os.Remove(file)

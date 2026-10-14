@@ -28,6 +28,10 @@ export function bindings(config) {
       case 'queue': return { name, type: 'queue', queueName: value.name };
       case 'browser': return { name, type: 'browser' };
       case 'ai': return { name, type: 'ai' };
+      // The semantic search index by name; Alchemy creates it (and its repository metadata index) before the Worker binds it.
+      case 'vectorize':
+        if (Object.keys(value).some(key => !['type', 'name'].includes(key)) || typeof value.name !== 'string' || !/^[a-z0-9][a-z0-9-]{1,62}$/.test(value.name)) throw Error('Unqualified Alchemy Vectorize binding');
+        return { name, type: 'vectorize', indexName: value.name };
       case 'analytics-engine-dataset': return { name, type: 'analytics_engine', dataset: value.name };
       case 'rate-limit': return { name, type: 'ratelimit', namespaceId: value.namespace, simple: value.simple };
       case 'secrets-store-secret': return { name, type: 'secrets_store_secret', storeId: value.storeId, secretName: value.secretName };

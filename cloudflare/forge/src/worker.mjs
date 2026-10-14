@@ -5,7 +5,7 @@ import { runMaintenance } from './operations.mjs';
 import { withInstallationPolicy } from './installation.mjs';
 import { publicFetch } from './public.mjs';
 import { DurableObject, WorkflowEntrypoint, WorkerEntrypoint } from 'cloudflare:workers';
-import { handle, serialize, concurrentRead, advanceEvidence, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI } from './core.mjs';
+import { handle, serialize, concurrentRead, advanceEvidence, advanceAi, advanceSearch, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI } from './core.mjs';
 import { consumeEvidence, consumeEvidenceDeadLetters, reconcileEvidence } from './evidence.mjs';
 import { Fault, deny } from './common.mjs';
 import { reconcileIndexes } from './repository-indexes.mjs';
@@ -21,6 +21,7 @@ import { releaseExecutionValues } from './execution-values.mjs';
 import { pipelinePolicy } from './pipeline-policy.mjs';
 import { advanceRunNow, advancePipelineRun } from './pipelines.mjs';
 import { processPipelineIntake, sweepPipelines } from './actions-intake.mjs';
+import { reconcileAi, runAiWorkflow } from './ai-workflow.mjs';
 
 
 const heartbeat = 5 * 60_000;
@@ -31,7 +32,8 @@ export class Workspace extends DurableObject {
     ctx.waitUntil(ctx.storage.getAlarm().then(at => at ?? ctx.storage.setAlarm(Date.now() + heartbeat)));
     const workflows = env.EvidenceWorkflow || ctx.exports.EvidenceWorkflow;
     this.activity = new RepositoryActivity(ctx.storage, (request, input) => this.authority({ activity: true, request, input }));
-    const configured = this.configured = { ...env, previewChanged: id => this.activity.publish(String(id), ['actions', 'pulls']), performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask, pipelineCoordinator: ctx.exports.PipelineRun, notifyPipeline: id => this.activity.publish(String(id), ['actions']) };
+    const configured = this.configured = { ...env, previewChanged: id => this.activity.publish(String(id), ['actions', 'pulls']), performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask, pipelineCoordinator: ctx.exports.PipelineRun, notifyPipeline: id => this.activity.publish(String(id), ['actions']),
+      AiWorkflow: env.AiWorkflow || (env.AI_WORKFLOW_NAME ? ctx.exports.AiWorkflow : undefined) };
     if (env.REGISTRY_PROVIDER === 'cloudflare') {
       configured.registryUploadStore = ctx.storage;
       configured.REGISTRY = managedRegistry(configured, input => registryAuthority(configured, input));
@@ -40,7 +42,7 @@ export class Workspace extends DurableObject {
       const selection = await activitySelection(event);
       let result;
       try {
-        result = await (event instanceof Request ? handle(event, configured) : event.ci ? runCI(configured) : event.preview ? servePreview(configured, event.preview) : event.cleanup ? cleanupPreviews(configured) : event.values ? releaseExecutionValues(configured, event.id, id => advanceEvidence(configured, id, 'authorize-test', workflows)) : event.git
+        result = await (event instanceof Request ? handle(event, configured) : event.ci ? runCI(configured) : event.preview ? servePreview(configured, event.preview) : event.ai ? advanceAi(configured, event.ai, event.phase, event.result) : event.cleanup ? cleanupPreviews(configured) : event.values ? releaseExecutionValues(configured, event.id, id => advanceEvidence(configured, id, 'authorize-test', workflows)) : event.git
           ? event.phase ? agentGit(configured, event.id, event.git, event.phase, workflows) : testGit(configured, event.id, event.git, workflows)
           : event.registry ? testRegistry(configured,event.id,event.registry) : event.notify ? undefined : advanceEvidence(configured, event.id, event.phase, workflows));
         return result;
@@ -82,6 +84,7 @@ export class Workspace extends DurableObject {
     try { await maintain(this.env, this.ctx.exports, this); } catch { /* Each stage's outcome is in the maintenance journal. */ }
   }
   evidence(id, phase) { return this.dispatch({ id, phase }); }
+  ai(id, phase, result) { return this.dispatch({ ai: id, phase, result }); }
   recordPerformance(sample) { this.performance.record(sample); }
   preview(input) { return this.dispatch({ preview: input }); }
   cleanupPreviews() { return this.dispatch({ cleanup: true }); }
@@ -250,6 +253,15 @@ export class EvidenceWorkflow extends WorkflowEntrypoint {
   }
 }
 
+// Workers AI runs: prepare and settle queue in the workspace; inference runs here, outside its write queue.
+export class AiWorkflow extends WorkflowEntrypoint {
+  run(event, step) {
+    const workspace = this.ctx.exports.Workspace;
+    return runAiWorkflow(event, step, { ...this.env, AiWorkflow: this.env.AiWorkflow || (this.env.AI_WORKFLOW_NAME ? this.ctx.exports.AiWorkflow : undefined) },
+      workspace.get(workspace.idFromName(this.env.WORKSPACE_SLUG)), withInstallationPolicy);
+  }
+}
+
 // The same stages run from the Cron Trigger and, when that stops reporting in, from the workspace alarm.
 async function maintain(env, exports, owner) {
     try { await runMaintenance(env, [
@@ -269,9 +281,13 @@ async function maintain(env, exports, owner) {
           if (!exports.PRAgentTask) throw Error('Agent cleanup allocation is missing');
           await exports.PRAgentTask.getByName(job.id).cancel();
         }
-      }); await owner.activityChanged(); return result; }],
-      ['indexes', () => reconcileIndexes(env)],
-      ...(pipelinePolicy(env) ? [['pipelines', async () => sweepPipelines({ ...env, pipelineCoordinator: exports.PipelineRun }, (await import('./core.mjs')).withArtifact, id => advancePipelineRun({ ...env, pipelineCoordinator: exports.PipelineRun }, id))]] : []),
+      }); if (env.EVIDENCE_ALLOW_AI === 'true') Object.assign(result, await reconcileAi(env.DB.withSession('first-primary'))); await owner.activityChanged(); return result; }],
+      // Semantic search and the Actions pipeline sweep share the read-index stage: the maintenance journal only names the four original stages.
+      ['indexes', async () => { const pipelines = pipelinePolicy(env) ? { ...env, pipelineCoordinator: exports.PipelineRun } : null;
+        const settled = await Promise.allSettled([reconcileIndexes(env), env.SEARCH_INDEX ? advanceSearch(env) : { processed: 0 },
+          pipelines ? sweepPipelines(pipelines, (await import('./core.mjs')).withArtifact, id => advancePipelineRun(pipelines, id)).then(r => ({ processed: r.intakes + r.runs })) : { processed: 0 }]);
+        for (const result of settled) if (result.status === 'rejected') throw result.reason;
+        return { ...settled[0].value, processed: settled[1].value.processed + settled[2].value.processed }; }],
 
     ]); } finally { try { await collectWorkerMetrics(env); } finally { await collectServiceHealth(env); } }
 }

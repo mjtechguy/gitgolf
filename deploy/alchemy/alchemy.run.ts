@@ -19,6 +19,8 @@ const name = input.name;
 const evidence = input.settings.evidence;
 // Agent proposals add their own steps to the evidence workflow.
 const agents = input.settings.agent_path !== undefined, steps = agents ? 100 : 87;
+// prepare, infer and settle; the same values are in prepare.mjs.
+const aiSteps = 4, aiConcurrency = 4;
 
 export default Alchemy.Stack('GolfDemo', {
   providers: Layer.mergeAll(Cloudflare.providers(), Command.providers(), workflowSettingsProvider(), previewDomainProvider()),
@@ -39,6 +41,13 @@ export default Alchemy.Stack('GolfDemo', {
   const pipelineBucket = pipelines ? yield* Cloudflare.R2.Bucket('Pipelines', { name: name + '-pipelines', forceDestroy: true, publicAccess: false }) : undefined;
   const pipelineQueue = pipelines ? yield* Cloudflare.Queues.Queue('PipelineQueue', { name: name + '-pipeline-intake' }) : undefined;
   const pipelineDeadLetter = pipelines ? yield* Cloudflare.Queues.Queue('PipelineDeadLetter', { name: name + '-pipeline-intake-failed' }) : undefined;
+  // Semantic search (enable-search): vectors carry only { repository, kind }. The repository metadata index exists before the Worker
+  // binds the index, so no vector is ever inserted unfilterable. A new dimension replaces the index and the Worker rebuilds every repository.
+  const search = input.settings.search ? yield* Cloudflare.Vectorize.Index('SearchIndex', {
+    name: input.settings.search.index, dimensions: input.settings.search.dimensions, metric: 'cosine',
+    description: 'Golf semantic search: ids and repository/kind metadata only' }) : undefined;
+  const searchFilter = search ? yield* Cloudflare.Vectorize.MetadataIndex('SearchRepositoryFilter', {
+    indexName: search.indexName, propertyName: 'repository', indexType: 'string' }) : undefined;
   const dispatch = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace('Applications', { name });
   // Email Service sends only from an onboarded subdomain of this zone; Cloudflare DNS receives its DKIM, SPF and return-path records.
   // No copies of sent messages are kept in the provider's activity log.
@@ -126,9 +135,13 @@ export default Alchemy.Stack('GolfDemo', {
       ...(agents ? { PRAgentTask: Cloudflare.DurableObject('PRAgentTask', { containers: [agent] }) } : {}),
       EvidenceWorkflow: Cloudflare.Workflow('EvidenceWorkflow', { workflowName: name, limits: { steps } }),
       ...(pipelines ? { PipelineRun: Cloudflare.DurableObject('PipelineRun'), ALCHEMY_PIPELINE_DEPENDENCY: Output.all(pipelineBucket!.bucketName, pipelineDeadLetter!.queueName).pipe(Output.map(values => values.join(','))) } : {}),
+      // Workers AI runs: prepare and settle in the workspace, inference in this Workflow (see cloudflare/forge/prepare.mjs).
+      ...(evidence.allow_ai ? { AiWorkflow: Cloudflare.Workflow('AiWorkflow', { workflowName: name + '-ai', limits: { steps: aiSteps } }) } : {}),
       ALCHEMY_OUTBOUND_DEPENDENCY: outbound.workerName,
       // The sender-restricted binding is uploaded only after its sending subdomain exists.
       ...(mail ? { ALCHEMY_MAIL_DEPENDENCY: mail.subdomainId } : {}),
+      // The Vectorize binding is uploaded only after its index and repository filter exist.
+      ...(searchFilter ? { ALCHEMY_SEARCH_DEPENDENCY: searchFilter.indexName } : {}),
     },
   });
   yield* control.bind('native-contract', { bindings: config().pipe(Output.map(bindings)) });
@@ -155,6 +168,8 @@ export default Alchemy.Stack('GolfDemo', {
   });
   const workflow = yield* WorkflowSettings('WorkflowLimits', { accountId: input.account,
     workflowName: control.env.EvidenceWorkflow.workflowName, scriptName: control.workerName, steps });
+  if (evidence.allow_ai) yield* WorkflowSettings('AiWorkflowLimits', { accountId: input.account, className: 'AiWorkflow',
+    workflowName: name + '-ai', scriptName: control.workerName, steps: aiSteps, concurrency: aiConcurrency });
   yield* Command.Exec('Receipt', {
     command: 'python3 scripts/cloudflare_alchemy_demo.py receipt', cwd: root, memo: false,
     env: { GOLF_ALCHEMY_DIRECTORY: directory,
