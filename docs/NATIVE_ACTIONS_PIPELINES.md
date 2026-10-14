@@ -589,5 +589,6 @@ Unit tests: `node --test cloudflare/forge/gitlab-pipeline.test.mjs cloudflare/fo
 evidence-path separation). The evidence coordinator's own real-runner test
 (`GOLF_TEST_GITLAB_RUNNER=<binary> node --test cloudflare/forge/gitlab-runner.test.mjs`) still passes.
 
-Not yet verified: hosted installation, the Actions UI against GitLab runs, a runner inside the cluster (Helm chart),
+Hosted installation, the Actions UI against GitLab runs and stock runners inside a kind cluster were verified on
+2026-10-14 (see IMPLEMENTATION_STATUS). Not yet verified: the Helm chart for runners,
 distributed (S3) runner cache, Windows/macOS runners, schedule triggers.
