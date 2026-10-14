@@ -86,6 +86,8 @@ def renew_deploy(directory, value):
         'Workers Scripts Write', 'Workers R2 Storage Write', 'Workers Containers Write', 'Queues Write',
         'Secrets Store Write', 'Access: Apps and Policies Write',
         'Access: Organizations, Identity Providers, and Groups Write', 'Access: Service Tokens Write'}
+    if value['settings']['evidence'].get('allow_ai'):
+        account_names.add('AI Gateway Write')
     zone_names = {'Zone Read', 'DNS Write', 'Workers Routes Write'}
     policies = []
     for scope, names, resource in [('com.cloudflare.api.account', account_names, value['account']),
@@ -162,6 +164,24 @@ def enable_analytics(directory, value):
     value['settings']['analytics_dataset'] = re.sub('[^A-Za-z0-9_]', '_', value['name'])[:64]
     replace_private_json(directory/'alchemy-input.json', value)
     print('PR evidence metrics prepared; deploy to bind the Analytics Engine dataset. Metrics are sampled, not billing.')
+
+
+def enable_ai(directory, value, agent_path):
+    # One private gateway per installation; the shared build validates the approved agent file.
+    if not re.fullmatch('[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', value['name']):
+        raise ValueError('The installation name cannot name an AI gateway')
+    value['settings']['evidence'].update(allow_ai=True, gateway=value['name'])
+    if agent_path:
+        value['settings']['agent_path'] = agent_path
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Workers AI through a private gateway prepared'+(' with agent proposals for '+agent_path if agent_path else '')
+        +'; run renew-deploy for the gateway permission, then deploy. Inference is billed by Cloudflare.')
+
+
+def enable_dead_letter(directory, value):
+    value['settings']['evidence']['dead_letter'] = value['name']+'-dead'
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Evidence failure retention prepared; deploy to create the dead-letter queue and its consumer.')
 
 
 def enable_webhooks(directory, value, origins):
@@ -333,8 +353,9 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-dead-letter'])
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
+    parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
     parser.add_argument('directory', nargs='?')
     args = parser.parse_args()
     os.umask(0o077)
@@ -347,6 +368,8 @@ def main():
     if args.action == 'enable-observability': return enable_observability(directory, value)
     if args.action == 'enable-analytics': return enable_analytics(directory, value)
     if args.action == 'enable-webhooks': return enable_webhooks(directory, value, args.origin)
+    if args.action == 'enable-ai': return enable_ai(directory, value, args.agent_path)
+    if args.action == 'enable-dead-letter': return enable_dead_letter(directory, value)
     if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)
     if args.action == 'receipt': return receipt(directory, value)

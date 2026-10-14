@@ -16,6 +16,9 @@ const directory = resolve(process.env.GOLF_ALCHEMY_DIRECTORY!);
 const input = JSON.parse(readFileSync(resolve(directory, 'alchemy-input.json'), 'utf8'));
 const root = resolve(import.meta.dirname, '../..');
 const name = input.name;
+const evidence = input.settings.evidence;
+// Agent proposals add their own steps to the evidence workflow.
+const agents = input.settings.agent_path !== undefined, steps = agents ? 100 : 87;
 
 export default Alchemy.Stack('GolfDemo', {
   providers: Layer.mergeAll(Cloudflare.providers(), Command.providers(), workflowSettingsProvider(), previewDomainProvider()),
@@ -24,6 +27,13 @@ export default Alchemy.Stack('GolfDemo', {
   const db = yield* Cloudflare.D1.Database('Database', { name });
   const bucket = yield* Cloudflare.R2.Bucket('Evidence', { name, forceDestroy: true, publicAccess: false });
   const queue = yield* Cloudflare.Queues.Queue('EvidenceQueue', { name });
+  const deadLetter = evidence.dead_letter ? yield* Cloudflare.Queues.Queue('EvidenceDeadLetter', { name: evidence.dead_letter }) : undefined;
+  // AI is an operator decision. The gateway requires authentication, keeps no prompts or responses and caps daily spend.
+  if (evidence.allow_ai) yield* Cloudflare.AI.Gateway('AiGateway', {
+    id: evidence.gateway, authentication: true, collectLogs: false, cacheTtl: null,
+    rateLimitingInterval: 60, rateLimitingLimit: 60, rateLimitingTechnique: 'fixed',
+    spendLimits: { enabled: true, rules: [{ limitType: 'cost', limit: 500, window: '1 day' }] },
+  });
   const dispatch = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace('Applications', { name });
   const machine = yield* Cloudflare.Access.ServiceToken('Operator', { name: name + '-operator', duration: '5h' });
   const idp = yield* Cloudflare.Access.IdentityProvider('Login', { name, type: 'onetimepin', config: {} });
@@ -84,17 +94,22 @@ export default Alchemy.Stack('GolfDemo', {
     publish: { repository: name }, observability: { logs: { enabled: false } },
   });
   const published = yield* agent.Application;
+  const agentContainer = agents ? Cloudflare.Container('agents', {
+    schedulingPolicy: 'durable_object', context: resolve(directory, 'image'),
+    publish: { repository: name }, observability: { logs: { enabled: false } },
+  }) : undefined;
   const control = yield* Cloudflare.Worker('Control', {
     name, main: main(), bundle: false, workersDev: false,
     domain: { name: input.hostname, zoneId: input.zone },
     compatibility: { date: '2026-10-08', flags: ['nodejs_compat'] },
     observability: config().pipe(Output.map(value => value.observability)), limits: { cpuMs: 100 }, crons: ['*/5 * * * *'],
-    entrypoints: { PackagesAuthority: {}, TestOutbound: {}, PreviewBroker: {} },
+    entrypoints: { PackagesAuthority: {}, TestOutbound: {}, PreviewBroker: {}, ...(agentContainer ? { AgentOutbound: {} } : {}) },
     env: {
       Workspace: Cloudflare.DurableObject('Workspace'),
       RepositoryReads: Cloudflare.DurableObject('RepositoryReads'),
       PRTestTask: Cloudflare.DurableObject('PRTestTask', { containers: [agent] }),
-      EvidenceWorkflow: Cloudflare.Workflow('EvidenceWorkflow', { workflowName: name, limits: { steps: 87 } }),
+      ...(agentContainer ? { PRAgentTask: Cloudflare.DurableObject('PRAgentTask', { containers: [agentContainer] }) } : {}),
+      EvidenceWorkflow: Cloudflare.Workflow('EvidenceWorkflow', { workflowName: name, limits: { steps } }),
       ALCHEMY_OUTBOUND_DEPENDENCY: outbound.workerName,
     },
   });
@@ -110,9 +125,14 @@ export default Alchemy.Stack('GolfDemo', {
   const consumer = yield* Cloudflare.Queues.Consumer('EvidenceConsumer', {
     queueId: queue.queueId, scriptName: control.workerName,
     settings: { batchSize: 1, maxConcurrency: 1, maxRetries: 3, maxWaitTimeMs: 1000 },
+    ...(deadLetter ? { deadLetterQueue: deadLetter.queueName } : {}),
+  });
+  if (deadLetter) yield* Cloudflare.Queues.Consumer('EvidenceDeadLetterConsumer', {
+    queueId: deadLetter.queueId, scriptName: control.workerName,
+    settings: { batchSize: 10, maxConcurrency: 1, maxRetries: 10, maxWaitTimeMs: 5000 },
   });
   const workflow = yield* WorkflowSettings('WorkflowLimits', { accountId: input.account,
-    workflowName: control.env.EvidenceWorkflow.workflowName, scriptName: control.workerName });
+    workflowName: control.env.EvidenceWorkflow.workflowName, scriptName: control.workerName, steps });
   yield* Command.Exec('Receipt', {
     command: 'python3 scripts/cloudflare_alchemy_demo.py receipt', cwd: root, memo: false,
     env: { GOLF_ALCHEMY_DIRECTORY: directory,

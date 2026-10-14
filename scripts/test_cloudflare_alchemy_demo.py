@@ -76,6 +76,20 @@ class Observability(unittest.TestCase):
             saved=json.loads((directory/'alchemy-input.json').read_text())['settings']
             self.assertEqual(saved,{'evidence':{'daily_limit':40},'analytics_dataset':'golf_alchemy_20261013_0f2087f8'})
 
+    def test_enabling_ai_names_one_gateway_and_agents_only_on_request(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            value={'name':'golf-alchemy-20261013-0f2087f8','settings':{'evidence':{'daily_limit':40,'allow_ai':False}}}
+            demo.enable_ai(directory,value,None)
+            saved=json.loads((directory/'alchemy-input.json').read_text())['settings']
+            self.assertEqual(saved,{'evidence':{'daily_limit':40,'allow_ai':True,'gateway':'golf-alchemy-20261013-0f2087f8'}})
+            demo.enable_ai(directory,value,'calc.py')
+            demo.enable_dead_letter(directory,value)
+            saved=json.loads((directory/'alchemy-input.json').read_text())['settings']
+            self.assertEqual(saved['agent_path'],'calc.py')
+            self.assertEqual(saved['evidence']['dead_letter'],'golf-alchemy-20261013-0f2087f8-dead')
+            with self.assertRaises(ValueError): demo.enable_ai(directory,{**value,'name':'Bad_Name'},None)
+
     def test_enabling_webhooks_approves_exact_origins_and_keeps_the_first_key(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory=Path(temporary)
