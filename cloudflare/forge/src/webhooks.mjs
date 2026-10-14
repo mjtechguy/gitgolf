@@ -1,4 +1,5 @@
 import { digest, deny, invalid, Fault, page, uuidOK } from './common.mjs';
+import { ownerJoin, ownerSlug } from './owners.mjs';
 
 export const webhookMethods = new Set(['ListRepositoryWebhooks', 'SaveRepositoryWebhook', 'ListRepositoryWebhookDeliveries', 'TestRepositoryWebhook', 'RedeliverRepositoryWebhook']);
 const text = new TextEncoder(), now = () => new Date().toISOString();
@@ -77,7 +78,7 @@ const delivery = d => ({ id: d.id, subscriptionId: d.subscription_id, subscripti
 export async function repositoryWebhooks(db, env, person, row, method, body) {
   if (!webhookPolicy(env)) throw new Fault('failed_precondition', 412, 'Configure an encryption key and approved webhook destinations first.');
   const target = body.target;
-  if (row.role !== 'admin' || target?.repositoryId !== String(row.id) || target.ownerId !== String(row.workspace_id) || target.repository?.owner !== env.WORKSPACE_SLUG || target.repository.name !== row.name) deny();
+  if (row.role !== 'admin' || target?.repositoryId !== String(row.id) || target.ownerId !== String(row.workspace_id) || target.repository?.owner !== ownerSlug(row, env) || target.repository.name !== row.name) deny();
   const guard = actorGuard(person, row), paging = page(body);
   if (method === 'ListRepositoryWebhooks') {
     const { results } = await db.prepare(subscriptionSelect + ' WHERE s.repository_id=? ORDER BY s.id LIMIT ? OFFSET ?').bind(row.id, paging.limit + 1, paging.offset).all();
@@ -147,6 +148,14 @@ export async function repositoryWebhooks(db, env, person, row, method, body) {
   return { target, delivery: delivery(await db.prepare('SELECT * FROM webhook_deliveries WHERE id=?').bind(body.operationId).first()) };
 }
 
+// Slack incoming webhooks refuse any body without their own message fields, so that one host receives a one-line summary of the same event.
+const slackTopics = { source: ['Source changed', ''], issues: ['Issues changed', '/issues'], pulls: ['Pull requests changed', '/pulls'], actions: ['Checks changed', '/actions'], test: ['Webhook test', '/settings/webhooks'] };
+async function slackBody(db, env, d) {
+  const r = await db.prepare(`SELECT r.name,o.slug AS owner_slug FROM repositories r ${ownerJoin} WHERE r.id=?`).bind(d.repository_id).first();
+  const [label, path] = slackTopics[d.event_topic] || ['Repository changed', ''], name = ownerSlug(r, env) + '/' + r.name;
+  return JSON.stringify({ text: `${label} in <${env.PUBLIC_ORIGIN}/${name}${path}|${name}>` });
+}
+
 // shortcut: receipts remain in D1; add archive/idempotency tombstones before sustained high-volume use.
 export async function drainWebhooks(env, options = {}) {
   const policy = webhookPolicy(env);
@@ -175,11 +184,12 @@ export async function drainWebhooks(env, options = {}) {
     try {
       const stamp = String(Math.floor(Date.now()/1000));
       const key = await crypto.subtle.importKey('raw',text.encode(value.signingSecret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
-      const signed = await crypto.subtle.sign('HMAC',key,text.encode(stamp+'\n'+d.event_id+'\n'+d.payload));
+      const body = new URL(value.endpoint).hostname === 'hooks.slack.com' ? await slackBody(db, env, d) : d.payload;
+      const signed = await crypto.subtle.sign('HMAC',key,text.encode(stamp+'\n'+d.event_id+'\n'+body));
       const signature = 'sha256='+[...new Uint8Array(signed)].map(b=>b.toString(16).padStart(2,'0')).join('');
       const beforeSend = await db.prepare(`SELECT d.id FROM webhook_deliveries d JOIN webhook_subscriptions s ON s.id=d.subscription_id WHERE d.id=? AND d.state='sending' AND d.lease=? AND d.lease_until>? AND s.version=d.subscription_version AND s.enabled=1 AND ${sponsorAuthority}`).bind(d.id,lease,now()).first();
       if (!beforeSend) { await db.prepare("UPDATE webhook_deliveries SET state='cancelled',failure_code='authority_changed',completed_at=? WHERE id=? AND lease=? AND state='sending'").bind(now(),d.id,lease).run(); continue; }
-      const response = await (options.fetch || fetch)(value.endpoint,{method:'POST',redirect:'manual',credentials:'omit',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json','User-Agent':'Golf-Webhooks/1','X-Golf-Event-ID':d.event_id,'X-Golf-Delivery-ID':d.id,'X-Golf-Timestamp':stamp,'X-Golf-Signature-256':signature},body:d.payload});
+      const response = await (options.fetch || fetch)(value.endpoint,{method:'POST',redirect:'manual',credentials:'omit',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json','User-Agent':'Golf-Webhooks/1','X-Golf-Event-ID':d.event_id,'X-Golf-Delivery-ID':d.id,'X-Golf-Timestamp':stamp,'X-Golf-Signature-256':signature},body});
       status = response.status;
       const delay = response.headers.get('Retry-After');
       if (delay && /^\d{1,5}$/.test(delay)) retryAfter = Math.min(Number(delay),3600);

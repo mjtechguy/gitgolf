@@ -76,6 +76,21 @@ class Observability(unittest.TestCase):
             saved=json.loads((directory/'alchemy-input.json').read_text())['settings']
             self.assertEqual(saved,{'evidence':{'daily_limit':40},'analytics_dataset':'golf_alchemy_20261013_0f2087f8'})
 
+    def test_enabling_webhooks_approves_exact_origins_and_keeps_the_first_key(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            value={'settings':{'evidence':{'daily_limit':40}}}
+            for refused in ([],['http://hooks.example.com'],['https://hooks.example.com/path'],['https://hooks.example.com:8443']):
+                with self.assertRaises(ValueError): demo.enable_webhooks(directory,value,refused)
+            self.assertFalse((directory/'alchemy-input.json').exists())
+            demo.enable_webhooks(directory,value,['https://hooks.example.com'])
+            key=json.loads((directory/'alchemy-input.json').read_text())['webhookKey']
+            self.assertRegex(key,r'^[A-Za-z0-9+/]{43}=$')
+            demo.enable_webhooks(directory,value,['https://other.example.com','https://hooks.example.com'])
+            saved=json.loads((directory/'alchemy-input.json').read_text())
+            self.assertEqual(saved['webhookKey'],key)
+            self.assertEqual(saved['settings'],{'evidence':{'daily_limit':40},'webhooks':{'origins':['https://hooks.example.com','https://other.example.com'],'dailyLimit':500}})
+
 
 class PublicMigration(unittest.TestCase):
     def test_public_enable_requires_owned_database_and_reviewed_predecessor(self):

@@ -2213,6 +2213,34 @@ test('native webhooks encrypt private values, validate targets and fence stale s
  assert.equal(f.sql.prepare('SELECT version FROM webhook_subscriptions').get().version,2);
 });
 
+test('native webhooks send Slack its own message shape for the same events',async t=>{
+ const f=await webhookFixture(t);f.env.WEBHOOK_POLICY=JSON.stringify({origins:['https://receiver.example.com','https://hooks.slack.com'],dailyLimit:100});
+ const endpoint='https://hooks.slack.com/services/T0000/B0000/placeholder';
+ await f.save({endpoint});const {drainWebhooks}=await import('./src/webhooks.mjs');
+ await f.value(await f.invoke('TestRepositoryWebhook',{subscriptionId:f.draft.id,expectedVersion:'1',operationId:crypto.randomUUID()}));
+ f.sql.prepare("INSERT INTO webhook_deliveries(id,subscription_id,subscription_version,event_id,event_topic,payload,next_attempt_at,created_at) VALUES(?,?,1,'discussion:1','pulls','{\"schema\":\"golf.webhook.v1\"}','2000','2000')").run(crypto.randomUUID(),f.draft.id);
+ const sent=[];
+ await drainWebhooks(f.env,{fetch:async(url,options)=>{
+   assert.equal(url,endpoint);const {createHmac}=await import('node:crypto');
+   assert.equal(options.headers['X-Golf-Signature-256'],'sha256='+createHmac('sha256',f.draft.signingSecret).update(options.headers['X-Golf-Timestamp']+'\n'+options.headers['X-Golf-Event-ID']+'\n'+options.body).digest('hex'));
+   sent.push(JSON.parse(options.body));return new Response('ok');
+ }});
+ const page=f.env.PUBLIC_ORIGIN+'/alice/project';
+ assert.deepEqual(sent.sort((a,b)=>a.text.localeCompare(b.text)),[{text:`Pull requests changed in <${page}/pulls|alice/project>`},{text:`Webhook test in <${page}/settings/webhooks|alice/project>`}]);
+});
+
+test('native webhooks follow a repository to its named owner',async t=>{
+ const f=await webhookFixture(t);
+ assert.equal((await f.call('',{action:'ensurePersonal',userId:'1',expectedLogin:'alice',login:'mj'},ownerToken,'/native/owners')).status,200);
+ const repository={owner:'mj',name:'project'};
+ const access=(await (await f.call('GetRepositoryAccess',{repository},ownerToken,'/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess')).json()).access;
+ const target={repository,repositoryId:access.repositoryId,ownerId:access.ownerId};
+ const call=(method,body)=>f.call(method,{target,...body},ownerToken,'/rpc/golf.v1.RepositoryWebhookService/'+method);
+ assert.equal((await f.invoke('ListRepositoryWebhooks',{})).status,404);
+ assert.equal((await f.value(await call('SaveRepositoryWebhook',f.draft))).subscription.authorizationState,'authorized');
+ assert.equal((await f.value(await call('ListRepositoryWebhooks',{}))).subscriptions.length,1);
+});
+
 test('native signed webhook tests retain original operations and never leak receiver bodies',async t=>{
  const f=await webhookFixture(t);await f.save();const {drainWebhooks}=await import('./src/webhooks.mjs');
  const input={subscriptionId:f.draft.id,expectedVersion:'1',operationId:crypto.randomUUID()};

@@ -455,6 +455,14 @@ They carry identifiers/topics rather than private source or discussion bodies.
 Read the current authorized API state when detailed data is needed. This starts
 with new events after installation; existing history is not backfilled.
 
+Slack incoming webhooks refuse any body without their own message fields. When
+`https://hooks.slack.com` is an approved origin, deliveries to that host carry a
+one-line `text` summary instead of the `golf.webhook.v1` document: what changed,
+the repository's name and a link to the matching page. That discloses the
+repository name to the Slack workspace; nothing else is added. The signature
+headers are still sent and cover the body as delivered. Every other destination
+receives the unchanged Golf payload. Portable Golf has no such adapter.
+
 Delivery runs after mutations and on the existing maintenance schedule (one minute
 is installed when no schedule exists). D1 leases coordinate parallel drains;
 work is limited to eight deliveries per drain, six attempts per delivery, ten
