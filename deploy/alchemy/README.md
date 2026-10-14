@@ -216,7 +216,8 @@ cents a day. Inference is billed by Cloudflare. `renew-deploy` is needed once
 because the deployment token gains `AI Gateway Write` only when AI is enabled.
 `--agent-path` names the one source file agents may change, for the whole
 installation; without it only review advice uses AI. It adds a second container
-application, the `PRAgentTask` Durable Object and the `AgentOutbound` export,
+application running the same image, the `PRAgentTask` Durable Object and the
+`AgentOutbound` export,
 and raises the evidence workflow to 100 steps. The approved test image must
 contain the maintained OpenCode controller. Alchemy beta.83 cannot create a
 container application for a Durable Object class in the same run that creates

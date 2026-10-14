@@ -94,21 +94,18 @@ export default Alchemy.Stack('GolfDemo', {
     publish: { repository: name }, observability: { logs: { enabled: false } },
   });
   const published = yield* agent.Application;
-  const agentContainer = agents ? Cloudflare.Container('agents', {
-    schedulingPolicy: 'durable_object', context: resolve(directory, 'image'),
-    publish: { repository: name }, observability: { logs: { enabled: false } },
-  }) : undefined;
   const control = yield* Cloudflare.Worker('Control', {
     name, main: main(), bundle: false, workersDev: false,
     domain: { name: input.hostname, zoneId: input.zone },
     compatibility: { date: '2026-10-08', flags: ['nodejs_compat'] },
     observability: config().pipe(Output.map(value => value.observability)), limits: { cpuMs: 100 }, crons: ['*/5 * * * *'],
-    entrypoints: { PackagesAuthority: {}, TestOutbound: {}, PreviewBroker: {}, ...(agentContainer ? { AgentOutbound: {} } : {}) },
+    entrypoints: { PackagesAuthority: {}, TestOutbound: {}, PreviewBroker: {}, ...(agents ? { AgentOutbound: {} } : {}) },
     env: {
       Workspace: Cloudflare.DurableObject('Workspace'),
       RepositoryReads: Cloudflare.DurableObject('RepositoryReads'),
       PRTestTask: Cloudflare.DurableObject('PRTestTask', { containers: [agent] }),
-      ...(agentContainer ? { PRAgentTask: Cloudflare.DurableObject('PRAgentTask', { containers: [agentContainer] }) } : {}),
+      // Both task classes start the image under the key `agent`, so they share one container definition.
+      ...(agents ? { PRAgentTask: Cloudflare.DurableObject('PRAgentTask', { containers: [agent] }) } : {}),
       EvidenceWorkflow: Cloudflare.Workflow('EvidenceWorkflow', { workflowName: name, limits: { steps } }),
       ALCHEMY_OUTBOUND_DEPENDENCY: outbound.workerName,
     },
