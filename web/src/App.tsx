@@ -18,7 +18,7 @@ import { clearOtherAccessIntents } from './accessIntents';
 import { clearOtherRuleIntents } from './ruleIntents';
 import { Breadcrumbs } from './Breadcrumbs';
 import { useRuntimeCapabilities } from './useRuntimeCapabilities';
-import { runtimeFeature, settingAvailable, settingForRoute } from './runtimeCapabilities';
+import { runtimeFeature, settingAvailable, settingForRoute, emailNotificationsMounted } from './runtimeCapabilities';
 import { useForm, useStore } from '@tanstack/react-form';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -339,7 +339,9 @@ function Workspace({ user, location, onSessionEnd }: { user: User; location: Loc
   // Repository runners are portable pools, or on the native runtime the workspace's own runner pools.
   const repositorySetting = location.kind === 'repository-runners' ? native ? 'settings.native-runners' : 'settings.runners' : settingForRoute(location.kind, undefined, true);
   const repositorySettingsPage = location.kind.startsWith('repository-') && repositorySetting;
-  const runtimeBlocked = repositorySettingsPage ? !runtimeFeature(manifest, repositorySetting) || repositorySetting === 'settings.runners' && !settingAvailable(manifest, repositorySetting) : requiredSetting && !settingAvailable(manifest, requiredSetting);
+  // Own repository email shares the Webhooks page, so on the native runtime either capability opens it.
+  const emailPage = native && location.kind === 'repository-webhooks' && emailNotificationsMounted(manifest);
+  const runtimeBlocked = !emailPage && (repositorySettingsPage ? !runtimeFeature(manifest, repositorySetting) || repositorySetting === 'settings.runners' && !settingAvailable(manifest, repositorySetting) : requiredSetting && !settingAvailable(manifest, requiredSetting));
   const unavailableSetting = manifest?.capabilities.find(item => item.id === (repositorySettingsPage ? repositorySetting : requiredSetting));
   const hash = useLocation({ select: (current) => current.hash });
   const client = useQueryClient();

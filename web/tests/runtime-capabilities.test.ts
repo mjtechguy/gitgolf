@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runtimeLabel, runtimeFeature, settingAvailable, settingForRoute, type RuntimeManifest } from '../src/runtimeCapabilities.ts';
+import { runtimeLabel, runtimeFeature, settingAvailable, settingForRoute, emailNotificationsMounted, type RuntimeManifest } from '../src/runtimeCapabilities.ts';
 
 test('deployment labels do not imply adapters or grant settings authority', () => {
   for (const runtimeProfile of ['portable', 'local', 'docker', 'kubernetes', 'cloudflare-bridge', 'cloudflare-native']) {
@@ -25,6 +25,18 @@ test('direct settings URLs use the same capability contract as menus', () => {
   assert.equal(settingAvailable(native, settingForRoute('instance-settings', 'infrastructure')!), false);
   native.capabilities[0]!.state = 'CAPABILITY_STATE_DEGRADED';
   assert.equal(settingAvailable(native, 'settings.native'), false);
+});
+
+test('native email mounts while configured or ready, never when disabled or unreported', () => {
+  const native = (state: number | string) => ({ runtimeProfile: 'cloudflare-native', capabilities: [{ id: 'repository.email-notifications', state, reason: '' }] });
+  for (const state of [3, 4, 'CAPABILITY_STATE_READY', 'CAPABILITY_STATE_DEGRADED']) assert.equal(emailNotificationsMounted(native(state)), true, String(state));
+  for (const state of [0, 1, 2, 'CAPABILITY_STATE_DISABLED', 'CAPABILITY_STATE_UNCONFIGURED', 'CAPABILITY_STATE_UNSPECIFIED']) assert.equal(emailNotificationsMounted(native(state)), false, String(state));
+  assert.equal(emailNotificationsMounted({ runtimeProfile: 'cloudflare-native', capabilities: [] }), false);
+  assert.equal(emailNotificationsMounted({ runtimeProfile: 'cloudflare-native', capabilities: [{ id: 'settings.repository-webhooks', state: 3, reason: '' }] }), false);
+  assert.equal(emailNotificationsMounted(undefined), false);
+  assert.equal(emailNotificationsMounted({ runtimeProfile: 'docker', capabilities: [] }), true);
+  // Degraded stays unavailable everywhere else.
+  assert.equal(settingAvailable(native(4), 'repository.email-notifications'), false);
 });
 
 test('native feature mounts and direct settings routes require reported support', () => {
