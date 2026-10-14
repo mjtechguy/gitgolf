@@ -3565,6 +3565,15 @@ test('public Git preserves v2 fetch negotiation and remaps ls-refs HEAD to the c
   const listed=await send(packets(['command=ls-refs\n']));assert.equal(listed.status,200);assert.match(await listed.text(),/symref-target:refs\/heads\/main/);
   assert.deepEqual(Buffer.from(await (await send(packets(['command=fetch\n']))).arrayBuffer()),fetchBytes);
   assert.equal(forwards,3);assert.equal(f.tokens.size,0);
+  // Git gzips a request above about 1 KiB (a fetch with many wants): it is decompressed and forwarded as plain bytes, still bounded.
+  const gz=async bytes=>new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+  const encoded=(body,encoding)=>handle(new Request(f.env.PUBLIC_ORIGIN+'/git/alice/project.git/git-upload-pack',{method:'POST',headers:{'Git-Protocol':'version=2','Content-Type':'application/x-git-upload-pack-request','Content-Encoding':encoding},body}),f.env,provider);
+  assert.deepEqual(Buffer.from(await (await encoded(await gz(packets(['command=fetch\n'])),'gzip')).arrayBuffer()),fetchBytes);
+  assert.equal(forwards,4);
+  assert.equal((await encoded(new Uint8Array([1,2,3,4]),'gzip')).status,400);
+  assert.equal((await encoded(packets(['command=fetch\n']),'br')).status,400);
+  assert.equal((await encoded(await gz(new Uint8Array(9*1024*1024)),'gzip')).status,413);
+  assert.equal(forwards,4);assert.equal(f.tokens.size,0);
 });
 
 async function environmentFixture(t) {
