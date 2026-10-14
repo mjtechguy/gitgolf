@@ -19,6 +19,8 @@ const access = await esbuild.build({ entryPoints: ['cloudflare/forge/src/access.
 modules.push({ type: 'ESModule', path: 'forge/src/access.mjs', contents: access.outputFiles[0].text });
 const nativeWorkflow = await esbuild.build({ entryPoints: ['cloudflare/forge/src/native-workflow.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./git.mjs'] });
 modules.push({ type: 'ESModule', path: 'forge/src/native-workflow.mjs', contents: nativeWorkflow.outputFiles[0].text });
+const issueTemplates = await esbuild.build({ entryPoints: ['cloudflare/forge/src/issue-templates.mjs'], bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['./common.mjs', './git.mjs'] });
+modules.push({ type: 'ESModule', path: 'forge/src/issue-templates.mjs', contents: issueTemplates.outputFiles[0].text });
 modules.push({ type: 'ESModule', path: 'forge/data/languages.mjs', contents: 'export default ' + await readFile(new URL('./data/languages.json', import.meta.url), 'utf8') });
 modules.push({ type: 'ESModule', path: 'agents/src/policy.mjs', contents: await readFile(new URL('../agents/src/policy.mjs', import.meta.url), 'utf8') });
 let webhookRequests = 0;

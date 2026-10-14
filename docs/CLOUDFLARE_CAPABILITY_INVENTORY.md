@@ -54,7 +54,7 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | RepositoryDeploymentService | 0 | 7 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryRefMutationService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
 | RepositoryFileMutationService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
-| DiscussionCollaborationService | 3 | 1 | Current-authority reactions, own subscriptions and in-app inbox; transaction-bound timeline since schema14. Historical activity is not backfilled; templates and email remain separate. |
+| DiscussionCollaborationService | 4 | 0 | Current-authority reactions, own subscriptions and in-app inbox; transaction-bound timeline since schema14. Historical activity is not backfilled. Issue templates and forms are read from the default-branch head with the portable limits; email remains separate. |
 | RepositoryReleaseManagementService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
 | PullReviewRequestService | 8 | 3 | Human account review assignments, cancellation and admin dismissal/restoration with original receipts. Current direct grants and exact-base GitHub-format CODEOWNERS suggestions; no team assignments, inline comments, automatic routing or protected approval authority. |
 | RepositoryMirrorService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
@@ -323,7 +323,7 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | DiscussionCollaborationService/GetDiscussionEngagement | golf.proto | Bounded adapter |
 | DiscussionCollaborationService/ListDiscussionTimeline | golf.proto | Bounded adapter |
 | DiscussionCollaborationService/ListOwnForgeNotifications | golf.proto | Bounded adapter |
-| DiscussionCollaborationService/ListIssueTemplates | golf.proto | Missing native adapter |
+| DiscussionCollaborationService/ListIssueTemplates | golf.proto | Bounded adapter |
 | RepositoryReleaseManagementService/SubmitRepositoryReleaseOperation | golf.proto | Missing native adapter |
 | RepositoryReleaseManagementService/GetRepositoryReleaseOperation | golf.proto | Missing native adapter |
 | PullReviewRequestService/GetPullReviewLifecycleState | golf.proto | Bounded adapter |

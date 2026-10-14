@@ -10,6 +10,7 @@ import { gitCredentialActor, confirmGitCredential, gitCredentialSQL, gitCredenti
 import { repositoryRules, enforceGitRules, ruleMethods } from './repository-rules.mjs';
 import { repositoryWebhooks, webhookPolicy } from './webhooks.mjs';
 import { engagement, engagementMethods } from './discussion-engagement.mjs';
+import { issueTemplates } from './issue-templates.mjs';
 import { resourceMethods, discussionResources, resourceOperation } from './discussion-resources.mjs';
 import { invitations, ownInvitationMethods } from './invitations.mjs';
 import { operationsAdmin, operationsDashboard } from './operations.mjs';
@@ -67,6 +68,7 @@ export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
   if (['/native/pr-evidence/read', '/native/pr-preview/read'].includes(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
+  if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
@@ -475,7 +477,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
         ['settings.repository-lifecycle', 'Archive, transfer and deletion'],
         ['settings.repository-agents', 'Agent policy editor'],
         ['repository.source-write', 'Browser file editing'], ['pull.advanced-reviews', 'Inline and pending reviews'],
-        ['discussion.attachments', 'Discussion attachments'], ['discussion.templates', 'Issue templates'],
+        ['discussion.attachments', 'Discussion attachments'],
         ['repository.releases', 'Releases'], ['repository.wiki', 'Wiki workspace'],
       ].map(([id, label, reason]) => ({ id, label, state: 'CAPABILITY_STATE_DISABLED', reason: reason || 'This feature is not available in the Cloudflare-native installation yet.' })),
       { id: 'settings.repository-workflows', label: 'Workflows', state: 'CAPABILITY_STATE_READY', reason: workflowCapability(env, Boolean(testPolicy(env)) && evidencePolicy(env)) },
@@ -484,6 +486,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'settings.native-runners', label: 'Customer-hosted native runners', state: 'CAPABILITY_STATE_READY', reason: 'Workspace administrators can enroll outbound machines and manage native pools. Repository administrators select an untrusted pool for approved PR jobs.' },
       ...[['settings.infrastructure', 'Portable database and storage profiles'], ['settings.runners', 'Portable runner pools'], ['settings.local-auth', 'Golf passwords, MFA and SSH keys'], ['settings.notifications', 'Portable SMTP settings'], ['settings.cloudflare-resources', 'Origin bridge resource allocation']].map(([id, label]) => ({ id, label, state: 'CAPABILITY_STATE_DISABLED', reason: 'This editor belongs to the portable/origin installation. Cloudflare native uses its separate identity, binding and allocation setup.' })),
       { id: 'discussion.activity', label: 'Discussion activity, reactions and inbox', state: 'CAPABILITY_STATE_READY', reason: 'Native reactions, subscriptions, permission-filtered inbox and activity recorded since schema14. In-app notifications; email and issue templates are separate.' },
+      { id: 'discussion.templates', label: 'Issue templates', state: 'CAPABILITY_STATE_READY', reason: 'Markdown and YAML issue forms read from the default branch. At most 50 templates of 6,000 bytes; unsupported or oversized templates are counted, not rendered.' },
       { id: 'discussion.comments', label: 'Comment editing', state: 'CAPABILITY_STATE_READY', reason: 'Authors and current administrators can edit or delete an exact discussion comment; atomic original receipts and revision checks.' },
       { id: 'discussion.resources', label: 'Labels, milestones and assignees', state: 'CAPABILITY_STATE_READY', reason: 'Repository resources and issue/PR assignment with version-fenced D1 writes and original receipts. Organization labels remain separate.' },
       { id: 'pull.pending-reviews', label: 'Pending review summaries', state: env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Requires verified human Access identity. Private own-account pending summaries, editing, exact-source publication and discard. Inline and saved-diff drafts remain separate.' },
@@ -525,6 +528,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       ? await withOwner(db,await operationRepository(db, person, body.idempotencyKey))
       : await env.timings.measure('grant', () => authorizedRepository(db, person, body.repository || body.selection?.repository || body.target?.repository, env, body.repositoryId || body.selection?.repositoryId || body.target?.repositoryId));
     env.readAuthority = { repository: { owner: ownerSlug(row,env), name: row.name }, repositoryId: String(row.id), role: row.role };
+    if (service === 'DiscussionCollaborationService' && method === 'ListIssueTemplates') return reply(await issueTemplates(row, body, action => withArtifact(env, row, action, true), readTree));
     if (service === 'DiscussionCollaborationService' && engagementMethods.has(method)) return reply(await engagement(db, env, person, row, method, body));
     if (service === 'RepositorySettingsService') return reply(await repositorySettings(db, env, person, row, method, body, action=>withArtifact(env,row,action)));
     if (service === 'RepositoryInvitationService') return reply(await invitations(db, env, person, row, method, body, request));
