@@ -1,5 +1,65 @@
 # Alchemy deployment of the retained Golf demo
 
+## One command
+
+From a fresh clone, with Node 24, Docker, Python 3, Git and `cf` 1.0.0-beta.13
+installed and a signed-in `cf` profile (`cf auth create golf`):
+
+```sh
+python3 scripts/golf_cloudflare.py doctor --fix --remote   # or: make cloudflare-doctor ARGS='--fix --remote'
+python3 scripts/golf_cloudflare.py install                 # or: make cloudflare-install
+```
+
+`doctor` checks the local tools (Node 24, `cf` exactly 1.0.0-beta.13, Docker with
+BuildKit and linux/amd64 builds, Python, Git, Go per `go.mod`, the locked npm
+dependencies, the `cf` profile, no ambient `CLOUDFLARE_API_TOKEN`/`CF_API_TOKEN`)
+and prints a fix for each failure; `--fix` runs the missing `npm ci`. `--remote`
+adds read-only (GET) account checks: sign-in, Workers Paid subscription, Zero
+Trust organization, Secrets Store and, with `--hostname`, that its zone is active.
+The workers.dev subdomain and Artifacts access cannot be read with this CLI and
+are reported as not checked.
+
+`install` reads, without changing anything, the account (the profile's only one,
+or a numbered choice), the zone containing your hostname, an existing Secrets
+Store and the Access team domain. It asks only for the hostname, the preview
+hostname (default `previews-HOSTNAME`, in the same zone), the administrator
+email, the content (example manifest, none or your own path) and optional
+services. It prints a summary and asks before any change, then runs: `npm ci`
+where missing, `build-image`, `init`, `plan`, `deploy`, `seed`; for each chosen
+service its sequence (`migrate` when the service needs new tables, `enable-*`,
+`renew-deploy` when the deployment token needs a new permission, `deploy`, and
+`seed-public` for public content); then it verifies the receipt and that the
+hostname redirects to Cloudflare Access, and prints the sign-in URL. A deploy that
+stops with `requires a resolved Durable Object namespace` or `WorkflowNotFound`
+is repeated once. A deployment token older than 7.5 hours or a machine
+credential older than 4.5 hours is renewed before the step that needs it.
+
+Unattended, every value as flags:
+
+```sh
+python3 scripts/golf_cloudflare.py install --yes \
+  --hostname golf.example.com --email you@example.com --content example \
+  --with ai,search,public,observability   # or --all (webhooks also needs --webhook-origin)
+```
+
+Services: `observability`, `analytics`, `dead-letter`, `operations`, `ai`,
+`search` (adds `ai`), `email`, `pipelines`, `webhooks`, `public`, `rate-limit`.
+Progress is saved in the private directory (`install-progress.json`). After a
+failure, fix the cause and continue from the failed step:
+
+```sh
+python3 scripts/golf_cloudflare.py install --resume .tmp/cloudflare-forge/golf-alchemy-...
+python3 scripts/golf_cloudflare.py status  DIR               # offline: steps, receipt, token ages, schema
+python3 scripts/golf_cloudflare.py update  DIR [--with email] # plan, migrate if needed, deploy, add services
+python3 scripts/golf_cloudflare.py destroy DIR               # asks you to type the installation name
+```
+
+The command only sequences the actions documented below; every Cloudflare
+change is made by `cloudflare_alchemy_demo.py`. It has been tested locally
+with a mocked `cf` and mocked actions; it has not yet been run against an
+account. Provider tokens still expire after seven days (`renew-credentials`,
+then `update`).
+
 This parallel deployment path keeps the Python/`cf` installer available. Alchemy
 owns the Cloudflare infrastructure; it uses the same native Worker build, Flare
 UI, approved Python CI image and explicit [content manifests](../demo/README.md#content-manifests).

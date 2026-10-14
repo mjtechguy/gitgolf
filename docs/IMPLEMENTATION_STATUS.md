@@ -1,5 +1,31 @@
 # Golf implementation status
 
+## 2026-10-14 — One-command Cloudflare deploy (`golf_cloudflare.py`)
+
+`scripts/golf_cloudflare.py` (and `make cloudflare-doctor`/`cloudflare-install`)
+wraps the Alchemy path without new provider logic:
+- `doctor` checks local prerequisites with fixes (`--fix` runs missing `npm ci`)
+  and, with `--remote`, read-only account checks (sign-in, Workers Paid,
+  Zero Trust organization, zone status, Secrets Store). workers.dev subdomain and
+  Artifacts access are reported as not checked (no read command in `cf` beta.13).
+- `install` discovers the account, zone, Secrets Store and Access team domain with
+  read-only `cf` calls, asks only for hostnames, email, content and optional
+  services (or takes flags with `--yes`), confirms, then runs build-image → init →
+  plan → deploy → seed → each service's sequence → verify. Known first-deploy
+  errors are retried once; progress is saved privately so `--resume DIR`
+  continues from the failed step.
+- `status` (offline), `update` (plan → migrate when pending → deploy, `--with`
+  adds services) and `destroy` (typed confirmation; delegates to the wrapper).
+
+Verified locally: 32 unit tests with a mocked `cf`, mocked actions and a mocked
+HTTP probe (discovery, non-interactive and scripted interactive prompts, step
+sequence per service, resume, retry on the known errors, token freshness, verify,
+update and destroy), `--help` of each subcommand, and `doctor` on a development
+machine. Not yet run against a Cloudflare account: discovery output shapes of
+`cf auth whoami`, `zones list`, `accounts subscriptions get` and
+`secrets-store stores list` are assumed from the CLI's API mapping, and the
+end-to-end install has not been exercised.
+
 ## 2026-10-14 — Cloudflare deploy paths without owner defaults
 
 Both retained-installation paths now take every owner-specific value as input

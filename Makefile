@@ -102,6 +102,13 @@ engine-check:
 compatibility-check:
 	python3 scripts/compatibility/inventory.py --check
 	python3 -m unittest discover -s scripts/compatibility -p 'test_*.py'
+.PHONY: cloudflare-doctor cloudflare-install
+# One-command Cloudflare deploy (deploy/alchemy/README.md). Pass flags with ARGS, e.g.
+# make cloudflare-install ARGS='--yes --hostname golf.example.com --email you@example.com --content example'
+cloudflare-doctor:
+	python3 scripts/golf_cloudflare.py doctor $(ARGS)
+cloudflare-install:
+	python3 scripts/golf_cloudflare.py install $(ARGS)
 .PHONY: cloudflare-check
 cloudflare-check:
 	node cloudflare/forge/capabilities-check.mjs
@@ -124,6 +131,7 @@ cloudflare-check:
 	python3 -m unittest discover -s scripts -p 'test_cloudflare_forge.py'
 	python3 -m unittest discover -s scripts -p 'test_cloudflare_demo.py'
 	python3 -m unittest discover -s scripts -p 'test_cloudflare_release.py'
+	python3 -m unittest discover -s scripts -p 'test_golf_cloudflare.py'
 	go test -race ./internal/cli -count=1
 	go test -race ./internal/cloudflare ./cmd/golf -run 'TestInspectionBoundary|TestManagementInspectionBoundary|TestResourceClientBoundary|TestProfileInspectionBoundary|TestCloudflareCommand' -count=1
 	node --check cloudflare/previews/prepare.mjs
