@@ -32,7 +32,7 @@ async function backend(page: Page, native = false, engagement = false) {
     canEditAssignees: false, assignees: [create(UserSchema,{id:'9007199254740993',login:'PRIVATE_ASSIGNEE_A',fullName:'Alex Reviewer'}),create(UserSchema,{id:'12',login:'PRIVATE_ASSIGNEE_B'})], assigneeReads: 0, assigneeWait: undefined as Promise<void> | undefined,
     canEditLabels: false, labels: [create(DiscussionLabelSchema,{id:"9",name:"PRIVATE_LABEL_A",color:"aabbcc"}),create(DiscussionLabelSchema,{id:"12",name:"PRIVATE_LABEL_B",color:"aaff00"})], labelPages: [] as number[], labelMore: false,
     canEditMilestone: false, milestones: [create(DiscussionMilestoneSchema, { id:'51', title:'PRIVATE_MILESTONE_A', state:IssueState.OPEN }), create(DiscussionMilestoneSchema, { id:'52', title:'PRIVATE_MILESTONE_B', state:IssueState.CLOSED })], milestonePages: [] as number[], milestoneMore:false,
-    methods: [] as string[], reaction:false,subscribed:false,engagementReads:0,canEngage:true,notificationUnread:true,templateEnabled:false,yamlTemplate:false,
+    methods: [] as string[], reaction:false,subscribed:false,engagementReads:0,canEngage:true,notificationUnread:true,templateEnabled:false,yamlTemplate:false,nativeTemplates:false,
     canManage: false, resourceUnknown:false, resourceRequests: [] as SubmitDiscussionResourceOperationRequest[], resourceRecords:new Map<string,DiscussionResourceOperation>(), resourceInspections:[] as string[],
     records: new Map<string, IssueMutation>(), errors: {} as Record<string, Failure>, barrier: undefined as Promise<void> | undefined,
   };
@@ -46,7 +46,7 @@ async function backend(page: Page, native = false, engagement = false) {
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Sign in required.');
     if (method === 'GetRepositoryStar') return reject(route, 'unimplemented', 'Stars are outside this issue fixture.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
-    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, native ? {runtimeProfile:'cloudflare-native',capabilities:[{id:'discussion.resources',state:3},{id:'discussion.comments',state:3},...(engagement?[{id:'discussion.activity',state:3}]:[])]} : portableRuntimeFixture);
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, native ? {runtimeProfile:'cloudflare-native',capabilities:[{id:'discussion.resources',state:3},{id:'discussion.comments',state:3},...(engagement?[{id:'discussion.activity',state:3}]:[]),...(state.nativeTemplates?[{id:'discussion.templates',state:3}]:[])]} : portableRuntimeFixture);
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { ...repository, id: state.repoId } });
     if (method === 'ListRepositoryAssignees') {
@@ -875,3 +875,10 @@ test('native comment editing is enabled independently of reactions and notificat
  await expect(page.getByRole('heading',{name:'Create an issue',exact:true})).toBeVisible();
  expect(state.methods).not.toContain('ListIssueTemplates');
  });
+
+test('native issue templates mount the chooser only when the installation reports them',async({page})=>{
+ const state=await backend(page,true);state.nativeTemplates=true;state.templateEnabled=true;await page.goto('/alex/project/issues/new');
+ await page.getByText('Issue templates',{exact:true}).click();await expect(page.getByText('From the default branch at',{exact:false})).toContainText('aaaaaaaaaaaa');
+ await page.getByRole('button',{name:'Use template'}).click();await expect(page.getByLabel('Issue title')).toHaveValue('[Bug]');
+ await expect(page.getByLabel('Description, plain text',{exact:true})).toHaveValue('## Steps\n');expect(state.methods).toContain('ListIssueTemplates');
+});

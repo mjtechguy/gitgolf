@@ -31,3 +31,13 @@ test('the native build keeps credentials as secret references and restricts app 
   ]);
   assert.throws(() => bindings({ env: { FUTURE: { type: 'unknown' } } }), /Unqualified/);
 });
+
+test('the anonymous read limiter keeps its namespace, limit and period', () => {
+  assert.deepEqual(bindings({ env: {
+    ANONYMOUS_READS: { type: 'rate-limit', namespace: '1001', simple: { limit: 300, period: 60 } },
+    ANONYMOUS_READ_LIMIT: { type: 'text', value: '300/60' },
+  } }), [
+    { name: 'ANONYMOUS_READS', type: 'ratelimit', namespaceId: '1001', simple: { limit: 300, period: 60 } },
+    { name: 'ANONYMOUS_READ_LIMIT', type: 'plain_text', text: '300/60' },
+  ]);
+});

@@ -1,7 +1,7 @@
 import { ownerSlug } from './owners.mjs';
 import { digest, deny, invalid, Fault, page, user } from './common.mjs';
 
-export const engagementMethods = new Set(['GetDiscussionEngagement', 'ListDiscussionTimeline', 'ListOwnForgeNotifications']);
+export const engagementMethods = new Set(['GetDiscussionEngagement', 'ListDiscussionTimeline', 'ListOwnForgeNotifications', 'ListIssueTemplates']);
 const contents = ['+1', '-1', 'laugh', 'hooray', 'confused', 'heart', 'rocket', 'eyes'];
 const idOK = v => typeof v === 'string' && /^[1-9][0-9]{0,15}$/.test(v) && Number.isSafeInteger(Number(v));
 

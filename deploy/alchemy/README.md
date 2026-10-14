@@ -155,6 +155,24 @@ and previews retain existing grants. The Python/`cf` release path supports schem
 needs its owned Access application's domain changed to `HOST/auth/login` with
 `pathCookieAttribute=false`. Never have both deployers manage the same resources.
 
+Throttle anonymous readers so a burst of public reads or clones does not fill the
+single workspace queue:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-rate-limit NEW_DIRECTORY --limit 300 --period 60
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+The Workers rate limiting binding counts requests that present no credential and
+match the public read contract (source RPCs, discovery, profiles and HTTPS clone)
+for each client network (an IPv4 address or an IPv6 /64) at each Cloudflare
+location. Counts are approximate: this is a throttle, not a quota. Over the limit
+the Worker answers 429 with `Retry-After` before the request reaches the
+workspace. Signed-in sessions, Git or API credentials and runner routes are never
+counted, including invalid credentials, which authentication refuses instead.
+Operations lists the installed limit. The period is 10 or 60 seconds and the
+limit 10 to 10,000. Not yet exercised on a hosted installation.
+
 Profile README content is edited in Golf, not synchronized from a special Git
 repository. Pins are limited to six currently public repositories owned by that
 profile. Search covers names, descriptions and topics, not file contents.
