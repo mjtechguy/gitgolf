@@ -31,7 +31,7 @@ async function fixture(page: Page, profile = 'docker') {
       repositoryId: repository.id, ownerId: user.id, description: 'PRIVATE route settings', defaultBranch: 'main', canEdit: true, revision: 'a'.repeat(64), generalEditImplemented:true, issuesMode:RepositoryFeatureMode.INTERNAL, wikiMode:RepositoryFeatureMode.DISABLED, hasIssues: true, hasPullRequests: true,
     } });
     if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: {
-      repositoryId: repository.id, ownerId: user.id, owner: user, canManage: true, currentPermission: 'admin', revision: 'access-v1',
+      repositoryId: repository.id, ownerId: user.id, owner: user, canManage: true, currentPermission: 'admin', revision: 'a'.repeat(64),
     } });
     if (method === 'ListRepositoryCollaborators') return respond(route, ListRepositoryCollaboratorsResponseSchema, {});
     if (method === 'InspectWorkflows') return respond(route, InspectWorkflowsResponseSchema, { repositoryId:repository.id, commitId: snapshot, catalogVersion: 'routing-fixture' });
@@ -325,6 +325,22 @@ test('native settings wait for capabilities, retain navigation on failure and re
 });
 
 
+test('native runner chooser stays open while repository access and placement revalidate', async ({page}) => {
+  const state = await fixture(page, 'cloudflare-native');
+  state.nativeCapabilities.push({id:'settings.native-runners',label:'Customer-hosted native runners',state:3,reason:'Available'});
+  let reads = 0;
+  await page.route('**/native/runner-placement', route => { reads++; return route.fulfill({status:200, contentType:'application/json', json:{placement:{repository_id:19,pool_id:null,pool_version:null,version:1},pools:[{id:'p1',name:'workstation',version:1,state:'ACTIVE',trust_class:'UNTRUSTED',max_parallel:1,image_id:'sha256:'+'a'.repeat(64)}],canEdit:true}}); });
+  await page.goto('/alex/demo/settings/runners');
+  await page.getByRole('button', {name:'Change runner',exact:true}).click();
+  const chooser = page.getByRole('combobox', {name:'Runner pool'});
+  await chooser.selectOption('p1');
+  const before = { access: state.methods.filter(method => method === 'GetRepositoryAccess').length, reads };
+  await page.evaluate(() => { window.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); });
+  await expect.poll(() => state.methods.filter(method => method === 'GetRepositoryAccess').length + reads).toBeGreaterThan(before.access + before.reads);
+  await expect(page.getByText('Verifying repository access…')).toHaveCount(0);
+  await expect(chooser).toHaveValue('p1');
+  await expect(page.getByRole('button', {name:'Save runner',exact:true})).toBeEnabled();
+});
 test('native runners settings open the workspace pool chooser and account navigation lists only provided pages', async ({page}) => {
   const state = await fixture(page, 'cloudflare-native');
   state.nativeCapabilities.push({id:'settings.native-runners',label:'Customer-hosted native runners',state:3,reason:'Available'});

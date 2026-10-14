@@ -85,9 +85,9 @@ export function NativeRunnerAdmin() {
 
 // Settings → Runners on the native runtime: the repository chooses one of the workspace's runner pools.
 export function NativeRepositoryRunners({ userId, owner, name, signingOut }: { userId: string; owner: string; name: string; signingOut: boolean }) {
-  const { access, revalidating, error, refresh } = useRepositorySettingsAccess(userId, owner, name, signingOut);
+  const { access, error, refresh } = useRepositorySettingsAccess(userId, owner, name, signingOut);
   return <section className="page-stack"><header className="repository-intro"><div><h1>Runners</h1><p>Choose the runner pool that runs this repository's approved pull request jobs. Workspace administrators enroll machines and manage pools.</p></div></header>
-    {error ? <PanelError error={error} retry={refresh} /> : !access || revalidating ? <Loading label="Verifying repository access…" /> : signingOut ? null : <NativeRunnerPlacement key={access.repositoryId} context={{ repository: { owner, name }, repositoryId: access.repositoryId }} />}
+    {error ? <PanelError error={error} retry={refresh} /> : !access ? <Loading label="Verifying repository access…" /> : signingOut ? null : <NativeRunnerPlacement key={access.repositoryId} context={{ repository: { owner, name }, repositoryId: access.repositoryId }} />}
   </section>;
 }
 
@@ -95,7 +95,8 @@ export function NativeRunnerPlacement({ context }: { context: { repository: { ow
   const [editing, setEditing] = useState(false);
   const inventory = useQuery({ ...privateQuery, queryKey: ['native-runner-placement', context.repositoryId], queryFn: ({ signal }) => nativeAPI<{ placement: Placement; pools: Pool[]; canEdit: boolean }>('/native/runner-placement', { ...context, action: 'get' }, signal), refetchInterval: editing ? false : 30000 });
   const [busy, setBusy] = useState(false), [error, setError] = useState<unknown>();
-  const current = inventory.isSuccess && !inventory.isFetching ? inventory.data : undefined;
+  // A background refetch keeps the last observation and the open editor; the server fences the version on save.
+  const current = inventory.isSuccess ? inventory.data : undefined;
   async function save(choice: string) {
     if (!current) return;
     const pool = current.pools.find(p => p.id === choice);
@@ -107,7 +108,7 @@ export function NativeRunnerPlacement({ context }: { context: { repository: { ow
   return <section className="browser-panel"><div className="browser-panel-heading"><h3>Pull request runner</h3><button className="button secondary" disabled={busy || inventory.isFetching} onClick={() => void inventory.refetch()}>Refresh</button></div>
     {inventory.error && <p className="error" role="alert">{message(inventory.error)}</p>}{error ? <p className="error" role="alert">{message(error)} Inspect the refreshed placement before another edit.</p> : null}
     {current && <div className="credential-form-content"><dl className="settings-profile"><div><dt>Current runner</dt><dd>{current.pools.find(p => p.id === current.placement.pool_id)?.name || (current.placement.pool_id ? 'Unavailable pool' : 'Managed Cloudflare Container')}</dd></div></dl>
-      {current.canEdit && (editing ? <PlacementEditor key={current.placement.version} placement={current.placement} pools={current.pools} busy={busy} save={save} close={() => setEditing(false)}/> : <button className="button secondary" onClick={() => setEditing(true)}>Change runner</button>)}</div>}
+      {current.canEdit && (editing ? <PlacementEditor key={current.placement.version} placement={current.placement} pools={current.pools} busy={busy || inventory.isFetching} save={save} close={() => setEditing(false)}/> : <button className="button secondary" disabled={inventory.isFetching} onClick={() => setEditing(true)}>Change runner</button>)}</div>}
     {inventory.isFetching ? <p className="panel-footnote" role="status">Checking runner settings…</p> : null}
   </section>;
 }
