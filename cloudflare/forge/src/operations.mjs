@@ -1,4 +1,5 @@
 import { webhookPolicy } from './webhooks.mjs';
+import { emailPolicy } from './email.mjs';
 import { Fault, reply } from './common.mjs';
 import { release } from './telemetry.mjs';
 import { rateLimitService } from './rate-limit.mjs';
@@ -22,6 +23,11 @@ export async function operationsDashboard(db, env, person, request) {
       ['webhooks.queued', 'Queued webhook deliveries', "SELECT COUNT(*) AS value FROM webhook_deliveries WHERE state IN ('queued','retrying','sending')"],
       ['webhooks.oldest', 'Oldest queued webhook age', "SELECT MIN(created_at) AS value FROM webhook_deliveries WHERE state IN ('queued','retrying','sending')"],
       ['webhooks.failed', 'Failed webhook deliveries', "SELECT COUNT(*) AS value FROM webhook_deliveries WHERE state='failed'"],
+    ] : []),
+    ...(emailPolicy(env) ? [
+      ['email.queued', 'Queued email deliveries', "SELECT COUNT(*) AS value FROM email_deliveries WHERE state IN ('queued','retrying','sending')"],
+      ['email.oldest', 'Oldest queued email age', "SELECT MIN(created_at) AS value FROM email_deliveries WHERE state IN ('queued','retrying','sending')"],
+      ['email.failed', 'Failed email deliveries', "SELECT COUNT(*) AS value FROM email_deliveries WHERE state='failed'"],
     ] : []),
     ['repositories', 'Repositories', "SELECT COUNT(*) AS value FROM repositories WHERE state='ACTIVE'"],
     ['jobs.queued', 'Queued evidence jobs', "SELECT COUNT(*) AS value FROM evidence_jobs WHERE state='QUEUED'"],
@@ -51,7 +57,8 @@ export async function operationsDashboard(db, env, person, request) {
   }
   const stages = (await db.prepare('SELECT stage,started_at,completed_at,last_success_at,outcome,processed,pending FROM operations_maintenance ORDER BY stage').all()).results;
   if (webhookPolicy(env)) stages.push(...(await db.prepare('SELECT * FROM webhook_maintenance').all()).results);
-  for (const id of ['ci','previews','evidence','indexes',...(webhookPolicy(env) ? ['webhooks'] : [])]) {
+  if (emailPolicy(env)) stages.push(...(await db.prepare('SELECT * FROM email_maintenance').all()).results);
+  for (const id of ['ci','previews','evidence','indexes',...(webhookPolicy(env) ? ['webhooks'] : []),...(emailPolicy(env) ? ['email'] : [])]) {
     const observation = stages.find(row => row.stage === id);
     const stale = observation && Date.now() - Date.parse(observation.completed_at || observation.started_at) > 15 * 60_000;
     services.push({ id: 'maintenance.' + id, label: 'Maintenance · ' + id,
@@ -115,7 +122,7 @@ export async function operationsDashboard(db, env, person, request) {
 
 export async function maintenanceStage(env, stage, action) {
   const db = env.DB.withSession('first-primary'), started = new Date().toISOString();
-  const table = stage === 'webhooks' ? 'webhook_maintenance' : 'operations_maintenance';
+  const table = stage === 'webhooks' ? 'webhook_maintenance' : stage === 'email' ? 'email_maintenance' : 'operations_maintenance';
   await db.prepare(`INSERT INTO ${table}(stage,started_at,outcome) VALUES(?,?,'running') ON CONFLICT(stage) DO UPDATE SET started_at=excluded.started_at,completed_at=NULL,outcome='running',processed=NULL,pending=NULL`).bind(stage,started).run();
   let result, failed = false;
   try { result = await action(); } catch { failed = true; }

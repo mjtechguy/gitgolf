@@ -1,5 +1,47 @@
 # Golf implementation status
 
+## 2026-10-14 — Native repository email notifications (not yet qualified live)
+
+Cloudflare-native repository email notifications are implemented in source but
+not qualified live. Schema 27 adds own-address consent, per-repository
+subscriptions and a D1 outbox filled by triggers on committed source, issue/PR
+and test-job activity. The Worker sends category-and-link messages only to each
+subscriber's own Access sign-in address through the `send_email` binding,
+rechecking account, address, consent, subscription version and repository
+grant before the claim and under the lease, with six attempts, possible-duplicate
+marking and a daily attempt budget. Cloudflare Email Service refuses a
+caller-set Message-ID, so retries carry a stable `X-Golf-Delivery-ID` header and
+the provider's message id is stored. `repository.email-notifications` is
+DISABLED without the binding or Access, DEGRADED once configured, and READY
+only after a provider acceptance from the current sender is recorded; none has
+been recorded. Retries and mail held by the daily limit ride the shared
+maintenance run (Cron Trigger or workspace alarm).
+
+Evidence: 17 Worker tests, a real workerd/D1 flow through the local Email
+Service simulator in `ui-check.mjs`, and native browser fixtures. Remaining:
+account eligibility, the Email Sending permission and subdomain DNS validation
+on the hosted account, a recorded live acceptance, bounce/complaint/reply
+handling and unsubscribe links.
+
+## 2026-10-14 — Native secrets accepted on the retained installation
+
+After `migrate` (applied `0026_execution_values.sql`), `enable-secrets`,
+`enable-workflow --workflow-path .github/workflows/ci.yml` and a deploy, both
+`settings.repository-workflows` (combined-profile wording) and
+`settings.repository-secrets` reported ready. The two playground repositories
+gained `.github/workflows/ci.yml` on `main` and `feature`. On
+`mj/review-playground`, signed in through Access: a secret `DEMO_DEPLOY_TOKEN`
+(a random 29-character demo value) saved as version 1; reading it back was
+refused (404) and the inventory never contained it; an approval for the exact
+`feature` head `30c980d` and its workflow blob saved with origin
+`WORKFLOW_RUN_ORIGIN_PULL_REQUEST`. A pull-request test job then ran the
+approved workflow and passed. Its stored output reads `Deploy token in this job
+is ***************************** with length 29`, so the value reached the step
+and the stored log was masked; the full report does not contain the value, and
+its limitations line states that values were released. The first approval
+attempt was refused because the demo step was not valid YAML, as designed. The
+demo secret and its approval (two-hour expiry) were left in place.
+
 ## 2026-10-14 — Native repository secrets and variables
 
 Cloudflare native: repository secrets and variables are stored as AES-GCM

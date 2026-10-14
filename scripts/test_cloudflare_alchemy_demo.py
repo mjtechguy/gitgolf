@@ -189,6 +189,47 @@ class Observability(unittest.TestCase):
             self.assertIn("input.executionValueKey ? [Cloudflare.SecretsStore.Secret('ExecutionValueSecret', { store, name: name + '-execution-values', value: Redacted.make(input.executionValueKey) })] : []",stack)
             self.assertIn("input.executionValueKey ? { execution_values: { key: { store: storeId, name: name + '-execution-values' } } } : {}",stack)
 
+    def test_enabling_email_names_one_sender_on_the_installation_hostname_after_migration(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            value={'hostname':'demo.example.com','settings':{'evidence':{'daily_limit':40}}}
+            current=hashlib.sha256((demo.ROOT/'cloudflare/forge/schema.sql').read_text().encode()).hexdigest()
+            replace_private_json(directory/'schema-receipt.json',{'database':'database','sha256':'older'})
+            with self.assertRaisesRegex(ValueError,'migrate'): demo.enable_email(directory,value,200)
+            replace_private_json(directory/'schema-receipt.json',{'database':'database','sha256':current})
+            for refused in (0,5001,True,'200'):
+                with self.assertRaises(ValueError): demo.enable_email(directory,value,refused)
+            for hostname in ('Demo.example.com','localhost','demo.example.com/path','demo@example.com'):
+                with self.assertRaises(ValueError): demo.enable_email(directory,{**value,'hostname':hostname},200)
+            self.assertFalse((directory/'alchemy-input.json').exists())
+            self.assertNotIn('email',value['settings'])
+            demo.enable_email(directory,value,200)
+            demo.enable_email(directory,value,50)
+            saved=json.loads((directory/'alchemy-input.json').read_text())
+            # A sender and a limit: no key, token or recipient is written.
+            self.assertEqual(saved,{'hostname':'demo.example.com','settings':{'evidence':{'daily_limit':40},'email':{'sender':'golf@mail.demo.example.com','dailyLimit':50}}})
+
+    def test_deploy_token_gains_the_email_permission_only_when_email_is_enabled(self):
+        base={'Account Settings Read','Account API Tokens Write','Artifacts Write','D1 Write','Workers Scripts Write','Workers R2 Storage Write','Workers Containers Write','Queues Write',
+            'Secrets Store Write','Access: Apps and Policies Write','Access: Organizations, Identity Providers, and Groups Write','Access: Service Tokens Write'}
+        zone={'Zone Read','DNS Write','Workers Routes Write'}
+        def run(settings, offered):
+            created=[]
+            groups=[{'id':name,'name':name,'scopes':['com.cloudflare.api.account'],'is_selectable':True} for name in offered]+[{'id':name,'name':name,'scopes':['com.cloudflare.api.account.zone'],'is_selectable':True} for name in zone]
+            def cf(config,*args):
+                if args[:3]==('user','tokens','permission-groups'): return groups
+                if args[:3]==('user','tokens','create'): created.append(json.loads(args[-1])); return {'id':'token','value':'never-printed'}
+                raise AssertionError(args)
+            with tempfile.TemporaryDirectory() as temporary, patch.object(demo,'cf',side_effect=cf):
+                demo.renew_deploy(Path(temporary),{'name':'example','account':'a'*32,'zone':'b'*32,'settings':settings})
+            return {group['id'] for group in created[0][0]['permission_groups']}
+        offered=base|{'Email Sending Write','Email Sending Read','AI Gateway Write'}
+        self.assertEqual(run({'evidence':{}},offered),base)
+        self.assertEqual(run({'evidence':{},'email':{'sender':'golf@mail.demo.example.com','dailyLimit':200}},offered),base|{'Email Sending Write'})
+        # An account that does not offer the permission stops here, before any token is created.
+        with self.assertRaisesRegex(ValueError,'permissions are unavailable'): run({'evidence':{},'email':{'sender':'golf@mail.demo.example.com','dailyLimit':200}},base)
+
 
 class GuardedMigration(unittest.TestCase):
     table='CREATE TABLE IF NOT EXISTS journal (\n id INTEGER PRIMARY KEY -- one row; per entry\n);\nCREATE UNIQUE INDEX IF NOT EXISTS journal_id ON journal(id);\n'

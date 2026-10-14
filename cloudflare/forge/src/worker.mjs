@@ -1,4 +1,5 @@
 import { drainWebhooks, webhookPolicy } from './webhooks.mjs';
+import { drainEmail, emailPolicy } from './email.mjs';
 import { collectWorkerMetrics, collectServiceHealth } from './operations-provider.mjs';
 import { runMaintenance } from './operations.mjs';
 import { publicFetch } from './public.mjs';
@@ -42,6 +43,9 @@ export class Workspace extends DurableObject {
       } finally {
         if (result?.ok && (selection || event instanceof Request && /\/golf\.v1\.RepositoryWebhookService\/(?:Test|Redeliver)RepositoryWebhook$/.test(new URL(event.url).pathname)))
           this.ctx.waitUntil(this.deliverWebhooks().catch(() => console.log(JSON.stringify({ event:'golf.webhook_delivery_failed' }))));
+        // The first send follows the mutation, runner report or background step that queued it; only retries wait for a later drain or the schedule.
+        if (selection ? result?.ok || !(event instanceof Request) : result?.ok && event instanceof Request && /\/golf\.v1\.EmailNotificationService\/RedeliverOwnEmail$|^\/native\/runner-machine\/[a-f0-9-]{36}\/finish$|^\/api\/v4\/jobs\/[1-9][0-9]{0,15}$/.test(new URL(event.url).pathname))
+          this.ctx.waitUntil(this.deliverEmail().catch(() => console.log(JSON.stringify({ event:'golf.email_delivery_failed' }))));
         // Definite refusals have no activity; ambiguous provider failures can have effects.
         if (selection && (!(event instanceof Request) || !result || result.ok || result.status >= 500)) {
           try {
@@ -62,6 +66,7 @@ export class Workspace extends DurableObject {
     event => event?.activity || concurrentRead(event));
   }
   deliverWebhooks() { return drainWebhooks(this.configured); }
+  deliverEmail() { return drainEmail(this.configured); }
   scheduleRan() { this.ctx.storage.kv.put('scheduled', Date.now()); }
   // Cron Triggers are the schedule. The alarm repeats the same maintenance only while none has reported in for two periods.
   async alarm() {
@@ -215,6 +220,7 @@ async function maintain(env, exports, owner) {
     try { await runMaintenance(env, [
       ['ci', () => owner.runCI()],
       ...(webhookPolicy(env) ? [['webhooks', () => owner.deliverWebhooks()]] : []),
+      ...(emailPolicy(env) ? [['email', () => owner.deliverEmail()]] : []),
       ['previews', () => owner.cleanupPreviews()],
       ['evidence', async () => { const result = await reconcileEvidence(env, async job => {
         if (job.test_state === 'RUNNING') {

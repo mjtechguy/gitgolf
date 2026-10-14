@@ -41,3 +41,14 @@ test('the anonymous read limiter keeps its namespace, limit and period', () => {
     { name: 'ANONYMOUS_READ_LIMIT', type: 'plain_text', text: '300/60' },
   ]);
 });
+
+test('the email binding is restricted to one sender and refuses any other shape', () => {
+  const sender = 'golf@mail.golf.example.com';
+  assert.deepEqual(bindings({ env: { EMAIL: { type: 'send-email', allowedSenderAddresses: [sender] }, EMAIL_POLICY: { type: 'text', value: '{}' } } }), [
+    { name: 'EMAIL', type: 'send_email', allowedSenderAddresses: [sender] },
+    { name: 'EMAIL_POLICY', type: 'plain_text', text: '{}' },
+  ]);
+  for (const value of [{}, { allowedSenderAddresses: [] }, { allowedSenderAddresses: [sender, 'other@example.com'] }, { allowedSenderAddresses: sender },
+    { allowedSenderAddresses: [sender], destinationAddress: 'someone@example.com' }, { allowedSenderAddresses: [sender], allowedDestinationAddresses: ['someone@example.com'] }, { allowedSenderAddresses: [sender], dev: {} }])
+    assert.throws(() => bindings({ env: { EMAIL: { type: 'send-email', ...value } } }), /Unqualified Alchemy email binding/, JSON.stringify(value));
+});

@@ -1,7 +1,7 @@
 import { NativeInstallationSettings } from './NativeForge';
 import { AgentUsagePanel } from './AgentUsagePanel';
 import { useRuntimeCapabilities } from './useRuntimeCapabilities';
-import { runtimeFeature, settingAvailable } from './runtimeCapabilities';
+import { runtimeFeature, settingAvailable, emailNotificationsMounted } from './runtimeCapabilities';
 import { AgentUsageScope } from './gen/golf/v1/golf_pb';
 import { ProfileSettings } from './ProfileSettings';
 import { AppearanceSettings } from './ThemeSwitch';
@@ -49,6 +49,8 @@ export function OrganizationSettingsLayout({ children, organization }: { childre
 export function RepositorySettingsLayout({ children, owner, name }: { children: ReactNode; owner: string; name: string }) {
   const runtime = useRuntimeCapabilities(), navigate = useNavigate();
   const manifest = runtime.isError ? undefined : runtime.data;
+  // Own repository email shares the Webhooks page; on the native runtime it can be allocated without webhooks.
+  const emailOnly = manifest?.runtimeProfile === 'cloudflare-native' && !settingAvailable(manifest, 'settings.repository-webhooks') && emailNotificationsMounted(manifest);
   const pathname = useLocation({select: location => location.pathname});
   const entries = [
     { label: 'General', group: '', suffix: '', icon: UserRound, enabled: runtimeFeature(manifest, 'settings.repository-general'), to: '/$owner/$name/settings' },
@@ -59,7 +61,7 @@ export function RepositorySettingsLayout({ children, owner, name }: { children: 
     { label: 'Runners', group: 'Automation', suffix: '/runners', icon: Server, enabled: settingAvailable(runtime.isError ? undefined : runtime.data, runtime.data?.runtimeProfile === 'cloudflare-native' ? 'settings.native-runners' : 'settings.runners'), to: '/$owner/$name/settings/runners' },
     { label: 'Secrets and variables', group: 'Automation', suffix: '/secrets', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-secrets'), to: '/$owner/$name/settings/secrets' },
     { label: 'Environments', group: 'Automation', suffix: '/environments', icon: Rocket, enabled: runtimeFeature(manifest, 'settings.repository-environments'), to: '/$owner/$name/settings/environments' },
-    { label: 'Webhooks', group: 'Integrations', suffix: '/webhooks', icon: Webhook, enabled: runtimeFeature(manifest, 'settings.repository-webhooks'), to: '/$owner/$name/settings/webhooks' },
+    { label: emailOnly ? 'Email notifications' : 'Webhooks', group: 'Integrations', suffix: '/webhooks', icon: Webhook, enabled: runtimeFeature(manifest, 'settings.repository-webhooks') || emailOnly, to: '/$owner/$name/settings/webhooks' },
   ] as const;
   const availability = (enabled: boolean) => enabled ? '' : runtime.isPending ? 'Checking…' : runtime.isError ? 'Status unknown' : 'Unavailable';
   const current = entries.find(entry => pathname.endsWith('/settings'+entry.suffix));
@@ -85,6 +87,7 @@ export function AccountSettings({ user, signingOut }: { user: User; signingOut: 
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1 id="settings-title"><UserRound size={29} />Profile</h1><p>Your identity, access and account preferences.</p></div></header>
     <ProfileSettings key={user.id} userId={user.id} signingOut={signingOut} isInstanceAdmin={user.isInstanceAdmin} />
     <AppearanceSettings />
+    {native && emailNotificationsMounted(runtime.isError ? undefined : runtime.data) ? <Suspense fallback={<Loading label="Opening notification settings…" />}><OwnEmailNotifications userId={user.id} signingOut={signingOut} native /></Suspense> : null}
     {native ? <details className="settings-diagnostics" onToggle={event=>setShowInstallation(event.currentTarget.open)}><summary>Installation details</summary>{showInstallation && <NativeInstallationSettings/>}</details> : runtime.isSuccess ? <Suspense fallback={<Loading label="Opening notification settings…" />}><OwnEmailNotifications userId={user.id} signingOut={signingOut} /></Suspense> : null}
     <SettingsInventory scope="personal" />
   </section>;

@@ -4,6 +4,7 @@ import { pullMergeMethods } from './src/pull-merge.mjs';
 import { gitCredentialMethods } from './src/git-credentials.mjs';
 import { ruleMethods } from './src/repository-rules.mjs';
 import { webhookMethods } from './src/webhooks.mjs';
+import { emailMethods } from './src/email.mjs';
 import { environmentMethods } from './src/environments.mjs';
 import { executionValueMethods } from './src/execution-values.mjs';
 import { engagementMethods } from './src/discussion-engagement.mjs';
@@ -27,6 +28,7 @@ const supported = {
   WorkflowService: workflowMethods,
   ExecutionPolicyService: executionPolicyMethods,
   RepositoryWebhookService: webhookMethods,
+  EmailNotificationService: emailMethods,
   RepositoryEnvironmentService: environmentMethods,
   RepositoryExecutionValueService: executionValueMethods,
   DiscussionCollaborationService: engagementMethods,
@@ -49,6 +51,7 @@ const limitations = {
   GitTransportService: 'Own Access-authenticated account; repository-only, identity/grant-bound HTTPS read/write credentials, one-time secrets, 5–60 minute expiry and revocation. Separate Access gate; SSH and receive-outcome RPC remain unavailable.',
   RepositoryRulesService: 'Branch locks and tag account restrictions enforced on Golf Git; exact/prefix patterns, current admin, atomic receipts. No protected merge, review/check gates, teams or provider-side enforcement.',
   RepositoryWebhookService: 'Encrypted subscriptions and signed durable deliveries to operator-approved HTTPS origins; current sponsor authority, bounded retries/daily attempts, tests and explicit redelivery. Native test-job events; repository email remains separate.',
+  EmailNotificationService: 'Own Access sign-in address only, through the Cloudflare Email Service binding: explicit account consent, per-repository subscriptions, provider acceptance history and explicit redelivery under current grant, identity and consent. Category-and-link messages, six attempts and a daily attempt budget. No SMTP transports, verification codes, unsubscribe links, bounce or reply handling; bearer and service-token callers are refused.',
   RepositoryEnvironmentService: 'One environment named preview, enforced on protected PR previews: head branches, lifetime under the operator ceiling and concurrent previews. Verified Access administrator, version-fenced saves and original receipts. No reviewers, wait timers, tag/commit selectors, environment secrets or deployment.',
   RepositoryExecutionValueService: 'Encrypted repository secrets and plain variables with exact-commit approvals of the one operator-approved Actions workflow; Access-verified administrators, version-fenced writes and original receipts. Released as environment variables only to approved Cloudflare-hosted pull-request jobs, with exact-match masking of stored output. No typed inputs, manual dispatch, organization values, environment scopes, secrets expressions, customer-runner or agent release.',
   DiscussionCollaborationService: 'Current-authority reactions, own subscriptions and in-app inbox; transaction-bound timeline since schema14. Historical activity is not backfilled. Issue templates and forms are read from the default-branch head with the portable limits; email remains separate.',
@@ -64,7 +67,7 @@ const limitations = {
   RepositoryInvitationService: 'Enrolled Access users only; current issuer administration, expiring consent, atomic grant/decision and original receipt lookup. No email delivery or automatic enrollment.',
   RepositoryService: 'Bounded Git/read contract, immutable source pages and complete bounded filename/path indexes, overall reviews and same-repository PRs. Repository labels/milestones, issue/PR assignment and author/admin comment editing; no protected merge, inline review threads or organization labels. Pending overall drafts use PullReviewAuthoringService.',
 };
-const source = (await Promise.all(['core.mjs', 'file-index.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'owners.mjs', 'workspace-ui.mjs', 'environments.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs', 'execution-values.mjs'].map(name => readFile(new URL('./src/' + name, import.meta.url), 'utf8')))).join('\n');
+const source = (await Promise.all(['core.mjs', 'file-index.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'owners.mjs', 'workspace-ui.mjs', 'environments.mjs', 'workflow-inventory.mjs', 'execution-policy.mjs', 'execution-values.mjs', 'email.mjs'].map(name => readFile(new URL('./src/' + name, import.meta.url), 'utf8')))).join('\n');
 for (const methods of Object.values(supported)) for (const method of methods) if (!collaborationMethods.has(method) && !source.includes("'" + method + "'") && !source.includes("/" + method + "'")) throw Error('Native adapter declaration has no maintained implementation: ' + method);
 const inventory = [];
 for (const proto of protos) for (const service of proto.text.matchAll(/service\s+(\w+)\s*\{(.*?)\n\}/gs)) for (const method of service[2].matchAll(/rpc\s+(\w+)/g)) inventory.push({ service: service[1], method: method[1], contract: proto.name, adapter: supported[service[1]]?.has(method[1]) ? 'Bounded adapter' : 'Missing native adapter' });

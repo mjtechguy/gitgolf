@@ -119,14 +119,14 @@ test('both deployment paths pass the real workflow binding to evidence admission
   }
 });
 
-function heartbeatFixture(existingAlarm) {
+function heartbeatFixture(existingAlarm, extra = {}) {
   const statements = [], alarms = [], kv = new Map(), waits = [];
   const statement = sql => ({ bind(...values) { statements.push([sql, values]); return this; }, run: async () => ({ meta: { changes: 1 } }), first: async () => null, all: async () => ({ results: [] }) });
   const db = { prepare: statement, batch: async () => [] };
   const storage = { sql: { exec() {} }, kv: { get: key => kv.get(key), put: (key, value) => kv.set(key, value) }, getAlarm: async () => existingAlarm, setAlarm: async at => { alarms.push(at); } };
-  const workspace = new Workspace({ storage, exports: {}, waitUntil: promise => waits.push(promise) }, { DB: { ...db, withSession: () => db }, handle: async () => new Response('ok'), background: async () => ({}) });
+  const workspace = new Workspace({ storage, exports: {}, waitUntil: promise => waits.push(promise) }, { DB: { ...db, withSession: () => db }, handle: async () => new Response('ok'), background: async () => ({}), ...extra });
   const stages = () => statements.filter(([sql]) => sql.startsWith('INSERT INTO operations_maintenance')).map(([, values]) => values[0]);
-  return { workspace, alarms, waits, stages };
+  return { workspace, alarms, waits, stages, statements };
 }
 
 test('the workspace arms one maintenance alarm and keeps an existing one', async () => {
@@ -148,6 +148,13 @@ test('the alarm repeats maintenance only while no scheduled run has reported in'
   const realNow = Date.now;
   try { Date.now = () => realNow() + 11 * 60_000; await f.workspace.alarm(); } finally { Date.now = realNow; }
   assert.equal(f.stages().length, 8);
+});
+
+test('the alarm also drains configured email, journalled apart from the fixed stages', async () => {
+  const f = heartbeatFixture(1, { ACCESS_AUD: 'aud', EMAIL: { send() {} }, EMAIL_POLICY: JSON.stringify({ sender: 'golf@mail.golf.example.com', dailyLimit: 5 }) });
+  await f.workspace.alarm();
+  assert.deepEqual(f.stages(), ['ci', 'previews', 'evidence', 'indexes']);
+  assert.ok(f.statements.some(([sql, values]) => sql.startsWith('INSERT INTO email_maintenance') && values[0] === 'email'));
 });
 
 test('a value release never overlaps a client revocation and asks the job authorization first', async () => {

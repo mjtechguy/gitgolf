@@ -8,6 +8,11 @@ export function settingAvailable(manifest: RuntimeManifest | undefined, id: stri
 export function runtimeFeature(manifest: RuntimeManifest | undefined, id: string) {
   return Boolean(manifest && Object.hasOwn(profiles, manifest.runtimeProfile) && (manifest.runtimeProfile !== 'cloudflare-native' || settingAvailable(manifest, id)));
 }
+// Native email is usable while degraded: that state only says the provider has not yet accepted a first message, and someone has to subscribe before it can.
+export function emailNotificationsMounted(manifest: RuntimeManifest | undefined) {
+  if (manifest?.runtimeProfile !== 'cloudflare-native') return runtimeFeature(manifest, 'repository.email-notifications');
+  return manifest.capabilities.some(c => c.id === 'repository.email-notifications' && [3, 4, 'CAPABILITY_STATE_READY', 'CAPABILITY_STATE_DEGRADED'].includes(c.state));
+}
 export function settingForRoute(kind: string, view?: string, native = false) {
   if (native) {
     const repositoryRoutes: Record<string, string> = { 'repository-settings': 'general', 'repository-access-settings': 'access', 'repository-git': 'git', 'repository-rules': 'rules', 'repository-secrets': 'secrets', 'repository-environments': 'environments', 'repository-webhooks': 'webhooks', 'repository-workflows': 'workflows', 'repository-deletion': 'lifecycle' };
