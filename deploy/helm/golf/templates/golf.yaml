@@ -26,6 +26,8 @@ metadata:
 spec:
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: 2
+  minReadySeconds: 5
+  progressDeadlineSeconds: 600
   strategy:
     type: RollingUpdate
     rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
@@ -41,6 +43,14 @@ spec:
     spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: golf
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets: {{ toYaml . | nindent 8 }}
       {{- end }}
@@ -62,6 +72,9 @@ spec:
             - {name: metrics, containerPort: 9090}
             {{- end }}
           env:
+            {{- if .Values.postgresql.existingCASecret }}
+            - {name: SSL_CERT_DIR, value: "/etc/ssl/certs:/etc/golf/postgres"}
+            {{- end }}
             - {name: GOLF_LISTEN_ADDR, value: ":8080"}
             - {name: GOLF_WEB_DIR, value: /app/web/dist}
             - {name: GOLF_DEPLOYMENT_RUNTIME, value: "kubernetes"}
@@ -108,6 +121,9 @@ spec:
             - name: GOLF_TRACE_SAMPLE_RATIO
               value: {{ .Values.observability.tracing.sampleRatio | quote }}
             {{- end }}
+          lifecycle:
+            preStop:
+              exec: {command: ["/bin/sleep", "5"]}
           startupProbe:
             httpGet: {path: /healthz, port: http}
             periodSeconds: 5
@@ -125,7 +141,16 @@ spec:
             failureThreshold: 6
           resources: {{ toYaml .Values.resources | nindent 12 }}
           volumeMounts:
+            {{- if .Values.postgresql.existingCASecret }}
+            - {name: postgres-ca, mountPath: /etc/golf/postgres, readOnly: true}
+            {{- end }}
             - {name: tmp, mountPath: /tmp}
       volumes:
+        {{- if .Values.postgresql.existingCASecret }}
+        - name: postgres-ca
+          secret:
+            secretName: {{ .Values.postgresql.existingCASecret | quote }}
+            items: [{key: ca.crt, path: ca.crt}]
+        {{- end }}
         - name: tmp
           emptyDir: {sizeLimit: 32Mi}

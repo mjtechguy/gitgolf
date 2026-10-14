@@ -45,9 +45,18 @@
   {{- if and .Values.forgejo.enabled (or (ne .Values.forgejo.image.repository "codeberg.org/forgejo/forgejo") (ne .Values.forgejo.image.digest "sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413")) -}}{{ fail "Forgejo requires the qualified exact image digest" }}{{- end -}}
   {{- if .Release.IsUpgrade -}}
     {{- $existing := lookup "apps/v1" "Deployment" .Release.Namespace (include "golf.fullname" .) -}}
-    {{- $bound := false -}}
-    {{- if $existing -}}{{- range $container := $existing.spec.template.spec.containers -}}{{- range $env := $container.env -}}
-      {{- if and (eq $env.name "GOLF_FORGE_KIND") (eq $env.value "forgejo") -}}{{- $bound = true -}}{{- end -}}
-    {{- end -}}{{- end -}}{{- end -}}
-    {{- if not $bound -}}{{ fail "Only an existing Forgejo release can be upgraded" }}{{- end -}}
+    {{- $identity := "" -}}
+    {{- $kind := "" -}}
+    {{- $url := "" -}}
+    {{- if $existing -}}{{- range $container := $existing.spec.template.spec.containers -}}{{- if eq $container.name "golf" -}}{{- range $env := $container.env -}}
+      {{- if eq $env.name "GOLF_FORGE_KIND" -}}{{- $kind = $env.value -}}{{- end -}}
+      {{- if eq $env.name "GOLF_FORGE_INSTANCE_ID" -}}{{- $identity = $env.value -}}{{- end -}}
+      {{- if eq $env.name "GOLF_FORGE_URL" -}}{{- $url = $env.value -}}{{- end -}}
+    {{- end -}}{{- end -}}{{- end -}}{{- end -}}
+    {{- if ne $kind "forgejo" -}}{{ fail "Only an existing Forgejo release can be upgraded" }}{{- end -}}
+    {{- if ne $identity .Values.forge.instanceID -}}{{ fail "forge.instanceID cannot change on an existing release" }}{{- end -}}
+    {{- if ne $url (include "golf.forgejoURL" .) -}}{{ fail "The bound Forgejo endpoint cannot change on an existing release" }}{{- end -}}
   {{- end -}}
+
+{{- if and .Values.postgresql.enabled .Values.postgresql.existingCASecret -}}{{ fail "postgresql.existingCASecret is only for external PostgreSQL" }}{{- end -}}
+{{- range .Values.networkPolicy.dnsPeers -}}{{- if empty . -}}{{ fail "DNS peers must explicitly select a resolver" }}{{- end -}}{{- end -}}

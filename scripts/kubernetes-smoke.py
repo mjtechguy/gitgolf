@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
-"""Qualify Golf's Helm chart in an explicitly selected disposable k3d cluster.
+"""Qualify Golf's Helm chart in an explicitly selected disposable local cluster.
 
-Requires kubectl, Helm, Git, Python and a built Golf CLI. The image must already
-be imported into the supplied cluster. Creates a unique namespace, private
+Accepts only dedicated local k3d (`k3d-golf-*`) or kind (`kind-golf-*`)
+contexts whose API server is on loopback; any other context, including a remote
+or production one, is refused before anything beyond reading that context's
+server address. Requires kubectl, Helm, Git, Python and a built Golf CLI. The
+image must already be available to the cluster: `k3d image import`,
+`kind load docker-image`, or a tag in a registry the nodes pull from (for
+example a kind-connected `localhost:5001` registry). Storage uses the cluster's
+default StorageClass (k3d `local-path`, kind `standard`) unless
+--storage-class names one. --preflight performs only read-only checks. Creates a unique namespace, private
 existing Secret and two Helm releases; checks real Git, authentication, source,
 replicas, persistence, external dependencies and retained PVCs; then removes its
 namespace. Never uses or changes the default kubeconfig/context, Compose, .env
 or a pre-existing namespace. The caller owns cluster creation and deletion.
 
-Example: python3 scripts/kubernetes-smoke.py --kubeconfig /tmp/private/config \
+Examples: python3 scripts/kubernetes-smoke.py --kubeconfig /tmp/private/config \
   --context k3d-golf-smoke --image golf-local:revision --cli bin/golf
+python3 scripts/kubernetes-smoke.py --kubeconfig ~/.kube/config --context kind-golf-ci \
+  --image localhost:5001/golf:revision --cli bin/golf --preflight
 """
 import argparse
 import base64
@@ -24,6 +33,7 @@ import sys
 import tempfile
 import time
 import urllib.parse
+import uuid
 
 sys.dont_write_bytecode = True
 import smoke
@@ -53,15 +63,21 @@ def wait_for(check, description, seconds=180):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--kubeconfig', required=True, type=Path)
-    parser.add_argument('--context', required=True, help='explicit dedicated k3d-golf-* context')
-    parser.add_argument('--image', required=True, help='already imported Golf image with an explicit tag')
+    parser.add_argument('--context', required=True, help='explicit dedicated local k3d-golf-* or kind-golf-* context')
+    parser.add_argument('--image', required=True, help='Golf image with an explicit tag, already imported or pullable by the cluster')
     parser.add_argument('--cli', required=True, type=Path)
+    parser.add_argument('--storage-class', default='', help='StorageClass for bundled claims; empty uses the cluster default')
+    parser.add_argument('--preflight', action='store_true',
+                        help='only verify context, loopback API, nodes, storage class and free ports; create nothing')
     args = parser.parse_args()
     config, binary = args.kubeconfig.resolve(), args.cli.resolve()
     if not config.is_file() or not binary.is_file():
         parser.error('The explicit kubeconfig and CLI binary must already exist')
-    if not args.context.startswith('k3d-golf-'):
-        parser.error('Only a dedicated k3d-golf-* context is accepted')
+    # Both prefixes are what `k3d cluster create golf-...` and
+    # `kind create cluster --name golf-...` produce. The loopback API check
+    # below is a second, independent guard against non-local clusters.
+    if not args.context.startswith(('k3d-golf-', 'kind-golf-')):
+        parser.error('Only a dedicated local k3d-golf-* or kind-golf-* context is accepted')
     if ':' not in args.image.rsplit('/', 1)[-1] or '@' in args.image:
         parser.error('--image must include an explicit tag')
     for port in (8086, 8087, 8088, 3006):
@@ -100,8 +116,8 @@ def main():
                 return False
         return True
 
-    def gitea_admin(*command):
-        return kube('exec', name + '-gitea-0', '--', 'gitea', '--config', '/etc/gitea/app.ini', 'admin', 'user', *command)
+    def forgejo_admin(*command):
+        return kube('exec', name + '-forgejo-0', '--', 'forgejo', '--config', '/etc/gitea/app.ini', 'admin', 'user', *command)
 
     forwards = []
 
@@ -137,14 +153,25 @@ def main():
 
     def forward_core():
         forward('service/' + name, 8086, 8080)
-        forward('service/' + name + '-gitea', 3006, 3000)
+        forward('service/' + name + '-forgejo', 3006, 3000)
         smoke.ready()
 
     # Read only the selected context's server; never serialize kubeconfig tokens.
     server = run(*kube_args, 'config', 'view', '--minify', '-o', 'jsonpath={.clusters[0].cluster.server}', env=env)
     if urllib.parse.urlsplit(server).hostname not in ('localhost', '127.0.0.1', '::1', '0.0.0.0'):
-        parser.error('The dedicated k3d API must be on loopback')
+        parser.error('The dedicated local cluster API must be on loopback')
     run(*kube_args, 'get', 'nodes', '-o', 'name', env=env)
+    classes = json.loads(run(*kube_args, 'get', 'storageclass', '-o', 'json', env=env))['items']
+    default_class = 'storageclass.kubernetes.io/is-default-class'
+    if args.storage_class:
+        if args.storage_class not in {item['metadata']['name'] for item in classes}:
+            parser.error(f'StorageClass {args.storage_class} does not exist in the selected cluster')
+    elif not any(item['metadata'].get('annotations', {}).get(default_class) == 'true' for item in classes):
+        parser.error('The selected cluster has no default StorageClass; pass --storage-class')
+    if args.preflight:
+        print(f'PASS: preflight for {args.context}: loopback API, reachable nodes, storage class '
+              f'{args.storage_class or "(cluster default)"} and free loopback ports; nothing was created', flush=True)
+        return
     smoke.GOLF, smoke.GITEA = 'http://localhost:8086', 'http://localhost:3006'
     users, installed, created = [], [], False
     with tempfile.TemporaryDirectory(prefix='golf-kubernetes-smoke-', dir='/tmp') as directory:
@@ -155,7 +182,7 @@ def main():
             created = True
             print('STEP: installing isolated Kubernetes namespace ' + namespace, flush=True)
             data = {'POSTGRES_PASSWORD': secrets.token_hex(24), 'GOLF_DB_PASSWORD': secrets.token_hex(24),
-                    'GITEA_DB_PASSWORD': secrets.token_hex(24), 'GOLF_ENCRYPTION_KEY': base64.b64encode(secrets.token_bytes(32)).decode()}
+                    'FORGEJO_DB_PASSWORD': secrets.token_hex(24), 'GOLF_ENCRYPTION_KEY': base64.b64encode(secrets.token_bytes(32)).decode()}
             data['DATABASE_URL'] = f'postgres://golf:{data["GOLF_DB_PASSWORD"]}@{name}-postgres:5432/golf?sslmode=disable'
             secret = path / 'secret.json'
             private_json(secret, {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': 'golf-existing', 'namespace': namespace},
@@ -164,25 +191,38 @@ def main():
             repo, tag = args.image.rsplit(':', 1)
             peer = {'podSelector': {'matchLabels': {'app.kubernetes.io/instance': external, 'app.kubernetes.io/component': 'golf'}}}
             values = {'image': {'repository': repo, 'tag': tag, 'pullPolicy': 'IfNotPresent'},
+                      'forge': {'kind': 'forgejo', 'instanceID': str(uuid.uuid4())},
                       'publicURL': smoke.GOLF, 'allowInsecureCookies': True, 'existingSecret': 'golf-existing', 'replicaCount': 2,
-                      'gitea': {'publicURL': smoke.GITEA + '/'},
-                      'networkPolicy': {'enabled': True, 'giteaIngressFrom': [peer], 'postgresIngressFrom': [peer]}}
+                      'forgejo': {'publicURL': smoke.GITEA + '/'},
+                      'networkPolicy': {'enabled': True, 'forgejoIngressFrom': [peer], 'postgresIngressFrom': [peer]}}
+            if args.storage_class:
+                values['forgejo']['persistence'] = {'storageClass': args.storage_class}
+                values['postgresql'] = {'persistence': {'storageClass': args.storage_class}}
             values_path = path / 'values.json'
             private_json(values_path, values)
             installed.append(release)
             run(*helm_args, 'install', release, str(smoke.ROOT / 'deploy/helm/golf'), '-f', str(values_path), env=env)
             wait_for(lambda: ready_workloads(release), 'Fresh chart installation')
             forward_core()
-            assert len(objects('statefulset', 'app.kubernetes.io/component=gitea')) == 1
-            assert objects('statefulset', 'app.kubernetes.io/component=gitea')[0]['spec']['replicas'] == 1
+            assert len(objects('pdb')) == 1
+            assert objects('pdb')[0]['spec']['maxUnavailable'] == 1
+            assert objects('deployment', 'app.kubernetes.io/component=golf')[0]['spec']['template']['spec']['topologySpreadConstraints'][0]['whenUnsatisfiable'] == 'ScheduleAnyway'
+            assert len(objects('statefulset', 'app.kubernetes.io/component=forgejo')) == 1
+            assert objects('statefulset', 'app.kubernetes.io/component=forgejo')[0]['spec']['replicas'] == 1
             assert len(objects('pod', f'app.kubernetes.io/instance={release},app.kubernetes.io/component=golf')) == 2
             assert len(objects('networkpolicy')) >= 3
             pvcs = {item['metadata']['name']: item['metadata']['uid'] for item in objects('pvc')}
             assert len(pvcs) == 3 and all(item['status']['phase'] == 'Bound' for item in objects('pvc'))
-            sql = "SELECT rolname,rolsuper,rolcreatedb,has_database_privilege(rolname,'golf','CONNECT'),has_database_privilege(rolname,'gitea','CONNECT') FROM pg_roles WHERE rolname IN ('golf','gitea') ORDER BY rolname"
+            sql = "SELECT rolname,rolsuper,rolcreatedb,has_database_privilege(rolname,'golf','CONNECT'),has_database_privilege(rolname,'forgejo','CONNECT') FROM pg_roles WHERE rolname IN ('golf','forgejo') ORDER BY rolname"
             roles = kube('exec', name + '-postgres-0', '--', 'psql', '-U', 'postgres', '-d', 'postgres', '-Atc', sql)
-            assert roles.splitlines() == ['gitea|f|f|f|t', 'golf|f|f|t|f']
-            print('PASS: fresh two-replica Golf install, separate restricted database roles, one Gitea writer and bound PVCs', flush=True)
+            assert roles.splitlines() == ['forgejo|f|f|f|t', 'golf|f|f|t|f']
+            changed = {**values, 'forge': {**values['forge'], 'instanceID': str(uuid.uuid4())}}
+            changed_path = path / 'changed-identity.json'
+            private_json(changed_path, changed)
+            rejected = run(*helm_args, 'upgrade', release, str(smoke.ROOT / 'deploy/helm/golf'), '-f', str(changed_path), '--dry-run=server', env=env, check=False)
+            assert rejected.returncode and 'forge.instanceID cannot change' in rejected.stderr
+            run(*helm_args, 'upgrade', release, str(smoke.ROOT / 'deploy/helm/golf'), '-f', str(values_path), '--dry-run=server', env=env)
+            print('PASS: fresh two-replica Golf install, separate restricted database roles, one Forgejo writer and bound PVCs', flush=True)
 
             # Reuse the pinned Alpine image's native BusyBox tools, with no
             # credentials or application labels. Ready dependencies distinguish
@@ -191,7 +231,7 @@ def main():
                 f'if ! busybox nslookup {host}.{namespace}.svc.cluster.local. >/dev/null 2>&1; then echo DNS_FAILED_{port}; exit 43; fi\n'
                 f'if busybox nc -z -w 3 {host}.{namespace}.svc.cluster.local. {port} >/dev/null 2>&1; then echo UNEXPECTED_CONNECTION_{port}; exit 42; fi\n'
                 f'echo BLOCKED_{port}'
-                for host, port in [(name, 8080), (name + '-gitea', 3000), (name + '-postgres', 5432)])
+                for host, port in [(name, 8080), (name + '-forgejo', 3000), (name + '-postgres', 5432)])
             probe = {'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': 'denied-client', 'namespace': namespace},
                      'spec': {'restartPolicy': 'Never', 'automountServiceAccountToken': False,
                               'securityContext': {'runAsNonRoot': True, 'runAsUser': 65532, 'seccompProfile': {'type': 'RuntimeDefault'}},
@@ -214,16 +254,22 @@ def main():
                 return phase == 'Succeeded'
             wait_for(network_finished, 'Default-deny network client')
             kube('delete', 'pod', 'denied-client', '--wait=false')
-            print('PASS: live CNI policy denies an unlabeled client access to Golf, Gitea and PostgreSQL', flush=True)
+            print('PASS: live CNI policy denies an unlabeled client access to Golf, Forgejo and PostgreSQL', flush=True)
 
             credentials = {}
             for label in ('alice', 'bob'):
                 username = 'golf-kube-' + label + '-' + secrets.token_hex(3)
-                gitea_admin('create', '--username', username, '--email', username + '@example.invalid',
+                forgejo_admin('create', '--username', username, '--email', username + '@example.invalid',
                             '--random-password', '--random-password-length', '32', '--must-change-password=false')
                 users.append(username)
-                token = gitea_admin('generate-access-token', '--username', username, '--token-name', 'kubernetes-proof',
+                token = forgejo_admin('generate-access-token', '--username', username, '--token-name', 'kubernetes-proof',
                                     '--scopes', 'write:user,write:repository,read:issue', '--raw')
+                enrollment = {'username': username, 'email': username + '@example.invalid',
+                              'password': secrets.token_urlsafe(24), 'forge_token': token, 'is_instance_admin': label == 'alice'}
+                kube('exec', '-i', 'deployment/' + name, '--', 'golf', 'local-account', 'create', input=json.dumps(enrollment))
+                local_session = smoke.client()
+                assert smoke.rpc(local_session, 'SessionService/LoginWithPassword', {'username': username, 'password': enrollment['password']})['user']['login'] == username
+                smoke.rpc(local_session, 'SessionService/Logout')
                 session = smoke.client()
                 assert smoke.rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})['user']['login'] == username
                 credentials[label] = (username, token, session)
@@ -298,8 +344,8 @@ def main():
 
             old_pods = {item['metadata']['uid'] for item in objects('pod')}
             stop_forwards()
-            print('STEP: replacing Golf, Gitea and PostgreSQL pods while retaining their storage', flush=True)
-            kube('rollout', 'restart', 'deployment/' + name, 'statefulset/' + name + '-gitea', 'statefulset/' + name + '-postgres')
+            print('STEP: replacing Golf, Forgejo and PostgreSQL pods while retaining their storage', flush=True)
+            kube('rollout', 'restart', 'deployment/' + name, 'statefulset/' + name + '-forgejo', 'statefulset/' + name + '-postgres')
             wait_for(lambda: ready_workloads(release) and not old_pods.intersection(item['metadata']['uid'] for item in objects('pod')),
                      'Pod replacement')
             forward_core()
@@ -311,14 +357,14 @@ def main():
             print('PASS: encrypted session, exact Git commit and source survive all workload pod replacements', flush=True)
 
             external_values = {**values, 'replicaCount': 1, 'publicURL': 'http://localhost:8087',
-                               'gitea': {'enabled': False, 'publicURL': smoke.GITEA + '/',
-                                         'externalURL': f'http://{name}-gitea:3000', 'qualifiedVersion': '1.27.3'},
+                               'forgejo': {'enabled': False, 'publicURL': smoke.GITEA + '/',
+                                         'externalURL': f'http://{name}-forgejo:3000', 'qualifiedVersion': '15.0.9'},
                                'postgresql': {'enabled': False},
                                'networkPolicy': {'enabled': True, 'externalEgress': [
                                    {'to': [{'podSelector': {'matchLabels': {'app.kubernetes.io/instance': release,
                                                                          'app.kubernetes.io/component': component}}}],
                                     'ports': [{'protocol': 'TCP', 'port': port}]}
-                                   for component, port in [('gitea', 3000), ('postgres', 5432)]]}}
+                                   for component, port in [('forgejo', 3000), ('postgres', 5432)]]}}
             external_path = path / 'external-values.json'
             private_json(external_path, external_values)
             installed.append(external)
@@ -331,16 +377,16 @@ def main():
             assert smoke.rpc(external_session, 'SessionService/LoginWithGiteaToken', {'token': alice_token})['user']['login'] == alice_name
             assert smoke.content(external_session, reference, revision, nested_path)['file']['content'] == text
             assert not objects('statefulset', 'app.kubernetes.io/instance=' + external)
-            assert len(objects('statefulset', 'app.kubernetes.io/component=gitea')) == 1
+            assert len(objects('statefulset', 'app.kubernetes.io/component=forgejo')) == 1
             assert {item['metadata']['name']: item['metadata']['uid'] for item in objects('pvc')} == pvcs
             smoke.rpc(external_session, 'SessionService/Logout')
             smoke.GOLF = 'http://localhost:8086'
             smoke.rpc(alice, 'SessionService/Logout')
             smoke.rpc(bob, 'SessionService/Logout')
-            print('PASS: external PostgreSQL/Gitea profile uses canonical services with network policies enabled and no duplicate writer/PVCs', flush=True)
+            print('PASS: external PostgreSQL/Forgejo profile uses canonical services with network policies enabled and no duplicate writer/PVCs', flush=True)
 
             for username in users[:]:
-                gitea_admin('delete', '--username', username, '--purge')
+                forgejo_admin('delete', '--username', username, '--purge')
                 users.remove(username)
             stop_forwards()
             for selected_release in installed[::-1]:
@@ -353,7 +399,7 @@ def main():
             failures = []
             for username in users:
                 try:
-                    gitea_admin('delete', '--username', username, '--purge')
+                    forgejo_admin('delete', '--username', username, '--purge')
                 except Exception:
                     # The namespace is still deleted below if a failed workload
                     # is unavailable. No resources exist outside this namespace.

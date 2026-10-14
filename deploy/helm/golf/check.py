@@ -163,3 +163,54 @@ assert 'whenDeleted: Retain' in fj
 render(merge(BASE, {"forge": {"instanceID": ""}}), expected=False)
 render(merge(BASE, {"forgejo": {"image": {"digest": "sha256:" + "a"*64}}}), expected=False)
 print("Forgejo default rendering, exact image/identity gates and native Actions isolation passed")
+
+# Current render fixtures and native disruption/placement contracts.
+fixture = subprocess.run([HELM, "template", "fixture", str(CHART), "-f", str(CHART / "tests/values.yaml")], capture_output=True, text=True)
+assert fixture.returncode == 0, fixture.stderr
+assert "kind: PodDisruptionBudget" not in core
+replicated = render(merge(BASE, {"replicaCount": 3}))
+pdb = find(replicated, "PodDisruptionBudget", "check-golf")
+assert "maxUnavailable: 1" in pdb and "app.kubernetes.io/component: golf" in pdb
+assert "kind: PodDisruptionBudget" not in render(merge(BASE, {"replicaCount": 2, "disruptionBudget": {"enabled": False}}))
+assert "whenUnsatisfiable: ScheduleAnyway" in golf and "topologyKey: kubernetes.io/hostname" in golf
+assert "minReadySeconds: 5" in golf and "progressDeadlineSeconds: 600" in golf
+assert 'command: ["/bin/sleep", "5"]' in golf
+private_ca = render(merge(external, {"webhooks": {"enabled": True}, "postgresql": {"existingCASecret": "database-ca"}}))
+for name in ["check-golf", "check-golf-webhooks"]:
+    pod = find(private_ca, "Deployment", name)
+    assert "secretName: \"database-ca\"" in pod and "key: ca.crt" in pod
+    assert "mountPath: /etc/golf/postgres, readOnly: true" in pod
+    assert "SSL_CERT_DIR" in pod and "/etc/ssl/certs:/etc/golf/postgres" in pod
+internal_forge_ca = render(merge(BASE, {"postgresql": {"enabled": False, "existingCASecret": "database-ca"}, "forgejo": {"database": {"host": "postgres.example.invalid:5432"}}, "networkPolicy": {"externalEgress": [{"to": [{"ipBlock": {"cidr": "10.20.30.4/32"}}], "ports": [{"port": 5432}]}]}}))
+assert "SSL_CERT_DIR" in find(internal_forge_ca, "StatefulSet", "check-golf-forgejo")
+assert "postgres-ca" not in golf
+render(merge(BASE, {"postgresql": {"existingCASecret": "database-ca"}}), expected=False)
+custom_dns = render(merge(BASE, {"networkPolicy": {"dnsPeers": [{"ipBlock": {"cidr": "169.254.20.10/32"}}]}}))
+assert "cidr: 169.254.20.10/32" in find(custom_dns, "NetworkPolicy", "check-golf")
+assert "kubernetes.io/metadata.name: \"kube-system\"" not in find(custom_dns, "NetworkPolicy", "check-golf")
+render(merge(BASE, {"networkPolicy": {"dnsPeers": [{}]}}), expected=False)
+print("Fixture, API disruption/spread/drain, private CA mounts and custom DNS checks passed")
+
+
+def notes(values):
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as file:
+        json.dump(values, file)
+        file.flush()
+        proc = subprocess.run([HELM, "install", "check", str(CHART), "-n", "golf-notes", "--dry-run=client", "-f", file.name],
+                              capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout.split("\nNOTES:\n", 1)[1]
+
+
+loopback = merge(BASE, {"publicURL": "http://localhost:8086", "allowInsecureCookies": True,
+                        "forgejo": {"publicURL": "http://localhost:3006", "sshPort": 2226}})
+single = notes(loopback)
+assert "port-forward service/check-golf 8086:8080" in single
+assert "port-forward service/check-golf-forgejo 3006:3000 2226:2222" in single
+assert "curl --fail http://localhost:8086/readyz" in single
+assert "golf local-account create" in single and "https://docs.gitgolf.app/docs/kubernetes/" in single
+assert "helm uninstall check -n golf-notes" in single and "no PodDisruptionBudget" in single
+assert "PodDisruptionBudget check-golf allows" in notes(merge(loopback, {"replicaCount": 2}))
+external_notes = notes(external)
+assert "check-golf-forgejo" not in external_notes and "port-forward service/check-golf 8080:8080" in external_notes
+print("NOTES port-forward, readiness, enrollment, disruption and uninstall guidance passed")

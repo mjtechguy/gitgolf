@@ -5,3 +5,6 @@ publicURL: https://golf.example.invalid
 forgejo:
   publicURL: https://git.example.invalid
 existingSecret: existing-golf-secret
+
+forge:
+  instanceID: ba09ae45-092f-4b4d-9e17-c6b848e5d95c
