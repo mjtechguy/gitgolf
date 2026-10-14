@@ -1,5 +1,35 @@
 # Golf implementation status
 
+## 2026-10-14 — Agent hosts, Worker side (agents plan phase 1a, schema 36)
+
+The Cloudflare-native Worker half of `docs/AGENT_HOSTS.md`: migration
+`0036_agent_hosts.sql`; the host protocol on `/native/agent-host/*` (register,
+heartbeat, claim, task start, log and finish, and a task-scoped Smart HTTP Git route)
+outside Access; the user API `/native/agent-hosts` and `/native/agent-tasks`; the six
+admission rules, checked at create and again at claim, each refusal naming its rule;
+the `agent-hosts` feature policy, the `agents.hosts` capability, audit rows
+(`agent_host.*`, `agent_task.*`) and a maintenance sweep that marks tasks `LOST` or
+`TIMED_OUT`. Credentials and tokens are stored as SHA-256 only. A task's push goes
+through the same fenced single-ref journal as `/git/` pushes, limited to its own
+`golf-agent/<id>` branch, and a `succeeded` finish is accepted only when the branch
+points at the commit and the base is on its first-parent chain.
+
+Verified locally: Worker tests (`agent-hosts.test.mjs`, 8 tests covering every rule,
+registration, the protocol, Git route refusals, cancel, the sweep, log bounds and the
+prompt bound, plus an audit case); the whole forge suite (523 tests, 522 pass, 1
+skipped); and `agent-hosts-runtime-check.mjs` on real workerd, D1 and Durable Objects:
+a fake host in the script registers, heartbeats, claims an issue assigned through
+`/native/agent-tasks`, streams a log, runs a real `git clone` and `git push` of its
+branch through the task route (a push to `main` is refused), finishes `SUCCEEDED`
+after the Worker's check, then a cancelled task and a `LOST` task swept by the
+scheduled handler. The Artifacts binding is the usual local `git http-backend`
+fixture.
+
+Not verified: the real `cmd/golf-agent-host` binary and real coding CLIs against
+this Worker, the web UI, and anything hosted. Agent pushes do not start Actions
+workflows; task changes are not on the live activity stream (the UI polls); personal
+host audit rows are readable only by operations administrators.
+
 ## 2026-10-14 — Hosted run of real repositories on stock runners, in kind, and live AI and search checks
 
 Run on `https://demo.gitgolf.mjtechguy.com` (schema 35, deployed before the fixes

@@ -210,3 +210,37 @@ test('pipeline dispatch, cancel, approval and environment changes are recorded a
   const text = f.everything();
   for (const secret of ['super-secret-input-value', 'private reviewer remark', 'another private remark', 'kubeconfig-contents-that-must-not-appear']) assert.equal(text.includes(secret), false, secret);
 });
+
+test('agent host tokens, host edits and agent tasks are recorded at their scope without tokens, credentials or instructions', async t => {
+  const f = await fixture(t);
+  f.sql.exec(`INSERT INTO native_owners(id,slug,kind,creator_id) VALUES(2,'team','ORGANIZATION',1); INSERT INTO native_owner_members VALUES(2,1,'owner');
+    INSERT INTO discussions(id,repository_id,number,kind,author_id,title,body,state,created_at,updated_at) VALUES(1,1,12,'issue',1,'Fix it','private issue body','OPEN','t','t')`);
+  const machine = async (path, body, credential) => (await f.dispatch(new Request(origin + '/native/agent-host/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(credential ? { Authorization: 'Bearer ' + credential } : {}) }, body: JSON.stringify(body) }))).json();
+  const personal = await f.signed('/native/agent-hosts', { action: 'createToken', scope: 'personal', ttlHours: 2, uses: 1 });
+  assert.equal(personal.status, 200, JSON.stringify(personal));
+  const host = await machine('register', { registrationToken: personal.token, name: 'laptop', hostVersion: '0.1.0', os: 'linux', arch: 'amd64' });
+  await machine('heartbeat', { tools: [{ tool: 'claude', version: '2', signedIn: true }] }, host.credential);
+  const team = await f.signed('/native/agent-hosts', { action: 'createToken', scope: 'organization', organization: 'team' });
+  const teamHost = await machine('register', { registrationToken: team.token, name: 'team-box' });
+  assert.equal((await f.signed('/native/agent-hosts', { action: 'update', id: teamHost.hostId, expectedVersion: 1, name: 'team-runner', shareSignins: true, enabledTools: ['claude'] })).status, 200);
+  assert.equal((await f.signed('/native/agent-hosts', { action: 'delete', id: teamHost.hostId })).status, 200);
+  assert.equal((await f.signed('/native/agent-hosts', { action: 'createToken', scope: 'installation' }, 'bob@example.invalid')).status, 403);
+  const created = await f.signed('/native/agent-tasks', { action: 'create', repository, repositoryId: '1', target: { kind: 'issue', number: 12 }, hostId: host.hostId, tool: 'claude', instructions: 'secret-instruction-text', idempotencyKey: uuid() });
+  assert.equal(created.status, 200, JSON.stringify(created));
+  assert.equal((await f.signed('/native/agent-tasks', { action: 'cancel', repository, repositoryId: '1', id: created.task.id })).status, 200);
+  assert.equal((await f.signed('/native/agent-hosts', { action: 'revokeToken', id: team.registration.id })).status, 200);
+  const rows = f.rows();
+  assert.deepEqual(rows.map(row => [row.action, row.scope, row.scope_id, row.subject, row.client.outcome]), [
+    ['agent_host.token_create', 'installation', 'alice', 'personal', 'success'], ['agent_host.token_create', 'organization', '2', 'organization', 'success'],
+    ['agent_host.update', 'organization', '2', 'team-box', 'success'], ['agent_host.delete', 'organization', '2', 'team-runner', 'success'],
+    ['agent_host.token_create', 'installation', 'alice', 'installation', 'denied'], ['agent_task.create', 'repository', '1', '#12', 'success'], ['agent_task.cancel', 'repository', '1', created.task.id, 'success'],
+    ['agent_host.token_revoke', 'organization', '2', team.registration.id, 'success']]);
+  assert.deepEqual([JSON.parse(rows[2].before).name, JSON.parse(rows[2].after)], ['team-box', { name: 'team-runner', shareSignins: true, enabledTools: ['claude'] }]);
+  assert.deepEqual(JSON.parse(rows[5].after), { kind: 'issue', number: 12, hostId: Number(host.hostId), tool: 'claude' });
+  const text = f.everything();
+  for (const secret of [personal.token, team.token, host.credential, teamHost.credential, 'secret-instruction-text', 'private issue body']) assert.equal(text.includes(secret), false);
+  const log = await f.read({ scope: 'installation' });
+  assert.deepEqual(log.entries.map(entry => entry.description).reverse(), ['created a personal agent host registration token', 'created an organization agent host registration token', 'updated agent host team-box', 'deleted agent host team-runner',
+    'tried to create an installation agent host registration token', 'assigned issue #12 to a coding agent (claude)', 'cancelled a coding agent task', 'revoked an agent host registration token']);
+  assert.ok(log.categories.some(category => category.id === 'agent_host'));
+});

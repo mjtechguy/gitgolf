@@ -92,6 +92,19 @@ const native = {
         failedOnly: body.action === 'rerun' ? flag(body.failedOnly) : undefined, kind: body.action === 'saveEnvironmentValue' ? clip(body.kind, 12) : undefined,
         reviewers: Array.isArray(body.reviewers) ? body.reviewers.length : undefined, branches: Array.isArray(body.branches) ? body.branches.length : undefined, preventSelfReview: flag(body.preventSelfReview) }) };
   },
+  // Agent hosts (docs/AGENT_HOSTS.md). Personal and installation hosts are recorded at installation scope, organization hosts at their
+  // organization; the scope of an update, delete or revocation comes from the stored host or token. Never the token, credential or a prompt.
+  'agent-hosts': body => agentHostActions[body.action] && ({ action: agentHostActions[body.action],
+    scope: async c => { c.agentScope = await agentHostScope(c.db, body); return c.agentScope?.scope === 'organization' ? 'organization' : 'installation'; },
+    scopeId: c => c.agentScope?.scopeId,
+    subject: c => body.action === 'createToken' ? clip(body.scope, 20) : body.action === 'revokeToken' ? token(body.id) : c.agentScope?.name || token(body.id),
+    before: async c => { const h = ['update', 'delete'].includes(body.action) && whole(body.id) && await one(c.db, 'SELECT * FROM agent_hosts WHERE id=?', whole(body.id)); return h ? agentHostSummary(h) : undefined; },
+    after: () => body.action === 'delete' ? null : body.action === 'revokeToken' ? clean({ id: token(body.id) }) : body.action === 'createToken' ? clean({ scope: clip(body.scope, 20), organization: clip(body.organization, 40), ttlHours: whole(body.ttlHours), uses: whole(body.uses) })
+      : clean({ name: clip(body.name, 128), state: clip(body.state, 12), shareSignins: flag(body.shareSignins), allowedUsers: names(body.allowedUsers, 50), allowedRepositories: names(body.allowedRepositories, 100), enabledTools: names(body.enabledTools, 4), maxConcurrent: whole(body.maxConcurrent) }) }),
+  // Assign to agent and cancel. The instructions and the prompt are never read.
+  'agent-tasks': body => body.action === 'create' ? { action: 'agent_task.create', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => whole(body.target?.number) && `#${whole(body.target.number)}`,
+    after: () => clean({ kind: clip(body.target?.kind, 20), number: whole(body.target?.number), hostId: whole(body.hostId), tool: clip(body.tool, 20), model: clip(body.model, 100) }) }
+    : body.action === 'cancel' && { action: 'agent_task.cancel', scope: 'repository', subject: () => token(body.id), after: () => clean({ taskId: token(body.id) }) },
   ai: body => body.action === 'create' && { action: 'ai.run_request', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => clip(body.kind, 40),
     after: () => clean({ kind: clip(body.kind, 40), number: whole(body.target?.number), tag: clip(body.target?.tagName, 100) }) },
   installation: body => ({ action: 'installation_policy.update', scope: 'installation', batch: true, subject: () => clip(body.key, 40) }),
@@ -100,6 +113,14 @@ const native = {
   'audit/read': body => body.scope === 'installation' && adminDenial('the installation audit log'),
 };
 
+const agentHostActions = { createToken: 'agent_host.token_create', revokeToken: 'agent_host.token_revoke', update: 'agent_host.update', delete: 'agent_host.delete' };
+async function agentHostScope(db, body) {
+  if (body.action === 'createToken') return { scope: clip(body.scope, 20), scopeId: body.scope === 'organization' ? (await one(db, "SELECT id FROM native_owners WHERE slug=? AND kind='ORGANIZATION'", clip(body.organization, 40) || ''))?.id : undefined };
+  const row = body.action === 'revokeToken' ? token(body.id) && await one(db, 'SELECT scope,scope_id FROM agent_host_registrations WHERE id=?', body.id) : whole(body.id) && await one(db, 'SELECT name,scope,scope_id FROM agent_hosts WHERE id=?', whole(body.id));
+  return row ? { scope: row.scope, scopeId: row.scope_id, name: row.name } : null;
+}
+const agentHostSummary = h => clean({ name: clip(h.name, 128), state: h.state, shareSignins: Boolean(h.share_signins), allowedUsers: JSON.parse(h.allowed_users || '[]').length, allowedRepositories: JSON.parse(h.allowed_repositories || '[]').length,
+  enabledTools: names(JSON.parse(h.enabled_tools || '[]'), 4), maxConcurrent: h.max_concurrent });
 const pipelineRunnerActions = { createToken: 'pipeline_runner.token_create', revokeToken: 'pipeline_runner.token_revoke', update: 'pipeline_runner.update', delete: 'pipeline_runner.delete' };
 const valueKinds = ['', 'secret', 'variable'], ruleActions = ['', 'CREATE_BRANCH', 'EDIT_BRANCH', 'REMOVE_BRANCH', 'CREATE_TAG', 'EDIT_TAG', 'REMOVE_TAG', 'EDIT_MERGE'];
 const resourceKinds = ['UNSPECIFIED', 'CREATE_LABEL', 'UPDATE_LABEL', 'DELETE_LABEL', 'CREATE_MILESTONE', 'UPDATE_MILESTONE', 'DELETE_MILESTONE'], releaseKinds = ['', 'EDIT', 'DELETE', 'UPLOAD_ASSET', 'RENAME_ASSET', 'DELETE_ASSET'];
@@ -245,9 +266,11 @@ export async function audited(request, env, run, identify) {
   if (!descriptor) return run();
   const db = env.DB.withSession('first-primary'), context = { db, env, body, repository: null, before: undefined };
   try {
+    // A descriptor may name its scope from stored rows (agent hosts); one it cannot resolve is recorded at installation scope.
+    if (typeof descriptor.scope === 'function') descriptor.scope = await descriptor.scope(context);
     if (descriptor.scope === 'repository') context.repository = await resolveRepository(db, env, repositoryKey(body)) || (descriptor.repository && await repositoryById(db, env, (await descriptor.repository(context))?.id));
     if (descriptor.before && (descriptor.scope !== 'repository' || context.repository)) context.before = await descriptor.before(context);
-  } catch { /* a missing before summary is recorded as unknown */ }
+  } catch { if (typeof descriptor.scope === 'function') descriptor.scope = 'installation'; /* a missing before summary is recorded as unknown */ }
   const response = await run();
   let action = '';
   try {
@@ -277,7 +300,7 @@ export async function audited(request, env, run, identify) {
 
 /* Reading. Categories are the action prefix; the first installation policy rows used the bare action 'update'. */
 const categories = [['installation_policy', 'Installation policy', ['update', 'installation_policy.']], ['feature_policy', 'Feature policy'], ['ai_model', 'AI models', ['ai_model.', 'repository_ai_model.']],
-  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
+  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.']], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
   ['repository_invitation', 'Invitations'], ['protected_branch', 'Rules', ['protected_branch.', 'protected_tag.']], ['hook', 'Webhooks'], ['repository_secret', 'Secrets and variables', ['repository_secret.', 'repository_variable.']],
   ['environment', 'Environments'], ['git_credential', 'Git credentials'], ['preview', 'Previews'], ['release', 'Releases', ['release.', 'release_asset.']], ['pull_request', 'Pull requests', ['pull_request.', 'pull_request_review.']],
   ['label', 'Labels and milestones', ['label.', 'milestone.']], ['ai', 'AI runs', ['ai.']], ['actions', 'Actions runs']].map(([id, label, prefixes]) => ({ id, label, prefixes: prefixes || [id + '.'] }));
@@ -327,6 +350,10 @@ const phrases = {
   'pipeline_runner.token_revoke': ['revoked', 'revoke', () => 'a runner registration token'], 'pipeline_runner.update': ['updated', 'update', e => named('runner', e.subject)], 'pipeline_runner.delete': ['deleted', 'delete', e => named('runner', e.subject)],
   'actions.dispatch': ['dispatched', 'dispatch', e => named('workflow', e.subject)], 'actions.cancel': ['cancelled', 'cancel', e => named('run', e.subject)], 'actions.rerun': ['re-ran', 're-run', e => named('run', e.subject)],
   'actions.play_job': ['started', 'start', e => named('manual job', e.subject)], 'actions.approve_deployment': ['approved', 'approve', e => named('deployment job', e.subject)], 'actions.reject_deployment': ['rejected', 'reject', e => named('deployment job', e.subject)],
+  'agent_host.token_create': ['created', 'create', e => `${e.subject === 'personal' ? 'a personal' : e.subject === 'organization' ? 'an organization' : 'an installation'} agent host registration token`],
+  'agent_host.token_revoke': ['revoked', 'revoke', () => 'an agent host registration token'], 'agent_host.update': ['updated', 'update', e => named('agent host', e.subject)], 'agent_host.delete': ['deleted', 'delete', e => named('agent host', e.subject)],
+  'agent_task.create': ['assigned', 'assign', e => `${e.after?.kind === 'pull_request' ? 'pull request' : e.after?.kind === 'issue' ? 'issue' : ''} ${e.subject} to a coding agent${e.after?.tool ? ' (' + e.after.tool + ')' : ''}`.replace(/^ /, '')],
+  'agent_task.cancel': ['cancelled', 'cancel', () => 'a coding agent task'],
   'environment.save': ['saved', 'save', e => named('environment', e.subject)], 'environment.save_value': ['saved', 'save', e => `${e.after?.kind || 'a value'} ${e.subject} of an environment`],
   'ai.run_request': ['requested', 'request', e => `an AI ${e.subject.replaceAll('-', ' ')} run`], 'actions.run_request': ['requested', 'request', e => `a run for pull request ${e.subject}`], 'actions.run_cancel': ['cancelled', 'cancel', () => 'a run'],
 };

@@ -62,7 +62,7 @@ agent_host_registrations(id TEXT PRIMARY KEY, scope TEXT, scope_id TEXT, token_d
   expires_at INTEGER, uses_left INTEGER, revoked INTEGER DEFAULT 0, created_by INTEGER, created_at TEXT)
 agent_hosts(id INTEGER PRIMARY KEY AUTOINCREMENT, uuid TEXT UNIQUE, name TEXT, scope TEXT, scope_id TEXT,
   registered_by INTEGER, credential_digest TEXT UNIQUE, state TEXT DEFAULT 'ACTIVE',   -- ACTIVE | DISABLED
-  share_signins INTEGER DEFAULT 0, allowed_users TEXT DEFAULT '[]', allowed_repositories TEXT DEFAULT '[]',
+  share_signins INTEGER DEFAULT 0, allowed_users TEXT DEFAULT '[]', allowed_repositories TEXT DEFAULT '[]', -- JSON ids
   enabled_tools TEXT DEFAULT '["codex","claude","opencode","grok"]', max_concurrent INTEGER DEFAULT 1,
   host_version TEXT DEFAULT '', os TEXT DEFAULT '', arch TEXT DEFAULT '', version INTEGER DEFAULT 1,
   last_seen_at TEXT, created_at TEXT, deleted INTEGER DEFAULT 0)
@@ -70,20 +70,28 @@ agent_host_tools(host_id INTEGER, tool TEXT, version TEXT, signed_in INTEGER,   
   account TEXT DEFAULT '', updated_at TEXT, PRIMARY KEY(host_id, tool))
 agent_tasks(id TEXT PRIMARY KEY, repository_id INTEGER, artifact_name TEXT, host_id INTEGER, tool TEXT,
   model TEXT DEFAULT '', requested_by INTEGER, target_kind TEXT, target_number INTEGER,     -- issue | pull_request
+  target_title TEXT DEFAULT '',                                                            -- title at create
   base_ref TEXT, base_commit TEXT, branch TEXT, instructions TEXT DEFAULT '', prompt TEXT,
   state TEXT,          -- QUEUED CLAIMED RUNNING SUCCEEDED NO_CHANGES FAILED CANCELLED TIMED_OUT LOST
-  token_digest TEXT UNIQUE, deadline INTEGER, cancel_requested INTEGER DEFAULT 0,
+  token_digest TEXT UNIQUE, claim_id TEXT, deadline INTEGER, cancel_requested INTEGER DEFAULT 0,
   claimed_at TEXT, started_at TEXT, finished_at TEXT, exit_code INTEGER, commit_id TEXT DEFAULT '',
   result TEXT DEFAULT '{}', failure_reason TEXT DEFAULT '', log_lines INTEGER DEFAULT 0,
-  log_bytes INTEGER DEFAULT 0, idempotency_key TEXT, created_at TEXT, updated_at TEXT,
+  log_bytes INTEGER DEFAULT 0, log_truncated INTEGER DEFAULT 0, idempotency_key TEXT, created_at TEXT, updated_at TEXT,
   UNIQUE(requested_by, idempotency_key))
 agent_task_logs(task_id TEXT, seq INTEGER, text TEXT, PRIMARY KEY(task_id, seq))
 ```
 
-Limits: 50 open registration tokens; 100 hosts per scope; 4 queued or running
-tasks per host and 20 per repository; prompt ≤ 32 KiB; stored log ≤ 512 KiB and
+The migration adds `NOT NULL` and `CHECK` constraints to these columns and indexes on
+hosts by scope and tasks by host, repository and state. `claim_id` makes a retried
+claim return the same task; `log_truncated` marks a log cut at its bound;
+`target_title` keeps the issue or pull request title at create.
+
+Limits: 50 open registration tokens per scope; registration tokens have 1–10 uses;
+100 hosts per scope; 4 queued or running tasks per host and 20 per repository (429
+`resource_exhausted`); prompt ≤ 32 KiB; stored log ≤ 512 KiB and
 10,000 lines per task (later lines are dropped and the log is marked truncated);
-default deadline 30 minutes, maximum 2 hours. Lost tasks: a CLAIMED or RUNNING task
+default deadline 30 minutes, maximum 2 hours. The deadline counts from the claim:
+time spent queued does not shorten it. Lost tasks: a CLAIMED or RUNNING task
 whose host has not called in for 3 minutes, or past its deadline, becomes `LOST` or
 `TIMED_OUT` in the maintenance sweep.
 
@@ -123,8 +131,27 @@ Claimed task:
   "target": { "kind": "issue", "number": 12, "title": "…", "url": "https://ORIGIN/owner/name/issues/12" } }
 ```
 
+A retried claim (same `claimId`, task still `CLAIMED`) returns the same task with a
+fresh token, and the earlier token stops working; the host always uses the token
+from the latest claim response. A claim returns `{ task: null }` when the host already
+runs `maxConcurrent` tasks, and 403 when the host is disabled (heartbeat reports
+`state`). A queued task that no longer passes the admission rules at claim becomes
+`FAILED` with `failureReason` `refused_<rule code>` and is skipped.
+
+`start` moves `CLAIMED` to `RUNNING`; if a cancel was requested it answers
+`{ ok: true, cancel: true }` without starting. A task token works for start, log and
+Git while the task is `CLAIMED` or `RUNNING` and before its deadline (401 after the
+deadline, 409 once finished). `finish` is accepted from `CLAIMED` (a host may refuse a
+task without starting it) or `RUNNING`; a finish for a task that already finished
+answers `{ ok: true, state }` with the state it has.
+
 Log `offset` is the number of lines already accepted; a retried chunk with an old
-offset is ignored for the lines already stored. `cancel: true` (from heartbeat,
+offset is ignored for the lines already stored. An offset past the accepted count is
+409 `{ code, message, nextOffset }`; resend from `nextOffset`. Golf credentials
+(`golf_agent_task_…`, `golf_agent_host_…`, `golfagentreg_…`, `golf_native_…`,
+`golf_git_…`) are replaced with `***` in stored lines and failure text. Heartbeat's
+`cancel` lists every `CLAIMED` or `RUNNING` task of the host with a cancel request; the
+host learns of a cancel there (it never sends empty log chunks). `cancel: true` (from heartbeat,
 start or log) means the host must stop the tool's process group, discard the working
 copy and finish with `cancelled`.
 
@@ -144,6 +171,14 @@ commits); otherwise the task becomes `FAILED` with `failure_reason = 'proposal_u
 Git through the task route: upload-pack reads the repository; receive-pack accepts
 exactly one update of `refs/heads/<branch>`, create or fast-forward from
 `baseCommit`, ≤ 8 MiB, only while the task is `RUNNING`. Everything else is 403.
+Precisely: upload-pack works while the task is `CLAIMED` or `RUNNING`; a push must
+create the branch, or move it from the commit this same task pushed before (any other
+old value is 403, a stale one 409); deletes are 403; repository branch rules apply;
+over 8 MiB is 413; git's 4-byte `0000` probe answers 200. The push is journaled and
+fenced like a `/git/` push (as the requester), and does not start Actions workflows.
+Send the credentials up front (`Authorization: Basic golf:<token>`); a request
+without them gets 401 with `WWW-Authenticate: Basic`. Ancestry is checked at
+`finish`, not at push.
 
 ## Host binary behaviour (`cmd/golf-agent-host`)
 
@@ -179,9 +214,12 @@ exactly one update of `refs/heads/<branch>`, create or fast-forward from
   enabledTools, maxConcurrent, hostVersion, os, arch, tools: [{ tool, version, signedIn, account }],
   activeTasks, version }], tokens: [{ id, expiresAt, usesLeft }], canManage }`.
   `scope: "personal"` lists the caller's own hosts.
-- `createToken` `{ scope, organization?, ttlHours, uses }` → `{ token, commands: [string] }`
-  (the exact `register` and `run` commands).
-- `revokeToken` `{ scope, organization?, id }`.
+- `createToken` `{ scope, organization?, ttlHours, uses }` → `{ token, registration: { id, expiresAt, usesLeft }, commands: [string] }`
+  (the exact `register` and `run` commands; `ttlHours` 1–24 and `uses` 1–10, both
+  default 1).
+- `revokeToken` `{ id }` (a `scope` sent with it is ignored).
+- Organization members who are not owners may `list` their organization's hosts with
+  `canManage: false` and no tokens.
 - `update` `{ id, expectedVersion, name?, state?, shareSignins?, allowedUsers?, allowedRepositories?,
   enabledTools?, maxConcurrent? }` → `{ host }`.
 - `delete` `{ id }`: credential stops at once; queued tasks are cancelled, running
@@ -193,7 +231,8 @@ operations administrators.
 `POST /native/agent-tasks` (`{ action, repository: { owner, name }, repositoryId, … }`):
 
 - `available` → `{ hosts: [{ id, name, scope, online, tools: [{ tool, version, signedIn, usable,
-  reason }] }], featureOn, reason }` for this repository and caller.
+  reason }] }], featureOn, reason }` for this repository and caller. Hosts are listed only
+  for writers when the feature is on; `reason` says why the list is empty otherwise.
 - `create` `{ target: { kind, number }, hostId, tool, model?, instructions?, idempotencyKey }`
   → `{ task }`. `instructions` ≤ 4 KiB. The server builds the prompt from the issue or
   pull request title and body, up to the 20 most recent comments, and the
@@ -201,13 +240,28 @@ operations administrators.
   says to change files in the working copy only and not to push.
   Issue → base is the default branch head. Pull request → base is the pull request's
   head commit and branch.
-- `list` `{ target? }` → `{ tasks }` (newest first, 50).
-- `get` `{ id }` → `{ task }`; `log` `{ id, offset }` → `{ lines, nextOffset, complete, truncated }`.
-- `cancel` `{ id }`.
+- `list` `{ target? }` → `{ tasks, canAssign }` (newest first, 50).
+- `get` `{ id }` → `{ task }`; `log` `{ id, offset }` → `{ lines, nextOffset, complete, truncated, state }`
+  (at most 1,000 lines per read).
+- `cancel` `{ id }` → `{ task }`: by the requester, a repository administrator, or a
+  manager of the task's host (its owner, the organization's owners, or operations
+  administrators). A queued task is `CANCELLED` at once; a claimed or running task
+  gets a cancel request and stops on the host's next call.
 
-Task view: `{ id, state, tool, model, host: { id, name }, requestedBy, target, branch, baseRef,
-baseCommit, commitId, changedFiles, summary, usage, exitCode, failureReason, createdAt,
-startedAt, finishedAt, logLines }`.
+Task view: `{ id, state, tool, model, host: { id, name }, requestedBy: { id, login },
+target: { kind, number, title, url }, branch, baseRef, baseCommit, commitId, changedFiles,
+summary, usage, exitCode, failureReason, cancelRequested, createdAt, claimedAt, startedAt,
+finishedAt, deadline, logLines, logTruncated }`. `usage` is the host's report with
+`reported: true`, or null; `costUsd` is present only when the tool reported it.
+
+`failureReason` codes the Worker writes: `proposal_unverified` (finish check failed),
+`timed_out` (deadline passed, sweep), `lost` (host silent for 3 minutes, sweep),
+`host_deleted` (queued when its host was deleted), `cancelled` (cancelled while queued),
+`refused_<code>` (admission failed at claim; codes `feature_off`, `not_writer`,
+`host_unavailable`, `host_scope`, `not_allowed`, `repository_not_allowed`,
+`tool_disabled`, `tool_missing`, `tool_signed_out`, `repository_unavailable`). For
+`failed`, `cancelled` and `timed_out` finishes it is the host's own `failure` text
+(≤ 512 characters, credentials masked), or empty.
 
 "Open pull request" in the UI uses the existing `CreatePullRequest` RPC from
 `branch` into the issue's default branch, or into the pull request's head branch.
@@ -217,10 +271,14 @@ The agent never opens or merges anything.
 
 - Feature policy id `agent-hosts`, label "Coding agents on your machines", group
   Automation, requires `issues`, always allocated (it needs no operator binding).
-- Capability `agents.hosts`: READY when the schema is present.
+- Capability `agents.hosts`: READY when the schema is present (DISABLED with the
+  reason when an installation policy turns the feature off).
 - Audit descriptors: `agent_host.token_create`, `agent_host.token_revoke`,
-  `agent_host.update`, `agent_host.delete`, `agent_task.create`, `agent_task.cancel`.
-  Never the token, credential, prompt or instructions text.
+  `agent_host.update`, `agent_host.delete`, `agent_task.create`, `agent_task.cancel`
+  (category "Coding agents"). Never the token, credential, prompt or instructions text.
+  Organization hosts and tokens are recorded at their organization; personal and
+  installation ones at installation scope. `update`, `delete` and `revokeToken` carry
+  only `id`; the scope comes from the stored host or token.
 
 ## Acceptance
 
