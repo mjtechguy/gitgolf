@@ -1,6 +1,7 @@
 import { digest, deny, invalid, unsupported, Fault } from './common.mjs';
 import { sha } from './git.mjs';
 import { nativeWorkflow, nativeWorkflowPath } from './native-workflow.mjs';
+import { repositoryExecution } from './execution-policy.mjs';
 
 export const workflowMethods = new Set(['InspectWorkflows']);
 export const workflowInventoryCatalog = 'golf.native.workflow-inventory.v1';
@@ -26,7 +27,7 @@ export async function workflowInventory(db, env, person, row, request, method, b
   if (!['admin', 'write', 'read'].includes(row.role)) deny();
   if (body.ref !== undefined && body.ref !== '') invalid('Native workflow inspection reads the current default-branch commit.');
   const profile = env.TEST_WORKFLOW_FORMAT || '', approved = profile && nativeWorkflowPath(profile, env.TEST_WORKFLOW_PATH) ? env.TEST_WORKFLOW_PATH : '';
-  const available = Boolean(executionAvailable);
+  const available = Boolean(executionAvailable), policy = await repositoryExecution(db, row);
   return artifact(async (repo, _info, commits) => {
     const commitId = commits[0]?.hash;
     if (!commitId) throw new Fault('failed_precondition', 412, 'The default branch has no commit to inspect.');
@@ -55,8 +56,8 @@ export async function workflowInventory(db, env, person, row, request, method, b
     for (const { path, entry, format } of selected) {
       const allowed = path === approved, item = { path, blobId: '', byteSize: '0', format: format === 'gitlab' ? 'WORKFLOW_FORMAT_GITLAB_CI' : 'WORKFLOW_FORMAT_GITHUB_ACTIONS',
         state: 'WORKFLOW_INSPECTION_STATE_UNSUPPORTED', name: '', jobs: [], events: [], diagnostics: [],
-        // Operator ceilings for the one approved path; neither proves a future run will be admitted.
-        manualPolicyAllowed: allowed && available, pushPolicyAllowed: allowed && available && env.CI_AUTO === 'true' };
+        // The operator allocation and the repository switch for the one approved path; neither proves a future run will be admitted.
+        manualPolicyAllowed: allowed && available && policy.manual, pushPolicyAllowed: allowed && available && env.CI_AUTO === 'true' && policy.push };
       configurations.push(item);
       if (entry.type !== 'blob' || !sha(entry.hash)) { item.diagnostics.push({ code: 'not_regular_file', message: 'Only a regular, non-executable file can be a workflow.' }); continue; }
       const blob = await repo.readBlob(entry.hash);
@@ -81,6 +82,6 @@ export async function workflowInventory(db, env, person, row, request, method, b
     }
     return { repositoryId: String(row.id), commitId, catalogVersion: workflowInventoryCatalog, executionAvailable: available, configurations, diagnostics,
       // An opaque observation of every ceiling reported above, not a dispatch receipt.
-      policyRevision: await digest(JSON.stringify(['golf.native.workflow-policy.v1', env.TEST_POLICY_SHA256 || '', approved, available, env.CI_AUTO === 'true'])), executionCatalog: '', executionEngineCommit: '' };
+      policyRevision: await digest(JSON.stringify(['golf.native.workflow-policy.v1', env.TEST_POLICY_SHA256 || '', approved, available, env.CI_AUTO === 'true', policy.version, policy.manual, policy.push])), executionCatalog: '', executionEngineCommit: '' };
   }, true);
 }

@@ -21,7 +21,7 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | CapabilityService | 1 | 0 | Explicit native contract. |
 | RepositoryAccessService | 6 | 0 | Enrolled direct collaborator inventory/resolution and atomic version-fenced grants with original receipts. Teams and SSH deploy keys remain open. |
 | WorkflowService | 1 | 0 | Read-only inventory of .github/workflows/*.yml and .gitlab-ci.yml at the default-branch commit for current repository accounts: at most 20 files of 64 KiB, classified against the native shell subset, with the one operator-approved path marked. No dispatch, editor or run history. |
-| ExecutionPolicyService | 0 | 2 | Native migration required; portable service remains available on its own setup path. |
+| ExecutionPolicyService | 2 | 0 | Repository scope only: current administrators turn pull-request runs and automatic push tests off or on with policy and authority revision checks. Enforced when a run is admitted; admitted runs are not revoked. No instance or organization ceilings, repository selection or workflow path lists. |
 | WorkflowRunService | 0 | 7 | Native migration required; portable service remains available on its own setup path. |
 | OrganizationCreationService | 0 | 3 | Native migration required; portable service remains available on its own setup path. |
 | InfrastructureConnectionService | 0 | 8 | Native migration required; portable service remains available on its own setup path. |
@@ -176,8 +176,8 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | RepositoryAccessService/RemoveRepositoryCollaborator | golf.proto | Bounded adapter |
 | RepositoryAccessService/GetRepositoryAccessOperation | golf.proto | Bounded adapter |
 | WorkflowService/InspectWorkflows | golf.proto | Bounded adapter |
-| ExecutionPolicyService/GetExecutionPolicy | golf.proto | Missing native adapter |
-| ExecutionPolicyService/UpdateExecutionPolicy | golf.proto | Missing native adapter |
+| ExecutionPolicyService/GetExecutionPolicy | golf.proto | Bounded adapter |
+| ExecutionPolicyService/UpdateExecutionPolicy | golf.proto | Bounded adapter |
 | WorkflowRunService/PrepareWorkflowDispatch | golf.proto | Missing native adapter |
 | WorkflowRunService/DispatchWorkflow | golf.proto | Missing native adapter |
 | WorkflowRunService/GetWorkflowRun | golf.proto | Missing native adapter |

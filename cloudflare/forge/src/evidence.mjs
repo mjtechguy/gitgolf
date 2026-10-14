@@ -8,6 +8,7 @@ import { nativeActionsBuildContract, nativeActionsContract, nativeWorkflowContra
 import { nativeRunnerAdmission, nativeRunnerProgress } from './native-runners.mjs';
 import { agentPolicy } from './agent-policy.mjs';
 import { agentStep, agentSource } from './agents.mjs';
+import { repositoryExecution } from './execution-policy.mjs';
 
 const terminal = new Set(['SUCCEEDED', 'REFUSED', 'EXPIRED']);
 const choices = ['inspect_changes', 'run_tests', 'resolve_feedback'];
@@ -60,7 +61,8 @@ async function send(db, env, job) {
   await db.prepare("UPDATE evidence_jobs SET delivery='SENT',updated_at=? WHERE id=? AND delivery='PENDING'").bind(time(), job.id).run();
   job.delivery = 'SENT';
 }
-export async function evidenceAPI(db, env, person, row, artifact, body) {
+// origin is set by trusted callers only: 'manual' for a writer's request, 'push' for automatic intake.
+export async function evidenceAPI(db, env, person, row, artifact, body, origin = 'manual') {
   if (body.action === 'list') {
     if (!Number.isInteger(body.number) || body.number < 1) invalid('Use a PR number.');
     const { results } = await db.prepare('SELECT * FROM evidence_jobs WHERE repository_id=? ORDER BY created_at DESC,id DESC LIMIT 101').bind(row.id).all();
@@ -97,6 +99,7 @@ export async function evidenceAPI(db, env, person, row, artifact, body) {
       policy(env, body.advice);
       if (runTests && !testPolicy(env)) throw new Fault('failed_precondition', 412, 'An operator-approved container test allocation is required.');
       if (runAgent && !agentPolicy(env)) throw new Fault('failed_precondition', 412, 'An operator-approved native agent allocation is required.');
+      if (runTests && !(await repositoryExecution(db, row))[origin === 'push' ? 'push' : 'manual']) throw new Fault('failed_precondition', 412, origin === 'push' ? 'Automatic push tests are turned off for this repository.' : 'Pull-request runs are turned off for this repository.');
       if (row.write_pending) conflict();
       const count = await db.prepare('SELECT count(*) AS total FROM evidence_jobs WHERE created_at>=?').bind(time().slice(0, 10)).first();
       if (count.total >= Number(env.EVIDENCE_DAILY_LIMIT)) exhausted();

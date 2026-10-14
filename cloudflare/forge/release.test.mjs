@@ -10,16 +10,17 @@ test('release retention parses only bounded embedded static manifests without ex
   for (const invalid of [bundle.replace('old-abcd1234.js', '../private-abcd1234.js'), bundle.replace('"aGk="', 'process.exit()'), bundle.replace('"aGk="', '"not base64!"'), 'no manifest']) assert.throws(() => embeddedAssets(invalid));
 });
 
-test('release schema 24 is the latest migration, ends schema.sql and bounds merge operations', async t => {
+test('release schema 25 is the latest migration and ends schema.sql; schema 24 bounds merge operations', async t => {
   const migrations = (await readdir(new URL('./migrations/', import.meta.url))).filter(name => /^\d{4}_.+\.sql$/.test(name)).sort();
-  assert.equal(migrations.at(-1), '0024_pull_merges.sql');
+  assert.equal(migrations.at(-1), '0025_repository_execution_policy.sql');
+  const latest = await readFile(new URL('./migrations/0025_repository_execution_policy.sql', import.meta.url), 'utf8');
   const migration = await readFile(new URL('./migrations/0024_pull_merges.sql', import.meta.url), 'utf8'), schema = await readFile(new URL('./schema.sql', import.meta.url), 'utf8');
-  assert.match(await readFile(new URL('./release.mjs', import.meta.url), 'utf8'), /contract: 1, schema: 24, /);
+  assert.match(await readFile(new URL('./release.mjs', import.meta.url), 'utf8'), /contract: 1, schema: 25, /);
   // Tail migrations are appended after one blank line; the Alchemy migrate step peels exactly that.
-  assert.ok(schema.endsWith(';\n\n' + migration));
+  assert.ok(schema.endsWith(';\n\n' + migration + '\n' + latest));
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());
   // The migration applies to its reviewed predecessor and is safe to replay after a lost response.
-  sql.exec(schema.slice(0, -(migration.length + 1))); sql.exec(migration); sql.exec(migration);
+  sql.exec(schema.slice(0, -(migration.length + latest.length + 2))); sql.exec(migration); sql.exec(migration); sql.exec(latest); sql.exec(latest);
   sql.exec(`INSERT INTO users(id,login) VALUES(1,'alice'),(2,'bob');
     INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at) VALUES(1,'project','','repo-1',1,'key','hash','ACTIVE','2026-10-14T00:00:00Z');
     INSERT INTO discussions(id,repository_id,number,kind,author_id,title,body,state,created_at,updated_at) VALUES(1,1,1,'pull',1,'One','','OPEN','t','t'),(2,1,2,'pull',1,'Two','','OPEN','t','t');

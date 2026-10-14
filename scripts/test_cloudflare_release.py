@@ -503,8 +503,8 @@ class ReleaseTests(unittest.TestCase):
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0024_pull_merges.sql').read_text()
-            self.assertTrue(schema.endswith(';\n\n'+migration))
-            db.executescript(schema[:-len('\n'+migration)])
+            self.assertIn(';\n\n'+migration, schema)
+            db.executescript(schema[:schema.index('\n'+migration)])
             lost = True; writes = []
             def command(*args, **kwargs):
                 nonlocal lost
@@ -535,6 +535,37 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(applied, ['0024']); release.check_pull_merge_schema()
             release.state['migration0024'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_pull_merge_schema([])
+
+    def test_execution_policy_migration_is_the_schema_tail_resumes_and_leaves_repositories_enabled(self):
+        release = self.release()
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0025_repository_execution_policy.sql').read_text()
+            self.assertTrue(schema.endswith(';\n\n'+migration))
+            db.executescript(schema[:-len('\n'+migration)])
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith('PRAGMA'):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost execution policy migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0025'): release.check_execution_policy_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost execution'): release.migrate_execution_policy_schema([])
+            applied = []; release.migrate_execution_policy_schema(applied)
+            self.assertEqual(applied, ['0025'])
+            # No row is written: every existing repository stays enabled within the operator allocation.
+            self.assertEqual(db.execute('SELECT count(*) FROM repository_execution_policy').fetchone()[0], 0)
+            applied = []; release.migrate_execution_policy_schema(applied)
+            self.assertEqual(applied, [])
+            release.state['migration0025'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_execution_policy_schema([])
 
     def test_pull_merge_schema_gates_only_schema24_releases(self):
         release = self.release(); called = []

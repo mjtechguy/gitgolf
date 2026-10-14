@@ -33,6 +33,13 @@ The repository settings page lists `.github/workflows/*.yml`/`*.yaml` and
 marks the approved path. It starts nothing: a run always reads the approved path
 from the pull request's head commit.
 
+A repository administrator can turn pull-request runs and automatic push tests
+off for one repository on the same page (schema 25, migration
+`0025_repository_execution_policy.sql`). A repository with no saved switch
+allows both within the operator allocation. The switch is checked when a run is
+admitted and when a push is recorded for automatic tests; it does not stop a run
+that was already admitted, and it does not govern agent proposals.
+
 The Actions profile accepts `on: pull_request`, one job with
 `runs-on: golf-native-linux`, and up to ten `run` steps. Optional `name` and
 `shell: sh|bash` are accepted. Each step gets a fresh shell in the same checkout.

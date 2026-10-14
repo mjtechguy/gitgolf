@@ -2930,7 +2930,7 @@ test('native merge writes one verified merge commit through the push journal and
   const again=(await value(await f.submit(f.input({selection:compared,expectedPullRevision:merged.revision})))).operation;
   assert.equal(again.phase,mergePhase('REJECTED'));assert.equal(again.failureCode,'preflight_refused');assert.equal(f.journal()[1].detail,'pull_request_not_open');
   assert.equal(f.counts().effects,1);
-  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,24);
+  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,25);
   const capability=(await value(await f.call('',{},ownerToken,'/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c=>c.id==='pull.merge');
   assert.equal(capability.length,1);assert.equal(capability[0].state,'CAPABILITY_STATE_READY');
 });
@@ -3641,4 +3641,112 @@ test('workflow inventory bounds files, bytes and entry kinds and keeps the appro
   assert.deepEqual([listed['binary.yaml'].state, listed['binary.yaml'].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_INVALID', 'not_utf8']);
   for (const name of ['link.yml', 'run.yml', '.gitlab-ci.yml']) assert.deepEqual([listed[name].state, listed[name].blobId, listed[name].diagnostics[0].code], ['WORKFLOW_INSPECTION_STATE_UNSUPPORTED', '', 'not_regular_file']);
   assert.deepEqual(result.diagnostics.map(d => d.code), ['unlisted_names', 'module_profile']);
+});
+
+const policyCall = (f, method, body = {}, token = ownerToken) => f.call('', { scope: 'EXECUTION_SCOPE_REPOSITORY', repository: key, ...body }, token, '/rpc/golf.v1.ExecutionPolicyService/' + method);
+async function setExecution(f, manual, push) {
+  const { policy } = await value(await policyCall(f, 'GetExecutionPolicy'));
+  return value(await policyCall(f, 'UpdateExecutionPolicy', { scopeId: policy.scopeId, expectedRevision: policy.revision, expectedAuthorityRevision: policy.authorityRevision,
+    mode: manual || push ? 'EXECUTION_MODE_ALL' : 'EXECUTION_MODE_DISABLED', ...(manual ? { manualDispatchEnabled: true } : {}), ...(push ? { pushAllowed: true } : {}), allowAllWorkflows: true }));
+}
+
+test('the repository execution switch defaults to enabled and saves only under current admin authority and the observed revision', async t => {
+  const f = await inventoryFixture(t), origin = f.env.PUBLIC_ORIGIN, path = '/rpc/golf.v1.ExecutionPolicyService/';
+  await value(await f.call('', { repository: key, repositoryId: '1', userId: '2', role: 'read' }, ownerToken, '/native/repository-grant'));
+  const initial = (await value(await policyCall(f, 'GetExecutionPolicy'))).policy;
+  assert.deepEqual(initial, { scope: 'EXECUTION_SCOPE_REPOSITORY', scopeId: '1', ownerId: initial.ownerId, mode: 'EXECUTION_MODE_ALL', selectedRepositoryIds: [], manualDispatchEnabled: true, allowAllWorkflows: true,
+    workflowPaths: [], revision: '0', revocationEpoch: '0', canEdit: true, authorityRevision: initial.authorityRevision, pushAllowed: true });
+  assert.match(initial.ownerId, /^[1-9][0-9]*$/); assert.match(initial.authorityRevision, /^[a-f0-9]{64}$/);
+  const reader = (await value(await policyCall(f, 'GetExecutionPolicy', {}, readerToken))).policy;
+  assert.equal(reader.canEdit, false); assert.equal(reader.manualDispatchEnabled, true); assert.notEqual(reader.authorityRevision, initial.authorityRevision);
+  assert.equal((await f.dispatch(new Request(origin + path + 'GetExecutionPolicy', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify({ scope: 3, repository: key }) }))).status, 401);
+  assert.equal((await policyCall(f, 'GetExecutionPolicy', { repository: { owner: 'alice', name: 'other' } })).status, 404);
+  for (const body of [{ scope: 'EXECUTION_SCOPE_INSTANCE' }, { scope: 'EXECUTION_SCOPE_ORGANIZATION', organization: 'alice' }, { organization: 'alice' }, { repository: undefined }, { scope: undefined }]) assert.equal((await policyCall(f, 'GetExecutionPolicy', body)).status, 501);
+  assert.equal((await policyCall(f, 'DeleteExecutionPolicy')).status, 501);
+  const update = (changes = {}, token) => policyCall(f, 'UpdateExecutionPolicy', { scopeId: '1', expectedRevision: '0', expectedAuthorityRevision: initial.authorityRevision, mode: 'EXECUTION_MODE_DISABLED', allowAllWorkflows: true, ...changes }, token);
+  assert.equal((await update({ expectedAuthorityRevision: reader.authorityRevision }, readerToken)).status, 404);
+  assert.equal((await update({ scopeId: '2' })).status, 404);
+  for (const changes of [{ mode: 'EXECUTION_MODE_SELECTED', selectedRepositoryIds: ['1'] }, { mode: 'EXECUTION_MODE_SELECTED' }, { workflowPaths: ['.github/workflows/ci.yml'] }, { allowAllWorkflows: false }, { mode: 'EXECUTION_MODE_ALL' },
+    { manualDispatchEnabled: true }, { pushAllowed: 'true' }, { revocationEpoch: '1' }, { expectedRevision: 'latest' }, { expectedAuthorityRevision: 'current' }]) assert.equal((await update(changes)).status, 400, JSON.stringify(changes));
+  assert.equal((await update({ expectedRevision: '1' })).status, 412);
+  assert.equal((await update({ expectedAuthorityRevision: 'f'.repeat(64) })).status, 412);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM repository_execution_policy').get().n, 0);
+  const disabled = (await value(await update())).policy;
+  assert.deepEqual([disabled.mode, disabled.manualDispatchEnabled, disabled.pushAllowed, disabled.revision, disabled.revocationEpoch, disabled.authorityRevision], ['EXECUTION_MODE_DISABLED', false, false, '1', '0', initial.authorityRevision]);
+  assert.deepEqual({ ...f.sql.prepare('SELECT repository_id,version,manual,push,updated_by FROM repository_execution_policy').get() }, { repository_id: 1, version: 1, manual: 0, push: 0, updated_by: 1 });
+  // The first observation cannot be replayed over a later one.
+  assert.equal((await update({ mode: 'EXECUTION_MODE_ALL', manualDispatchEnabled: true })).status, 412);
+  const pushOnly = (await value(await update({ expectedRevision: '1', mode: 'EXECUTION_MODE_ALL', pushAllowed: true }))).policy;
+  assert.deepEqual([pushOnly.mode, pushOnly.manualDispatchEnabled, pushOnly.pushAllowed, pushOnly.revision], ['EXECUTION_MODE_ALL', false, true, '2']);
+  // Losing admin between the read and the write leaves the stored switch untouched.
+  const prepare = f.env.DB.prepare;
+  f.env.DB.prepare = function (query) { if (query.startsWith('INSERT INTO repository_execution_policy')) f.sql.exec("UPDATE grants SET role='write' WHERE repository_id=1 AND user_id=1"); return prepare.call(this, query); };
+  assert.equal((await update({ expectedRevision: '2', mode: 'EXECUTION_MODE_ALL', manualDispatchEnabled: true, pushAllowed: true })).status, 412);
+  f.env.DB.prepare = prepare;
+  assert.deepEqual({ ...f.sql.prepare('SELECT version,manual,push FROM repository_execution_policy').get() }, { version: 2, manual: 0, push: 1 });
+  assert.equal((await value(await policyCall(f, 'GetExecutionPolicy'))).policy.canEdit, false);
+  // A row recorded for another artifact enables nothing.
+  f.sql.exec("UPDATE repository_execution_policy SET artifact_name='repo-other',manual=1");
+  const foreign = (await value(await policyCall(f, 'GetExecutionPolicy'))).policy;
+  assert.deepEqual([foreign.mode, foreign.manualDispatchEnabled, foreign.pushAllowed], ['EXECUTION_MODE_DISABLED', false, false]);
+  assert.equal(concurrentRead(new Request(origin + path + 'GetExecutionPolicy', { method: 'POST' })), true);
+  assert.equal(concurrentRead(new Request(origin + path + 'UpdateExecutionPolicy', { method: 'POST' })), false);
+});
+
+test('a repository that turns runs off refuses new admission, marks automatic intake refused and leaves admitted work and agents alone', async t => {
+  const f = await evidenceFixture(t), input = { ...f.input, advice: false, runTests: true };
+  allocateAgents(f); Object.assign(f.env, { CI_AUTO: 'true', EVIDENCE_DAILY_LIMIT: '20' });
+  const capability = async () => (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.find(c => c.id === 'settings.repository-execution-policy');
+  assert.equal((await capability()).state, 'CAPABILITY_STATE_READY');
+  const jobs = () => f.sql.prepare('SELECT count(*) AS n FROM evidence_jobs').get().n;
+  const pushed = () => f.sql.prepare('INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,ci_state,created_at) VALUES(?,1,1,?,?,?,?,?,?) RETURNING id')
+    .get(nonce(), 'refs/heads/feature', commit, 'b'.repeat(40), 'APPLIED', 'PENDING', new Date().toISOString()).id;
+  const admitted = (await value(await f.evidence(input))).job;
+  assert.equal((await setExecution(f, false, true)).policy.manualDispatchEnabled, false);
+  const refused = await f.evidence({ ...input, idempotencyKey: nonce() });
+  assert.equal(refused.status, 412); assert.deepEqual(await refused.json(), { code: 'failed_precondition', message: 'Pull-request runs are turned off for this repository.' });
+  assert.equal(jobs(), 1); assert.equal(f.messages.length, 1);
+  // The switch is an admission rule: the original run is still readable, replayable and running.
+  assert.equal((await value(await f.evidence(input))).job.id, admitted.id);
+  assert.equal((await f.advance(admitted.id, 'tests')).state, 'RUNNING'); assert.equal(f.sql.prepare('SELECT test_state FROM evidence_jobs WHERE id=?').get(admitted.id).test_state, 'RUNNING');
+  assert.equal((await f.advance(admitted.id, 'authorize-test')).state, 'AUTHORIZED');
+  // Evidence without tests and agent proposals are not governed by it.
+  assert.equal((await f.evidence({ ...f.input, advice: false, idempotencyKey: nonce() })).status, 200);
+  assert.equal((await value(await f.evidence({ ...f.input, advice: false, agent: { prompt: 'Improve the approved source file.' }, idempotencyKey: nonce() }))).job.agentState, 'REQUESTED');
+  // Automatic push tests have their own switch and still admit.
+  const first = pushed();
+  assert.deepEqual(await runCI(f.env), { admitted: 1 });
+  assert.deepEqual({ ...f.sql.prepare('SELECT state,reason FROM ci_intake WHERE operation_id=?').get(first) }, { state: 'ADMITTED', reason: null });
+  assert.equal((await setExecution(f, true, false)).policy.pushAllowed, false);
+  const second = pushed(), admissions = jobs();
+  assert.deepEqual(await runCI(f.env), { admitted: 0 });
+  assert.equal(f.sql.prepare('SELECT ci_state FROM git_operations WHERE id=?').get(second).ci_state, 'REFUSED');
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM ci_intake WHERE operation_id=?').get(second).n, 0);
+  // Intake recorded while enabled is refused, not silently dropped, once the switch is off.
+  const third = pushed(), intake = nonce();
+  f.sql.prepare("UPDATE git_operations SET ci_state='RECORDED' WHERE id=?").run(third);
+  f.sql.prepare('INSERT INTO ci_intake(id,operation_id,repository_id,user_id,number,selection,created_at) VALUES(?,?,1,1,?,?,?)').run(intake, third, f.selection.number, JSON.stringify(f.selection), new Date().toISOString());
+  assert.deepEqual(await runCI(f.env), { admitted: 0 });
+  assert.deepEqual({ ...f.sql.prepare('SELECT state,reason,job_id FROM ci_intake WHERE id=?').get(intake) }, { state: 'REFUSED', reason: 'failed_precondition', job_id: null });
+  assert.equal(jobs(), admissions);
+  // A writer's own run is allowed again, and the inventory reports the same switch.
+  assert.equal((await f.evidence({ ...input, idempotencyKey: nonce() })).status, 200);
+  await setExecution(f, false, false);
+  assert.equal((await f.evidence({ ...input, idempotencyKey: nonce() })).status, 412);
+  delete f.env.EVIDENCE_BUCKET;
+  assert.deepEqual([(await capability()).state, (await capability()).reason], ['CAPABILITY_STATE_DISABLED', 'Pull-request test execution is not allocated on this installation; a repository switch has nothing to govern.']);
+});
+
+test('the workflow inventory reports the repository switch beside the operator allocation', async t => {
+  const f = await inventoryFixture(t); allocateEvidence(f); allocateTests(f);
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'actions', TEST_WORKFLOW_PATH: '.github/workflows/ci.yml', CI_AUTO: 'true' });
+  workflowFiles(f, { '.github/workflows/ci.yml': shellWorkflow });
+  const flags = async () => { const result = await value(await inspect(f)); return [result.configurations[0].manualPolicyAllowed, result.configurations[0].pushPolicyAllowed, result.policyRevision]; };
+  const enabled = await flags(); assert.deepEqual(enabled.slice(0, 2), [true, true]);
+  await setExecution(f, false, true);
+  const pushOnly = await flags(); assert.deepEqual(pushOnly.slice(0, 2), [false, true]); assert.notEqual(pushOnly[2], enabled[2]);
+  await setExecution(f, false, false);
+  assert.deepEqual((await flags()).slice(0, 2), [false, false]);
+  await setExecution(f, true, true);
+  const restored = await flags(); assert.deepEqual(restored.slice(0, 2), [true, true]); assert.notEqual(restored[2], enabled[2]);
 });
