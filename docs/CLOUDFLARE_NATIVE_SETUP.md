@@ -1,5 +1,23 @@
 # Native Artifacts repository setup
 
+**Retained installation on your own account.** Two deploy paths provision a complete
+Cloudflare-native Golf (Workers, D1, Artifacts, Access, previews, managed CI) from
+values you supply; neither has owner-specific defaults, and content is explicit
+(`--manifest deploy/demo/example.json` for a neutral sample, your own manifest, or
+`--no-seed`):
+
+- **Alchemy, fresh install** (recommended; all optional services such as AI, search,
+  pipelines and email, plus token renewal):
+  `cloudflare_alchemy_demo.py init` → `plan` → `deploy` → `seed`. See
+  [deploy/alchemy/README.md](../deploy/alchemy/README.md).
+- **Python/`cf` installer**: `cloudflare-demo-deploy.py create`. Optional services are
+  Alchemy actions; hand the installation over with `cloudflare_alchemy_demo.py prepare`.
+  See [deploy/demo/README.md](../deploy/demo/README.md).
+
+Both list what you provide (account and zone IDs, `cf` profile, hostnames, Access
+email, optional Secrets Store, admin login). The manual operator installation below
+(`scripts/cloudflare_forge.py`) is the lower-level path.
+
 The integrated [Operations dashboard](OPERATIONS.md) at `/admin/operations` uses current Access identity and an explicitly enrolled native operations role. Fresh setup enrolls the configured owner; existing installations apply additive migration0010 and deliberately enroll administrators. Optional read-only analytics/probes, safe managed logs and a separate operator-owned dead-letter queue have their own setup flags and qualification gates. See the [robustness execution plan](CLOUDFLARE_ROBUSTNESS_OPERATIONS_PLAN.md). No Grafana is deployed in Cloudflare.
 
 Repository **Settings → Access** uses the shared collaborator and invitation
@@ -51,7 +69,7 @@ Prerequisites:
 
 1. Enable [Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/reference/pricing/) in the selected account. Its subscription is separate from Workers Paid. After the operator's2026-10-09 upgrade, dispatch discovery and actual hosted application qualification succeed in the selected `golf` account.
 2. Allocate a dispatch namespace using the selected profile after CLI command discovery. Create a Secrets Store and a short-lived, selected-account management token with Workers Scripts write, D1 write, R2 write and Secrets Store write authority. Store its value directly in Secrets Store with `workers` scope; installation files contain only the store ID and secret name. CLI OAuth cannot create account API tokens (403/error9109), but supported `cf user tokens create` accepts selected-account permission policies. The disposable launcher uses that path, keeps token values in memory and revokes them during cleanup. Do not copy OAuth credentials into a Worker or paste tokens into chat.
-3. Configure the preview Access application to cover both `previews.mjtechguy.com` and `*.previews.mjtechguy.com` under the configured audience and approved identity policy. A child hostname without the expected runtime Access context is denied by the gateway. Preserve existing account users/providers/subscriptions.
+3. Configure the preview Access application to cover both `YOUR_PREVIEW_HOSTNAME` and `*.YOUR_PREVIEW_HOSTNAME` under the configured audience and approved identity policy. A child hostname without the expected runtime Access context is denied by the gateway. Preserve existing account users/providers/subscriptions.
 4. Keep the existing approved evidence/test/preview options and add these initializer options, replacing identifiers with the operator's actual allocations:
 
 ```sh
@@ -79,7 +97,7 @@ The execution Workflow stores its immutable report before separate `publish-stat
 
 The [2026-10-09 hosted receipt](../.tmp/cloudflare-forge/golf-native-20261009-f8536cfa/ownership.json) passes real managed dispatch, custom-domain TLS/Access machine admission, private app D1/R2 writes, a verified Secrets Store HMAC, Internet egress denial, grant replay denial and current-reader revocation. All21 owned cleanup categories are absent. Its operator-only synthetic reviewer wrapper does **not** qualify human Access login or browser cookies. Missing dispatch scripts return HTTP200 with `script:null`; custom-domain IDs can contain40 hexadecimal characters; successful deletes can return an empty body or202. Readback checks still establish resource identity and absence.
 
-For a populated demo, add `--evidence --evidence-ai --container-tests --agents --delivery --apps`, the selected `--app-zone`/`--app-host`, and `--demo-host gitgolf.mjtechguy.com --demo-email YOUR_EXISTING_ACCESS_EMAIL` to the qualification command below. The launcher seeds two private Artifacts repositories/PRs, actual passing CI, private evidence, two independent agent proposals and protected static/Worker previews. It adds owned email-code Access applications and an owned temporary identity provider without modifying existing account users/providers. Email-code dispatch requires the operator's approval.
+For a populated demo, add `--evidence --evidence-ai --container-tests --agents --delivery --apps`, the selected `--app-zone`/`--app-host`, and `--demo-host golf.example.com --demo-email YOUR_EXISTING_ACCESS_EMAIL` (optionally `--admin-login LOGIN`; by default the login is derived from the email) to the qualification command below. The launcher seeds two private Artifacts repositories/PRs, actual passing CI, private evidence, two independent agent proposals and protected static/Worker previews. It adds owned email-code Access applications and an owned temporary identity provider without modifying existing account users/providers. Email-code dispatch requires the operator's approval.
 
 The supervisor first reports `awaiting_login`. Verify the human Access login and UI before running `python3 scripts/cloudflare_demo.py begin PATH_TO_OWNERSHIP_JSON`. It renews the original static and Worker preview leases, reports `ready`, records `ready_at`/`stop_at` and starts the agreed **four-hour** window. Renewal retains preview identities/source/bundles, requires current writer authority and canonical open PR source, and atomically fences changed expiry. Both lifetimes require explicit operator policy and are capped at four hours or any earlier configured demo deadline. Activation failure retains the prepared UI for a bounded thirty-minute repair window and requires a new begin request. `python3 scripts/cloudflare_demo.py stop PATH_TO_OWNERSHIP_JSON` requests owned-resource teardown immediately; inspect each cleanup result in the receipt. An unstarted login window stops after30minutes. An independent recorded host timer protects against supervisor loss; the operator host and credentials must remain available. A deployed binding is not proof that the demo is ready; consult its current receipt.
 
@@ -121,7 +139,7 @@ Record the returned database UUID, then prepare private files locally:
 ```sh
 python3 scripts/cloudflare_forge.py \
   --account-id YOUR_ACCOUNT_ID \
-  --hostname gitgolf.mjtechguy.com \
+  --hostname golf.example.com \
   --workspace YOUR_WORKSPACE --owner YOUR_LOGIN \
   --namespace gitgolf-native \
   --database-id YOUR_D1_UUID --database-name gitgolf-native
@@ -136,7 +154,7 @@ cf --profile golf d1 query YOUR_D1_UUID --batch @.cloudflare/native/bootstrap.js
 node cloudflare/forge/prepare.mjs .cloudflare/native "$(command -v cf)"
 ```
 
-Review the generated configuration, domain ownership and existing routes before publishing. This installation and the bridge cannot both own `gitgolf.mjtechguy.com`. Native `cf deploy --prebuilt --provision false`, run from `.cloudflare/native/`, publishes the prepared Worker and custom domain using its configured existing resources. The native custom-domain/operator-bootstrap path has not been qualified end to end; the disposable proof uses an independently verified Workers subdomain instead. Do not switch existing users onto it based on source or disposable proof alone.
+Review the generated configuration, domain ownership and existing routes before publishing. This installation and the bridge cannot both own the same control hostname. Native `cf deploy --prebuilt --provision false`, run from `.cloudflare/native/`, publishes the prepared Worker and custom domain using its configured existing resources. The native custom-domain/operator-bootstrap path has not been qualified end to end; the disposable proof uses an independently verified Workers subdomain instead. Do not switch existing users onto it based on source or disposable proof alone.
 
 The default disables Workers subdomain and alternate preview URLs. An API-only installation uses a short-lived Golf bearer credential. The native control UI requires Cloudflare Access as its default sign-in: when `access_aud` is configured, every HTTP caller must pass that exact Access application, including callers using a Golf bearer. Golf accepts human identity only from runtime-authenticated `ctx.access.getIdentity()`, strips caller-supplied identity headers and requires an active, already mapped D1 user. Access authentication never supplies repository grants or auto-enrolls a user. Real local workerd checks cover this mapping and disabled-user denial; the disposable populated demo also verifies actual human Access sign-in, shared repository/PR browsing and a protected Worker application D1/R2 write/read. The earlier bridge browser proof is separate.
 
@@ -149,7 +167,7 @@ cd web
 npm run build:native
 ```
 
-Append `--access-aud YOUR_CONTROL_AUDIENCE --owner-email YOUR_VERIFIED_EMAIL --web-assets /ABSOLUTE/PATH/web/dist-native` to the fresh initializer command. This maps the bootstrap owner explicitly. Grant other users through native authority, preserving their independent repository roles. The portable frontend/login and PostgreSQL deployment remain separate.
+Append `--access-aud YOUR_CONTROL_AUDIENCE --access-team-domain https://YOUR_TEAM.cloudflareaccess.com --owner-email YOUR_VERIFIED_EMAIL --web-assets /ABSOLUTE/PATH/web/dist-native` to the fresh initializer command. The team domain (`cf --profile golf zero-trust organization get` reports it as `auth_domain`) is written to `forge.json` as `access_team_domain`, which lets the Worker verify signed Access JWTs and is required before enabling public repositories. This maps the bootstrap owner explicitly. Grant other users through native authority, preserving their independent repository roles. The portable frontend/login and PostgreSQL deployment remain separate.
 
 The control Worker embeds the shared built UI, including exact Archivo/Geist Mono font bytes, with a 256-file/6MiB limit. The build was approximately 4.0MiB on 2026-10-14. Both entries import the same application and route tree; native setup does not introduce another visual implementation. It deliberately does not use the Static Assets router: that router currently does not propagate `ctx.access` to the user Worker ([provider limitation](https://developers.cloudflare.com/workers/configuration/cloudflare-access/#ctxaccess-limitations)). UI assets require a current active Golf session and receive no-cache/CSP headers. Direct identity headers and unverified JWT strings are rejected. For large-scale public SaaS, qualify customer IdPs, onboarding, identity changes, MFA requirements and Access seat economics before adopting this as universal customer authentication.
 
@@ -170,7 +188,7 @@ The new tables hold enrolled workspace identity, user/repository stars and revis
 Enable the existing evidence/container-test allocation, then append these initializer flags:
 
 ```sh
---preview-hostname previews.mjtechguy.com \
+--preview-hostname previews.example.com \
 --preview-worker gitgolf-native-previews \
 --preview-access-aud YOUR_PREVIEW_AUDIENCE \
 --preview-path public --preview-ttl 900
@@ -218,7 +236,7 @@ The existing Golf CLI now has an explicit native credential mode. Build it using
 
 ```sh
 python3 -c 'import json; print(json.load(open(".cloudflare/native/credential.json"))["token"])' | \
-  .cloudflare/native/golfctl --url https://gitgolf.mjtechguy.com \
+  .cloudflare/native/golfctl --url https://golf.example.com \
   --native-token-stdin issue create --input issue.json
 ```
 
@@ -683,15 +701,15 @@ GitLab Runner registration and the pinned Actions/BuildKit host setup are in
 ### Unattended hosted qualification
 
 Use `--unattended` with the existing populated-demo command and omit
-`--demo-email`. For the authorized test account/hostnames:
+`--demo-email`. With your own account, zone and unused hostnames:
 
 ```sh
 python3 scripts/cloudflare-forge-smoke.py \
-  --profile golf --account-id 530bd01e3d3b298bac1f172ec1868f5a \
-  --workers-subdomain mikejohnsonit \
+  --profile golf --account-id YOUR_ACCOUNT_ID \
+  --workers-subdomain YOUR_WORKERS_SUBDOMAIN \
   --evidence --evidence-ai --container-tests --agents --delivery --apps \
-  --app-zone 8804ea6a239cf8a1cd0994d1624f3939 \
-  --app-host previews.mjtechguy.com --demo-host gitgolf.mjtechguy.com \
+  --app-zone YOUR_ZONE_ID \
+  --app-host previews.example.com --demo-host golf.example.com \
   --unattended --operations-rehearsal
 ```
 

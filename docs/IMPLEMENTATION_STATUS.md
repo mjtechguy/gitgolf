@@ -1,5 +1,32 @@
 # Golf implementation status
 
+## 2026-10-14 — Cloudflare deploy paths without owner defaults
+
+Both retained-installation paths now take every owner-specific value as input
+(see the "What you provide" tables in `deploy/demo/README.md` and
+`deploy/alchemy/README.md`):
+- `cloudflare_alchemy_demo.py init` writes the private Alchemy input for a fresh
+  account without a previous receipt; `prepare` (existing-installation handoff) is kept.
+- The administrator login (`--admin-login`, default derived from the Access email)
+  and the playground Git author (`--git-author-name`/`--git-author-email`) replace
+  the hardcoded values and are saved in the private input.
+- Content is explicit: `--manifest PATH` or `--no-seed` on `create`, `apply` and
+  Alchemy `seed`; `seed-public` needs `--manifest`. `deploy/demo/example.json` and
+  `example-public.json` are neutral samples; the maintainer's hosted demo moved
+  unchanged to `mj.json`/`mj-public.json`.
+- `cloudflare_forge.py` requires `--hostname` and accepts `--access-team-domain`;
+  `cloudflare_setup.py init` requires both hostnames; the preview smoke accepts any
+  base hostname in the selected zone.
+- A `cf`-created installation reaches the Alchemy-only `enable-*` actions and token
+  renewal through the documented `prepare` handoff (a replacement with reseeded
+  content, not an in-place adoption).
+
+Verified locally: unit tests for `init` input generation, identity derivation,
+explicit-content argument handling, the build's admin enrollment, manifests and
+`--access-team-domain`; `--help` of each changed CLI. Not yet exercised against
+Cloudflare: `init` → `deploy` on an empty account, and a manifest without a
+personal section on a hosted installation.
+
 ## 2026-10-14 — Agent access: API tokens and remote MCP (agentic mode AM-3, schema 39)
 
 Personal API tokens (`golf_pat_…`, stored as SHA-256, migration `0039_api_tokens.sql`)
