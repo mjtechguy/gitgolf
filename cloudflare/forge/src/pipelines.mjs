@@ -99,6 +99,15 @@ export async function createPipelineRun(db, env, run, jobs) {
     throw error;
   }
   const { results } = await db.prepare('SELECT id,job_key AS key,name FROM pipeline_jobs WHERE run_id=? ORDER BY id').bind(created.runId).all();
+  if (run.concurrency?.group) {
+    // A new run in a group cancels earlier runs that have not started, and running ones with cancel-in-progress.
+    const { results: others } = await db.prepare(`SELECT id FROM pipeline_runs WHERE repository_id=? AND concurrency_group=? AND id<? AND state IN ('QUEUED','RUNNING','WAITING')
+      AND (started_at IS NULL OR ?=1) AND cancel_requested=0`).bind(Number(run.repositoryId), String(run.concurrency.group).slice(0, 400), created.runId, run.concurrency.cancelInProgress ? 1 : 0).all();
+    for (const other of others) {
+      await db.prepare('UPDATE pipeline_runs SET cancel_requested=1,reason=CASE WHEN reason=\'\' THEN ? ELSE reason END,updated_at=? WHERE id=?').bind(`Cancelled by run #${created.number} in concurrency group.`, now(), other.id).run();
+      await advancePipelineRun(env, other.id);
+    }
+  }
   await advancePipelineRun(env, created.runId);
   return { ...created, jobs: results };
 }
