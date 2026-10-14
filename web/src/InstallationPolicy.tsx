@@ -46,7 +46,8 @@ export function PolicyPanel({ policy, editable, onSaved }: { policy: Installatio
       } catch (cause) { setError(cause instanceof Error ? cause.message : 'The change could not be confirmed. Refresh before trying again.'); }
       finally { setPending(false); }
     } });
-  const label = policy.label.toLowerCase();
+  // Mid-sentence label that keeps acronyms such as AI.
+  const label = /^[A-Z]{2}/.test(policy.label) ? policy.label : policy.label.charAt(0).toLowerCase() + policy.label.slice(1);
   return <div className="settings-policy">
     <div className="settings-policy-current"><span><strong>{policy.source === 'installation' ? 'Set here' : 'Deploy value'}</strong>{policy.source === 'installation' ? <> by {policy.updatedBy || 'an administrator'} <DateLabel value={policy.updatedAt} relative /> · deploy value {policyText(policy.key, policy.deploy)}</> : ' · editable within the deploy allocation'}</span>
       {editable && !open ? <button type="button" className="button secondary" aria-label={`Edit ${label}`} onClick={() => { setOpen(true); setError(''); setOperationId(crypto.randomUUID()); form.reset(); }}>Edit</button> : null}</div>
