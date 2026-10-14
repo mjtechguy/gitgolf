@@ -22,6 +22,8 @@ import { nativeRunnerAdmin, nativeRunnerPlacement, nativeRunnerMachine } from '.
 import { gitLabRunner } from './gitlab-runner.mjs';
 import { pipelinePolicy, pipelineCapabilities } from './pipeline-policy.mjs';
 import { pipelineAPI, pipelineRunnerAPI } from './pipeline-api.mjs';
+import { agentHostsAPI, agentTasksAPI, agentHostCapability } from './agent-hosts.mjs';
+import { agentHostMachine } from './agent-host-protocol.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
@@ -367,6 +369,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       async id => (await advanceEvidence(env,id,'authorize-test')).state === 'AUTHORIZED',
       (id,source) => testGit(env,id,source,undefined,providerFetch));
     }
+    // Agent hosts: host credential and task token routes, outside Access (docs/AGENT_HOSTS.md).
+    if (url.pathname.startsWith('/native/agent-host/')) return await agentHostMachine(db, env, request, url, withArtifact, providerFetch);
     env.publicRead = env.PUBLIC_REPOSITORIES === 'true' && publicReadRequest(request);
     const publicSession = env.PUBLIC_REPOSITORIES === 'true' && ['/rpc/golf.v1.SessionService/GetSession', '/rpc/golf.v1.SessionService/GetAuthenticationOptions', '/rpc/golf.v1.CapabilityService/ListCapabilities'].includes(url.pathname);
     const person = await env.timings.measure('actor', () => actor(db, request, env.publicRead || publicSession));
@@ -430,6 +434,12 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (body.repositoryId !== String(row.id)) deny();
       return row;
     }));
+    if (url.pathname === '/native/agent-hosts') return reply(await agentHostsAPI(db, env, person, request, body));
+    if (url.pathname === '/native/agent-tasks') {
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
+      return reply(await agentTasksAPI(db, env, person, row, request, body, () => withArtifact(env, row, repo => refs(env, repo, row, providerFetch))));
+    }
     if (url.pathname === '/native/ai-models' || url.pathname === '/native/ai-models/read') return await aiModelsAPI(db, env, person, request, body, url.pathname.endsWith('/read'), () => authorizedRepository(db, person, body.repository, env, body.repositoryId));
     if (url.pathname === '/native/ai-usage/read') return await aiUsageAPI(db, env, person, request, body, providerFetch);
     if (url.pathname === '/native/runner-placement') {
@@ -574,6 +584,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'settings.repository-environments', label: 'Environments', state: environmentPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: environmentPolicy(env) ? 'One environment named preview governs protected pull-request previews: allowed head branches, preview lifetime within the operator limit and concurrent previews. Required reviewers, wait timers, environment secrets and production deployment are not available. Changes need a verified Access sign-in.' : `Repository environments need ${[!previewPolicy(env) && 'an operator-approved protected preview allocation', !env.ACCESS_AUD && 'Cloudflare Access sign-in'].filter(Boolean).join(' and ')} on this installation.` },
       executionValueCapability(env),
       await searchCapability(db, env),
+      await agentHostCapability(db),
       ...[
         ['settings.repository-teams', 'Repository team access', 'Team membership and inherited repository permissions are not implemented on Cloudflare native. Direct collaborators and invitations are available in Access.'],
         ['settings.repository-deploy-keys', 'SSH deploy keys', 'Cloudflare native serves Git over HTTPS. SSH transport and SSH deploy keys are not available.'],

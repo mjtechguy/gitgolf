@@ -51,8 +51,8 @@ async function dispatch(request, env, ctx, clock) {
       if (artifactRoute(url.pathname)) return actionsArtifacts(request, pipelineEnv());
       if (actionsGitRoute(url.pathname) && (request.method === 'POST' || url.search === '?service=git-upload-pack')) return actionsGit(request, pipelineEnv(), (await import('./core.mjs')).withArtifact);
     }
-    // Configured Access is the outer gate for both people and machine callers.
-    const machineRoute = url.pathname.startsWith('/native/runner-machine/') || url.pathname.startsWith('/api/v4/');
+    // Configured Access is the outer gate for people; machine routes (runners, agent hosts) check their own credentials against D1.
+    const machineRoute = url.pathname.startsWith('/native/runner-machine/') || url.pathname.startsWith('/native/agent-host/') || url.pathname.startsWith('/api/v4/');
     const access = env.ACCESS_AUD && !machineRoute ? await clock.measure('access_auth', () => accessContext(request, env, ctx)) : null;
     const publicSite = env.PUBLIC_REPOSITORIES === 'true';
     if (env.ACCESS_AUD && !access && !machineRoute && !publicSite) return new Response('Access sign-in required', { status: 401, headers: { 'Cache-Control': 'no-store' } });

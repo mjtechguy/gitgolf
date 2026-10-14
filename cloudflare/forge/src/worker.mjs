@@ -22,6 +22,7 @@ import { pipelinePolicy } from './pipeline-policy.mjs';
 import { advanceRunNow, advancePipelineRun } from './pipelines.mjs';
 import { processPipelineIntake, sweepPipelines } from './actions-intake.mjs';
 import { reconcileAi, runAiWorkflow } from './ai-workflow.mjs';
+import { sweepAgentTasks } from './agent-hosts.mjs';
 
 
 const heartbeat = 5 * 60_000;
@@ -282,12 +283,13 @@ async function maintain(env, exports, owner) {
           await exports.PRAgentTask.getByName(job.id).cancel();
         }
       }); if (env.EVIDENCE_ALLOW_AI === 'true') Object.assign(result, await reconcileAi(env.DB.withSession('first-primary'))); await owner.activityChanged(); return result; }],
-      // Semantic search and the Actions pipeline sweep share the read-index stage: the maintenance journal only names the four original stages.
+      // Semantic search, the Actions pipeline sweep and the agent task sweep share the read-index stage: the maintenance journal only names the four original stages.
       ['indexes', async () => { const pipelines = pipelinePolicy(env) ? { ...env, pipelineCoordinator: exports.PipelineRun } : null;
         const settled = await Promise.allSettled([reconcileIndexes(env), env.SEARCH_INDEX ? advanceSearch(env) : { processed: 0 },
-          pipelines ? sweepPipelines(pipelines, (await import('./core.mjs')).withArtifact, id => advancePipelineRun(pipelines, id)).then(r => ({ processed: r.intakes + r.runs })) : { processed: 0 }]);
+          pipelines ? sweepPipelines(pipelines, (await import('./core.mjs')).withArtifact, id => advancePipelineRun(pipelines, id)).then(r => ({ processed: r.intakes + r.runs })) : { processed: 0 },
+          sweepAgentTasks(env.DB.withSession('first-primary'))]);
         for (const result of settled) if (result.status === 'rejected') throw result.reason;
-        return { ...settled[0].value, processed: settled[1].value.processed + settled[2].value.processed }; }],
+        return { ...settled[0].value, processed: settled[1].value.processed + settled[2].value.processed + settled[3].value.processed }; }],
 
     ]); } finally { try { await collectWorkerMetrics(env); } finally { await collectServiceHealth(env); } }
 }
