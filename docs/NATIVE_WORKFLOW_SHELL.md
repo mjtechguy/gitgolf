@@ -33,7 +33,8 @@ The repository settings page lists `.github/workflows/*.yml`/`*.yaml` and
 marks the approved path. It starts nothing: a run always reads the approved path
 from the pull request's head commit.
 
-A repository administrator can turn pull-request runs and automatic push tests
+A repository administrator signed in through Access (not a bearer or service
+token) can turn pull-request runs and automatic push tests
 off for one repository on the same page (schema 25, migration
 `0025_repository_execution_policy.sql`). A repository with no saved switch
 allows both within the operator allocation. The switch is checked when a run is

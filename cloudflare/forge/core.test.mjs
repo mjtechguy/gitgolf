@@ -3651,27 +3651,41 @@ test('workflow inventory bounds files, bytes and entry kinds and keeps the appro
 });
 
 const policyCall = (f, method, body = {}, token = ownerToken) => f.call('', { scope: 'EXECUTION_SCOPE_REPOSITORY', repository: key, ...body }, token, '/rpc/golf.v1.ExecutionPolicyService/' + method);
+// Changes need a verified human Access sign-in; this header stands in for the identity the public Worker forwards.
+const humanPolicy = (f, method, body = {}, email = 'alice@example.com', headers = {}) => f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/rpc/golf.v1.ExecutionPolicyService/' + method, { method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...(email ? { 'X-Golf-Native-Access-Email': email } : {}), ...headers }, body: JSON.stringify({ scope: 'EXECUTION_SCOPE_REPOSITORY', repository: key, ...body }) }));
 async function setExecution(f, manual, push) {
-  const { policy } = await value(await policyCall(f, 'GetExecutionPolicy'));
-  return value(await policyCall(f, 'UpdateExecutionPolicy', { scopeId: policy.scopeId, expectedRevision: policy.revision, expectedAuthorityRevision: policy.authorityRevision,
+  f.sql.exec("UPDATE users SET email=login||'@example.com' WHERE email IS NULL");
+  const { policy } = await value(await humanPolicy(f, 'GetExecutionPolicy'));
+  return value(await humanPolicy(f, 'UpdateExecutionPolicy', { scopeId: policy.scopeId, expectedRevision: policy.revision, expectedAuthorityRevision: policy.authorityRevision,
     mode: manual || push ? 'EXECUTION_MODE_ALL' : 'EXECUTION_MODE_DISABLED', ...(manual ? { manualDispatchEnabled: true } : {}), ...(push ? { pushAllowed: true } : {}), allowAllWorkflows: true }));
 }
 
-test('the repository execution switch defaults to enabled and saves only under current admin authority and the observed revision', async t => {
+test('the repository execution switch defaults to enabled and saves only under a current admin Access sign-in and the observed revision', async t => {
   const f = await inventoryFixture(t), origin = f.env.PUBLIC_ORIGIN, path = '/rpc/golf.v1.ExecutionPolicyService/';
   await value(await f.call('', { repository: key, repositoryId: '1', userId: '2', role: 'read' }, ownerToken, '/native/repository-grant'));
-  const initial = (await value(await policyCall(f, 'GetExecutionPolicy'))).policy;
+  f.sql.exec("UPDATE users SET email=login||'@example.com'");
+  const initial = (await value(await humanPolicy(f, 'GetExecutionPolicy'))).policy;
   assert.deepEqual(initial, { scope: 'EXECUTION_SCOPE_REPOSITORY', scopeId: '1', ownerId: initial.ownerId, mode: 'EXECUTION_MODE_ALL', selectedRepositoryIds: [], manualDispatchEnabled: true, allowAllWorkflows: true,
     workflowPaths: [], revision: '0', revocationEpoch: '0', canEdit: true, authorityRevision: initial.authorityRevision, pushAllowed: true });
   assert.match(initial.ownerId, /^[1-9][0-9]*$/); assert.match(initial.authorityRevision, /^[a-f0-9]{64}$/);
-  const reader = (await value(await policyCall(f, 'GetExecutionPolicy', {}, readerToken))).policy;
+  // A bearer credential reads the same switch and authority revision but is never offered the edit.
+  assert.deepEqual((await value(await policyCall(f, 'GetExecutionPolicy'))).policy, { ...initial, canEdit: false });
+  const reader = (await value(await humanPolicy(f, 'GetExecutionPolicy', {}, 'bob@example.com'))).policy;
+  assert.deepEqual((await value(await policyCall(f, 'GetExecutionPolicy', {}, readerToken))).policy, reader);
   assert.equal(reader.canEdit, false); assert.equal(reader.manualDispatchEnabled, true); assert.notEqual(reader.authorityRevision, initial.authorityRevision);
   assert.equal((await f.dispatch(new Request(origin + path + 'GetExecutionPolicy', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify({ scope: 3, repository: key }) }))).status, 401);
   assert.equal((await policyCall(f, 'GetExecutionPolicy', { repository: { owner: 'alice', name: 'other' } })).status, 404);
   for (const body of [{ scope: 'EXECUTION_SCOPE_INSTANCE' }, { scope: 'EXECUTION_SCOPE_ORGANIZATION', organization: 'alice' }, { organization: 'alice' }, { repository: undefined }, { scope: undefined }]) assert.equal((await policyCall(f, 'GetExecutionPolicy', body)).status, 501);
   assert.equal((await policyCall(f, 'DeleteExecutionPolicy')).status, 501);
-  const update = (changes = {}, token) => policyCall(f, 'UpdateExecutionPolicy', { scopeId: '1', expectedRevision: '0', expectedAuthorityRevision: initial.authorityRevision, mode: 'EXECUTION_MODE_DISABLED', allowAllWorkflows: true, ...changes }, token);
-  assert.equal((await update({ expectedAuthorityRevision: reader.authorityRevision }, readerToken)).status, 404);
+  const intent = (changes = {}) => ({ scopeId: '1', expectedRevision: '0', expectedAuthorityRevision: initial.authorityRevision, mode: 'EXECUTION_MODE_DISABLED', allowAllWorkflows: true, ...changes });
+  const update = (changes = {}, email, headers) => humanPolicy(f, 'UpdateExecutionPolicy', intent(changes), email, headers);
+  // The switch can stop a repository's CI: an admin bearer credential, a service token and a signed-in reader are all refused.
+  assert.equal((await policyCall(f, 'UpdateExecutionPolicy', intent())).status, 404);
+  for (const headers of [{ Authorization: 'Bearer ' + ownerToken }, { 'CF-Access-Client-Id': 'machine' }, { 'CF-Access-Client-Secret': 'secret' }]) assert.ok([401, 404].includes((await update({}, 'alice@example.com', headers)).status), JSON.stringify(headers));
+  assert.equal((await update({}, '')).status, 401);
+  assert.equal((await update({ expectedAuthorityRevision: reader.authorityRevision }, 'bob@example.com')).status, 404);
+  assert.equal((await policyCall(f, 'UpdateExecutionPolicy', intent({ expectedAuthorityRevision: reader.authorityRevision }), readerToken)).status, 404);
   assert.equal((await update({ scopeId: '2' })).status, 404);
   for (const changes of [{ mode: 'EXECUTION_MODE_SELECTED', selectedRepositoryIds: ['1'] }, { mode: 'EXECUTION_MODE_SELECTED' }, { workflowPaths: ['.github/workflows/ci.yml'] }, { allowAllWorkflows: false }, { mode: 'EXECUTION_MODE_ALL' },
     { manualDispatchEnabled: true }, { pushAllowed: 'true' }, { revocationEpoch: '1' }, { expectedRevision: 'latest' }, { expectedAuthorityRevision: 'current' }]) assert.equal((await update(changes)).status, 400, JSON.stringify(changes));
@@ -3691,7 +3705,7 @@ test('the repository execution switch defaults to enabled and saves only under c
   assert.equal((await update({ expectedRevision: '2', mode: 'EXECUTION_MODE_ALL', manualDispatchEnabled: true, pushAllowed: true })).status, 412);
   f.env.DB.prepare = prepare;
   assert.deepEqual({ ...f.sql.prepare('SELECT version,manual,push FROM repository_execution_policy').get() }, { version: 2, manual: 0, push: 1 });
-  assert.equal((await value(await policyCall(f, 'GetExecutionPolicy'))).policy.canEdit, false);
+  assert.equal((await value(await humanPolicy(f, 'GetExecutionPolicy'))).policy.canEdit, false);
   // A row recorded for another artifact enables nothing.
   f.sql.exec("UPDATE repository_execution_policy SET artifact_name='repo-other',manual=1");
   const foreign = (await value(await policyCall(f, 'GetExecutionPolicy'))).policy;
@@ -3704,7 +3718,9 @@ test('a repository that turns runs off refuses new admission, marks automatic in
   const f = await evidenceFixture(t), input = { ...f.input, advice: false, runTests: true };
   allocateAgents(f); Object.assign(f.env, { CI_AUTO: 'true', EVIDENCE_DAILY_LIMIT: '20' });
   const capability = async () => (await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.find(c => c.id === 'settings.repository-execution-policy');
-  assert.equal((await capability()).state, 'CAPABILITY_STATE_READY');
+  assert.deepEqual([(await capability()).state, (await capability()).reason], ['CAPABILITY_STATE_DISABLED', 'The repository execution switch is changed only under a verified Access sign-in, which this installation does not configure.']);
+  f.env.ACCESS_AUD = 'access-aud';
+  assert.equal((await capability()).state, 'CAPABILITY_STATE_READY'); assert.match((await capability()).reason, /Changes need a verified Access sign-in\./);
   const jobs = () => f.sql.prepare('SELECT count(*) AS n FROM evidence_jobs').get().n;
   const pushed = () => f.sql.prepare('INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,ci_state,created_at) VALUES(?,1,1,?,?,?,?,?,?) RETURNING id')
     .get(nonce(), 'refs/heads/feature', commit, 'b'.repeat(40), 'APPLIED', 'PENDING', new Date().toISOString()).id;
