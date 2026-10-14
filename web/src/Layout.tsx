@@ -59,3 +59,25 @@ export function KeyboardLayer() {
     </dialog>
   </>;
 }
+
+// Rail layouts shrink side navigation to icons. One tooltip names the hovered or focused item, outside the scrolling rail so it is never clipped.
+export function RailTooltip() {
+  const tip = useRef<HTMLSpanElement>(null);
+  const [text, setText] = useState('');
+  useEffect(() => {
+    const show = (event: Event) => {
+      const target = event.target instanceof Element ? event.target.closest<HTMLElement>('.appearance-sidebar [data-tip]') : null;
+      if (!target || getComputedStyle(target).fontSize !== '0px') { setText(''); return; }
+      const box = target.getBoundingClientRect();
+      tip.current?.style.setProperty('--tip-top', box.top + box.height / 2 + 'px');
+      tip.current?.style.setProperty('--tip-left', box.right + 8 + 'px');
+      setText(target.dataset.tip || '');
+    };
+    const hide = () => setText('');
+    document.addEventListener('pointerover', show); document.addEventListener('focusin', show);
+    document.addEventListener('focusout', hide); window.addEventListener('scroll', hide, true);
+    return () => { document.removeEventListener('pointerover', show); document.removeEventListener('focusin', show); document.removeEventListener('focusout', hide); window.removeEventListener('scroll', hide, true); };
+  }, []);
+  // The item's own text already names it for assistive technology, so the visual copy is hidden from it.
+  return <span ref={tip} className="rail-tooltip" aria-hidden="true" hidden={!text}>{text}</span>;
+}

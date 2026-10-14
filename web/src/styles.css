@@ -1987,3 +1987,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .overview-list-meta code { font:.75rem var(--mono); }
 .overview-list-time { grid-column:2; grid-row:1 / span 2; align-self:center; color:var(--muted); font-size:.75rem; white-space:nowrap; }
 @media(max-width:900px) { .repository-overview-lists { grid-template-columns:minmax(0,1fr); } }
+
+/* Rail tooltip: names an icon-only side navigation item on hover and keyboard focus. */
+.rail-tooltip { position:fixed; z-index:60; top:var(--tip-top); left:var(--tip-left); transform:translateY(-50%); padding:4px 8px; border-radius:var(--radius); background:var(--text); color:var(--bg); font-size:.75rem; font-weight:500; line-height:1.3; white-space:nowrap; pointer-events:none; box-shadow:0 2px 8px rgb(0 0 0 / .18); }
+.rail-tooltip[hidden] { display:none; }
