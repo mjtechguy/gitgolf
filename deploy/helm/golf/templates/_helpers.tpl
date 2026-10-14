@@ -28,9 +28,13 @@ capabilities:
 {{- end -}}
 {{- define "golf.dnsEgress" -}}
 - to:
+  {{- if .Values.networkPolicy.dnsPeers }}
+    {{- toYaml .Values.networkPolicy.dnsPeers | nindent 4 }}
+  {{- else }}
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: {{ .Values.networkPolicy.dnsNamespace | quote }}
+  {{- end }}
   ports:
     - {protocol: UDP, port: 53}
     - {protocol: TCP, port: 53}

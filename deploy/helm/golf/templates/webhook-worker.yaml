@@ -39,6 +39,9 @@ spec:
           securityContext:
             {{- include "golf.containerSecurity" . | nindent 12 }}
           env:
+            {{- if .Values.postgresql.existingCASecret }}
+            - {name: SSL_CERT_DIR, value: "/etc/ssl/certs:/etc/golf/postgres"}
+            {{- end }}
             - name: GOLF_PUBLIC_URL
               value: {{ trimSuffix "/" .Values.publicURL | quote }}
             - name: GOLF_ALLOW_INSECURE_COOKIES
@@ -60,8 +63,17 @@ spec:
             requests: {cpu: 50m, memory: 64Mi}
             limits: {cpu: 500m, memory: 256Mi}
           volumeMounts:
+            {{- if .Values.postgresql.existingCASecret }}
+            - {name: postgres-ca, mountPath: /etc/golf/postgres, readOnly: true}
+            {{- end }}
             - {name: tmp, mountPath: /tmp}
       volumes:
+        {{- if .Values.postgresql.existingCASecret }}
+        - name: postgres-ca
+          secret:
+            secretName: {{ .Values.postgresql.existingCASecret | quote }}
+            items: [{key: ca.crt, path: ca.crt}]
+        {{- end }}
         - name: tmp
           emptyDir: {medium: Memory, sizeLimit: 16Mi}
 {{- end }}

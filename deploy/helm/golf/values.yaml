@@ -6,6 +6,9 @@ image:
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 replicaCount: 1
+# Protect ready API capacity during voluntary evictions when replicas > 1.
+disruptionBudget:
+  enabled: true
 publicURL: ""
 allowInsecureCookies: false
 existingSecret: ""
@@ -64,6 +67,8 @@ forgejo:
 
 postgresql:
   enabled: true
+  # Optional existing Secret containing ca.crt for verified external PostgreSQL.
+  existingCASecret: ""
   image:
     repository: postgres
     tag: 18.4-alpine3.24
@@ -98,6 +103,8 @@ networkPolicy:
   # Full egress rules required for external Forgejo/PostgreSQL with policy enabled.
   externalEgress: []
   dnsNamespace: kube-system
+  # Explicit resolver peers for custom/NodeLocal DNS; empty uses dnsNamespace.
+  dnsPeers: []
 
 observability:
   metrics:

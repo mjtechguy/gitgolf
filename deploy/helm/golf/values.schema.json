@@ -361,6 +361,10 @@
             "requests",
             "limits"
           ]
+        },
+        "existingCASecret": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
         }
       },
       "required": [
@@ -503,6 +507,39 @@
         "dnsNamespace": {
           "type": "string",
           "minLength": 1
+        },
+        "dnsPeers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "podSelector": {
+                "type": "object"
+              },
+              "namespaceSelector": {
+                "type": "object"
+              },
+              "ipBlock": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "cidr": {
+                    "type": "string"
+                  },
+                  "except": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "cidr"
+                ]
+              }
+            }
+          }
         }
       },
       "required": [
@@ -601,6 +638,18 @@
       "required": [
         "kind",
         "instanceID"
+      ]
+    },
+    "disruptionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
       ]
     }
   },

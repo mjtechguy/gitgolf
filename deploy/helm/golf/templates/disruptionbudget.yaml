@@ -1,0 +1,15 @@
+{{- if and .Values.disruptionBudget.enabled (gt (int .Values.replicaCount) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "golf.fullname" . }}
+  labels:
+    {{- include "golf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: golf
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "golf.selector" . | nindent 6 }}
+      app.kubernetes.io/component: golf
+{{- end }}
