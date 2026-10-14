@@ -36,10 +36,10 @@ async function setup(t, answer = glm(good), git = graph()) {
 test('the draft covers the first-parent range from the previous release, cites Golf merges and commits, and the Worker writes the links', async t => {
   const f = await setup(t), run = await f.complete('release-notes', { tag: 'v1.1' });
   assert.equal(run.state, 'SUCCEEDED', JSON.stringify(run));
-  assert.equal(run.model, '@cf/zai-org/glm-5.3-flash');
+  assert.equal(run.model, '@cf/zai-org/glm-5.3');
   assert.equal(f.calls.length, 1);
   const { model, input, options } = f.calls[0];
-  assert.equal(model, '@cf/zai-org/glm-5.3-flash'); assert.deepEqual(options, { gateway: { id: 'golf-gateway', skipCache: true, collectLog: false } });
+  assert.equal(model, '@cf/zai-org/glm-5.3'); assert.deepEqual(options, { gateway: { id: 'golf-gateway', skipCache: true, collectLog: false } });
   assert.equal(input.response_format.type, 'json_schema'); assert.equal(input.response_format.json_schema.strict, true);
   assert.equal(input.reasoning_effort, 'low'); assert.equal(input.tools, undefined);
   assert.match(input.messages[0].content, /from v1\.0 to v1\.1/);

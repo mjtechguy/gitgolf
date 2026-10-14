@@ -39,7 +39,7 @@ export async function firstParentRange(repo, tagCommit, previousCommit, names) {
 }
 
 export const releaseNotes = {
-  feature: 'ai-release-notes', model: '@cf/zai-org/glm-5.3-flash', roles: ['admin'],
+  feature: 'ai-release-notes', use: 'release-notes', roles: ['admin'],
   target(value) {
     const keys = Object.keys(value || {}).sort().join();
     if (!value || typeof value !== 'object' || !['tag', 'previousTag,tag'].includes(keys) || !tagOK(value.tag) || keys !== 'tag' && (!tagOK(value.previousTag) || value.previousTag === value.tag)) invalid('Select an existing tag and, optionally, a different previous tag.');

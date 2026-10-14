@@ -53,7 +53,9 @@ export class AgentTask extends DurableObject {
   remote(role) { return `https://${this.env.GOLF_ACCOUNT_ID}.artifacts.cloudflare.net/git/${this.env.GOLF_NAMESPACE}/${role}.git`; }
   credential(role, scope) { return this.env[`GIT_${role.replaceAll('-', '_').toUpperCase()}_${scope.toUpperCase()}`]; }
   outboundService(role) { return this.ctx.exports.Outbound({ props: { role } }); }
-  executionPolicy() { return this.record?.allowed_path ? filePolicy(this.record.allowed_path) : policy; }
+  // A job admitted with a model (native proposals) runs exactly that model; the fixture roles keep the default.
+  admittedModel() { return this.record?.model || model; }
+  executionPolicy() { return this.record?.allowed_path ? filePolicy(this.record.allowed_path, this.admittedModel()) : policy; }
   async authorize() {}
   cloneArgs(r) { return ['--depth', '1', '--branch', r.branch || 'master']; }
   validateProposal() {}
@@ -207,7 +209,7 @@ code=$?; printf '%s' "$code" >"$dir/exit.tmp"; mv "$dir/exit.tmp" "$dir/exit"`;
     try {
     const payload = JSON.stringify({ ...this.publicRecord(), context: {
       prompt: r.prompt, policy_sha256: await digest(JSON.stringify(this.executionPolicy())),
-      harness: 'opencode@1.18.34', model,
+      harness: 'opencode@1.18.34', model: this.admittedModel(),
     } });
     for (const secret of [this.env.GOLF_PROBE_TOKEN, this.credential(r.role, 'read'), this.credential(r.role, 'write')]) {
       if (secret && payload.includes(secret)) throw new Error('credential screening failed');
@@ -299,7 +301,9 @@ code=$?; printf '%s' "$code" >"$dir/exit.tmp"; mv "$dir/exit.tmp" "$dir/exit"`;
       this.record = { ...current, calls: current.calls + 1,
         ...(current.calls === 0 ? { first_inference_at: Date.now() } : {}) };
       try {
-        const result = await this.env.AI.run(model, { ...body, model, max_tokens: maxOutput, max_completion_tokens: maxOutput },
+        // The proxy forces the admitted model whatever the harness asked for.
+        const chosen = this.admittedModel();
+        const result = await this.env.AI.run(chosen, { ...body, model: chosen, max_tokens: maxOutput, max_completion_tokens: maxOutput },
           { gateway: { id: this.env.GOLF_GATEWAY, skipCache: true, collectLog: false } });
         return result instanceof ReadableStream ? new Response(openAIStream(result), { headers: { 'Content-Type': 'text/event-stream' } }) : Response.json(result);
       } catch (error) {

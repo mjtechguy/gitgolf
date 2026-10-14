@@ -44,7 +44,7 @@ function Draft({ context, userId, tag, previousChoices, notes, busy, onUse }: { 
   }
   const range = output ? `between ${output.previousTag ?? 'the first commit'} and ${output.tag}` : '';
   const reads = output ? `From ${plural(output.pulls, 'merged pull request')} and ${plural(output.commits, 'commit')} ${range}.` : 'Reads merged pull requests and commit subjects on the tag’s first-parent history.';
-  return <AiAdvisory title="Release notes draft" label="Release notes draft" model={run?.model || '@cf/zai-org/glm-5.3-flash'} reads={reads} commitId={output?.tagCommit} at={run?.updatedAt} draft current={run && status.data ? !stale : undefined}>
+  return <AiAdvisory title="Release notes draft" label="Release notes draft" model={run?.model} reads={reads} commitId={output?.tagCommit} at={run?.updatedAt} draft current={run && status.data ? !stale : undefined}>
     {runs.error ? <p className="error" role="alert">{message(runs.error)}</p>
       : !runs.isSuccess ? <p className="muted" role="status">Reading stored drafts…</p>
       : output ? <>

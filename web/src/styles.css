@@ -2110,3 +2110,39 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .release-notes-draft-actions { display:flex; flex-wrap:wrap; align-items:end; justify-content:space-between; gap:10px 16px; }
 .release-notes-draft-actions label { display:grid; gap:4px; min-width:12rem; color:var(--muted); font-size:.8125rem; }
 .release-notes-draft-actions .row-actions { display:flex; flex-wrap:wrap; gap:8px; }
+/* AI models and AI usage (admin portal and repository settings). Existing tokens only. */
+.ai-use-grid { align-items:stretch; }
+.ai-use-card .browser-panel-heading h3 > svg { color:var(--accent); }
+.ai-use-default { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:10px 0 2px; }
+.ai-use-default .ai-model-chip { font-size:.875rem; padding:3px 10px; border-color:var(--accent); background:var(--accent-surface,var(--raised)); }
+.ai-use-label { color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.08em; }
+.ai-chip-row { display:flex; flex-wrap:wrap; gap:4px 6px; margin:0; padding:0; list-style:none; }
+.ai-use-notes { margin:10px 0 0; padding:8px 12px; list-style:none; border:1px solid var(--warning); border-radius:var(--radius); background:var(--warning-bg); color:var(--warning); font-size:.8125rem; line-height:1.5; }
+.ai-use-notes li + li { margin-top:4px; }
+.ai-use-card .settings-card-body > .policy-row-detail { margin-top:10px; }
+.ai-use-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; padding:8px var(--panel-padding); border-top:1px solid var(--line); background:var(--raised); color:var(--muted); font-size:.75rem; }
+.ai-model-editor { margin-top:12px; }
+.ai-model-editor label:first-child { margin-top:0; }
+.ai-model-choices { display:grid; gap:6px; margin:14px 0 0; padding:0; border:0; min-width:0; }
+.ai-model-choices legend { margin-bottom:6px; font-size:.875rem; font-weight:500; }
+.ai-model-choices .policy-choice strong { display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-family:var(--mono); font-size:.8125rem; }
+.ai-model-choices .policy-choice strong .visibility { font-family:inherit; }
+.ai-table-model { font-family:var(--mono); font-size:.8125rem; }
+.ai-warning-band { border-color:var(--warning); }
+.ai-warning-band .settings-attention-list > li { color:var(--warning); background:var(--warning-bg); }
+.ai-usage-window { display:inline-flex; align-items:center; gap:8px; margin:0; color:var(--muted); font-size:.8125rem; }
+.ai-usage-window select { width:auto; min-height:44px; font-size:.875rem; }
+.ai-usage-grid { align-items:start; }
+.ai-usage-bars { display:grid; gap:6px; margin:0; padding:12px var(--panel-padding); list-style:none; }
+.ai-usage-bars li { display:grid; grid-template-columns:minmax(4.5rem,9rem) minmax(0,1fr) 4.5rem; align-items:center; gap:12px; font-size:.8125rem; }
+.ai-usage-bar-label { display:grid; color:var(--text); min-width:0; }
+.ai-usage-bar-label small { color:var(--muted); font-size:.75rem; }
+.ai-usage-bar-value { text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--text); }
+.ai-usage-bars meter { display:block; width:100%; height:10px; border:0; border-radius:4px; background:var(--raised); -webkit-appearance:none; appearance:none; }
+.ai-usage-bars meter::-webkit-meter-bar { height:10px; border:0; border-radius:4px; background:var(--raised); }
+.ai-usage-bars meter::-webkit-meter-optimum-value,.ai-usage-bars meter::-webkit-meter-suboptimum-value,.ai-usage-bars meter::-webkit-meter-even-less-good-value { border-radius:4px; background:var(--accent); }
+.ai-usage-bars meter::-moz-meter-bar { border-radius:4px; background:var(--accent); }
+.ai-usage-grid .browser-panel-heading h2 > code { font-family:var(--mono); font-size:.75rem; color:var(--muted); font-weight:400; }
+.ai-gateway-models { margin-top:10px; }
+.ai-gateway-models li { display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:.75rem; }
+@media(max-width:480px) { .ai-usage-bars li { grid-template-columns:minmax(0,1fr) 4rem; gap:4px 10px; } .ai-usage-bars meter { grid-column:1 / -1; grid-row:2; } }

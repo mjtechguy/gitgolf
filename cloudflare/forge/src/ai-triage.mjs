@@ -28,7 +28,7 @@ function offered(labels) {
 const sourceHash = (issue, labels) => digest(JSON.stringify(['native.ai-triage.v1', issue.id, issue.title, issue.body, labels.map(label => [label.id, label.name, label.description || ''])]));
 
 export const triage = {
-  feature: 'ai-triage', model: '@cf/cloudflare/clef', roles: ['admin'],
+  feature: 'ai-triage', use: 'triage', roles: ['admin'],
   target(value) {
     if (!value || typeof value !== 'object' || Object.keys(value).join() !== 'number' || !Number.isInteger(value.number) || value.number < 1 || value.number > 4294967295) invalid('Select one issue number.');
     return { number: value.number };

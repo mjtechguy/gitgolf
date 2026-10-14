@@ -44,7 +44,7 @@ export class AiWorkflow extends Production {
         const keys = Object.keys(input.questions.label.criteria), probabilities = Object.fromEntries(keys.map(key => [key, key === 'l1' ? 0.7 : 0.3 / (keys.length - 1)]));
         return { answers: { label: { type: 'choice', choice: 'l1', probabilities } }, usage: { input_tokens: 200, output_tokens: 3 } };
       }
-      if (model === '@cf/zai-org/glm-5.3-flash' && input.response_format?.type === 'json_schema') {
+      if (model === '@cf/zai-org/glm-5.3' && input.response_format?.type === 'json_schema') {
         const data = JSON.parse(input.messages[1].content.split('\\n').slice(2, -1).join('\\n'));
         const sections = [{ heading: 'Changes', items: [{ text: 'Config loading hardened. @team <b>', pulls: [data.pullRequests[0].number], commits: [] },
           { text: data.commits[0].subject, pulls: [], commits: [data.commits[0].sha7] }] }];

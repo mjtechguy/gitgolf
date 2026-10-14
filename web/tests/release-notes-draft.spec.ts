@@ -14,7 +14,7 @@ const markdown=`## Features\n\n- Repository reads are cached per commit, so brow
  `## Maintenance\n\n- Dependencies updated. ([\`a7b8607\`](${base}/commit/a7b8607${'0'.repeat(33)}))\n`;
 const output={markdown,tag:'v1.1',previousTag:'v1.0',tagCommit:C11,previousCommit:C10,walked:15,pulls:7,commits:12,omittedPulls:0,omittedCommits:0,uncitedPulls:[40,42,43,45]};
 type Run={id:string;kind:string;state:string;target:{tag:string;previousTag?:string};model:string;output?:typeof output;refusal?:string;createdAt:string;updatedAt:string};
-const run=(over:Partial<Run>={}):Run=>({id:'7c9e6679-7425-40de-944b-e07fc1f90ae7',kind:'release-notes',state:'SUCCEEDED',target:{tag:'v1.1'},model:'@cf/zai-org/glm-5.3-flash',output,createdAt:at,updatedAt:at,...over});
+const run=(over:Partial<Run>={}):Run=>({id:'7c9e6679-7425-40de-944b-e07fc1f90ae7',kind:'release-notes',state:'SUCCEEDED',target:{tag:'v1.1'},model:'@cf/zai-org/glm-5.3',output,createdAt:at,updatedAt:at,...over});
 
 async function backend(page:Page,{runs=[run()] as Run[],capability=true,policyOff=false,stale=false}={}){
  const state={runs,created:[] as Record<string,unknown>[],writes:0,settleAfter:0};
@@ -60,7 +60,7 @@ test('a stored draft shows rendered notes, what it read, the tag commit and the 
  const state=await backend(page);await open(page);
  await expect(card(page)).toContainText('Untrusted draft');await expect(card(page)).toContainText('Current');
  await expect(card(page)).toContainText('From 7 merged pull requests and 12 commits between v1.0 and v1.1.');
- await expect(card(page)).toContainText('@cf/zai-org/glm-5.3-flash');await expect(card(page).getByTitle(C11)).toHaveText(C11.slice(0,12));
+ await expect(card(page)).toContainText('@cf/zai-org/glm-5.3');await expect(card(page).getByTitle(C11)).toHaveText(C11.slice(0,12));
  const preview=card(page).getByLabel('Draft release notes, rendered Markdown');
  await expect(preview.getByRole('heading',{name:'Fixes'})).toBeVisible();await expect(preview.getByRole('link',{name:'#41'})).toHaveAttribute('href',`${base}/pull/41`);
  // Model text arrives neutralized: the escaped tag stays text and the mention stays inert.
