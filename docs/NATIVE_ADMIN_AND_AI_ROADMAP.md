@@ -79,7 +79,7 @@ above and the editable "AI on/off" approval.
 
 | Feature | Cloudflare product | State on 2026-10-14 |
 | --- | --- | --- |
-| Agent proposals: OpenCode in a container edits the approved file and runs its tests | Workers AI `@cf/zai-org/glm-5.3`, Containers, Artifacts forks | shipped (moved from `glm-4.7-flash` on 2026-10-14) |
+| Agent proposals: OpenCode in a container edits the approved file and runs its tests | Workers AI `@cf/zai-org/glm-5.3-flash`, Containers, Artifacts forks | shipped (moved from `glm-4.7-flash` to `glm-5.3`, then `glm-5.3-flash`, on 2026-10-14) |
 | Review advice: one constrained question about the next review step | Workers AI `@cf/cloudflare/clef` | shipped, but only visible inside a run report |
 | Clef recommendation card on the pull request page | existing stored advice | planned |
 | Pull request summary and review draft from the bounded diff, edited and published by a person through the existing review contracts | Workers AI text generation | planned |
