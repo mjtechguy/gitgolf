@@ -1,5 +1,28 @@
 # Golf implementation status
 
+## 2026-10-14 — Native merge accepted on the retained installation
+
+After `migrate` (applied `0024_pull_merges.sql`) and a deploy, `pull.merge`
+reported ready. On a scratch repository `mj/merge-probe`, created for this
+check: two branches were pushed with a one-hour repository credential, pull
+request 1 (`feature` into `main`, base an ancestor of head) merged through
+`SubmitStandardPullMerge` in about one second with phase `SUCCEEDED`.
+Cloudflare Artifacts accepted the Worker-built one-object pack and a command
+requesting only `report-status`, and the ref read back immediately. An
+independent `git fetch` showed `main` at the reported commit with parents
+`[base, head]`, the head's tree, author and committer `Mike Johnson
+<mj@users.noreply.demo.gitgolf.mjtechguy.com>`, and `git fsck --strict` clean.
+Replaying the operation id returned the same receipt; the pull request read
+back closed and merged with the merge commit id. Pull request 2 from a branch
+that had diverged from `main` was recorded `REJECTED` / `preflight_refused`, as
+was a squash request, and `main` did not move. The credential was revoked and
+then refused by Git.
+
+Not exercised on hosted: an unconfirmed write and its read-back settlement, a
+locked target, the merge panel in a browser, and the webhook and activity
+events a merge emits. `mj/merge-probe` remains on the installation because
+native repository deletion does not exist yet.
+
 ## 2026-10-14 — Native pull request merge, first slice
 
 Cloudflare native now merges a same-repository pull request with a merge commit
