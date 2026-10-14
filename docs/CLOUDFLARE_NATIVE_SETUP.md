@@ -625,6 +625,49 @@ Local review runtime check (uses fixture Artifacts reads, actual workerd/D1):
 node cloudflare/forge/review-runtime-check.mjs "$(command -v cf)"
 ```
 
+### Native pull request merge, first slice (schema24)
+
+Apply additive migration 0024 before serving schema24: every pull request read
+joins `pull_merge_operations`. The Python/`cf` release path applies and verifies
+it, including both partial unique indexes; on the Alchemy path run
+`cloudflare_alchemy_demo.py migrate DIRECTORY` before `deploy`. `pull.merge`
+then reports ready.
+
+The slice merges a same-repository pull request with a merge commit only when
+the base branch tip is already contained in the head branch. The merge commit
+then has the head's tree and parents `[base tip, head tip]`; no tree merge is
+computed. The Worker builds that one commit, sends it as a one-object pack
+through the same single-ref reservation, Git rules and `git_operations` journal
+as a brokered push, and confirms it by reading the branch and the commit back.
+Author and committer are the acting account's display name with
+`<login>@users.noreply.<public host>`. Commit title and message are bound in the
+request fingerprint and written into the commit; D1 does not store them.
+
+Squash, rebase, a base with commits the head lacks, fork sources, drafts, closed
+or changed pull requests and locked targets are recorded as `REJECTED` /
+`preflight_refused` with a plain `detail` in `pull_merge_operations`, and nothing
+is sent. The merge observation names the same reason before a request is made.
+Protected merge, review/check requirements and CODEOWNERS policy are not part of
+this slice. A merge does not start automatic PR tests; its journal row is
+recorded with `ci_state` `NONE`.
+
+Any failure after the reservation is `DISPATCH_UNKNOWN`: the operation, its pull
+request and the repository's `write_pending` fence stay as they are, exactly like
+an unconfirmed push. Inspecting the original operation settles it only when the
+branch names the dispatched commit and that commit reads back with the expected
+parents. The pack is never sent again and there is no automatic conclusion that
+a write did not land; that case needs the same operator reconciliation as an
+unconfirmed push, and must also resolve the `pull_merge_operations` row.
+
+Local source tests feed the generated pack to real Git, and this check runs the
+whole merge in actual workerd/D1 against a real local repository (the Artifacts
+binding is a fixture). Cloudflare Artifacts accepting this pack is not proven
+until a hosted merge is observed; probe it on a scratch repository first.
+
+```sh
+node cloudflare/forge/merge-runtime-check.mjs "$(command -v cf)"
+```
+
 ### Native runners and stock GitLab Runner (schema20)
 
 Fresh installations include native runner tables and the GitLab coordinator job

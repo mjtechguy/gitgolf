@@ -111,6 +111,10 @@ test('mutation notices target issue versus PR discussions, and pure observations
   }
   assert.deepEqual((await activitySelection(write('/rpc/golf.v1.RepositoryService/SubmitDiscussionResourceOperation', input()))).topics, ['issues', 'pulls']);
   assert.deepEqual((await activitySelection(write('/rpc/golf.v1.RepositoryService/UpdatePullRequest', input()))).topics, ['pulls']);
+  // A native merge moves the base branch like a push; inspecting its receipt publishes nothing.
+  const merge = await activitySelection(write('/rpc/golf.v1.StandardPullMergeService/SubmitStandardPullMerge', { selection: input() }));
+  assert.deepEqual(merge.topics, ['source', 'pulls', 'actions']); assert.equal(merge.id, '1'); assert.equal(merge.name, 'repo');
+  assert.equal(await activitySelection(write('/rpc/golf.v1.StandardPullMergeService/GetStandardPullMergeOperation', input())), undefined);
   for (const action of ['list', 'status', 'report', 'compare']) assert.equal(await activitySelection(write('/native/pr-evidence', { ...input(), action })), undefined);
   for (const action of ['list', 'grant', 'screenshot']) assert.equal(await activitySelection(write('/native/pr-preview', { ...input(), action })), undefined);
   assert.equal(await activitySelection(write(activityPath, input())), undefined);

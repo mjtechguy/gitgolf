@@ -102,3 +102,46 @@ for(const method of ['merge','squash'] as const)test(`custom ${method} text is s
 });
 test('commit fields validate byte limits before storage or dispatch and cancel clears draft text',async({page})=>{const s=await fixture(page);await open(page);await page.getByRole('button',{name:'Merge pull request',exact:true}).click();await page.getByLabel('Commit title',{exact:true}).fill('é'.repeat(128));await page.getByRole('button',{name:'Confirm merge',exact:true}).click();await expect(page.getByRole('alert')).toContainText('255 UTF-8 bytes');expect(s.writes).toHaveLength(0);expect(await page.evaluate(()=>Object.values(sessionStorage))).toEqual([]);await page.getByLabel('Commit title',{exact:true}).fill('');await page.getByLabel('Commit message (optional)',{exact:true}).fill('é'.repeat(3001));await page.getByRole('button',{name:'Confirm merge',exact:true}).click();await expect(page.getByRole('alert')).toContainText('6,000 UTF-8 bytes');expect(s.writes).toHaveLength(0);await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.getByRole('button',{name:'Merge pull request',exact:true}).click();await expect(page.getByLabel('Commit title',{exact:true})).toHaveValue('');await expect(page.getByLabel('Commit message (optional)',{exact:true})).toHaveValue('');expect(s.writes).toHaveLength(0);});
 test('loss of current writer closes an open custom confirmation without persisting or submitting',async({page})=>{const s=await fixture(page);await open(page);await enableSquash(page);await page.getByRole('button',{name:'Merge pull request',exact:true}).click();await page.getByLabel('Commit title',{exact:true}).fill('Private draft');await change(page,{observation:{...observed,currentTargetWriter:false}});await expect(page.getByRole('dialog')).toHaveCount(0);expect(s.writes).toHaveLength(0);expect(await page.evaluate(()=>Object.values(sessionStorage))).toEqual([]);});
+
+// Cloudflare-native slice: the Worker's own JSON (string enums, omitted source fields, millisecond timestamps, own-account source owner).
+// cloudflare/forge/core.test.mjs pins the same receipt keys and the request fields read here.
+const nativeObservation=create(PullRequestMergeObservationSchema,{...observed,sourceOwnerId:'42'});
+type NativePhase='SUCCEEDED'|'REJECTED'|'DISPATCH_UNKNOWN';
+const nativeReceipt=(operationId:string,phase:NativePhase)=>({operation:{operationId,actorId:'42',repository:key,repositoryId:'11',ownerId:'42',pullRequestId:id,number:7,expectedPullRevision:R,headCommitId:H,observedBaseCommitId:B,sourceRef:'feature/topic',targetRef:'main',method:'merge',phase:'STANDARD_PULL_MERGE_PHASE_'+phase,mergeCommitId:phase==='SUCCEEDED'?'d'.repeat(40):'',actualBaseCommitId:phase==='SUCCEEDED'?B:'',failureCode:phase==='REJECTED'?'preflight_refused':'',createdAt:'2026-10-14T18:00:00.123Z',updatedAt:'2026-10-14T18:00:00.456Z',contract:'golf.pull.standard-native-merge.v1'}});
+async function nativeFixture(page:Page){
+ const state={phase:'SUCCEEDED' as NativePhase,writes:[] as Record<string,unknown>[],reads:[] as Record<string,unknown>[]};
+ await page.route('**/rpc/**',route=>{const name=new URL(route.request().url()).pathname.split('/').at(-1)!,body=route.request().postDataJSON() as Record<string,unknown>;
+  if(name==='SubmitStandardPullMerge')state.writes.push(body);else if(name==='GetStandardPullMergeOperation')state.reads.push(body);else return reject(route,'unimplemented','Unexpected fixture procedure');
+  return route.fulfill({status:200,contentType:'application/json',json:nativeReceipt(body.operationId as string,state.phase)});});
+ return state;
+}
+async function openNative(page:Page,observation=nativeObservation){await open(page);await change(page,{observation});}
+
+test('native slice offers only a merge commit and adopts the Worker receipt',async({page})=>{
+ const s=await nativeFixture(page);await openNative(page);
+ await page.getByRole('button',{name:'Merge pull request',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('Same repository');await expect(page.getByRole('dialog').getByRole('option')).toHaveText(['Create a merge commit']);
+ await page.getByLabel('Commit title').fill('Merge topic');await page.getByRole('button',{name:'Confirm merge',exact:true}).click();
+ await expect(page.getByRole('status')).toContainText('Native merge confirmed.');await expect(page.getByText('d'.repeat(40),{exact:true})).toBeVisible();
+ // Exactly the JSON the Worker validates: no method, message or source binding for an ordinary same-repository merge.
+ expect(s.writes).toEqual([{selection:{repository:key,repositoryId:'11',pullRequestId:id,number:7,baseCommitId:B,headCommitId:H},ownerId:'42',expectedPullRevision:R,operationId:expect.stringMatching(/^[a-f0-9-]{36}$/),commitTitle:'Merge topic',sourceRef:'feature/topic',targetRef:'main'}]);
+ await page.reload();await page.getByRole('button',{name:'Inspect original merge',exact:true}).click();await expect(page.getByRole('status')).toContainText('Native merge confirmed.');
+ expect(s.reads).toEqual([{repository:key,repositoryId:'11',ownerId:'42',pullRequestId:id,number:7,operationId:s.writes[0]!.operationId}]);expect(s.writes).toHaveLength(1);
+});
+test('native refusal receipt is terminal and never resent',async({page})=>{
+ const s=await nativeFixture(page);s.phase='REJECTED';await openNative(page);await confirm(page);
+ await expect(page.getByRole('status')).toContainText('refused before dispatch');await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Inspect original merge',exact:true}).click();await expect(page.getByRole('status')).toContainText('refused before dispatch');
+ await expect(page.getByRole('button',{name:'Review current pull request',exact:true})).toBeVisible();expect(s.writes).toHaveLength(1);expect(s.reads).toHaveLength(1);
+});
+test('native unresolved receipt blocks replacement until inspection confirms the original',async({page})=>{
+ const s=await nativeFixture(page);s.phase='DISPATCH_UNKNOWN';await openNative(page);await confirm(page);
+ await expect(page.getByRole('status')).toContainText('unresolved');await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Review current pull request',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Inspect original merge',exact:true}).click();await expect(page.getByRole('status')).toContainText('unresolved');
+ s.phase='SUCCEEDED';await page.getByRole('button',{name:'Inspect original merge',exact:true}).click();await expect(page.getByRole('status')).toContainText('Native merge confirmed.');
+ expect(s.writes).toHaveLength(1);expect(s.reads).toHaveLength(2);expect(s.reads[1]!.operationId).toBe(s.writes[0]!.operationId);
+});
+test('native observation that names a refusal has no confirmation or dispatch',async({page})=>{
+ const s=await nativeFixture(page);await openNative(page,create(PullRequestMergeObservationSchema,{...nativeObservation,nativeCallerCanMerge:false,mergeConfiguration:{...observed.mergeConfiguration!,allowMergeCommits:false},unavailableReason:'native_base_not_ancestor'}));
+ await expect(page.getByRole('region',{name:'Standard native merge'})).toContainText('Standard merge is unavailable');await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);expect(s.writes).toHaveLength(0);
+});

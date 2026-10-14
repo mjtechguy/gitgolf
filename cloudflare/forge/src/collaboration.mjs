@@ -19,6 +19,9 @@ const checkKinds = ['UNSPECIFIED', 'PENDING', 'SUCCESS', 'FAILURE', 'ERROR', 'WA
 const writable = row => ['write', 'admin'].includes(row.role);
 const timestamp = () => new Date().toISOString();
 const changed = () => { throw new Fault('failed_precondition', 412, 'The selected discussion or commits changed. Refresh before retrying.'); };
+// At most one SUCCEEDED merge exists per pull request (pull_merge_one_success).
+const pullColumns = 'p.id AS pull_id,p.base_branch,p.head_branch,p.base_commit,p.head_commit,p.draft,m.merge_commit_id,m.updated_at AS merged_at';
+const pullJoin = "JOIN pull_requests p ON p.discussion_id=d.id LEFT JOIN pull_merge_operations m ON m.pull_request_id=p.id AND m.phase='SUCCEEDED'";
 
 function enumeration(value, prefix, values, fallback) {
   if (value === undefined || value === 0 || value === prefix + 'UNSPECIFIED') return fallback;
@@ -97,8 +100,7 @@ async function discussion(db, repository, num, kind) {
   return row;
 }
 async function pullRow(db, repository, num) {
-  const row = await db.prepare(`SELECT d.*,p.id AS pull_id,p.base_branch,p.head_branch,p.base_commit,p.head_commit,p.draft
-    FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE d.repository_id=? AND d.number=? AND d.kind='pull'`).bind(repository.id, number(num)).first();
+  const row = await db.prepare(`SELECT d.*,${pullColumns} FROM discussions d ${pullJoin} WHERE d.repository_id=? AND d.number=? AND d.kind='pull'`).bind(repository.id, number(num)).first();
   if (!row) deny();
   return row;
 }
@@ -112,15 +114,17 @@ async function issue(db, env, repository, d, metadata, authors) {
     htmlUrl: url(env, repository, d), revision: await digest(JSON.stringify([d.id, d.revision])),
     metadata: metadata || await discussionMetadata(db, d) };
 }
-async function inventory(env, row, repo) {
-  return advertisedRefs((await gitRequest(env, repo, row.artifact_name, 'info/refs?service=git-upload-pack', 'git-upload-pack', null)).bytes);
+export async function inventory(env, row, repo, providerFetch) {
+  return advertisedRefs((await gitRequest(env, repo, row.artifact_name, 'info/refs?service=git-upload-pack', 'git-upload-pack', null, providerFetch)).bytes);
 }
 async function pull(db, env, repository, d, refs, metadata, authors) {
-  const base = refs.get('refs/heads/' + d.base_branch), head = refs.get('refs/heads/' + d.head_branch);
+  // A merged proposal keeps the exact comparison pinned at merge time; its live base already contains the head.
+  const merged = Boolean(d.merge_commit_id);
+  const base = !merged && refs.get('refs/heads/' + d.base_branch), head = !merged && refs.get('refs/heads/' + d.head_branch);
   const baseCommit = base || d.base_commit, headCommit = head || d.head_commit;
   return { id: String(d.pull_id), number: d.number, title: d.title, body: d.body, state: 'ISSUE_STATE_' + d.state,
     user: authors?.get(d.author_id) || await author(db, d.author_id), createdAt: d.created_at, updatedAt: d.updated_at, htmlUrl: url(env, repository, d),
-    draft: Boolean(d.draft), merged: false,
+    draft: Boolean(d.draft), merged, ...(merged ? { mergedAt: d.merged_at, mergeCommitId: d.merge_commit_id } : {}),
     head: { repositoryId: String(repository.id), label: `${ownerSlug(repository,env)}:${d.head_branch}`, ref: d.head_branch, commitId: headCommit, retainedSnapshot: !head },
     base: { repositoryId: String(repository.id), label: `${ownerSlug(repository,env)}:${d.base_branch}`, ref: d.base_branch, commitId: baseCommit, retainedSnapshot: !base },
     revision: await digest(JSON.stringify([d.id, d.revision, baseCommit, headCommit, Boolean(d.draft)])),
@@ -134,7 +138,7 @@ async function comment(db, env, repository, d, c, person, authors) {
 export async function review(db, env, repository, d, r, current, authors) {
   const lifecycle = r.dismissed === undefined ? await db.prepare('SELECT dismissed,updated_at FROM pull_review_lifecycle WHERE review_id=?').bind(r.id).first() : r;
   return { id: String(r.id), user: authors?.get(r.author_id) || await author(db, r.author_id), body: r.body, state: 'PULL_REQUEST_REVIEW_STATE_' + (r.draft_status==='PENDING'?'PENDING':r.state),
-    commitId: r.head_commit, stale: r.head_commit !== current.head.commitId || r.base_commit !== current.base.commitId || current.head.retainedSnapshot || current.base.retainedSnapshot,
+    commitId: r.head_commit, stale: r.head_commit !== current.head.commitId || r.base_commit !== current.base.commitId || !current.merged && (current.head.retainedSnapshot || current.base.retainedSnapshot),
     dismissed: Boolean(lifecycle?.dismissed), official: false, submittedAt: r.draft_status==='PENDING'?'':r.created_at, updatedAt: [r.draft_updated_at,lifecycle?.updated_at,r.created_at].filter(Boolean).sort().at(-1),
     htmlUrl: url(env, repository, d) + '#pullreview-' + r.id, commentsCount: 0 };
 }
@@ -161,16 +165,14 @@ async function result(db, env, person, repository, op, artifact) {
   if (op.result_kind === 'review') {
     const r = await db.prepare('SELECT * FROM pull_reviews WHERE id=?').bind(op.result_id).first();
     if (!r) deny();
-    d = await db.prepare(`SELECT d.*,p.id AS pull_id,p.base_branch,p.head_branch,p.base_commit,p.head_commit,p.draft
-      FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE p.id=? AND d.repository_id=?`).bind(r.pull_request_id, repository.id).first();
+    d = await db.prepare(`SELECT d.*,${pullColumns} FROM discussions d ${pullJoin} WHERE p.id=? AND d.repository_id=?`).bind(r.pull_request_id, repository.id).first();
     if (!d) deny();
     const current = await artifact(async repo => pull(db, env, repository, d, await inventory(env, repository, repo)));
     return { mutation: { ...common, pullRequestId: String(d.pull_id), number: d.number, headCommitId: r.head_commit,
       reviewState: 'PULL_REQUEST_REVIEW_STATE_' + r.state, observedReviewId: String(r.id) }, review: await review(db, env, repository, d, r, current) };
   }
   const isPull = op.result_kind === 'pull';
-  d = isPull ? await db.prepare(`SELECT d.*,p.id AS pull_id,p.base_branch,p.head_branch,p.base_commit,p.head_commit,p.draft
-    FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE p.id=? AND d.repository_id=?`).bind(op.result_id, repository.id).first()
+  d = isPull ? await db.prepare(`SELECT d.*,${pullColumns} FROM discussions d ${pullJoin} WHERE p.id=? AND d.repository_id=?`).bind(op.result_id, repository.id).first()
     : await db.prepare("SELECT * FROM discussions WHERE id=? AND repository_id=? AND kind='issue'").bind(op.result_id, repository.id).first();
   if (!d) deny();
   const kind = ({ CreateIssue: 'CREATE_ISSUE', UpdateIssue: 'UPDATE_ISSUE', CreatePullRequest: 'CREATE_PULL', UpdatePullRequest: 'UPDATE_PULL' })[op.method];
@@ -226,8 +228,8 @@ export async function collaboration(db, env, person, method, body, row, artifact
     const sort = body.sort || 'newest', orders = { newest: 'd.number DESC', oldest: 'd.number ASC', updated: 'd.updated_at DESC,d.number DESC', 'least-updated': 'd.updated_at ASC,d.number ASC' };
     if (isPull && !orders[sort]) invalid('Choose a supported PR ordering.');
     if (body.baseBranch) { if (!isPull) invalid('Base branch filters are for PRs.'); filter.clauses.push('p.base_branch=?'); filter.values.push(text(body.baseBranch, 200, true)); }
-    const { results } = await db.prepare(`SELECT d.*,(SELECT count(*) FROM discussion_comments c WHERE c.discussion_id=d.id) AS comment_count${isPull ? ',p.id AS pull_id,p.base_branch,p.head_branch,p.base_commit,p.head_commit,p.draft' : ''}
-      FROM discussions d JOIN users u ON u.id=d.author_id ${isPull ? 'JOIN pull_requests p ON p.discussion_id=d.id' : ''}
+    const { results } = await db.prepare(`SELECT d.*,(SELECT count(*) FROM discussion_comments c WHERE c.discussion_id=d.id) AS comment_count${isPull ? ',' + pullColumns : ''}
+      FROM discussions d JOIN users u ON u.id=d.author_id ${isPull ? pullJoin : ''}
       WHERE ${filter.clauses.join(' AND ')} ORDER BY ${isPull ? orders[sort] : 'd.number DESC'} LIMIT ? OFFSET ?`).bind(...filter.values, paging.limit + 1, paging.offset).all();
     const entries = [];
     const refs = isPull && results.length ? await artifact(repo => inventory(env, row, repo)) : null;
@@ -239,7 +241,7 @@ export async function collaboration(db, env, person, method, body, row, artifact
     const d = await pullRow(db, row, body.number);
     return { pullRequest: await artifact(async repo => {
       const current = await pull(db, env, row, d, await inventory(env, row, repo));
-      if (!current.base.retainedSnapshot && !current.head.retainedSnapshot) {
+      if (current.merged || !current.base.retainedSnapshot && !current.head.retainedSnapshot) {
         try { current.mergeBaseCommitId = (await comparison(repo, current.base.commitId, current.head.commitId)).mergeBase; }
         catch (error) { if (!(error instanceof Fault) || !['resource_exhausted', 'unimplemented', 'failed_precondition'].includes(error.code)) throw error; }
       }
@@ -269,7 +271,7 @@ export async function collaboration(db, env, person, method, body, row, artifact
       return { reviews, page: { nextPage: results.length > paging.limit ? paging.number + 1 : 0 } };
     }
     exactRepository(selection, row);
-    if (selection.pullRequestId !== String(d.pull_id) || selection.baseCommitId !== current.base.commitId || selection.headCommitId !== current.head.commitId || current.base.retainedSnapshot || current.head.retainedSnapshot) changed();
+    if (selection.pullRequestId !== String(d.pull_id) || selection.baseCommitId !== current.base.commitId || selection.headCommitId !== current.head.commitId || !current.merged && (current.base.retainedSnapshot || current.head.retainedSnapshot)) changed();
     if (method === 'ListPullRequestCommits' || method === 'GetPullRequestDiff') return artifact(async repo => {
       const observed = await comparison(repo, selection.baseCommitId, selection.headCommitId);
       if (method === 'GetPullRequestDiff') return { repositoryId: String(row.id), pullRequestId: String(d.pull_id),
@@ -339,7 +341,9 @@ export async function collaboration(db, env, person, method, body, row, artifact
       await metadataChange(db, person, row, d, body, op);
       return completed(db, env, person, row, body.idempotencyKey, artifact);
     }
-    const [field, value] = edits(body, isPull), statements = [admission(db, person, row, method, body, op, isPull ? 'pull' : 'issue', isPull ? d.pull_id : d.id, d)];
+    const [field, value] = edits(body, isPull);
+    if (current.merged && ['state', 'draft'].includes(field)) throw new Fault('failed_precondition', 412, 'A merged pull request cannot be reopened or changed to a draft.');
+    const statements = [admission(db, person, row, method, body, op, isPull ? 'pull' : 'issue', isPull ? d.pull_id : d.id, d)];
     if (field === 'draft') {
       statements.push(db.prepare(`UPDATE pull_requests SET draft=? WHERE id=? AND ${admitted}`).bind(value, d.pull_id, op.id));
       statements.push(db.prepare(`UPDATE discussions SET revision=revision+1,updated_at=? WHERE id=? AND ${admitted}`).bind(op.time, d.id, op.id));

@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -123,7 +123,9 @@ class Release:
             self.check_public_schema()
         if self.manifest['schema'] >= 23:
             self.check_environment_schema()
-        deployments = self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
+        if self.manifest['schema'] >= 24:
+            self.check_pull_merge_schema()
+        deployments =self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
         if len(versions) != 1 or versions[0]['percentage'] != 100 or not UUID.fullmatch(versions[0]['version_id']):
@@ -199,7 +201,39 @@ class Release:
             self.migrate_public_schema(applied)
         if self.manifest['schema'] >= 23:
             self.migrate_environment_schema(applied)
+        if self.manifest['schema'] >= 24:
+            self.migrate_pull_merge_schema(applied)
         return applied or 'already-applied'
+
+    def check_pull_merge_schema(self):
+        fields = {'actor_id', 'operation_id', 'repository_id', 'pull_request_id', 'input_hash', 'original', 'phase', 'detail',
+                  'git_operation_id', 'merge_commit_id', 'actual_base_commit_id', 'created_at', 'updated_at'}
+        columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info(pull_merge_operations)')[0]['results']
+        if {row['name'] for row in columns} != fields:
+            raise ValueError('Apply reviewed 0024 pull merge migration before releasing')
+        # The partial unique indexes are the one-unresolved and merged-once guarantees, not an optimization.
+        indexes = self.command('d1', 'query', self.manifest['database'], '--sql', "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='pull_merge_operations' AND sql LIKE 'CREATE UNIQUE INDEX%WHERE%'")[0]['results']
+        if not {'pull_merge_one_unresolved', 'pull_merge_one_success'}.issubset({row['name'] for row in indexes}):
+            raise ValueError('Apply 0024 pull merge uniqueness indexes before releasing')
+
+    def migrate_pull_merge_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0024_pull_merges.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0024') not in (None, digest):
+            raise ValueError('Recorded pull merge migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        prefixes = ['CREATE TABLE IF NOT EXISTS pull_merge_operations (', 'CREATE UNIQUE INDEX IF NOT EXISTS pull_merge_one_unresolved ON pull_merge_operations(pull_request_id) WHERE ', 'CREATE UNIQUE INDEX IF NOT EXISTS pull_merge_one_success ON pull_merge_operations(pull_request_id) WHERE ']
+        if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement, prefix in zip(statements, prefixes)):
+            raise ValueError('Pull merge migration must only add the reviewed table and indexes')
+        ready = False
+        try:
+            self.check_pull_merge_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0024') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_pull_merge_schema()
+            self.state['migration0024'] = digest; self.save(); applied.append('0024')
 
     def check_environment_schema(self):
         required = {'repository_environments': {'id', 'repository_id', 'artifact_name', 'name', 'version', 'deleted'},

@@ -1,5 +1,6 @@
 import { reviewAuthoringMethods } from './src/review-authoring.mjs';
 import { pullReviewMethods } from './src/pull-reviews.mjs';
+import { pullMergeMethods } from './src/pull-merge.mjs';
 import { gitCredentialMethods } from './src/git-credentials.mjs';
 import { ruleMethods } from './src/repository-rules.mjs';
 import { webhookMethods } from './src/webhooks.mjs';
@@ -15,6 +16,7 @@ const files = (await readdir(contracts)).filter(name => name.endsWith('.proto'))
 const protos = await Promise.all(files.map(async name => ({ name, text: await readFile(new URL(name, contracts), 'utf8') })));
 const supported = {
   PullMergeObservationService: new Set(['GetPullRequestMergeObservation']),
+  StandardPullMergeService: pullMergeMethods,
   PullReviewAuthoringService: reviewAuthoringMethods,
   PullReviewRequestService: pullReviewMethods,
   GitTransportService: gitCredentialMethods,
@@ -34,7 +36,8 @@ const supported = {
   RepositoryService: new Set(['ListRepositories', 'CreateRepository', 'GetRepositoryCreation', 'GetRepository', 'GetRepositoryOverview', 'GetRepositoryStar', 'SetRepositoryStar', 'ListBranches', 'ListTags', 'ResolveRepositorySource', 'GetContents', 'GetRepositoryFileIndex', 'GetRepositoryImage', 'ListCommits', 'GetCommitDiff', 'GetRepositoryComparison', ...collaborationMethods, ...resourceMethods]),
 };
 const limitations = {
-  PullMergeObservationService: 'Exact current same-repository comparison, branch locks, retained source and current writer observations. No executable merge authority; all strategies remain disabled.',
+  PullMergeObservationService: 'Exact current same-repository comparison, branch locks, retained source, current writer and base-ancestry observations. No executable merge authority; merge commits are reported only for a pull request the native merge slice would currently admit.',
+  StandardPullMergeService: 'Same-repository merge commits when the base tip is already contained in the head: writer authority, rules, one journaled single-ref write and ref/commit readback; original receipts. Squash, diverged branches, forks and locked targets are durably refused; an unconfirmed write stays unknown and fences the repository. Provider acceptance of the generated pack needs hosted proof.',
   PullReviewAuthoringService: 'Private pending overall summaries, exact-source update/publication and discard with original receipts. No saved inline draft transfer or comment edits.',
   PullReviewRequestService: 'Human account review assignments, cancellation and admin dismissal/restoration with original receipts. Current direct grants and exact-base GitHub-format CODEOWNERS suggestions; no team assignments, inline comments, automatic routing or protected approval authority.',
   GitTransportService: 'Own Access-authenticated account; repository-only, identity/grant-bound HTTPS read/write credentials, one-time secrets, 5–60 minute expiry and revocation. Separate Access gate; SSH and receive-outcome RPC remain unavailable.',
@@ -52,7 +55,7 @@ const limitations = {
   RepositoryInvitationService: 'Enrolled Access users only; current issuer administration, expiring consent, atomic grant/decision and original receipt lookup. No email delivery or automatic enrollment.',
   RepositoryService: 'Bounded Git/read contract, immutable source pages and complete bounded filename/path indexes, overall reviews and same-repository PRs. Repository labels/milestones, issue/PR assignment and author/admin comment editing; no protected merge, inline review threads or organization labels. Pending overall drafts use PullReviewAuthoringService.',
 };
-const source = (await Promise.all(['core.mjs', 'file-index.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'owners.mjs', 'workspace-ui.mjs', 'environments.mjs'].map(name => readFile(new URL('./src/' + name, import.meta.url), 'utf8')))).join('\n');
+const source = (await Promise.all(['core.mjs', 'file-index.mjs', 'repository-settings.mjs', 'invitations.mjs', 'discussion-resources.mjs', 'discussion-engagement.mjs', 'webhooks.mjs', 'repository-rules.mjs', 'git-credentials.mjs', 'pull-reviews.mjs', 'pull-merge.mjs', 'review-authoring.mjs', 'codeowners.mjs', 'owners.mjs', 'workspace-ui.mjs', 'environments.mjs'].map(name => readFile(new URL('./src/' + name, import.meta.url), 'utf8')))).join('\n');
 for (const methods of Object.values(supported)) for (const method of methods) if (!collaborationMethods.has(method) && !source.includes("'" + method + "'") && !source.includes("/" + method + "'")) throw Error('Native adapter declaration has no maintained implementation: ' + method);
 const inventory = [];
 for (const proto of protos) for (const service of proto.text.matchAll(/service\s+(\w+)\s*\{(.*?)\n\}/gs)) for (const method of service[2].matchAll(/rpc\s+(\w+)/g)) inventory.push({ service: service[1], method: method[1], contract: proto.name, adapter: supported[service[1]]?.has(method[1]) ? 'Bounded adapter' : 'Missing native adapter' });

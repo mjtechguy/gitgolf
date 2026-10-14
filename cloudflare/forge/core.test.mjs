@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
+import { createHash } from 'node:crypto';
+import { inflateSync } from 'node:zlib';
 import { digest, handle, serialize, concurrentRead, advanceEvidence, testGit, agentGit, servePreview, cleanupPreviews, runCI } from './src/core.mjs';
 import { allocateApps } from './app-fixture.mjs';
 import { previewBundle } from './src/delivery.mjs';
@@ -15,6 +17,20 @@ const zero = '0'.repeat(40), commit = 'a'.repeat(40);
 const push = (ref = 'refs/heads/main', old = zero, next = commit) => new Uint8Array(Buffer.concat([
   packetLine(`${old} ${next} ${ref}\0 report-status side-band-64k object-format=sha1 agent=git/2.54.0\n`), Buffer.from('0000PACK\0\0\0\x02'),
 ]));
+
+// Independent decoder for the one-commit pack a native merge sends; the fixture provider stores only what it can verify.
+function unpackCommit(pack) {
+  assert.equal(pack.subarray(0, 12).toString('hex'), '5041434b0000000200000001');
+  assert.deepEqual(pack.subarray(-20), createHash('sha1').update(pack.subarray(0, -20)).digest());
+  let offset = 12, byte = pack[offset++], size = byte & 15, shift = 4; assert.equal(byte >> 4 & 7, 1);
+  while (byte & 0x80) { byte = pack[offset++]; size |= (byte & 0x7f) << shift; shift += 7; }
+  const body = inflateSync(pack.subarray(offset, -20)); assert.equal(body.length, size);
+  const text = body.toString(), split = text.indexOf('\n\n'), headers = text.slice(0, split).split('\n');
+  const author = /^author (.+) <([^<> ]+)> (\d+) \+0000$/.exec(headers.find(line => line.startsWith('author ')));
+  assert.equal(headers.at(-1), headers.at(-2).replace('author ', 'committer '));
+  return { hash: createHash('sha1').update(`commit ${size}\0`).update(body).digest('hex'), treeHash: headers[0].slice(5), parents: headers.filter(line => line.startsWith('parent ')).map(line => line.slice(7)),
+    message: text.slice(split + 2), author: { name: author[1], email: author[2] }, authoredAt: Number(author[3]) };
+}
 
 async function fixture(t) {
   const sql = new DatabaseSync(':memory:');
@@ -36,7 +52,7 @@ async function fixture(t) {
       catch (error) { sql.exec('ROLLBACK'); throw error; }
     },
   };
-  const repos = new Map(), tokens = new Set(); let creates = 0, effects = 0, losePush = false, forks = 0, loseFork = false;
+  const repos = new Map(), tokens = new Set(); let creates = 0, effects = 0, losePush = false, loseReply = false, refuseRef = false, held, forks = 0, loseFork = false;
   const env = { DB: db, ACCOUNT_ID: 'c'.repeat(32), ARTIFACTS_NAMESPACE: 'test-space', WORKSPACE_SLUG: 'alice', PUBLIC_ORIGIN: 'https://golf.example.com',
     ARTIFACTS: {
       async create(name) {
@@ -48,7 +64,7 @@ async function fixture(t) {
         async fork(target) { forks++; repos.set(target, { ...repos.get(name), refs: new Map(repos.get(name).refs), source: 'artifacts:test-space/' + name }); if (loseFork) { loseFork = false; throw Error('Lost fork acknowledgement'); } return { name: target }; },
         async listTokens() { return { tokens: [], total: 0 }; },
         async log(options = {}) { return repos.get(name).ref && !options.offset ? [{ hash: commit, treeHash: 'f'.repeat(40), parents: [], message: 'Native commit', author: { name: 'Alice' }, authoredAt: 1700000000 }] : []; },
-        async readCommit(hash) { return [commit, 'b'.repeat(40), 'c'.repeat(40)].includes(hash) ? { hash, treeHash: 'f'.repeat(40), parents: hash === 'c'.repeat(40) ? ['b'.repeat(40)] : hash === 'b'.repeat(40) ? [commit] : [], message: 'Native commit', author: { name: 'Alice' }, authoredAt: 1700000000 } : null; },
+        async readCommit(hash) { return repos.get(name).commits?.get(hash) || ([commit, 'b'.repeat(40), 'c'.repeat(40)].includes(hash) ? { hash, treeHash: 'f'.repeat(40), parents: hash === 'c'.repeat(40) ? ['b'.repeat(40)] : hash === 'b'.repeat(40) ? [commit] : [], message: 'Native commit', author: { name: 'Alice' }, authoredAt: 1700000000 } : null); },
         async readTree(hash) { return hash === 'f'.repeat(40) ? [
           { name: 'hello.txt', hash: '1'.repeat(40), type: 'blob', mode: '100644' },
           { name: 'link', hash: '2'.repeat(40), type: 'symlink', mode: '120000' },
@@ -67,9 +83,18 @@ async function fixture(t) {
     const name = new URL(url).pathname.split('/')[3].slice(0, -4);
     if (options.method === 'POST') {
       effects++;
-      if (losePush) throw Error('unknown provider outcome containing sensitive metadata');
-      const command = receiveCommand(options.body); repos.get(name).ref = command.next; repos.get(name).refs.set(command.ref, command.next);
-      return new Response(packetLine('unpack ok\n'), { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } });
+      const command = receiveCommand(options.body), sent = Buffer.from(options.body), pack = sent.subarray(parseInt(sent.subarray(0, 4).toString(), 16) + 4);
+      const apply = () => {
+        if (pack.length > 8) { const object = unpackCommit(pack); assert.equal(object.hash, command.next); assert.equal(repos.get(name).refs.get(command.ref), command.old); (repos.get(name).commits ||= new Map()).set(object.hash, object); }
+        repos.get(name).ref = command.next; repos.get(name).refs.set(command.ref, command.next);
+      };
+      // A lost push may still land later (land); a lost reply follows an applied write.
+      if (losePush) { held = apply; throw Error('unknown provider outcome containing sensitive metadata'); }
+      // The provider keeps the unpacked object but refuses the ref update, as for a lost compare-and-swap.
+      if (refuseRef) { (repos.get(name).commits ||= new Map()).set(command.next, unpackCommit(pack)); return new Response(Buffer.concat([packetLine('unpack ok\n'), packetLine(`ng ${command.ref} failed to update ref\n`), Buffer.from('0000')]), { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } }); }
+      apply();
+      if (loseReply) { loseReply = false; throw Error('lost provider reply'); }
+      return new Response(Buffer.concat([packetLine('unpack ok\n'), packetLine(`ok ${command.ref}\n`), Buffer.from('0000')]), { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } });
     }
     const refs = repos.get(name).refs;
     return new Response(Buffer.concat([packetLine('# service=git-upload-pack\n'), Buffer.from('0000'),
@@ -85,7 +110,7 @@ async function fixture(t) {
   const sendPush = () => dispatch(new Request(env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', {
     method: 'POST', headers: { Authorization: 'Bearer ' + ownerToken, 'Content-Type': 'application/x-git-receive-pack-request' }, body: push(),
   }));
-  return { sql, env, call, create, sendPush, tokens, providerFetch, dispatch, advance: (id, phase) => dispatch({ id, phase }), setRefs: refs => { for (const r of repos.values()) r.refs = new Map(refs); }, counts: () => ({ creates, effects, forks }), losePush: () => { losePush = true; }, loseFork: () => { loseFork = true; }, forks: () => forks };
+  return { sql, env, call, create, sendPush, tokens, providerFetch, dispatch, advance: (id, phase) => dispatch({ id, phase }), setRefs: refs => { for (const r of repos.values()) r.refs = new Map(refs); }, counts: () => ({ creates, effects, forks }), losePush: () => { losePush = true; }, loseReply: () => { loseReply = true; }, refuseRef: () => { refuseRef = true; }, land: () => held(), loseFork: () => { loseFork = true; }, forks: () => forks };
 }
 
 test('native runner HTTP routes separate current admin sign-in from machine credentials', async t => {
@@ -2824,28 +2849,221 @@ test('complete file inventory is immutable, indexed and current-authority fenced
  assert.equal((await f.call('GetRepositoryFileIndex',target)).status,404);
 });
 
-test('native merge diagnostics bind live source, locks and current readers without merge authority', async t => {
+test('native merge diagnostics bind live source, locks, base ancestry and current readers', async t => {
   const f=await evidenceFixture(t), pr=f.created.pullRequest;
   const input={selection:f.selection,expectedPullRevision:pr.revision};
   const read=(body=input,token=ownerToken)=>f.call('',body,token,'/rpc/golf.v1.PullMergeObservationService/GetPullRequestMergeObservation');
   const initial=(await value(await read())).observation;
   assert.equal(initial.targetProtection,'PULL_MERGE_TARGET_PROTECTION_UNPROTECTED');
   assert.equal(initial.sourceState,'PULL_MERGE_SOURCE_STATE_CURRENT');
-  assert.equal(initial.nativeCallerCanMerge,false);
+  assert.equal(initial.nativeCallerCanMerge,true);
   assert.equal(initial.currentTargetWriter,true);
   assert.equal(initial.unavailableReason,'protected_integration_unqualified');
-  assert.equal(Object.values(initial.mergeConfiguration).some(v=>v===true),false);
-  assert.equal((await value(await read(input,readerToken))).observation.currentTargetWriter,false);
+  assert.deepEqual(initial.mergeConfiguration,{allowMergeCommits:true,defaultMergeStyle:'merge',defaultUpdateStyle:'merge'});
+  const reader=(await value(await read(input,readerToken))).observation;
+  assert.equal(reader.currentTargetWriter,false);assert.equal(reader.nativeCallerCanMerge,false);assert.equal(Object.values(reader.mergeConfiguration).some(v=>v===true),false);
   assert.equal((await read({...input,expectedPullRevision:'0'.repeat(64)})).status,412);
   assert.equal((await read({...input,selection:{...f.selection,repositoryId:'9'}})).status,404);
   const artifact=f.sql.prepare('SELECT artifact_name FROM repositories WHERE id=1').get().artifact_name;
   f.sql.prepare('INSERT INTO repository_rules(repository_id,artifact_name,version,branches,tags,next_tag) VALUES(1,?,1,?,\'[]\',1)').run(artifact,JSON.stringify([{ruleName:'main'}]));
   const locked=(await value(await read())).observation;
   assert.equal(locked.targetProtection,'PULL_MERGE_TARGET_PROTECTION_PROTECTED');assert.notEqual(locked.fingerprint,initial.fingerprint);
+  assert.equal(locked.nativeCallerCanMerge,false);assert.equal(Object.values(locked.mergeConfiguration).some(v=>v===true),false);
   f.setRefs([['refs/heads/main',pr.base.commitId]]);
   const retained=(await value(await read())).observation;
   assert.equal(retained.sourceState,'PULL_MERGE_SOURCE_STATE_RETAINED_ONLY');assert.equal(retained.source,undefined);assert.equal(retained.sourceRepository,undefined);
   f.sql.exec('DELETE FROM grants WHERE user_id=2');assert.equal((await read(input,readerToken)).status,404);
+});
+
+async function mergeFixture(t) {
+  const f=await pullFixture(t), pr=f.created.pullRequest;
+  const selection={repository:key,repositoryId:'1',pullRequestId:pr.id,number:pr.number,baseCommitId:pr.base.commitId,headCommitId:pr.head.commitId};
+  const input=(changes={})=>({selection,ownerId:'1',expectedPullRevision:pr.revision,operationId:nonce(),sourceRef:'feature',targetRef:'main',...changes});
+  const submit=(body,token)=>f.call('',body,token,'/rpc/golf.v1.StandardPullMergeService/SubmitStandardPullMerge');
+  const inspect=(body,token,changes={})=>f.call('',{repository:key,repositoryId:'1',ownerId:'1',pullRequestId:pr.id,number:pr.number,operationId:body.operationId,...changes},token,'/rpc/golf.v1.StandardPullMergeService/GetStandardPullMergeOperation');
+  const observe=(pull=pr,token)=>f.call('',{selection:{...selection,baseCommitId:pull.base.commitId,headCommitId:pull.head.commitId},expectedPullRevision:pull.revision},token,'/rpc/golf.v1.PullMergeObservationService/GetPullRequestMergeObservation');
+  const pull=async()=>(await value(await f.call('GetPullRequest',{repository:key,number:pr.number}))).pullRequest;
+  const journal=()=>f.sql.prepare('SELECT * FROM pull_merge_operations ORDER BY created_at,rowid').all();
+  return {...f,pr,selection,input,submit,inspect,observe,pull,journal};
+}
+const mergePhase=name=>'STANDARD_PULL_MERGE_PHASE_'+name;
+
+test('native merge writes one verified merge commit through the push journal and keeps its original receipt', async t => {
+  const f=await mergeFixture(t), body=f.input({commitTitle:'Merge feature',commitMessage:'Reviewed by the team.\n'});
+  f.sql.prepare("UPDATE users SET full_name='Alice <Admin>' WHERE id=1").run();
+  assert.equal((await value(await f.observe())).observation.nativeCallerCanMerge,true);
+  const operation=(await value(await f.submit(body))).operation, merge=operation.mergeCommitId;
+  assert.deepEqual(Object.keys(operation).sort(),['actorId','actualBaseCommitId','contract','createdAt','expectedPullRevision','failureCode','headCommitId','mergeCommitId','method','number','observedBaseCommitId','operationId','ownerId','phase','pullRequestId','repository','repositoryId','sourceRef','targetRef','updatedAt']);
+  assert.deepEqual({...operation,mergeCommitId:'',createdAt:'',updatedAt:''},{operationId:body.operationId,actorId:'1',repository:key,repositoryId:'1',ownerId:'1',pullRequestId:f.pr.id,number:f.pr.number,
+    expectedPullRevision:f.pr.revision,headCommitId:'b'.repeat(40),observedBaseCommitId:commit,sourceRef:'feature',targetRef:'main',method:'merge',phase:mergePhase('SUCCEEDED'),
+    mergeCommitId:'',actualBaseCommitId:commit,failureCode:'',createdAt:'',updatedAt:'',contract:'golf.pull.standard-native-merge.v1'});
+  assert.match(merge,/^[a-f0-9]{40}$/);assert.ok(Date.parse(operation.updatedAt)>=Date.parse(operation.createdAt));
+  // The fixture provider decoded the pack independently and stored exactly the commit whose ID the Worker computed.
+  const artifact=f.sql.prepare('SELECT artifact_name FROM repositories WHERE id=1').get().artifact_name, stored=await (await f.env.ARTIFACTS.get(artifact)).readCommit(merge);
+  assert.deepEqual(stored,{hash:merge,treeHash:'f'.repeat(40),parents:[commit,'b'.repeat(40)],message:'Merge feature\n\nReviewed by the team.\n',
+    author:{name:'Alice Admin',email:'alice@users.noreply.golf.example.com'},authoredAt:Math.floor(Date.parse(operation.createdAt)/1000)});
+  assert.equal(f.counts().effects,1);assert.equal(f.tokens.size,0);
+  assert.deepEqual({...f.sql.prepare('SELECT repository_id,user_id,ref,old_sha,new_sha,state,ci_state FROM git_operations').get()},{repository_id:1,user_id:1,ref:'refs/heads/main',old_sha:commit,new_sha:merge,state:'APPLIED',ci_state:'NONE'});
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);
+  // Title and message are in the fingerprint and the commit only.
+  assert.doesNotMatch(JSON.stringify(f.journal()),/Reviewed|Merge feature/);
+  assert.deepEqual((await value(await f.submit(body))).operation,operation);
+  assert.deepEqual((await value(await f.inspect(body))).operation,operation);
+  assert.equal((await f.submit({...body,commitMessage:'Different text'})).status,412);
+  assert.equal((await f.inspect(body,ownerToken,{number:f.pr.number+1})).status,404);
+  assert.equal(f.counts().effects,1);assert.equal(f.journal().length,1);
+  // The merged proposal is closed, records its commit and keeps the merged comparison although main moved.
+  const merged=await f.pull();
+  assert.equal(merged.merged,true);assert.equal(merged.state,'ISSUE_STATE_CLOSED');assert.equal(merged.mergeCommitId,merge);assert.equal(merged.mergedAt,operation.updatedAt);
+  assert.equal(merged.base.commitId,commit);assert.equal(merged.head.commitId,'b'.repeat(40));assert.equal(merged.mergeBaseCommitId,commit);assert.equal(merged.base.retainedSnapshot,true);
+  assert.equal((await value(await f.call('ListBranches',{repository:key}))).branches.find(branch=>branch.name==='main').commitId,merge);
+  const compared={...f.selection,baseCommitId:merged.base.commitId,headCommitId:merged.head.commitId};
+  assert.equal((await value(await f.call('GetPullRequestDiff',compared))).mergeBaseCommitId,commit);
+  assert.deepEqual((await value(await f.call('ListPullRequestCommits',{selection:compared}))).commits.map(c=>c.sha),['b'.repeat(40)]);
+  assert.equal((await value(await f.call('ListPullRequests',{repository:key}))).pullRequests.length,0);
+  assert.equal((await value(await f.call('ListPullRequests',{repository:key,state:'ISSUE_STATE_CLOSED'}))).pullRequests[0].mergeCommitId,merge);
+  assert.deepEqual(f.sql.prepare("SELECT kind FROM discussion_events WHERE kind IN ('merge_pull','close')").all().map(e=>e.kind),['merge_pull']);
+  // A merged proposal is never reopened, drafted or merged again.
+  const edit=changes=>f.call('UpdatePullRequest',{repository:key,repositoryId:'1',pullRequestId:merged.id,number:merged.number,expectedRevision:merged.revision,idempotencyKey:nonce(),...changes});
+  assert.equal((await edit({state:'ISSUE_STATE_OPEN'})).status,412);assert.equal((await edit({draft:true})).status,412);
+  assert.equal((await f.pull()).state,'ISSUE_STATE_CLOSED');
+  const again=(await value(await f.submit(f.input({selection:compared,expectedPullRevision:merged.revision})))).operation;
+  assert.equal(again.phase,mergePhase('REJECTED'));assert.equal(again.failureCode,'preflight_refused');assert.equal(f.journal()[1].detail,'pull_request_not_open');
+  assert.equal(f.counts().effects,1);
+  assert.equal((await value(await f.call('',{},ownerToken,'/native/diagnostics'))).schema,24);
+  const capability=(await value(await f.call('',{},ownerToken,'/rpc/golf.v1.CapabilityService/ListCapabilities'))).capabilities.filter(c=>c.id==='pull.merge');
+  assert.equal(capability.length,1);assert.equal(capability[0].state,'CAPABILITY_STATE_READY');
+});
+
+test('native merge refuses everything outside its first slice with a durable receipt and no provider write', async t => {
+  const f=await mergeFixture(t), refused=async(body,detail)=>{
+    const operation=(await value(await f.submit(body))).operation, row=f.journal().at(-1);
+    assert.equal(operation.phase,mergePhase('REJECTED'));assert.equal(operation.failureCode,'preflight_refused');assert.equal(operation.mergeCommitId,'');assert.equal(operation.actualBaseCommitId,'');
+    assert.equal(row.operation_id,body.operationId);assert.equal(row.detail,detail);assert.equal(row.git_operation_id,null);
+    assert.deepEqual((await value(await f.inspect(body))).operation,operation);
+    return operation;
+  };
+  assert.equal((await refused(f.input({method:'squash'}),'squash_unsupported')).method,'squash');
+  const fork={sourceRepository:{owner:'bob',name:'fork'},sourceRepositoryId:'7',sourceOwnerId:'2'}, forked=await refused(f.input(fork),'fork_source_unsupported');
+  assert.equal(forked.contract,'golf.pull.standard-native-merge.v2');assert.deepEqual(forked.sourceRepository,fork.sourceRepository);assert.equal(forked.sourceRepositoryId,'7');assert.equal(forked.sourceOwnerId,'2');
+  await refused(f.input({expectedPullRevision:'0'.repeat(64)}),'pull_request_changed');
+  await refused(f.input({sourceRef:'other'}),'pull_request_changed');
+  const artifact=f.sql.prepare('SELECT artifact_name FROM repositories WHERE id=1').get().artifact_name;
+  f.sql.prepare('INSERT INTO repository_rules(repository_id,artifact_name,version,branches,tags,next_tag) VALUES(1,?,1,?,\'[]\',1)').run(artifact,JSON.stringify([{ruleName:'main'}]));
+  await refused(f.input(),'target_locked');
+  f.sql.exec('DELETE FROM repository_rules');
+  // The base gained a commit the head does not contain: no tree merge exists in this slice.
+  const moved='d'.repeat(40), get=f.env.ARTIFACTS.get;
+  f.env.ARTIFACTS.get=async name=>{const repo=await get(name);return {...repo,async readCommit(hash){return hash===moved?{hash,treeHash:'f'.repeat(40),parents:[commit],message:'Base moved',author:{name:'Bob'},authoredAt:1700000001}:repo.readCommit(hash);}};};
+  f.setRefs([['refs/heads/main',moved],['refs/heads/feature','b'.repeat(40)]]);
+  const diverged=await f.pull(), observed=(await value(await f.observe(diverged))).observation;
+  assert.equal(observed.nativeCallerCanMerge,false);assert.equal(observed.unavailableReason,'native_base_not_ancestor');assert.equal(Object.values(observed.mergeConfiguration).some(v=>v===true),false);
+  await refused(f.input({selection:{...f.selection,baseCommitId:moved},expectedPullRevision:diverged.revision}),'base_not_ancestor');
+  // The base already contains the head: nothing to merge.
+  f.setRefs([['refs/heads/main','c'.repeat(40)],['refs/heads/feature','b'.repeat(40)]]);
+  const ahead=await f.pull();
+  await refused(f.input({selection:{...f.selection,baseCommitId:'c'.repeat(40)},expectedPullRevision:ahead.revision}),'base_not_ancestor');
+  f.setRefs([['refs/heads/main',commit],['refs/heads/feature','b'.repeat(40)]]);
+  const drafted=(await value(await f.call('UpdatePullRequest',{repository:key,repositoryId:'1',pullRequestId:f.pr.id,number:f.pr.number,expectedRevision:f.pr.revision,idempotencyKey:nonce(),draft:true}))).pullRequest;
+  await refused(f.input({expectedPullRevision:drafted.revision}),'pull_request_draft');
+  // Malformed intents are invalid before any journal row.
+  const rows=f.journal().length;
+  for(const invalid of [{method:'rebase'},{sourceRef:'main'},{commitTitle:' padded '},{commitMessage:'bell\x07'},{operationId:'not-a-uuid'},{sourceRepositoryId:'7'},{targetRef:'refs/heads/main'}]) assert.equal((await f.submit(f.input(invalid))).status,400,JSON.stringify(invalid));
+  assert.equal(f.journal().length,rows);
+  assert.equal(f.counts().effects,0);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_operations').get().n,0);assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);
+  assert.equal((await f.pull()).merged,false);
+  // A refusal is terminal for its own key only; a fresh eligible request still merges.
+  const ready=(await value(await f.call('UpdatePullRequest',{repository:key,repositoryId:'1',pullRequestId:f.pr.id,number:f.pr.number,expectedRevision:drafted.revision,idempotencyKey:nonce(),draft:false}))).pullRequest;
+  assert.equal((await value(await f.submit(f.input({expectedPullRevision:ready.revision})))).operation.phase,mergePhase('SUCCEEDED'));
+  assert.equal(f.counts().effects,1);
+});
+
+test('native merge requires the current writer and never reveals another account\'s receipt', async t => {
+  const f=await mergeFixture(t), body=f.input();
+  // The reader holds a read grant; a merge is denied like a push, without a journal row.
+  assert.equal((await f.submit(body,readerToken)).status,404);
+  assert.equal((await f.submit(f.input({ownerId:'9'}))).status,404);
+  assert.equal((await f.submit(f.input({selection:{...f.selection,pullRequestId:'99'}}))).status,404);
+  assert.equal((await f.submit(f.input({selection:{...f.selection,repositoryId:'9'}}))).status,404);
+  assert.equal(f.journal().length,0);assert.equal(f.counts().effects,0);
+  f.sql.exec("UPDATE repositories SET write_pending='unresolved'");
+  assert.equal((await f.submit(f.input())).status,412);assert.equal(f.journal().length,0);
+  f.sql.exec('UPDATE repositories SET write_pending=NULL');
+  const operation=(await value(await f.submit(body))).operation;
+  assert.equal(operation.phase,mergePhase('SUCCEEDED'));
+  await value(await f.call('',{...f.grant,role:'write'},ownerToken,'/native/repository-grant'));
+  assert.equal((await f.inspect(body,readerToken)).status,404);
+  assert.equal((await value(await f.submit(body,readerToken))).operation.phase,mergePhase('REJECTED'));
+  assert.equal(f.journal()[1].actor_id,2);assert.equal(f.journal()[1].detail,'pull_request_changed');
+  // Losing write authority hides the caller's own historical receipt.
+  f.sql.prepare("UPDATE grants SET role='read' WHERE user_id=1").run();
+  assert.equal((await f.inspect(body)).status,404);assert.equal((await f.submit(body)).status,404);
+  assert.equal(f.counts().effects,1);
+});
+
+test('an unconfirmed native merge stays unknown, fences writes and settles only by reading the ref back', async t => {
+  const f=await mergeFixture(t), body=f.input(); f.losePush();
+  const first=await f.submit(body), text=await first.clone().text(), unknown=(await value(first)).operation;
+  assert.doesNotMatch(text,/sensitive/);
+  assert.equal(unknown.phase,mergePhase('DISPATCH_UNKNOWN'));assert.equal(unknown.failureCode,'');assert.equal(unknown.mergeCommitId,'');assert.equal(unknown.actualBaseCommitId,'');
+  const git=f.sql.prepare('SELECT * FROM git_operations').get();
+  assert.equal(git.state,'DISPATCHED');assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,git.id);
+  assert.equal(f.journal()[0].detail,'provider_unavailable');assert.equal(f.journal()[0].git_operation_id,git.id);assert.equal(f.tokens.size,0);
+  // Replay, inspection and a second operation never send the pack again.
+  assert.deepEqual((await value(await f.submit(body))).operation,unknown);
+  assert.deepEqual((await value(await f.inspect(body))).operation,unknown);
+  assert.equal((await f.submit(f.input())).status,412);assert.equal((await f.sendPush()).status,412);
+  assert.equal(f.journal().length,1);assert.equal(f.counts().effects,1);
+  // Clearing the repository fence by hand does not make the pull request mergeable again.
+  f.sql.exec('UPDATE repositories SET write_pending=NULL');
+  const replaced=await f.submit(f.input());assert.equal(replaced.status,412);assert.match((await replaced.json()).message,/unresolved operation cannot be retried or replaced/);
+  f.sql.prepare('UPDATE repositories SET write_pending=?').run(git.id);
+  assert.equal(f.journal().length,1);assert.equal(f.counts().effects,1);
+  const pending=await f.pull(), observed=(await value(await f.observe(pending))).observation;
+  assert.equal(pending.merged,false);assert.equal(pending.state,'ISSUE_STATE_OPEN');
+  assert.equal(observed.nativeCallerCanMerge,false);assert.equal(observed.unavailableReason,'native_write_unresolved');
+  // The original request lands at the provider afterwards; only the ref and commit readback settle it.
+  f.land();
+  const settled=(await value(await f.inspect(body))).operation;
+  assert.equal(settled.phase,mergePhase('SUCCEEDED'));assert.equal(settled.mergeCommitId,git.new_sha);assert.equal(settled.actualBaseCommitId,commit);assert.equal(settled.createdAt,unknown.createdAt);
+  assert.equal(f.counts().effects,1);assert.equal(f.journal()[0].detail,'provider_unavailable');
+  assert.equal(f.sql.prepare('SELECT state FROM git_operations').get().state,'APPLIED');assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);
+  assert.equal((await f.pull()).mergeCommitId,git.new_sha);
+  assert.deepEqual((await value(await f.submit(body))).operation,settled);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM discussion_events WHERE kind='merge_pull'").get().n,1);
+});
+
+test('a lost provider reply after an applied native merge is confirmed by the immediate readback', async t => {
+  const f=await mergeFixture(t); f.loseReply();
+  const operation=(await value(await f.submit(f.input()))).operation;
+  assert.equal(operation.phase,mergePhase('SUCCEEDED'));assert.equal(f.counts().effects,1);
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);
+  // The lost reply stays recorded on the confirmed operation.
+  assert.equal(f.journal()[0].detail,'provider_unavailable');
+});
+
+test('a provider that stores the object but refuses the ref leaves the native merge unknown with its answer recorded', async t => {
+  const f=await mergeFixture(t), body=f.input(); f.refuseRef();
+  const unknown=(await value(await f.submit(body))).operation;
+  assert.equal(unknown.phase,mergePhase('DISPATCH_UNKNOWN'));assert.equal(f.journal()[0].detail,'provider_status: ng refs/heads/main failed to update ref');
+  // The dispatched commit exists at the provider, but the branch does not name it: inspection never adopts it.
+  const git=f.sql.prepare('SELECT * FROM git_operations').get(), artifact=f.sql.prepare('SELECT artifact_name FROM repositories WHERE id=1').get().artifact_name;
+  assert.equal((await (await f.env.ARTIFACTS.get(artifact)).readCommit(git.new_sha)).hash,git.new_sha);
+  assert.equal((await value(await f.inspect(body))).operation.phase,mergePhase('DISPATCH_UNKNOWN'));
+  assert.equal(git.state,'DISPATCHED');assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,git.id);
+  assert.equal((await f.pull()).merged,false);assert.equal(f.counts().effects,1);
+});
+
+test('a readback that differs from the dispatched merge commit never becomes success', async t => {
+  const f=await mergeFixture(t), body=f.input(), get=f.env.ARTIFACTS.get;
+  // The ref names the dispatched ID but the provider returns different parents for it.
+  f.env.ARTIFACTS.get=async name=>{const repo=await get(name);return {...repo,async readCommit(hash){const value=await repo.readCommit(hash);return value?.parents.length===2?{...value,parents:[value.parents[1],value.parents[0]]}:value;}};};
+  assert.equal((await value(await f.submit(body))).operation.phase,mergePhase('DISPATCH_UNKNOWN'));
+  assert.equal(f.journal()[0].detail,'readback_unconfirmed');
+  assert.equal((await value(await f.inspect(body))).operation.phase,mergePhase('DISPATCH_UNKNOWN'));
+  assert.notEqual(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);assert.equal((await f.pull()).merged,false);
+  f.env.ARTIFACTS.get=get;
+  assert.equal((await value(await f.inspect(body))).operation.phase,mergePhase('SUCCEEDED'));assert.equal(f.counts().effects,1);
 });
 
 test('CI registry broker requires an admitted exact-source job and never forwards caller credentials', async t => {
