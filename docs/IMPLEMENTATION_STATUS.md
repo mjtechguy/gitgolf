@@ -1,5 +1,24 @@
 # Golf implementation status
 
+## 2026-10-14 — Native pull request merge, first slice
+
+Cloudflare native now merges a same-repository pull request with a merge commit
+when the base branch tip is already contained in the head (schema 24,
+`pull.merge` ready). The Worker builds the commit and a one-object pack and
+writes it through the push reservation, Git rules and journal, confirming by
+ref and commit read-back. The author and committer are the acting account's
+name with `<login>@users.noreply.<public host>`. Squash, forks, diverged
+branches, drafts and locked targets are recorded as refused with a reason, and
+an unconfirmed write stays unknown and fences the repository like an
+unconfirmed push. A merge does not start automatic CI.
+
+Validation is local: the Worker suite (316 tests, 315 pass, 1 skipped), real
+Git accepting the generated pack and receive-pack request, and a workerd/D1
+merge against a real local repository (`cloudflare/forge/merge-runtime-check.mjs`).
+Cloudflare Artifacts accepting the pack, automated recovery of a write that did
+not land, tree merges, squash, protected merge and CI on merge remain open;
+hosted acceptance is recorded separately once probed on a scratch repository.
+
 ## 2026-10-14 — Native environments accepted on the retained installation; expired previews were blocking new ones
 
 After `migrate` (applied `0023_repository_environments.sql`, then reported the
