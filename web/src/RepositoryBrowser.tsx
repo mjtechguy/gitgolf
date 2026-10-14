@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { NativePackages, NativePackagesTab } from './NativePackages';
 import { RuntimeFeature } from './RuntimeFeature';
 import { runtimeFeature } from './runtimeCapabilities';
+import { RepositorySearchField } from './RepositorySearch';
 import { useRepositoryFeatures, policyOff, deciderLabels } from './RepositoryFeatures';
 import { NativeRepositoryActions } from './NativeForge';
 import { useRuntimeCapabilities } from './useRuntimeCapabilities';
@@ -237,6 +238,8 @@ function TabCount({ kind, repository, userId }: { kind: 'issues' | 'pulls'; repo
 export function RepositoryBrowser({ location: addressLocation, userId, anonymous = false, settingsPage = false, children }: { location: RepositoryLocation; userId: string; anonymous?: boolean; settingsPage?: boolean; children?: ReactNode }) {
   const runtime = useRuntimeCapabilities();
   const native = runtime.data?.runtimeProfile === 'cloudflare-native';
+  // Semantic search answers while degraded too: that state only says no index has read back from Vectorize yet.
+  const searchOffered = runtime.data?.capabilities.some(item => item.id === 'repository.semantic-search' && (item.state === 3 || item.state === 4));
   const cache = useQueryClient();
   const appearance = useAppearance();
   const navigationSlot = useShellSlot('navigation'), topSlot = useShellSlot('heading'), tabsTarget = useShellSlot('tabs'), toolsTarget = useShellSlot('tools');
@@ -279,7 +282,7 @@ export function RepositoryBrowser({ location: addressLocation, userId, anonymous
   const toolbar = topTools ? createPortal(codeToolbar, topTools) : codeToolbar;
   const owner = native && document.documentElement.dataset.golfPublic === 'true' ? <Link to="/$owner" params={{owner:location.owner}}>{location.owner}</Link> : <span>{location.owner}</span>;
   const root = !settingsPage && location.view === 'source' && !location.path;
-  const identityActions = !settingsPage && repository ? <div className="panel-actions repository-identity-actions"><RepositoryVisibility isPrivate={repository.private} />{!anonymous && <><RepositoryStars client={repositoryClient} userId={userId} repository={repositoryKey} repositoryId={repository.id} revalidating={query.isFetching} onAuthorityDenied={denyStarAuthority}/><RepositoryLiveStatus status={live.status} reconnect={live.reconnect}/></>}<button className="icon-button manual-refresh" aria-label="Refresh repository access" disabled={query.isFetching} onClick={() => void refreshAccess()}><RefreshCw size={16} /></button></div> : null;
+  const identityActions = !settingsPage && repository ? <div className="panel-actions repository-identity-actions"><RepositoryVisibility isPrivate={repository.private} />{!anonymous && <>{native && searchOffered && !policyOff(features, 'semantic-search') ? <RepositorySearchField owner={location.owner} name={location.name}/> : null}<RepositoryStars client={repositoryClient} userId={userId} repository={repositoryKey} repositoryId={repository.id} revalidating={query.isFetching} onAuthorityDenied={denyStarAuthority}/><RepositoryLiveStatus status={live.status} reconnect={live.reconnect}/></>}<button className="icon-button manual-refresh" aria-label="Refresh repository access" disabled={query.isFetching} onClick={() => void refreshAccess()}><RefreshCw size={16} /></button></div> : null;
   // Layouts with a top-bar breadcrumb show the title row on the repository root only; elsewhere its controls sit beside the breadcrumb.
   const compact = Boolean(crumb) && !root;
   const identity = <div className={`repository-identity ${compact ? 'repository-identity-compact' : ''}`}><h1 className="repository-context" aria-label={`${location.owner}/${location.name}`} title={`${location.owner}/${location.name}`}>{topTools ? <><Link className="repository-context-root" to="/">Repositories</Link><span aria-hidden="true">/</span></> : null}{owner}<span aria-hidden="true">/</span><Link {...repositoryOptions({owner:location.owner,name:location.name})}>{location.name}</Link></h1>{compact ? null : identityActions}</div>;
