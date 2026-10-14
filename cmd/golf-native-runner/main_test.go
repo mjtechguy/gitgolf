@@ -200,7 +200,7 @@ func TestCompletedAttemptReplaysExactReceipt(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"result":{"state":"FAILED"}}`)
+		_, _ = io.WriteString(w, `{"result":{"state":"FAILED","contract":"golf.native.workflow-shell.v1","jobId":"`+jobID+`","exitCode":7,"producer":{"kind":"customer-runner","generation":2,"cleanup":"asserted"}}}`)
 	}))
 	defer server.Close()
 	c := client{config: config{Origin: server.URL}, credential: "secret", http: server.Client()}
@@ -348,7 +348,7 @@ func localClaimCloneExecuteAndFinish(t *testing.T, imageID, format string) {
 				return
 			}
 			finished <- body
-			_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"state": body["state"]}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"state": body["state"], "jobId": jobID, "cleanup": "destroyed", "producer": map[string]any{"kind": "customer-runner"}}})
 		case strings.HasPrefix(r.URL.Path, "/native/runner-machine/"+jobID+"/git/"):
 			gitRequests.Add(1)
 			if r.Header.Get("X-Golf-Runner-Lease") != lease {

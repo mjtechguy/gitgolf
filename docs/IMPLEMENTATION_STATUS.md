@@ -1,5 +1,29 @@
 # Golf implementation status
 
+## 2026-10-14 — First hosted customer-runner run; runner finish receipt fixed
+
+A Golf native runner on a Linux Docker host was enrolled against the retained
+installation (Admin → Runners: untrusted pool `mj-workstation`, machine
+`mj-linux-docker`, 4-hour credential) and selected for `mj/review-playground`.
+"Run approved workflow" on pull request 1 ran the approved `.github/workflows/ci.yml`
+shell job on the host (Docker, no network, approved image
+`sha256:81188fb3…`) and the report shows "Customer-hosted runner … attempt 2",
+exit 0 and the unittest output. This is the first hosted customer-runner run.
+
+The first attempt exposed a runner bug: it decoded `/finish` strictly and
+expected only `{"result":{"state"}}`, but the Worker returns the whole stored
+result, so every hosted completion failed to decode after the server had
+accepted it. The runner now reads only the state from the receipt; the test
+fakes return the Worker's real shape. The interrupted attempt's journal replayed
+the exact payload and was accepted. Also fixed: the repository Runners settings
+page unmounted its chooser on every background access check (#44).
+
+Verified: `go test ./cmd/golf-native-runner` with the real Docker image, and the
+two hosted runs above. Still open from the hosted trial list: failing job,
+cancellation, runner restart mid-job, credential revocation; and the bounded
+shell profile is not real GitHub Actions or GitLab CI (see
+`docs/NATIVE_ACTIONS_PIPELINES.md`, in progress).
+
 ## 2026-10-14 — Native feature policies and repository Features (admin slices 3–4)
 
 Installation administrators set each of 15 governed features (pull requests,
