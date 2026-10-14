@@ -161,3 +161,52 @@ test('the log is read by scope: repository administrators, organization owners a
   const paged = await f.read({ scope: 'installation', page: { page: 1, limit: 3 } });
   assert.deepEqual([paged.entries.length, paged.page.nextPage], [3, 2]);
 });
+
+test('runner registration tokens, runner edits and pipeline actions are recorded without tokens, input values or comments', async t => {
+  const f = await fixture(t);
+  Object.assign(f.env, { PIPELINES_ENABLED: 'true', PIPELINE_BUCKET: {} });
+  f.sql.exec("INSERT INTO pipeline_runners(id,uuid,engine,scope,scope_id,name,labels,token_digest,state,created_by,created_at) VALUES(7,'u-7','gitlab-ci','installation','','builder','[\"docker\"]','d7','ACTIVE',1,'2026-10-14T00:00:00Z')");
+  const created = await f.signed('/native/pipeline-runners', { scope: 'installation', action: 'createToken', engine: 'gitlab-ci', labels: ['docker', 'gpu'], ttlHours: 4, uses: 2 });
+  assert.equal(created.status, 200, JSON.stringify(created)); assert.match(created.token, /^golfreg_/);
+  const revoked = await f.signed('/native/pipeline-runners', { scope: 'installation', action: 'revokeToken', id: created.registration.id });
+  assert.equal(revoked.status, 200, JSON.stringify(revoked));
+  const updated = await f.signed('/native/pipeline-runners', { scope: 'installation', action: 'update', id: '7', state: 'DISABLED', labels: ['docker'] });
+  assert.equal(updated.status, 200, JSON.stringify(updated));
+  const deleted = await f.signed('/native/pipeline-runners', { scope: 'installation', action: 'delete', id: '7' });
+  assert.equal(deleted.status, 200, JSON.stringify(deleted));
+  const denied = await f.signed('/native/pipeline-runners', { scope: 'installation', action: 'createToken', engine: 'forgejo-actions', labels: [], ttlHours: 1, uses: 1 }, 'bob@example.invalid');
+  assert.equal(denied.status, 403);
+  const rows = f.rows();
+  assert.deepEqual(rows.map(row => [row.action, row.scope, row.subject, row.client.outcome]), [
+    ['pipeline_runner.token_create', 'installation', 'gitlab-ci', 'success'], ['pipeline_runner.token_revoke', 'installation', created.registration.id, 'success'],
+    ['pipeline_runner.update', 'installation', 'builder', 'success'], ['pipeline_runner.delete', 'installation', 'builder', 'success'], ['pipeline_runner.token_create', 'installation', 'forgejo-actions', 'denied']]);
+  assert.deepEqual(JSON.parse(rows[0].after), { engine: 'gitlab-ci', labels: ['docker', 'gpu'], ttlHours: 4, uses: 2 });
+  assert.deepEqual([JSON.parse(rows[2].before), JSON.parse(rows[2].after)], [{ name: 'builder', state: 'ACTIVE', labels: ['docker'] }, { labels: ['docker'], state: 'DISABLED' }]);
+  assert.equal(f.everything().includes(created.token), false);
+  assert.equal(f.everything().includes(created.token.slice(-24)), false);
+  const log = await f.read({ scope: 'installation' });
+  assert.equal(log.status, 200, JSON.stringify(log));
+  assert.deepEqual(log.entries.map(entry => entry.description).reverse().slice(0, 4), ['created a GitLab runner registration token', 'revoked a runner registration token', 'updated runner builder', 'deleted runner builder']);
+  assert.ok(log.categories.some(category => category.id === 'pipeline_runner'));
+});
+
+test('pipeline dispatch, cancel, approval and environment changes are recorded as counts and names only', async t => {
+  const f = await fixture(t);
+  Object.assign(f.env, { PIPELINES_ENABLED: 'true', PIPELINE_BUCKET: {}, EXECUTION_VALUE_KEY: { get: async () => btoa(String.fromCharCode(...new Uint8Array(32).fill(7))) } });
+  const call = body => f.signed('/native/pipelines', { repository, repositoryId: '1', ...body });
+  // Each handler may refuse (no run, no workflow): the audit row records the attempt and its outcome either way.
+  await call({ action: 'dispatch', workflowPath: '.github/workflows/ci.yml', ref: 'main', inputs: { note: 'super-secret-input-value' } });
+  await call({ action: 'cancel', runId: '41' });
+  await call({ action: 'rerun', runId: '41', failedOnly: true });
+  await call({ action: 'approve', jobId: '52', approve: true, comment: 'private reviewer remark' });
+  await call({ action: 'approve', jobId: '53', approve: false, comment: 'another private remark' });
+  await call({ action: 'saveEnvironment', name: 'production', reviewers: ['alice'], branches: ['main'], url: 'https://example.invalid', preventSelfReview: true, expectedVersion: 0 });
+  await call({ action: 'saveEnvironmentValue', environmentId: '1', name: 'KUBECONFIG', kind: 'secret', value: 'kubeconfig-contents-that-must-not-appear' });
+  const rows = f.rows();
+  assert.deepEqual(rows.map(row => [row.action, row.scope, row.subject]), [
+    ['actions.dispatch', 'repository', '.github/workflows/ci.yml'], ['actions.cancel', 'repository', '41'], ['actions.rerun', 'repository', '41'], ['actions.approve_deployment', 'repository', '52'],
+    ['actions.reject_deployment', 'repository', '53'], ['environment.save', 'repository', 'production'], ['environment.save_value', 'repository', 'KUBECONFIG']]);
+  assert.ok(rows.every(row => ['success', 'refused', 'denied', 'unknown'].includes(row.client.outcome)));
+  const text = f.everything();
+  for (const secret of ['super-secret-input-value', 'private reviewer remark', 'another private remark', 'kubeconfig-contents-that-must-not-appear']) assert.equal(text.includes(secret), false, secret);
+});

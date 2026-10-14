@@ -76,6 +76,22 @@ const native = {
   'pr-evidence': body => body.action === 'create' ? { action: 'actions.run_request', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => whole(body.selection?.number) && `#${whole(body.selection.number)}`,
     after: () => clean({ number: whole(body.selection?.number), headCommit: short(body.selection?.headCommitId), tests: flag(body.runTests), advice: flag(body.advice), agent: body.agent ? true : undefined }) }
     : body.action === 'cancel' && { action: 'actions.run_cancel', scope: 'repository', subject: () => token(body.jobId), after: () => clean({ jobId: token(body.jobId) }) },
+  // Self-hosted pipeline runners (stock Forgejo and GitLab runners): registration tokens, edits and deletes. The token itself is never read.
+  'pipeline-runners': body => pipelineRunnerActions[body.action] && ({ action: pipelineRunnerActions[body.action], scope: ['organization', 'repository'].includes(body.scope) ? body.scope : 'installation',
+    scopeId: async c => (await one(c.db, "SELECT id FROM native_owners WHERE slug=? AND kind='ORGANIZATION'", clip(body.organization, 40) || ''))?.id,
+    subject: async c => body.action === 'createToken' ? clip(body.engine, 20) : (whole(body.id) && (await one(c.db, 'SELECT name FROM pipeline_runners WHERE id=?', whole(body.id)))?.name) || token(body.id),
+    before: async c => { const r = ['update', 'delete'].includes(body.action) && whole(body.id) && await one(c.db, 'SELECT name,state,labels FROM pipeline_runners WHERE id=?', whole(body.id));
+      return r ? clean({ name: clip(r.name, 128), state: r.state, labels: names(JSON.parse(r.labels || '[]'), 32) }) : undefined; },
+    after: () => body.action === 'delete' ? null : clean({ engine: clip(body.engine, 20), labels: names(body.labels, 32), ttlHours: whole(body.ttlHours), uses: whole(body.uses), state: clip(body.state, 12) }) }),
+  // Actions tab changes on one repository. Approval comments, dispatch input values and environment values are never read.
+  pipelines: body => {
+    const action = { dispatch: 'actions.dispatch', cancel: 'actions.cancel', rerun: 'actions.rerun', play: 'actions.play_job', approve: body.approve === true ? 'actions.approve_deployment' : 'actions.reject_deployment',
+      saveEnvironment: 'environment.save', saveEnvironmentValue: 'environment.save_value' }[body.action];
+    return action && { action, scope: 'repository', subject: () => body.action === 'dispatch' ? clip(body.workflowPath, 200) : ['saveEnvironment', 'saveEnvironmentValue'].includes(body.action) ? clip(body.name, 100) : token(body.runId) || token(body.jobId),
+      after: () => clean({ ref: clip(body.ref, 100), inputs: body.action === 'dispatch' && body.inputs && typeof body.inputs === 'object' ? Object.keys(body.inputs).length : undefined,
+        failedOnly: body.action === 'rerun' ? flag(body.failedOnly) : undefined, kind: body.action === 'saveEnvironmentValue' ? clip(body.kind, 12) : undefined,
+        reviewers: Array.isArray(body.reviewers) ? body.reviewers.length : undefined, branches: Array.isArray(body.branches) ? body.branches.length : undefined, preventSelfReview: flag(body.preventSelfReview) }) };
+  },
   ai: body => body.action === 'create' && { action: 'ai.run_request', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => clip(body.kind, 40),
     after: () => clean({ kind: clip(body.kind, 40), number: whole(body.target?.number), tag: clip(body.target?.tagName, 100) }) },
   installation: body => ({ action: 'installation_policy.update', scope: 'installation', batch: true, subject: () => clip(body.key, 40) }),
@@ -84,6 +100,7 @@ const native = {
   'audit/read': body => body.scope === 'installation' && adminDenial('the installation audit log'),
 };
 
+const pipelineRunnerActions = { createToken: 'pipeline_runner.token_create', revokeToken: 'pipeline_runner.token_revoke', update: 'pipeline_runner.update', delete: 'pipeline_runner.delete' };
 const valueKinds = ['', 'secret', 'variable'], ruleActions = ['', 'CREATE_BRANCH', 'EDIT_BRANCH', 'REMOVE_BRANCH', 'CREATE_TAG', 'EDIT_TAG', 'REMOVE_TAG', 'EDIT_MERGE'];
 const resourceKinds = ['UNSPECIFIED', 'CREATE_LABEL', 'UPDATE_LABEL', 'DELETE_LABEL', 'CREATE_MILESTONE', 'UPDATE_MILESTONE', 'DELETE_MILESTONE'], releaseKinds = ['', 'EDIT', 'DELETE', 'UPLOAD_ASSET', 'RENAME_ASSET', 'DELETE_ASSET'];
 const repo = (action, more = {}) => ({ action, scope: 'repository', ...more });
@@ -260,7 +277,7 @@ export async function audited(request, env, run, identify) {
 
 /* Reading. Categories are the action prefix; the first installation policy rows used the bare action 'update'. */
 const categories = [['installation_policy', 'Installation policy', ['update', 'installation_policy.']], ['feature_policy', 'Feature policy'], ['ai_model', 'AI models', ['ai_model.', 'repository_ai_model.']],
-  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
+  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
   ['repository_invitation', 'Invitations'], ['protected_branch', 'Rules', ['protected_branch.', 'protected_tag.']], ['hook', 'Webhooks'], ['repository_secret', 'Secrets and variables', ['repository_secret.', 'repository_variable.']],
   ['environment', 'Environments'], ['git_credential', 'Git credentials'], ['preview', 'Previews'], ['release', 'Releases', ['release.', 'release_asset.']], ['pull_request', 'Pull requests', ['pull_request.', 'pull_request_review.']],
   ['label', 'Labels and milestones', ['label.', 'milestone.']], ['ai', 'AI runs', ['ai.']], ['actions', 'Actions runs']].map(([id, label, prefixes]) => ({ id, label, prefixes: prefixes || [id + '.'] }));
@@ -306,6 +323,11 @@ const phrases = {
   'pull_request.merge': ['merged', 'merge', e => named('pull request', e.subject)], 'pull_request_review.dismiss': ['dismissed', 'dismiss', e => `a review on pull request ${e.subject}`], 'pull_request_review.restore': ['restored', 'restore', e => `a review on pull request ${e.subject}`],
   'label.create': ['created', 'create', e => named('label', e.subject)], 'label.update': ['updated', 'update', e => named('label', e.subject)], 'label.destroy': ['deleted', 'delete', e => named('label', e.subject)],
   'milestone.create': ['created', 'create', e => named('milestone', e.subject)], 'milestone.update': ['updated', 'update', e => named('milestone', e.subject)], 'milestone.destroy': ['deleted', 'delete', e => named('milestone', e.subject)],
+  'pipeline_runner.token_create': ['created', 'create', e => `a ${e.subject === 'gitlab-ci' ? 'GitLab' : e.subject === 'forgejo-actions' ? 'Forgejo' : 'runner'} runner registration token`],
+  'pipeline_runner.token_revoke': ['revoked', 'revoke', () => 'a runner registration token'], 'pipeline_runner.update': ['updated', 'update', e => named('runner', e.subject)], 'pipeline_runner.delete': ['deleted', 'delete', e => named('runner', e.subject)],
+  'actions.dispatch': ['dispatched', 'dispatch', e => named('workflow', e.subject)], 'actions.cancel': ['cancelled', 'cancel', e => named('run', e.subject)], 'actions.rerun': ['re-ran', 're-run', e => named('run', e.subject)],
+  'actions.play_job': ['started', 'start', e => named('manual job', e.subject)], 'actions.approve_deployment': ['approved', 'approve', e => named('deployment job', e.subject)], 'actions.reject_deployment': ['rejected', 'reject', e => named('deployment job', e.subject)],
+  'environment.save': ['saved', 'save', e => named('environment', e.subject)], 'environment.save_value': ['saved', 'save', e => `${e.after?.kind || 'a value'} ${e.subject} of an environment`],
   'ai.run_request': ['requested', 'request', e => `an AI ${e.subject.replaceAll('-', ' ')} run`], 'actions.run_request': ['requested', 'request', e => `a run for pull request ${e.subject}`], 'actions.run_cancel': ['cancelled', 'cancel', () => 'a run'],
 };
 export function describe(entry) {

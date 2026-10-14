@@ -82,9 +82,14 @@ credentials are tested never to appear in a row.
 
 Verified locally: Worker tests (475, 474 pass, 1 skipped), real workerd runtime,
 UI and audit checks, and the audit, installation, feature-policy and
-settings-navigation specs. Not yet audited: pipeline dispatch, cancel and
-approval (one descriptor entry each once pipelines merge). The row stores client
-IP addresses; retention and export are not yet configurable.
+settings-navigation specs. Pipeline runner registration tokens, runner edits
+and deletes, workflow dispatch, cancel, re-run, manual play, deployment approval
+and rejection, and environment and environment-value saves are audited as well
+(`pipeline_runner.*`, `actions.*`, `environment.*`); a hosted check on
+2026-10-14 showed repository, Git credential, secret and variable rows but no
+runner-token rows, which this change adds. Dispatch inputs, approval comments and
+environment values are never read into a row. The row stores client IP
+addresses; retention and export are not yet configurable.
 
 ## 2026-10-14 — Semantic search with Workers AI embeddings and Vectorize (AI-E)
 
