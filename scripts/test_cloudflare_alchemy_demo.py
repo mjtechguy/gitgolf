@@ -67,6 +67,20 @@ class Observability(unittest.TestCase):
             saved=json.loads((directory/'alchemy-input.json').read_text())['settings']['operations']
             self.assertEqual(saved,{'service_health':True,'analytics_secret':{'store':'store','name':'secret'},'observability':{'enabled':True,'sampling':0.01}})
 
+    def test_renewing_credentials_moves_only_the_expiry_within_bounds(self):
+        import datetime as dt
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            value={'name':'example','expiresAt':'2026-10-20T17:21:59Z','signingKey':'kept','settings':{'evidence':{'daily_limit':40}}}
+            for refused in (0,31,-1):
+                with self.assertRaises(ValueError): demo.renew_credentials(directory,value,refused)
+            self.assertFalse((directory/'alchemy-input.json').exists())
+            demo.renew_credentials(directory,value,30)
+            saved=json.loads((directory/'alchemy-input.json').read_text())
+            remaining=dt.datetime.strptime(saved.pop('expiresAt'),'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=dt.timezone.utc)-dt.datetime.now(dt.timezone.utc)
+            self.assertTrue(dt.timedelta(days=29,hours=23)<remaining<=dt.timedelta(days=30))
+            self.assertEqual(saved,{'name':'example','signingKey':'kept','settings':{'evidence':{'daily_limit':40}}})
+
     def test_enabling_operations_keeps_observability_and_requests_the_read_only_feed(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory=Path(temporary)
