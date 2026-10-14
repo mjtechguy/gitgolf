@@ -1,6 +1,6 @@
 // The portable ACP policy remains stricter and separately qualified. This
 // operator prototype permits only native file tools; the controller runs tests.
-export const model = '@cf/zai-org/glm-5.3';
+export const model = '@cf/zai-org/glm-5.3-flash';
 // ponytail: fixed disposable fixture roles; use Golf task IDs/policy at consumer integration.
 export const roles = ['agent-a', 'agent-b', 'cancel', 'timeout', 'integration'];
 export const maxCalls = 16;
