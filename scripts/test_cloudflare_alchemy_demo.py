@@ -241,6 +241,10 @@ class GuardedMigration(unittest.TestCase):
                         self.trigger+'DELETE FROM users;','CREATE TRIGGER IF NOT EXISTS t AFTER INSERT ON journal BEGIN\n SELECT 1;\n','-- nothing\n'):
             with self.assertRaises(ValueError): demo.migration_objects(refused)
 
+    def test_installation_policy_migration_is_accepted_with_abort_triggers(self):
+        migration=(Path(__file__).resolve().parents[1]/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()
+        self.assertEqual(demo.migration_objects(migration),['installation_settings','installation_operations','installation_audit','installation_audit_scope','installation_audit_no_update','installation_audit_no_delete'])
+
     def test_pending_migrations_follow_the_reviewed_tail(self):
         import hashlib
         digest=lambda text: hashlib.sha256(text.encode()).hexdigest()

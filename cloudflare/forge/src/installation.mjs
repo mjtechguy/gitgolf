@@ -1,7 +1,7 @@
-import { Fault, reply } from './common.mjs';
+import { Fault, reply, invalid, uuidOK, digest, page } from './common.mjs';
 import { release, configuration } from './telemetry.mjs';
 import { operationsAdmin } from './operations.mjs';
-import { webhookPolicy } from './webhooks.mjs';
+import { webhookPolicy, approvedOrigin } from './webhooks.mjs';
 import { emailPolicy } from './email.mjs';
 import { rateLimitPolicy } from './rate-limit.mjs';
 import { evidencePolicy } from './evidence.mjs';
@@ -14,7 +14,7 @@ import { previewSlots } from './environments.mjs';
 import { defaultAppearance } from './public.mjs';
 
 // Newest first: the first table present names the applied schema.
-const schemaTables = [[29, 'discussion_attachment_operations'], [28, 'repository_release_operations'], [27, 'email_deliveries'], [26, 'execution_value_brokers'],
+const schemaTables = [[30, 'installation_audit'], [29, 'discussion_attachment_operations'], [28, 'repository_release_operations'], [27, 'email_deliveries'], [26, 'execution_value_brokers'],
   [25, 'repository_execution_policy'], [24, 'pull_merge_operations'], [23, 'repository_environment_operations'], [22, 'repository_visibility'], [21, 'native_owners'],
   [20, 'gitlab_runner_jobs'], [19, 'native_runner_pools'], [18, 'pull_review_operations'], [17, 'git_credentials'], [16, 'repository_rule_operations'],
   [15, 'webhook_subscriptions'], [14, 'discussion_events'], [13, 'discussion_resources'], [12, 'repository_invitations'], [11, 'repository_access_operations'],
@@ -111,12 +111,173 @@ export function installationGroups(env, today) {
   ];
 }
 
+// Installation policy: operator-approved values that are editable in the product inside the deploy allocation.
+// Add a key by adding an entry here; installation_settings has no CHECK on keys, so a new key needs no migration.
+// deploy(env) is the deploy default and ceiling (null: not allocated, not editable). validate(env, value, deploy) returns the canonical value or
+// throws invalid_argument. effective(env, stored, deploy) narrows a stored value to the current deploy bounds and throws on a value it cannot
+// read (the deploy value then applies). widening(before, after) needs typed confirmation and a recent Access sign-in. overlay(value, env) is
+// what the point of use reads. effect states what happens to queued, in-flight and new work.
+const int = (value, min, max) => Number.isInteger(value) && value >= min && value <= max;
+const shape = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
+const toggle = (label, deploy, off, effect, widensWhenOff = false) => ({ label, deploy: env => deploy(env) ? { enabled: true } : null,
+  validate(env, value) { if (!shape(value, ['enabled']) || typeof value.enabled !== 'boolean') invalid(`Choose whether ${label.toLowerCase()} is on.`); return { enabled: value.enabled }; },
+  effective(env, value) { if (typeof value?.enabled !== 'boolean') throw Error('unreadable'); return { enabled: value.enabled }; },
+  widening: (before, after) => widensWhenOff ? before.enabled && !after.enabled : !before.enabled && after.enabled,
+  overlay: value => value.enabled ? {} : off, effect });
+export const installationPolicies = {
+  webhooks: { label: 'Webhooks', deploy: env => { const p = webhookPolicy(env); return p && { origins: p.origins, dailyLimit: p.dailyLimit }; },
+    bounds: () => ({ origins: 'One to 32 public HTTPS origins. Never this installation or its subdomains, the preview origin, Cloudflare Access or Artifacts.', dailyLimit: [1, 5000] }),
+    validate(env, value) {
+      if (!shape(value, ['origins', 'dailyLimit']) || !Array.isArray(value.origins) || value.origins.length < 1 || value.origins.length > 32 || new Set(value.origins).size !== value.origins.length) invalid('Use one to 32 distinct origins.');
+      for (const origin of value.origins) if (!approvedOrigin(env, origin)) invalid(`${String(origin).slice(0, 300)} cannot receive webhooks: use a public HTTPS origin such as https://hooks.example.com that is not this installation, its previews, Cloudflare Access or Artifacts.`);
+      if (!int(value.dailyLimit, 1, 5000)) invalid('Daily delivery attempts must be a whole number from 1 to 5000.');
+      return { origins: [...value.origins], dailyLimit: value.dailyLimit };
+    },
+    // An origin that no longer passes (for example, it became the preview origin) is dropped, never replaced by the deploy list.
+    effective: (env, value, deploy) => ({ origins: value.origins.filter(origin => approvedOrigin(env, origin)).slice(0, 32), dailyLimit: int(value.dailyLimit, 1, 5000) ? value.dailyLimit : deploy.dailyLimit }),
+    widening: (before, after) => after.origins.some(origin => !before.origins.includes(origin)) || after.dailyLimit > before.dailyLimit,
+    overlay: value => ({ WEBHOOK_POLICY: JSON.stringify(value) }),
+    effect: { queued: 'Queued and retrying deliveries to a removed origin fail at their next attempt (destination unavailable).', inFlight: 'A delivery already sending completes.', new: 'Subscriptions to a removed origin can no longer be saved. A new limit applies at the next claim.' } },
+  email: { label: 'Email notifications', deploy: env => { const p = emailPolicy(env); return p && { enabled: true, dailyLimit: p.dailyLimit }; },
+    bounds: () => ({ dailyLimit: [1, 5000] }),
+    validate(env, value) { if (!shape(value, ['enabled', 'dailyLimit']) || typeof value.enabled !== 'boolean' || !int(value.dailyLimit, 1, 5000)) invalid('Choose on or off and daily send attempts from 1 to 5000.'); return { enabled: value.enabled, dailyLimit: value.dailyLimit }; },
+    effective(env, value) { if (typeof value?.enabled !== 'boolean' || !int(value.dailyLimit, 1, 5000)) throw Error('unreadable'); return { enabled: value.enabled, dailyLimit: value.dailyLimit }; },
+    widening: (before, after) => after.enabled && !before.enabled || after.dailyLimit > before.dailyLimit,
+    overlay: (value, env) => ({ EMAIL_POLICY: JSON.stringify({ ...JSON.parse(env.EMAIL_POLICY), dailyLimit: value.dailyLimit }), ...(value.enabled ? {} : { EMAIL_DISABLED: 'installation' }) }),
+    effect: { queued: 'Turned off: queued and retrying mail is cancelled at the next drain (disabled by installation policy).', inFlight: 'A message already sending completes.', new: 'Turned off: nothing new is sent and email settings are unavailable. A new limit applies at the next claim.' } },
+  advice: toggle('AI advice', env => evidencePolicy(env) && env.EVIDENCE_ALLOW_AI === 'true' && env.AI && env.EVIDENCE_GATEWAY, { EVIDENCE_ALLOW_AI: 'false' },
+    { queued: 'Turned off: queued runs that asked for advice are refused at their next step. Agent proposals need AI advice and stop with it.', inFlight: 'An advice call already started completes.', new: 'Turned off: new runs asking for advice or agent proposals are refused.' }),
+  agents: toggle('Agent proposals', env => agentPolicy(env), { AGENT_EXECUTION_ENABLED: 'false' },
+    { queued: 'Turned off: queued proposals are refused at their next step.', inFlight: 'Running agents are not stopped.', new: 'Turned off: new proposals are refused.' }),
+  previews: { label: 'Protected previews', deploy: env => previewPolicy(env) ? { lifetimeSeconds: Number(env.PREVIEW_TTL), concurrency: previewSlots } : null,
+    bounds: (env, deploy) => ({ lifetimeSeconds: [60, deploy.lifetimeSeconds], concurrency: [1, previewSlots] }),
+    validate(env, value, deploy) {
+      if (!shape(value, ['lifetimeSeconds', 'concurrency']) || !int(value.lifetimeSeconds, 60, deploy.lifetimeSeconds) || !int(value.concurrency, 1, previewSlots)) invalid(`Use a lifetime from 60 to ${deploy.lifetimeSeconds} seconds and 1 to ${previewSlots} concurrent previews.`);
+      return { lifetimeSeconds: value.lifetimeSeconds, concurrency: value.concurrency };
+    },
+    effective(env, value, deploy) { if (!int(value?.lifetimeSeconds, 60, 14400) || !int(value.concurrency, 1, previewSlots)) throw Error('unreadable'); return { lifetimeSeconds: Math.min(value.lifetimeSeconds, deploy.lifetimeSeconds), concurrency: value.concurrency }; },
+    widening: (before, after) => after.lifetimeSeconds > before.lifetimeSeconds || after.concurrency > before.concurrency,
+    overlay: value => ({ PREVIEW_TTL: String(value.lifetimeSeconds), PREVIEW_SLOTS: String(value.concurrency) }),
+    effect: { queued: 'Previews already published keep their expiry.', inFlight: 'A publication already admitted completes with the lifetime it was admitted with.', new: 'New publications and renewals use the new lifetime; a new preview is refused while the installation holds that many.' } },
+  'rate-limit': toggle('Anonymous rate limit', env => rateLimitPolicy(env), { ANONYMOUS_LIMIT_OFF: 'true' },
+    { queued: 'Nothing is queued by the limit.', inFlight: 'Requests already admitted are unaffected.', new: 'The next anonymous request is limited, or not.' }, true),
+  evidence: { label: 'Daily evidence admissions', deploy: env => evidencePolicy(env) ? { dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) } : null,
+    bounds: (env, deploy) => ({ dailyLimit: [1, deploy.dailyLimit] }),
+    validate(env, value, deploy) { if (!shape(value, ['dailyLimit']) || !int(value.dailyLimit, 1, deploy.dailyLimit)) invalid(`Daily admissions must be a whole number from 1 to the deploy value ${deploy.dailyLimit}.`); return { dailyLimit: value.dailyLimit }; },
+    effective(env, value, deploy) { if (!int(value?.dailyLimit, 1, 50)) throw Error('unreadable'); return { dailyLimit: Math.min(value.dailyLimit, deploy.dailyLimit) }; },
+    widening: (before, after) => after.dailyLimit > before.dailyLimit,
+    overlay: value => ({ EVIDENCE_DAILY_LIMIT: String(value.dailyLimit) }),
+    effect: { queued: 'Runs already admitted continue.', inFlight: 'Running jobs are not stopped.', new: 'The next admission counts against the new limit, including automatic push tests and previews.' } },
+};
+const locked = env => env.INSTALLATION_POLICY_EDITING === 'false';
+// Before schema 30 there are no rows, so every deploy value applies.
+export async function installationSettings(db) {
+  try { return new Map((await db.prepare('SELECT s.key,s.value,s.version,s.updated_at,u.login AS updated_by FROM installation_settings s LEFT JOIN users u ON u.id=s.updated_by').all()).results.map(row => [row.key, row])); }
+  catch { return null; }
+}
+function current(env, key, row) {
+  const policy = installationPolicies[key], deploy = policy.deploy(env);
+  if (!deploy || !row || locked(env)) return { deploy, value: deploy, unreadable: false };
+  try { return { deploy, value: policy.effective(env, JSON.parse(row.value), deploy), unreadable: false }; } catch { return { deploy, value: deploy, unreadable: true }; }
+}
+export function installationOverlay(env, rows) {
+  const overlay = { installationOff: [], installationSchema: Boolean(rows) };
+  if (!rows || locked(env)) return overlay;
+  for (const key of Object.keys(installationPolicies)) {
+    const { value } = current(env, key, rows.get(key));
+    if (!value || !rows.has(key)) continue;
+    Object.assign(overlay, installationPolicies[key].overlay(value, env));
+    if (value.enabled === false) overlay.installationOff.push(key);
+  }
+  return overlay;
+}
+// Requests read the effective policy in core before their route runs; background stages read it at their own start.
+export const withInstallationPolicy = async (env, db = env.DB.withSession('first-primary')) => ({ ...env, ...installationOverlay(env, await installationSettings(db)) });
+
+/* auditStatement(db, entry) returns one prepared INSERT into installation_audit for the caller's own D1 batch.
+ * Place it immediately after the statement whose change it records: by default it inserts only when that statement changed exactly one row
+ * (changes()=1), so a refused or stale write leaves no audit row; pass guarded: false to record unconditionally. Rows can never be updated or
+ * deleted (triggers abort). entry: { actor: { id }, actorEmail, scope: 'installation' | 'organization' | 'repository' | …, scopeId,
+ * subject: the setting or feature id, action: a short verb such as 'update', before, after: any JSON values, widening: boolean,
+ * operationId?: unique per change (replays are refused by the unique index), client?: { colo, country } }. */
+export function auditStatement(db, entry) {
+  return db.prepare(`INSERT INTO installation_audit(at,actor_id,actor_email,scope,scope_id,subject,action,before,after,widening,operation_id,client) SELECT ?,?,?,?,?,?,?,?,?,?,?,?${entry.guarded === false ? '' : ' WHERE changes()=1'}`)
+    .bind(new Date().toISOString(), entry.actor.id, entry.actorEmail || '', entry.scope, String(entry.scopeId ?? ''), entry.subject, entry.action,
+      entry.before === undefined ? null : JSON.stringify(entry.before), entry.after === undefined ? null : JSON.stringify(entry.after), entry.widening ? 1 : 0, entry.operationId || null, JSON.stringify(entry.client || {}));
+}
+const auditRow = row => ({ id: String(row.id), at: row.at, actor: row.login || '', actorEmail: row.actor_email, scope: row.scope, scopeId: row.scope_id, subject: row.subject, action: row.action,
+  before: row.before === null ? null : JSON.parse(row.before), after: row.after === null ? null : JSON.parse(row.after), widening: Boolean(row.widening), client: JSON.parse(row.client || '{}') });
+const auditSelect = 'SELECT a.*,u.login FROM installation_audit a LEFT JOIN users u ON u.id=a.actor_id';
+const editing = env => locked(env) ? { enabled: false, reason: 'Installation policy is locked at deploy (policy_editing: false). Deploy values apply and every change needs a deploy.' }
+  : { enabled: true, reason: 'Operations administrators signed in through Access can narrow these values at any time. Widening one needs typed confirmation and an Access sign-in from the last 10 minutes.' };
+function policyView(env, key, row) {
+  const policy = installationPolicies[key], { deploy, value, unreadable } = current(env, key, row);
+  return deploy && { key, label: policy.label, version: String(row?.version || 0), value, deploy, source: row && !locked(env) ? 'installation' : 'deploy', unreadable,
+    updatedAt: row?.updated_at || '', updatedBy: row?.updated_by || '', bounds: policy.bounds?.(env, deploy) || {}, effect: policy.effect, confirmation: key };
+}
+const stale = () => { throw new Fault('failed_precondition', 412, 'This setting changed since you read it. Refresh before editing.'); };
+const recentSignIn = 600;
+const clientHeaders = request => Object.fromEntries([['colo', /^[A-Z]{3}$/], ['country', /^[A-Z]{2}$/]]
+  .map(([name, pattern]) => [name, request.headers.get(name === 'colo' ? 'X-Golf-Native-Access-Colo' : 'X-Golf-Native-Access-Country') || '', pattern]).filter(([, value, pattern]) => pattern.test(value)).map(([name, value]) => [name, value]));
+
 // Operations administrators only, checked before and after the reads like the dashboard, so a revocation during the read returns nothing.
 export async function installationAPI(db, env, person, request, body, read) {
   const requireAdmin = async () => { if (!await operationsAdmin(db, person, request)) throw new Fault('permission_denied', 403, 'Current workspace operations administrator sign-in required.'); };
   await requireAdmin();
-  if (!read || body.action !== 'read') throw new Fault('invalid_argument', 400, 'Use the read action on the read route.');
-  const today = await usage(db), schema = await schemaVersion(db), groups = installationGroups(env, today);
-  await requireAdmin();
-  return reply({ generatedAt: new Date().toISOString(), release, configuration, schema, workspace: env.WORKSPACE_SLUG, publicOrigin: env.PUBLIC_ORIGIN, demoStopAt: env.DEMO_STOP_AT || '', groups });
+  if (read && body.action === 'read') {
+    const today = await usage(db), schema = await schemaVersion(db), rows = await installationSettings(db), effective = { ...env, ...installationOverlay(env, rows) };
+    // States describe the deploy allocation; values are what applies now.
+    const allocated = installationGroups(env, today).flatMap(group => group.items), groups = installationGroups(effective, today);
+    for (const item of groups.flatMap(group => group.items)) {
+      item.state = allocated.find(row => row.id === item.id).state;
+      if (Object.hasOwn(installationPolicies, item.id)) item.policy = policyView(env, item.id, rows?.get(item.id)) || undefined;
+    }
+    const recent = rows ? (await db.prepare(auditSelect + ' ORDER BY a.id DESC LIMIT 10').all()).results.map(auditRow) : [];
+    await requireAdmin();
+    return reply({ generatedAt: new Date().toISOString(), release, configuration, schema, workspace: env.WORKSPACE_SLUG, publicOrigin: env.PUBLIC_ORIGIN, demoStopAt: env.DEMO_STOP_AT || '',
+      editing: rows ? editing(env) : { enabled: false, reason: 'Apply the schema 30 migration to edit installation policy. Deploy values apply.' }, groups, recent });
+  }
+  if (read && body.action === 'audit') {
+    const paging = page(body);
+    let results = [];
+    try { ({ results } = await db.prepare(auditSelect + ' ORDER BY a.id DESC LIMIT ? OFFSET ?').bind(paging.limit + 1, paging.offset).all()); }
+    catch { throw new Fault('failed_precondition', 412, 'Apply the schema 30 migration to keep an installation audit log.'); }
+    await requireAdmin();
+    return reply({ entries: results.slice(0, paging.limit).map(auditRow), page: { nextPage: results.length > paging.limit ? paging.number + 1 : 0 } });
+  }
+  if (read || body.action !== 'update') invalid('Use the read or audit action on the read route and the update action on the write route.');
+  if (locked(env)) throw new Fault('failed_precondition', 412, editing(env).reason);
+  const policy = Object.hasOwn(installationPolicies, body.key) ? installationPolicies[body.key] : null;
+  if (!policy) invalid('Choose an installation setting.');
+  if (!uuidOK(body.operationId) || typeof body.expectedVersion !== 'string' || !/^(0|[1-9][0-9]{0,14})$/.test(body.expectedVersion)) invalid('Provide an operation ID and the version you read.');
+  const rows = await installationSettings(db);
+  if (!rows) throw new Fault('failed_precondition', 412, 'Apply the schema 30 migration to edit installation policy.');
+  const { deploy, value: before } = current(env, body.key, rows.get(body.key));
+  if (!deploy) throw new Fault('failed_precondition', 412, `${policy.label} is not allocated on this installation; allocating it needs a deploy.`);
+  const after = policy.validate(env, body.value, deploy), inputHash = await digest(JSON.stringify([body.key, body.expectedVersion, after]));
+  const previous = await db.prepare('SELECT * FROM installation_operations WHERE operation_id=?').bind(body.operationId).first();
+  if (previous) {
+    if (previous.actor_id !== person.id || previous.input_hash !== inputHash) throw new Fault('already_exists', 409, 'This operation ID belongs to another change.');
+    return reply(JSON.parse(previous.receipt));
+  }
+  const version = Number(body.expectedVersion);
+  if ((rows.get(body.key)?.version || 0) !== version) stale();
+  const widening = policy.widening(before, after);
+  if (widening) {
+    if (body.confirmation !== body.key) throw new Fault('failed_precondition', 412, `This change widens ${policy.label.toLowerCase()}. Type ${body.key} to confirm it.`);
+    const issued = Number(request.headers.get('X-Golf-Native-Access-Issued-At'));
+    if (!Number.isInteger(issued) || Date.now() / 1000 - issued > recentSignIn) throw new Fault('failed_precondition', 412, 'Widening changes need an Access sign-in from the last 10 minutes. Sign out of Access, sign in again and retry.');
+  }
+  const time = new Date().toISOString(), text = JSON.stringify(after), email = request.headers.get('X-Golf-Native-Access-Email');
+  const admin = 'EXISTS(SELECT 1 FROM operations_admins a JOIN users u ON u.id=a.user_id WHERE a.user_id=? AND a.active=1 AND u.active=1 AND u.email=?)';
+  const receipt = { key: body.key, version: String(version + 1), value: after, widening, operationId: body.operationId, at: time };
+  // One batch: the revision-fenced write, its audit row and the receipt. A stale version or a revoked administrator writes none of them.
+  await db.batch([
+    version ? db.prepare(`UPDATE installation_settings SET value=?,version=version+1,updated_by=?,updated_at=? WHERE key=? AND version=? AND ${admin}`).bind(text, person.id, time, body.key, version, person.id, email)
+      : db.prepare(`INSERT INTO installation_settings(key,value,version,updated_by,updated_at) SELECT ?,?,1,?,? WHERE ${admin} ON CONFLICT(key) DO NOTHING`).bind(body.key, text, person.id, time, person.id, email),
+    auditStatement(db, { actor: person, actorEmail: email, scope: 'installation', scopeId: env.WORKSPACE_SLUG, subject: body.key, action: 'update', before, after, widening, operationId: body.operationId, client: clientHeaders(request) }),
+    db.prepare('INSERT INTO installation_operations(operation_id,actor_id,input_hash,receipt,created_at) SELECT ?,?,?,?,? WHERE changes()=1').bind(body.operationId, person.id, inputHash, JSON.stringify(receipt), time),
+  ]);
+  if (!await db.prepare('SELECT 1 AS saved FROM installation_operations WHERE operation_id=?').bind(body.operationId).first()) { await requireAdmin(); stale(); }
+  return reply(receipt);
 }

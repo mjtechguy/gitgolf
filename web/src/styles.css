@@ -2015,3 +2015,10 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .settings-attention-list > li:last-child { border-bottom:0; }
 .settings-attention-list small { color:var(--muted); font-size:.75rem; }
 .visibility.refused { color:var(--error); border-color:var(--error); background:var(--error-bg); font-weight:600; }
+.settings-policy { display:grid; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
+.settings-policy-current { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; color:var(--muted); font-size:.8125rem; }
+.settings-policy-current strong { color:var(--text); font-weight:600; }
+.settings-policy-current > span { min-width:0; flex:1 1 200px; }
+.credential-form-content.settings-policy-form { padding:0; }
+.settings-policy-form textarea { font-family:var(--mono); font-size:.8125rem; }
+.settings-policy-effect { margin:14px 0 0; }

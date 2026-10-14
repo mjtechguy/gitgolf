@@ -7,11 +7,12 @@ import { DataTable, type DataTableColumn } from './DataTable';
 import { DateLabel, Loading, PanelError, privateQuery } from './RepositoryUI';
 import { SummaryBand } from './Layout';
 import { useRuntimeCapabilities } from './useRuntimeCapabilities';
+import { PolicyPanel, RecentChanges, type AuditEntry, type InstallationPolicy } from './InstallationPolicy';
 
 // Mirrors cloudflare/forge/src/installation.mjs. Values are what the Worker holds; secret bindings are reported only as present.
 export type InstallationValue = { label: string; value: string; usage?: string };
-export type InstallationItem = { id: string; label: string; service: string; state: 'configured' | 'unallocated' | 'refused'; capability: string; values: InstallationValue[]; change: { settingsKey: string; alchemy: string }; reason: string };
-export type InstallationOverview = { generatedAt: string; release: string; configuration: string; schema: number; workspace: string; publicOrigin: string; demoStopAt: string; groups: { id: string; label: string; items: InstallationItem[] }[] };
+export type InstallationItem = { id: string; label: string; service: string; state: 'configured' | 'unallocated' | 'refused'; capability: string; values: InstallationValue[]; change: { settingsKey: string; alchemy: string }; reason: string; policy?: InstallationPolicy };
+export type InstallationOverview = { generatedAt: string; release: string; configuration: string; schema: number; workspace: string; publicOrigin: string; demoStopAt: string; editing?: { enabled: boolean; reason: string }; recent?: AuditEntry[]; groups: { id: string; label: string; items: InstallationItem[] }[] };
 
 const states = { configured: ['Configured', 'available'], unallocated: ['Not allocated', ''], refused: ['Invalid at deploy', 'refused'] } as const;
 const capabilityStates: Record<number, [string, string]> = { 1: ['Off', ''], 2: ['Not configured', ''], 3: ['Ready', 'available'], 4: ['Degraded', 'configured'] };
@@ -50,10 +51,15 @@ export function NativeInstallationAdmin({ userId, signingOut }: { userId: string
       ['Services', `${configured} of ${items.length}`, refused ? `${refused} invalid at deploy` : 'Configured'],
       ['Validation window', data.demoStopAt ? <DateLabel key="stop" value={data.demoStopAt} /> : 'No end set', data.demoStopAt ? 'Background work stops after this date' : undefined],
     ]} />
+    {data.editing ? <p className="field-help" role="note">{data.editing.reason}</p> : null}
     {data.groups.map(group => <section key={group.id} className="settings-group" aria-labelledby={`installation-group-${group.id}`}>
       <h2 id={`installation-group-${group.id}`}>{group.label}</h2>
-      <div className="settings-card-grid">{group.items.map(item => <InstallationCard key={item.id} item={item} />)}</div>
+      <div className="settings-card-grid">{group.items.map(item => <InstallationCard key={item.id} item={item}>{item.policy ? <PolicyPanel key={item.policy.version} policy={item.policy} editable={Boolean(data.editing?.enabled)} onSaved={() => query.refetch()} /> : null}</InstallationCard>)}</div>
     </section>)}
+    {data.recent ? <RecentChanges entries={data.recent} /> : null}
+    <details className="settings-diagnostics"><summary>If an administrator’s Access session is stolen</summary><div className="credential-form-content">
+      <p>Within this installation’s deploy allocation, someone holding an operations administrator’s Access session could add a webhook origin (sending data there still needs a repository administrator to subscribe to it), turn AI advice or agent proposals on (private source then reaches Workers AI, up to the AI Gateway caps), raise email, webhook and preview limits, turn anonymous rate limiting off, and turn email, advice and agents off.</p>
+      <p>They cannot go beyond what the deploy allocated, read secret values, or edit or remove audit entries. Widening needs the typed setting name and an Access sign-in from the last 10 minutes, every change is in the audit log with where it came from, and the operator can return all of this to deploy only with <code>policy_editing: false</code>. Administrators are not emailed about changes yet.</p></div></details>
     <InstallationCapabilities />
   </>;
 }

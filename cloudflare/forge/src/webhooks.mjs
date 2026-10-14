@@ -15,6 +15,12 @@ function publicURL(value) {
       /(?:^|\.)(?:localhost|local|internal|invalid|test)$/.test(url.hostname) || url.hostname.endsWith('.home.arpa')) invalid('Use a public HTTPS hostname without credentials, fragments or a custom port.');
   return url;
 }
+// Destinations never reach this installation, its subdomains or previews, Cloudflare Access, or Artifacts, whoever approved them.
+const ownHost = (env, host) => [env.PUBLIC_ORIGIN, env.PREVIEW_ORIGIN].some(origin => { try { const own = new URL(origin).hostname; return host === own || host.endsWith('.' + own); } catch { return false; } }) ||
+  /(?:^|\.)(?:cloudflareaccess\.com|artifacts\.cloudflare\.net)$/.test(host);
+export function approvedOrigin(env, value) {
+  try { const url = publicURL(value); return url.origin === value && !ownHost(env, url.hostname); } catch { return false; }
+}
 export function webhookPolicy(env) {
   try {
     const p = JSON.parse(env.WEBHOOK_POLICY || 'null');
@@ -34,7 +40,7 @@ export function webhookBindings(settings) {
 function destination(env, endpoint) {
   const url = publicURL(endpoint), policy = webhookPolicy(env);
   // Exact operator-approved origins bound egress; subscription input cannot add destinations or private network bindings.
-  if (!policy?.origins.includes(url.origin)) invalid('This webhook destination requires operator approval in the Cloudflare webhook policy.');
+  if (!policy?.origins.includes(url.origin) || ownHost(env, url.hostname)) invalid('This webhook destination requires operator approval in the Cloudflare webhook policy.');
   return url;
 }
 const encryptionKey = async env => (await sealingKey(env.WEBHOOK_KEY, 'Webhook')).key;

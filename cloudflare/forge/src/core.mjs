@@ -16,7 +16,7 @@ import { issueTemplates } from './issue-templates.mjs';
 import { resourceMethods, discussionResources, resourceOperation } from './discussion-resources.mjs';
 import { invitations, ownInvitationMethods } from './invitations.mjs';
 import { operationsAdmin, operationsDashboard } from './operations.mjs';
-import { installationAPI, schemaVersion } from './installation.mjs';
+import { installationAPI, schemaVersion, installationOverlay, installationSettings, withInstallationPolicy } from './installation.mjs';
 import { nativeRunnerAdmin, nativeRunnerPlacement, nativeRunnerMachine } from './native-runners.mjs';
 import { gitLabRunner } from './gitlab-runner.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
@@ -79,6 +79,7 @@ export function concurrentRead(request) {
   if (/^\/rpc\/golf\.v1\.(?:DiscussionAttachmentService\/(?:ListDiscussionAttachments|DownloadDiscussionAttachment)|DiscussionAttachmentUploadService\/GetDiscussionAttachmentUploadState)$/.test(new URL(request.url).pathname)) return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
+const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+))$/;
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
 async function input(request) {
   if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') invalid('Use JSON.');
@@ -361,6 +362,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (url.pathname.startsWith('/git/')) return await git(db, env, person, request, url, providerFetch);
     if (request.method !== 'POST' || url.search || request.headers.get('Connect-Protocol-Version') !== '1') invalid('Use Connect JSON POST.');
     const body = await input(request);
+    // Routes that consult editable installation policy read the effective value now; other routes skip the read.
+    if (policyRoute.test(url.pathname)) Object.assign(env, installationOverlay(env, await installationSettings(db)));
     if (env.PUBLIC_REPOSITORIES === 'true' && url.pathname === '/native/discover') return reply(await discover(db, body));
     if (env.PUBLIC_REPOSITORIES === 'true' && url.pathname === '/native/public-profile') return reply(await publicProfile(db, person, body));
     if (url.pathname === '/rpc/golf.v1.OperationsService/GetOperationsDashboard') return await operationsDashboard(db, env, person, request);
@@ -484,7 +487,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'native-forge-collaboration', label: 'Native collaboration', state: 'CAPABILITY_STATE_READY', reason: 'Issues/comments, same-repository PRs, overall reviews and reported checks.' },
       { id: 'native-pr-evidence', label: 'Private PR evidence', state: evidencePolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Operator-allocated Queues, Workflows and R2; optional advisory Clef inference.' },
       { id: 'native-pr-tests', label: 'PR container tests', state: evidencePolicy(env) && testPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.TEST_WORKFLOW_FORMAT === 'actions-act' ? 'Pinned act catalog on enrolled customer runners for exact-head PR workflows; catalog limits and private advisory results apply.' : env.TEST_WORKFLOW_FORMAT ? 'Operator-approved single-job Actions or GitLab shell workflow from the exact PR head; private results, no full runner compatibility or merge authority.' : 'Operator-approved Python unittest module on the exact PR head; private results, no merge authority.' },
-      { id: 'native-pr-agents', label: 'Private PR agent proposals', state: evidencePolicy(env) && agentPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Approved single-file OpenCode proposals in isolated Artifacts forks; observed tests, private context and no merge authority.' },
+      { id: 'native-pr-agents', label: 'Private PR agent proposals', state: evidencePolicy(env) && agentPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: (env.installationOff?.some(key => ['agents', 'advice'].includes(key)) ? 'Turned off for this installation by an operations administrator. ' : '') + 'Approved single-file OpenCode proposals in isolated Artifacts forks; observed tests, private context and no merge authority.' },
       { id: 'native-pr-analytics', label: 'PR evidence metrics', state: env.USAGE_ANALYTICS ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Configured Analytics Engine binding; sampled completion metrics, not authoritative billing or quota.' },
       { id: 'native-pr-previews', label: 'Protected static PR previews', state: previewPolicy(env) ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'Exact passing canonical source; private R2 assets, Access identity, expiring Golf reviewer grants and current repository permissions.' },
       { id: 'native-preview-browser', label: 'Private visual snapshots', state: previewPolicy(env) && env.BROWSER && env.PREVIEW_BROWSER === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: 'One Browser Run Quick Action per preview; captured index HTML, no scripts or external requests, private PNG in R2.' },
@@ -514,7 +517,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'discussion.attachments', label: 'Discussion attachments', state: env.EVIDENCE_BUCKET ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.EVIDENCE_BUCKET ? 'Files up to 256 KiB, at most 100 per issue, pull request or comment. The author or a current writer attaches to a description; a comment takes files from its author while a writer, or from an administrator. Private R2 storage, SHA-256 verified on download, current repository access required. No inline image rendering, scanning, replacement, deletion or type allowlist beyond filename rules.' : 'Discussion attachments need the private R2 bucket binding on this installation.' },
       { id: 'settings.repository-workflows', label: 'Workflows', state: 'CAPABILITY_STATE_READY', reason: workflowCapability(env, Boolean(testPolicy(env)) && evidencePolicy(env)) },
       { id: 'settings.repository-execution-policy', label: 'Repository execution switch', state: testPolicy(env) && evidencePolicy(env) && env.ACCESS_AUD ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: executionPolicyCapability(Boolean(testPolicy(env)) && evidencePolicy(env), Boolean(env.ACCESS_AUD)) },
-      { id: 'settings.native', label: 'Cloudflare allocation settings', state: 'CAPABILITY_STATE_READY', reason: "Operations administrators signed in through Access see every installation setting the Worker holds: allocations, approved origins, sender, limits and today's use. Secret values are never shown." },
+      { id: 'settings.native', label: 'Cloudflare allocation settings', state: 'CAPABILITY_STATE_READY', reason: "Operations administrators signed in through Access see every installation setting the Worker holds: allocations, approved origins, sender, limits and today's use. Secret values are never shown. " + (env.INSTALLATION_POLICY_EDITING === 'false' ? 'Installation policy is locked at deploy.' : 'Webhook origins and limits, email, AI advice, agent proposals, preview lifetime and slots, anonymous rate limiting and daily evidence admissions are editable within the deploy allocation; widening needs typed confirmation and a recent Access sign-in.') },
+      { id: 'settings.installation-audit', label: 'Installation audit log', state: env.installationSchema ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.installationSchema ? 'Append-only record of installation policy changes, readable by operations administrators signed in through Access.' : 'Apply the schema 30 migration to keep an installation audit log.' },
       // The portable administration pages these name have no native service; the specific reason replaces a generic blocked page.
       { id: 'settings.execution', label: 'Installation execution policy', state: 'CAPABILITY_STATE_DISABLED', reason: 'Cloudflare native has no installation-wide execution policy service. Repository administrators switch pull-request runs per repository; the approved workflow is fixed at deploy.' },
       { id: 'settings.organization-creation', label: 'Organization creation policy', state: 'CAPABILITY_STATE_DISABLED', reason: 'Cloudflare native has no organization creation policy service. Accounts allowed to create repositories create organizations.' },
@@ -741,6 +745,7 @@ export async function servePreview(env, input) {
 export { cleanupPreviews };
 
 export async function runCI(env) {
+  env = await withInstallationPolicy(env);
   if (env.CI_AUTO !== 'true' || !evidencePolicy(env) || !testPolicy(env)) return { admitted: 0 };
   const db = env.DB.withSession('first-primary');
   const context = async (userId, repositoryId) => {
@@ -791,6 +796,8 @@ export async function runCI(env) {
 export async function advanceEvidence(env, id, phase, workflows) {
   if (!uuidOK(id) || !['start', 'advice', 'store', 'publish-static', 'publish-app', 'tests', 'finish-tests', 'authorize-test', 'agents', 'finish-agents', 'authorize-agent', 'refuse'].includes(phase)) throw Error('Invalid internal evidence dispatch');
   const db = env.DB.withSession('first-primary');
+  // Each step reads the installation policy in force now, so a feature turned off refuses work that is still queued.
+  env = await withInstallationPolicy(env, db);
   const job = await db.prepare('SELECT * FROM evidence_jobs WHERE id=?').bind(id).first();
   let context;
   if (job) {

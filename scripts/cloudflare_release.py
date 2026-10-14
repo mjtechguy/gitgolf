@@ -28,7 +28,7 @@ def load_release(directory):
     manifest = json.loads((root / 'release-manifest.json').read_text())
     identities = {'account': settings['account'], 'worker': settings['worker'], 'database': settings['database']['uuid'],
                   'namespace': settings['namespace'], 'workspace': settings['workspace'], 'origin': settings['origin'], 'bucket': settings['evidence']['bucket']}
-    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29) or manifest.get('contract') != 1:
+    if any(manifest.get(key) != value for key, value in identities.items()) or manifest.get('format') != 1 or manifest.get('schema') not in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30) or manifest.get('contract') != 1:
         raise ValueError('Release identity or contract differs from the prepared installation')
     for key in ['release', 'bundleSha256', 'previousBundleSha256']:
         if not re.fullmatch('[a-f0-9]{64}', manifest.get(key, '')):
@@ -135,6 +135,8 @@ class Release:
             self.check_release_schema()
         if self.manifest['schema'] >= 29:
             self.check_attachment_schema()
+        if self.manifest['schema'] >= 30:
+            self.check_installation_schema()
         deployments =self.command('workers', 'deployments', 'list', '--worker', self.manifest['worker'], '--per-page', '1')
         deployment = deployments[0] if isinstance(deployments, list) else deployments['deployments'][0]
         versions = deployment['versions']
@@ -223,7 +225,43 @@ class Release:
             self.migrate_release_schema(applied)
         if self.manifest['schema'] >= 29:
             self.migrate_attachment_schema(applied)
+        if self.manifest['schema'] >= 30:
+            self.migrate_installation_schema(applied)
         return applied or 'already-applied'
+
+    def check_installation_schema(self):
+        required = {'installation_settings': {'key', 'value', 'version', 'updated_by', 'updated_at'},
+                    'installation_operations': {'operation_id', 'actor_id', 'input_hash', 'receipt', 'created_at'},
+                    'installation_audit': {'id', 'at', 'actor_id', 'actor_email', 'scope', 'scope_id', 'subject', 'action', 'before', 'after', 'widening', 'operation_id', 'client'}}
+        for table, fields in required.items():
+            columns = self.command('d1', 'query', self.manifest['database'], '--sql', 'PRAGMA table_info('+table+')')[0]['results']
+            if {row['name'] for row in columns} != fields:
+                raise ValueError('Apply reviewed 0030 installation policy migration before releasing')
+        triggers = self.command('d1', 'query', self.manifest['database'], '--sql', "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='installation_audit'")[0]['results']
+        if {row['name'] for row in triggers} != {'installation_audit_no_update', 'installation_audit_no_delete'}:
+            raise ValueError('Apply reviewed 0030 installation policy migration before releasing')
+
+    def migrate_installation_schema(self, applied):
+        sql = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()
+        digest = hashlib.sha256(sql.encode()).hexdigest()
+        if self.state.get('migration0030') not in (None, digest):
+            raise ValueError('Recorded installation policy migration differs from reviewed source')
+        statements = [s.strip() for s in re.sub(r'--[^\n]*', '', sql).split(';') if s.strip()]
+        prefixes = ['CREATE TABLE IF NOT EXISTS installation_settings (', 'CREATE TABLE IF NOT EXISTS installation_operations (', 'CREATE TABLE IF NOT EXISTS installation_audit (',
+                    'CREATE INDEX IF NOT EXISTS installation_audit_scope ON installation_audit(',
+                    "CREATE TRIGGER IF NOT EXISTS installation_audit_no_update BEFORE UPDATE ON installation_audit\nBEGIN SELECT RAISE(ABORT, 'installation audit is append-only')", 'END',
+                    "CREATE TRIGGER IF NOT EXISTS installation_audit_no_delete BEFORE DELETE ON installation_audit\nBEGIN SELECT RAISE(ABORT, 'installation audit is append-only')", 'END']
+        if len(statements) != len(prefixes) or any(not statement.startswith(prefix) for statement, prefix in zip(statements, prefixes)):
+            raise ValueError('Installation policy migration must only add reviewed tables, an index and append-only triggers')
+        ready = False
+        try:
+            self.check_installation_schema(); ready = True
+        except ValueError:
+            pass
+        if self.state.get('migration0030') != digest or not ready:
+            self.command('d1', 'query', self.manifest['database'], '--sql', sql)
+            self.check_installation_schema()
+            self.state['migration0030'] = digest; self.save(); applied.append('0030')
 
     def check_attachment_schema(self):
         required = {'discussion_attachments': {'id', 'repository_id', 'discussion_id', 'comment_id', 'name', 'size', 'sha256', 'r2_key', 'author_id', 'created_at'},

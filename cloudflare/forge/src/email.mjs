@@ -13,7 +13,7 @@ export function emailPolicy(env) {
     const p = JSON.parse(env.EMAIL_POLICY || 'null');
     // Without Access sign-in nobody can prove a mailbox, so the binding alone does not enable anything.
     if (!p || Object.keys(p).some(key => !['sender', 'dailyLimit'].includes(key)) || !addressOK(p.sender) || p.sender !== p.sender.toLowerCase() ||
-        !Number.isInteger(p.dailyLimit) || p.dailyLimit < 1 || p.dailyLimit > 5000 || !env.EMAIL?.send || !env.ACCESS_AUD) return null;
+        !Number.isInteger(p.dailyLimit) || p.dailyLimit < 1 || p.dailyLimit > 5000 || !env.EMAIL?.send || !env.ACCESS_AUD || env.EMAIL_DISABLED) return null;
     return p;
   } catch { return null; }
 }
@@ -26,7 +26,7 @@ export function emailBindings(settings) {
 // READY needs a recorded provider acceptance for the current sender; configuration alone stays DEGRADED.
 export async function emailCapability(db, env) {
   const policy = emailPolicy(env), id = 'repository.email-notifications', label = 'Repository email notifications';
-  if (!policy) return { id, label, state: 'CAPABILITY_STATE_DISABLED', reason: 'Configure a Cloudflare Email Service sending address, a daily limit and Cloudflare Access sign-in.' };
+  if (!policy) return { id, label, state: 'CAPABILITY_STATE_DISABLED', reason: env.EMAIL_DISABLED ? 'An operations administrator turned email notifications off for this installation. Subscriptions are kept.' : 'Configure a Cloudflare Email Service sending address, a daily limit and Cloudflare Access sign-in.' };
   let accepted;
   try { accepted = await db.prepare('SELECT accepted_at FROM email_acceptance WHERE sender=?').bind(policy.sender).first(); }
   catch { return { id, label, state: 'CAPABILITY_STATE_DISABLED', reason: 'The email notification schema is not applied on this installation.' }; }
@@ -59,7 +59,7 @@ const delivery = d => ({ id: d.id, kind: 'activity', eventId: d.event_id, eventT
   subscriptionId: d.subscription_id, subscriptionVersion: String(d.subscription_version), contactVersion: contact(d.identity_version) });
 
 export async function emailNotifications(db, env, person, row, request, method, body) {
-  if (!emailPolicy(env)) throw new Fault('failed_precondition', 412, 'Email notifications are not configured on this installation.');
+  if (!emailPolicy(env)) throw new Fault('failed_precondition', 412, env.EMAIL_DISABLED ? 'Email notifications are turned off for this installation by an operations administrator.' : 'Email notifications are not configured on this installation.');
   // Only a runtime-verified Access sign-in proves the mailbox. Bearer and service-token callers neither read nor change email settings.
   if (request.headers.has('Authorization') || request.headers.has('CF-Access-Client-Id') || request.headers.has('CF-Access-Client-Secret') || !person.email || request.headers.get('X-Golf-Native-Access-Email') !== person.email)
     throw new Fault('permission_denied', 403, 'Sign in through Cloudflare Access to manage email notifications.');
@@ -163,6 +163,12 @@ const refusals = { E_RATE_LIMIT_EXCEEDED: ['rate_limited', true], E_DAILY_LIMIT_
 // shortcut: receipts remain in D1; add archive tombstones before sustained high-volume use.
 export async function drainEmail(env) {
   const policy = emailPolicy(env);
+  if (env.EMAIL_DISABLED && emailPolicy({ ...env, EMAIL_DISABLED: '' })) {
+    // Turned off by installation policy: waiting mail is cancelled with its own code; a message already sending completes under its lease.
+    const db = env.DB.withSession('first-primary');
+    const cancelled = await db.prepare("UPDATE email_deliveries SET state='cancelled',failure_code='disabled_by_installation',completed_at=?,lease=NULL,lease_until=NULL WHERE state IN ('queued','retrying') OR state='sending' AND lease_until<=?").bind(now(), now()).run();
+    return { processed: cancelled.meta.changes, pending: (await db.prepare("SELECT COUNT(*) AS n FROM email_deliveries WHERE state='sending'").first()).n };
+  }
   if (!policy || env.DEMO_STOP_AT && Date.parse(env.DEMO_STOP_AT) <= Date.now()) return { processed: 0 };
   const db = env.DB.withSession('first-primary'), time = now();
   // A lost result may already have been accepted by the provider; the retry is disclosed as a possible duplicate.

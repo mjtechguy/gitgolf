@@ -89,3 +89,19 @@ test('public HTML admits anonymous sessions while login redirects stay on the co
     assert.equal(result.status,303); assert.equal(result.headers.get('Location'),'/');
   }
 });
+
+test('installation policy writes receive the verified sign-in time and location; forged headers never pass', async t => {
+  t.mock.method(globalThis, 'fetch', async () => Response.json(jwks));
+  const seen = [];
+  const context = { exports: { Workspace: { idFromName: id => id, get: () => ({ fetch: async r => { seen.push(Object.fromEntries([...r.headers].filter(([name]) => name.startsWith('x-golf-native-access')))); return Response.json({}); } }) } } };
+  const issued = Math.floor(Date.now() / 1000) - 120, token = await sign({ iat: issued });
+  const forged = { 'Cf-Access-Jwt-Assertion': token, 'Content-Type': 'application/json', 'X-Golf-Native-Access-Issued-At': String(Math.floor(Date.now() / 1000)), 'X-Golf-Native-Access-Colo': 'XXX', 'X-Golf-Native-Access-Country': 'ZZ' };
+  const post = (path, ctx, cf) => { const r = new Request(env.PUBLIC_ORIGIN + path, { method: 'POST', headers: forged, body: '{}' }); if (cf) Object.defineProperty(r, 'cf', { value: cf }); return publicFetch(r, env, { ...context, ...ctx }); };
+  await post('/native/installation', {}, { colo: 'LHR', country: 'GB' });
+  assert.deepEqual(seen.pop(), { 'x-golf-native-access-email': claims.email, 'x-golf-native-access-issued-at': String(issued), 'x-golf-native-access-colo': 'LHR', 'x-golf-native-access-country': 'GB' });
+  // Cloudflare's runtime context has no iat, so the application token is verified for this route.
+  await post('/native/installation', { access: { aud: env.ACCESS_AUD, getIdentity: async () => ({ email: claims.email }) } });
+  assert.deepEqual(seen.pop(), { 'x-golf-native-access-email': claims.email, 'x-golf-native-access-issued-at': String(issued) });
+  await post('/native/installation/read', {}, { colo: 'LHR', country: 'GB' });
+  assert.deepEqual(seen.pop(), { 'x-golf-native-access-email': claims.email });
+});

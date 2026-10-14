@@ -2,6 +2,7 @@ import { drainWebhooks, webhookPolicy } from './webhooks.mjs';
 import { drainEmail, emailPolicy } from './email.mjs';
 import { collectWorkerMetrics, collectServiceHealth } from './operations-provider.mjs';
 import { runMaintenance } from './operations.mjs';
+import { withInstallationPolicy } from './installation.mjs';
 import { publicFetch } from './public.mjs';
 import { DurableObject, WorkflowEntrypoint, WorkerEntrypoint } from 'cloudflare:workers';
 import { handle, serialize, concurrentRead, advanceEvidence, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI } from './core.mjs';
@@ -65,8 +66,9 @@ export class Workspace extends DurableObject {
       : new URL(event.url).pathname === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' ? handle(event, configured) : this.dispatch(event),
     event => event?.activity || concurrentRead(event));
   }
-  deliverWebhooks() { return drainWebhooks(this.configured); }
-  deliverEmail() { return drainEmail(this.configured); }
+  // Drains read the installation policy in force at their start: removed origins, limits and email turned off.
+  async deliverWebhooks() { return drainWebhooks(await withInstallationPolicy(this.configured)); }
+  async deliverEmail() { return drainEmail(await withInstallationPolicy(this.configured)); }
   scheduleRan() { this.ctx.storage.kv.put('scheduled', Date.now()); }
   // Cron Triggers are the schedule. The alarm repeats the same maintenance only while none has reported in for two periods.
   async alarm() {

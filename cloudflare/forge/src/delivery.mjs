@@ -174,7 +174,8 @@ export async function previewAPI(db, env, person, row, artifact, body) {
     // Checked again inside the insert below, which commits only under this observed policy revision.
     const governed = await previewEnvironment(db, row), limit = governed.policy?.maxConcurrency, lifetime = Math.min(ttl, governed.policy?.previewTtlSeconds ?? ttl);
     if (limit && (await db.prepare(`SELECT ${live} AS total`).bind(row.id, now()).first()).total >= limit) occupied(limit);
-    if ((await db.prepare("SELECT count(*) AS total FROM previews WHERE purged=0").first()).total >= previewSlots) throw new Fault('resource_exhausted', 429, 'Clean up prior previews before allocating another.');
+    // Installation policy may hold fewer than the deploy's slots (PREVIEW_SLOTS); never more.
+    if ((await db.prepare("SELECT count(*) AS total FROM previews WHERE purged=0").first()).total >= Math.min(previewSlots, Number(env.PREVIEW_SLOTS) || previewSlots)) throw new Fault('resource_exhausted', 429, 'Clean up prior previews before allocating another.');
     const dailyLimit = Number(env.EVIDENCE_DAILY_LIMIT);
     if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 50 ||
         (await db.prepare('SELECT count(*) AS total FROM previews WHERE created_at>=?').bind(now().slice(0, 10)).first()).total >= Math.min(dailyLimit, 20)) {

@@ -29,10 +29,17 @@ export async function accessContext(request, env, ctx, keySet) {
   try {
     const { payload } = await jwtVerify(token, keySet, { issuer: env.ACCESS_TEAM_DOMAIN, audience: env.ACCESS_AUD,
       algorithms: ['RS256'], requiredClaims: ['exp', 'iat', 'sub'] });
-    return { aud: env.ACCESS_AUD, getIdentity: async () => ({ email: payload.type === 'app' && typeof payload.email === 'string' ? payload.email : undefined }) };
+    return { aud: env.ACCESS_AUD, issuedAt: payload.iat, getIdentity: async () => ({ email: payload.type === 'app' && typeof payload.email === 'string' ? payload.email : undefined }) };
   } catch (error) {
     if ([errors.JWTExpired, errors.JWTClaimValidationFailed, errors.JWTInvalid, errors.JWSInvalid, errors.JWSSignatureVerificationFailed, errors.JOSEAlgNotAllowed, errors.JOSENotSupported, errors.JWKSNoMatchingKey].some(type => error instanceof type)) return null;
     // Key-service outages are availability failures, not sign-outs.
     throw error;
   }
+}
+
+// When the sign-in happened, for changes that need a recent one: the verified token's iat. Cloudflare's own ctx.access does not carry it,
+// so the application token in the request is verified here with the same issuer, audience and expiry. Unknown means not recent.
+export async function accessIssuedAt(request, env, access, keySet) {
+  if (Number.isInteger(access?.issuedAt)) return access.issuedAt;
+  try { const verified = await accessContext(request, env, {}, keySet); return Number.isInteger(verified?.issuedAt) ? verified.issuedAt : null; } catch { return null; }
 }

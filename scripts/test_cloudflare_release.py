@@ -821,6 +821,8 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             db.row_factory = sqlite3.Row
             schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
             migration = (ROOT/'cloudflare/forge/migrations/0029_discussion_attachments.sql').read_text()
+            later = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()
+            schema = schema[:-len('\n'+later)]
             self.assertTrue(schema.endswith(';\n\n'+migration))
             db.executescript(schema[:-len('\n'+migration)])
             lost = True
@@ -844,5 +846,37 @@ class ExecutionValueMigrationTest(unittest.TestCase):
             self.assertEqual(applied, [])
             release.state['migration0029'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_attachment_schema([])
+
+    def test_installation_migration_is_the_schema_tail_resumes_without_replaying(self):
+        release = self.release(); release.manifest['schema'] = 30
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory = sqlite3.Row
+            schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
+            migration = (ROOT/'cloudflare/forge/migrations/0030_installation_policy.sql').read_text()
+            self.assertTrue(schema.endswith(';\n\n'+migration))
+            db.executescript(schema[:-len('\n'+migration)])
+            lost = True
+            def command(*args, **kwargs):
+                nonlocal lost
+                sql = args[-1]
+                if sql.startswith('PRAGMA') or sql.startswith('SELECT'):
+                    return [{'results': [dict(row) for row in db.execute(sql)]}]
+                db.executescript(sql)
+                if lost:
+                    lost = False
+                    raise RuntimeError('Lost installation migration response')
+                return [{'results': []}]
+            release.command = command
+            with self.assertRaisesRegex(ValueError, '0030'): release.check_installation_schema()
+            with self.assertRaisesRegex(RuntimeError, 'Lost installation'): release.migrate_installation_schema([])
+            applied = []; release.migrate_installation_schema(applied)
+            self.assertEqual(applied, ['0030']); release.check_installation_schema()
+            db.execute("INSERT INTO installation_audit(at,actor_id,scope,subject,action) VALUES('now',1,'installation','webhooks','update')")
+            for statement in ("UPDATE installation_audit SET action='x'", 'DELETE FROM installation_audit'):
+                with self.assertRaisesRegex(sqlite3.IntegrityError, 'append-only'): db.execute(statement)
+            applied = []; release.migrate_installation_schema(applied)
+            self.assertEqual(applied, [])
+            release.state['migration0030'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'differs'): release.migrate_installation_schema([])
 
 if __name__ == '__main__': unittest.main()
