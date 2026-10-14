@@ -116,7 +116,7 @@ test('operators set the first-visit appearance and layout; a saved choice still 
 
 test('signed-out pages keep the top bar and one frame in every appearance', async ({ page }) => {
   await page.route('**/rpc/**', route => route.request().url().endsWith('/GetSession') ? respond(route, GetSessionResponseSchema, {}) : reject(route, 'unimplemented', 'Fixture procedure unavailable.'));
-  await page.route('**/', async route => { const response = await route.fetch(); await route.fulfill({ response, body: (await response.text()).replace('<html', '<html data-golf-public="true"') }); });
+  for (const document of ['**/', '**/alex/demo']) await page.route(document, async route => { const response = await route.fetch(); await route.fulfill({ response, body: (await response.text()).replace('<html', '<html data-golf-public="true"') }); });
   for (const appearance of ['classic', 'golf', 'flare']) for (const width of [1600, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
@@ -132,6 +132,14 @@ test('signed-out pages keep the top bar and one frame in every appearance', asyn
     expect(await fits(page)).toBe(true);
     await page.screenshot({ path: `test-results/layout-signed-out-${appearance}-${width}.png` });
   }
+  // Row changes are private reads, so signed-out visitors see plain rows rather than a column of refusals.
+  await fixture(page);
+  await page.route('**/rpc/**/GetSession', route => respond(route, GetSessionResponseSchema, {}));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/alex/demo');
+  await expect(page.locator('.source-tree > li')).toHaveCount(4);
+  await expect(page.locator('.source-entry-commit')).toHaveCount(0);
+  await expect(page.getByText('Latest change unavailable')).toHaveCount(0);
 });
 
 test('the three designs keep their drawn structure on a repository', async ({ page }) => {

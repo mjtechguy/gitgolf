@@ -112,7 +112,8 @@ function SourcePanel({ repositoryKey, queryKey, location, addressLocation, snaps
   const navigate = useNavigate();
   const router = useRouter();
   const cache = useQueryClient();
-  const [showLatestChanges, setShowLatestChanges] = useState(() => { try { return localStorage.getItem('golf.source.latestChanges') !== 'hide'; } catch { return true; } });
+  // Row changes are private reads, so signed-out visitors start with them hidden.
+  const [showLatestChanges, setShowLatestChanges] = useState(() => { const signedIn = queryKey[1] !== 'anonymous'; try { const saved = localStorage.getItem('golf.source.latestChanges'); return saved === 'show' || signedIn && saved !== 'hide'; } catch { return signedIn; } });
   const commitId = snapshot;
   const navigation = sourceNavigationOptions(queryKey, repositoryId, commitId, location.path);
   const { access, admitted } = useRetainedRepositoryAccess(repositoryKey, queryKey, repositoryId, navigation.queryKey);
