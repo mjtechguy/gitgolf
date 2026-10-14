@@ -58,6 +58,11 @@ export function receiveCommand(bytes) {
   return { old: fields[0], next: fields[1], ref: fields[2], sideband: caps.includes('side-band-64k') };
 }
 
+// A refusal in the client's own report-status, so Git prints "! [remote rejected] <ref> (<reason>)" instead of an HTTP error.
+export function refusalReport(command, reason) {
+  const status = new Uint8Array([...packetLine('unpack ok\n'), ...packetLine(`ng ${command.ref} ${reason.replace(/[^\x20-\x7e]/g, ' ').slice(0, 160)}\n`), ...encoder.encode('0000')]);
+  return command.sideband ? new Uint8Array([...packetLine('\x01' + decoder.decode(status)), ...encoder.encode('0000')]) : status;
+}
 // The report a client receives for its own accepted update, for when the provider's final reply is not it (an earlier attempt landed).
 export function acceptedReport(command) {
   const status = new Uint8Array([...packetLine('unpack ok\n'), ...packetLine(`ok ${command.ref}\n`), ...encoder.encode('0000')]);
