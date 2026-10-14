@@ -201,6 +201,23 @@ keep the key, because saved subscriptions are encrypted with it. Receiver URLs
 and signing secrets are entered in the repository's Webhooks settings, never in
 this directory. Retries ride the stack's five-minute schedule.
 
+The stack's own API tokens (management, registry and, when enabled, analytics)
+expire seven days after `prepare`. When they lapse, app previews, registry
+publishing and the analytics feed stop. Extend them before that:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py renew-credentials NEW_DIRECTORY --days 7
+python3 scripts/cloudflare_alchemy_demo.py renew-deploy NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+`renew-credentials` only moves the expiry in the private input, 1 to 30 days
+ahead. The deploy updates each token in place, so token values and the Secrets
+Store entries that hold them do not change. Nothing renews them automatically;
+the current expiry is `credentials_expire_at` in `ownership.json`. `renew-deploy`
+is the separate eight-hour deployment token and is needed only when it has
+expired.
+
 When a checkout adds schema migrations, `deploy` refuses until they are applied:
 
 ```sh

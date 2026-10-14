@@ -104,6 +104,15 @@ def renew_deploy(directory, value):
     if previous: cf(value, 'user', 'tokens', 'delete', previous['id'])
 
 
+def renew_credentials(directory, value, days):
+    # The stack updates its management, registry and analytics tokens in place; their values and secrets stay as they are.
+    if not 1 <= days <= 30:
+        raise ValueError('Renew for 1 to 30 days')
+    value['expiresAt'] = (dt.datetime.now(dt.timezone.utc)+dt.timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Installation credentials prepared to expire at '+value['expiresAt']+'; deploy to apply.')
+
+
 def build(directory, value):
     settings = json.loads(os.environ['GOLF_ALCHEMY_SETTINGS'])
     if settings['account'] != value['account'] or settings['worker'] != value['name']:
@@ -413,8 +422,9 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-dead-letter', 'enable-operations', 'migrate'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-dead-letter', 'enable-operations', 'migrate'])
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
+    parser.add_argument('--days', type=int, default=7, help='lifetime for renew-credentials, 1 to 30 days')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
     parser.add_argument('directory', nargs='?')
     args = parser.parse_args()
@@ -422,6 +432,7 @@ def main():
     if args.action == 'prepare': return prepare(args.directory)
     directory, value = load(args.directory or os.environ['GOLF_ALCHEMY_DIRECTORY'])
     if args.action == 'renew-deploy': return renew_deploy(directory, value)
+    if args.action == 'renew-credentials': return renew_credentials(directory, value, args.days)
     if args.action == 'seed-public':
         from cloudflare_public_demo import publish
         return publish(directory, ROOT)

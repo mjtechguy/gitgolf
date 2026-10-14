@@ -1,5 +1,31 @@
 # Golf implementation status
 
+## 2026-10-14 — Alchemy path: schema migration, credential renewal, operations feed; scheduled runs failing
+
+Three operator steps were added to `cloudflare_alchemy_demo.py`: `migrate`
+applies reviewed, repeatable migrations between the recorded schema and the
+checkout; `renew-credentials --days N` moves the expiry of the stack's
+management, registry and analytics tokens 1 to 30 days ahead, applied in place
+by the next deploy; `enable-operations` turns on service probes and provisions
+a separate `Account Analytics Read` token for the Operations analytics feed.
+
+Evidence on the retained installation (2026-10-14): after `renew-credentials
+--days 30` and a deploy, Cloudflare lists the three tokens as active until
+2026-11-13T03:14:12Z (previously 2026-10-20). After `enable-operations`,
+Operations reports the Workers Analytics API as `configured`, with nothing
+collected. `migrate` has only run against SQLite in tests.
+
+Open defect found while checking the feed: Cloudflare's analytics record every
+scheduled run of the retained installation's Worker since its first Alchemy
+deploy (2026-10-13T17:36Z) as `internalError` with zero CPU, a live log stream
+shows no scheduled event reaching the Worker, and `operations_maintenance` is
+empty. The schedule is listed on the script, and re-applying it changed
+nothing. Consequences until fixed: no cron-driven maintenance on that
+installation (CI intake retry, preview cleanup, evidence reconciliation, index
+reconciliation, webhook retries, the analytics feed, service probes). Work that
+runs after a request is unaffected, which is why first-attempt webhook
+deliveries and evidence jobs succeed. The cause is not established.
+
 ## 2026-10-14 — Workers AI, agent proposals and failure retention on the Alchemy path
 
 The Alchemy deployment path can now enable three more Cloudflare services:
