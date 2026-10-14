@@ -25,7 +25,7 @@ test('native UI assets embed exact font bytes without an Access-dropping Static 
     await symlink(join(root, 'native.html'), join(root, 'linked.html'));
     await assert.rejects(readUIAssets(root), /Unsupported/);
     await rm(join(root, 'linked.html'));
-    await writeFile(join(root, 'large.js'), new Uint8Array(4 * 1024 * 1024));
+    await writeFile(join(root, 'large.js'), new Uint8Array(6 * 1024 * 1024));
     await assert.rejects(readUIAssets(root), /Unsupported|exceeds/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
