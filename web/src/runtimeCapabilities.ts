@@ -18,7 +18,7 @@ export function settingForRoute(kind: string, view?: string, native = false) {
     const repositoryRoutes: Record<string, string> = { 'repository-settings': 'general', 'repository-access-settings': 'access', 'repository-git': 'git', 'repository-rules': 'rules', 'repository-secrets': 'secrets', 'repository-environments': 'environments', 'repository-webhooks': 'webhooks', 'repository-workflows': 'workflows', 'repository-deletion': 'lifecycle' };
     if (repositoryRoutes[kind]) return 'settings.repository-' + repositoryRoutes[kind];
     // The native runtime has no adapter for these account services; an id it never reports keeps their routes honest.
-    const account: Record<string, string> = { 'account-connections': 'settings.provider-connections', 'account-agents': 'settings.account-agents', 'api-credentials': 'settings.api-credentials', audit: 'settings.account-activity' };
+    const account: Record<string, string> = { 'account-connections': 'settings.provider-connections', 'account-agents': 'settings.account-agents', 'api-credentials': 'settings.api-credentials', audit: 'settings.account-activity', 'organization-labels': 'settings.organization-labels', 'organization-secrets': 'settings.organization-secrets' };
     if (account[kind]) return account[kind];
   }
   if (native && kind === 'instance-settings') {
