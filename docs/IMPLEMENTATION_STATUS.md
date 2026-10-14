@@ -1,5 +1,27 @@
 # Golf implementation status
 
+## 2026-10-14 — Native webhooks on the Alchemy path; Slack message shape
+
+`cloudflare_alchemy_demo.py enable-webhooks DIRECTORY --origin ORIGIN` prepares
+repository webhooks for an Alchemy installation: it generates the encryption key
+in the private input and approves exact receiver origins, and the stack stores
+the key in Secrets Store and binds the policy. Repeating it keeps the key.
+
+Deliveries to `hooks.slack.com` carry a one-line `text` summary (what changed,
+the repository name, a link), because Slack incoming webhooks refuse the
+`golf.webhook.v1` document. Other destinations are unchanged, and portable Golf
+has no such adapter. Webhook settings also denied every repository under a
+named owner; they now follow the repository's owner.
+
+Evidence on the retained installation (2026-10-14): after the deploy the
+Webhooks capability reported ready, a subscription for `mj-labs/typer` saved as
+`authorized`, and its test delivery was `accepted` by Slack with HTTP 200 on the
+first attempt. The capability turned ready about five minutes after the deploy
+finished although the live Worker version already carried both bindings; the
+cause of that lag is not established. Not exercised: a delivery produced by a
+real push, issue or pull request change, retries, and the daily limit against
+Slack. PR agent proposals remain unconfigured.
+
 ## 2026-10-14 — Repository overview; PR evidence metrics on the Alchemy path
 
 Console and Overview open a repository with an overview above the files: a band

@@ -164,6 +164,19 @@ def enable_analytics(directory, value):
     print('PR evidence metrics prepared; deploy to bind the Analytics Engine dataset. Metrics are sampled, not billing.')
 
 
+def enable_webhooks(directory, value, origins):
+    for origin in origins:
+        if not re.fullmatch(r'https://[a-z0-9-]+(\.[a-z0-9-]+)+', origin):
+            raise ValueError('Approve exact public HTTPS origins such as https://hooks.example.com')
+    if not origins:
+        raise ValueError('Approve at least one receiver with --origin')
+    # Saved subscriptions are encrypted with this key, so a repeated run keeps the first one.
+    value.setdefault('webhookKey', base64.b64encode(secrets.token_bytes(32)).decode())
+    value['settings']['webhooks'] = {'origins': sorted(set(origins)), 'dailyLimit': 500}
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('Repository webhooks prepared; deploy to store the encryption key and bind the approved origins.')
+
+
 def enable_public(directory, value):
     if not re.fullmatch(r'https://[a-z0-9-]+\.cloudflareaccess\.com', value['settings'].get('access_team_domain', '')):
         raise ValueError('Public sites require the configured Access issuer for signed login cookies')
@@ -320,7 +333,8 @@ def destroy(directory, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics'])
+    parser.add_argument('action', choices=['prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks'])
+    parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('directory', nargs='?')
     args = parser.parse_args()
     os.umask(0o077)
@@ -332,6 +346,7 @@ def main():
         return publish(directory, ROOT)
     if args.action == 'enable-observability': return enable_observability(directory, value)
     if args.action == 'enable-analytics': return enable_analytics(directory, value)
+    if args.action == 'enable-webhooks': return enable_webhooks(directory, value, args.origin)
     if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)
     if args.action == 'receipt': return receipt(directory, value)

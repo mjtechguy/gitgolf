@@ -186,6 +186,21 @@ policy. No analytics credential or provider billing collection is implied.
 Operations shows source, evidence and preview latency, including p50/p95, beside
 existing database, authority and cache observations. Empty families are unknown.
 
+Enable repository webhooks on a retained installation by approving each
+receiver origin, then deploying:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-webhooks NEW_DIRECTORY --origin https://hooks.example.com
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+The first run generates a 32-byte encryption key in the private input; the stack
+stores it as a Secrets Store secret and binds it with the policy (the approved
+origins and 500 delivery attempts a day). Later runs replace the origin list and
+keep the key, because saved subscriptions are encrypted with it. Receiver URLs
+and signing secrets are entered in the repository's Webhooks settings, never in
+this directory. Retries ride the stack's five-minute schedule.
+
 Use `cloudflare/forge/browser-benchmark.mjs` in an authenticated browser for
 bounded source-read comparisons (up to eight fixed repositories, eight passes,
 and 16 concurrent requests). First pass is not proof of an empty cache. Preserve

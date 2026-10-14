@@ -56,6 +56,7 @@ export default Alchemy.Stack('GolfDemo', {
     Cloudflare.SecretsStore.Secret('ManagementSecret', { store, name: name + '-management', value: management.value }),
     Cloudflare.SecretsStore.Secret('RegistrySecret', { store, name: name + '-registry', value: registry.value }),
     Cloudflare.SecretsStore.Secret('SigningSecret', { store, name: name + '-signing', value: Redacted.make(input.signingKey) }),
+    ...(input.webhookKey ? [Cloudflare.SecretsStore.Secret('WebhookSecret', { store, name: name + '-webhook', value: Redacted.make(input.webhookKey) })] : []),
   ]);
   const settings = Output.all(db.databaseId, controlAccess.aud, previewAccess.aud,
     bucket.bucketName, queue.queueName, dispatch.name, ...secrets.map(s => s.storeId)).pipe(Output.map(([databaseId, aud, previewAud, , , , storeId]) => ({
@@ -64,6 +65,7 @@ export default Alchemy.Stack('GolfDemo', {
       registry: { ...input.settings.registry, apiToken: { store: storeId, name: name + '-registry' } },
       apps: { ...input.settings.apps, provisioner: { store: storeId, name: name + '-management' },
         policy: { ...input.settings.apps.policy, secret: { store: storeId, name: name + '-signing' } } },
+      ...(input.webhookKey ? { webhooks: { ...input.settings.webhooks, key: { store: storeId, name: name + '-webhook' } } } : {}),
   })));
   const build = yield* Command.Build('NativeBuild', {
     command: 'python3 scripts/cloudflare_alchemy_demo.py build', cwd: root, outdir: resolve(directory, '.cloudflare'),
