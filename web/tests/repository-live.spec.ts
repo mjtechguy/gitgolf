@@ -9,7 +9,7 @@ import {GetRepositoryAccessResponseSchema,GetSessionResponseSchema,GetRepository
 const head='a'.repeat(40);
 function envelope(flag:number,body:unknown){const text=Buffer.from(JSON.stringify(body));const size=Buffer.alloc(5);size[0]=flag;size.writeUInt32BE(text.length,1);return Buffer.concat([size,text]);}
 async function fixture(page:Page){
- const state={labelName:'Original label',labelReads:0,workflowName:'Original CI',manualAllowed:true,inspections:0,dispatches:0,cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0,issuesEnabled:undefined as boolean|undefined,metadataReads:0,eventCursor:undefined as string|undefined};
+ const state={issueReads:0,labelName:'Original label',labelReads:0,workflowName:'Original CI',manualAllowed:true,inspections:0,dispatches:0,cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0,issuesEnabled:undefined as boolean|undefined,metadataReads:0,eventCursor:undefined as string|undefined};
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='WatchRepository'){
@@ -40,6 +40,7 @@ async function fixture(page:Page){
   if(method==='GetPullRequest'){state.pullReads++;return respond(route,GetPullRequestResponseSchema,{pullRequest:{id:'4',number:1,title:'Live contribution',state:IssueState.OPEN,user,base:{repositoryId:'11',ref:'main',commitId:'b'.repeat(40)},head:{repositoryId:'11',ref:'feature',commitId:state.pullHead}}});}
   if(method==='ListPullRequestCommits'){state.commitReads++;const input=request(route,ListPullRequestCommitsRequestSchema);return respond(route,ListPullRequestCommitsResponseSchema,{selection:input.selection,commits:[{sha:input.selection!.headCommitId,message:'Pinned private commit',authorName:'Alex',authoredAt:'2026-10-03T00:00:00Z'}]});}
   if(method==='ListPullRequestChecks'){state.checkReads++;const input=request(route,ListPullRequestChecksRequestSchema);return respond(route,ListPullRequestChecksResponseSchema,{selection:input.selection,checks:[{id:'5',context:'ci/build',state:state.checkState,description:'Live private status',updatedAt:'2026-10-03T00:00:00Z'}]});}
+  if(method==='GetIssue'){state.issueReads++;}
   if(method==='GetIssue')return respond(route,GetIssueResponseSchema,{issue:{id:'3',number:1,title:state.title,state:IssueState.OPEN,user,createdAt:'2026-10-03T00:00:00Z'}});
   if(method==='ListIssueComments')return respond(route,ListIssueCommentsResponseSchema,{});
   if(method==='ListIssues')return respond(route,ListIssuesResponseSchema,{issues:[{id:'3',number:1,title:state.title,state:IssueState.OPEN,user,createdAt:'2026-10-03T00:00:00Z'}]});
@@ -207,6 +208,17 @@ test('live cursor cannot regress a positive observation to zero',async({page})=>
  await expect.poll(()=>state.cursors).toContain('1');state.eventCursor='0';
  await expect(page.getByRole('button',{name:'Reconnect live updates',exact:true})).toBeVisible({timeout:10000});
  expect(state.cursors.slice(1).every(value=>value==='1')).toBe(true);
+});
+
+test('a brief return to a live page keeps it on screen; without live updates it revalidates',async({page})=>{
+ const state=await fixture(page);await page.goto('/alex/demo/issues/1');await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:/Original issue/})).toBeVisible();
+ const toggle=()=>page.evaluate(async()=>{for(const value of ['hidden','visible']){Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>value});document.dispatchEvent(new Event('visibilitychange',{bubbles:true}));await new Promise(r=>setTimeout(r,100));}});
+ const reads=state.issueReads;await toggle();await page.waitForTimeout(500);
+ expect(state.issueReads).toBe(reads);await expect(page.getByRole('heading',{name:/Original issue/})).toBeVisible();
+ state.offline=true;await expect(page.getByRole('button',{name:'Reconnect live updates',exact:true})).toBeVisible({timeout:10000});
+ const offline=state.issueReads;await toggle();
+ await expect.poll(()=>state.issueReads).toBeGreaterThan(offline);
 });
 
 test('hidden tabs stop live requests and resume their last authorized cursor without moving source',async({page})=>{

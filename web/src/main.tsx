@@ -4,6 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 import { router } from './router';
 import { createQueryClient } from './queryClient';
+import { installFocusPolicy } from './focusPolicy';
 import './styles.css';
 import { reloadOnceForBuild } from './staleBuild';
 
@@ -13,6 +14,7 @@ window.addEventListener('vite:preloadError', event => {
 });
 
 const client = createQueryClient();
+installFocusPolicy();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode><QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider></StrictMode>,
