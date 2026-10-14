@@ -1,5 +1,42 @@
 # Golf implementation status
 
+## 2026-10-14 — Signed-in audit of the retained native site; settings wiring
+
+All 46 signed-in routes of the retained native installation were opened in a
+signed-in browser and compared with the capabilities the Worker reports.
+
+Fixed in the web client:
+
+- **Runners.** Repository Settings → Runners was gated on the portable runner
+  pools and read "Unavailable" although the native runtime reports
+  customer-hosted runners as ready. It now opens the native pool chooser that
+  previously appeared only on the Actions page.
+- **Account pages with no native service.** Provider connections, Coding
+  agents, API credentials and Account activity called procedures the native
+  Worker does not implement and showed an error. On the native runtime they
+  leave the account navigation and their routes explain that the page is not
+  provided, without calling the API.
+- **Settings navigation.** Sections an installation does not provide move to one
+  closed group at the foot ("Not on this installation") once capabilities have
+  loaded, instead of sitting among working sections marked "Unavailable".
+- **Unavailable page.** Its heading names the feature, with a "Not available on
+  this installation" state and the Worker's own reason.
+- **Git access.** The clone address is a read-only field with a copy button.
+- **Tables.** An empty table no longer shows its search-scope footnote.
+
+Not changed: the native Worker still has no adapter for general workflows,
+repository secrets and variables, environments, merge execution, releases, wiki,
+browser file editing, archive/transfer/deletion, API credentials, the account
+activity log, teams, deploy keys or email notifications
+(`docs/CLOUDFLARE_CAPABILITY_INVENTORY.md`). Webhooks, PR analytics and PR agent
+proposals are implemented but not configured on the retained installation. The
+retained repositories are single-commit snapshots, so per-file history has
+nothing to report there.
+
+Validation: typecheck and the native build pass. The routing, settings, Git
+transport, table and layout specs pass (175 tests) apart from three that fail
+the same way on `main`. The full browser suite was not rerun.
+
 ## 2026-10-14 — Centered Console, full-width Workbench header, quiet unavailable row changes
 
 At 1920 and 2560 pixels every layout was measured on the repository list, a

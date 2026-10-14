@@ -45,6 +45,6 @@ export function DataTable<T extends RowData>({ data, columns, getRowId, label, e
       <span className="data-table-page-status" aria-live="polite">Page {pageIndex + 1} of {pageCount}<span>Rows {firstRow}–{lastRow}</span></span>
       <div className="data-table-page-actions"><button type="button" className="button secondary" aria-label="Previous loaded page" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>Previous</button><button type="button" className="button secondary" aria-label="Next loaded page" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>Next</button></div>
       <p id={scopeId} className="data-table-scope">Search, sorting and pages cover loaded entries only.</p>
-      </nav> : <p id={scopeId} className="data-table-scope">{pagination ? 'Search and sorting cover loaded entries only.' : 'Search and sorting cover all reported entries.'}</p>}
+      </nav> : <p id={scopeId} className={data.length ? 'data-table-scope' : 'data-table-scope sr-only'}>{pagination ? 'Search and sorting cover loaded entries only.' : 'Search and sorting cover all reported entries.'}</p>}
   </div>;
 }

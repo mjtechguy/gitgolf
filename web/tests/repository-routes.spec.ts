@@ -293,7 +293,7 @@ for (const width of [320, 1440]) test(`native settings retain the full sidebar a
   const frame = await tabs.elementHandle();
   const methods = state.methods.length;
   if (width === 320) await picker.selectOption('/$owner/$name/settings/rules');
-  else await nav.getByRole('link', {includeHidden:true}).filter({hasText:'Rules and merge policy'}).click();
+  else { await nav.getByText('Not on this installation').click(); await nav.getByRole('link').filter({hasText:'Rules and merge policy'}).click(); }
   await expect(page.getByRole('heading', {name:'Rules and merge policy', exact:true})).toBeVisible();
   await expect(page.getByText('Protected merge enforcement is not implemented on Cloudflare native.', {exact:true})).toBeVisible();
   await expect(nav.locator('[aria-current="page"]')).toContainText('Rules and merge policy');
@@ -325,11 +325,31 @@ test('native settings wait for capabilities, retain navigation on failure and re
 });
 
 
+test('native runners settings open the workspace pool chooser and account navigation lists only provided pages', async ({page}) => {
+  const state = await fixture(page, 'cloudflare-native');
+  state.nativeCapabilities.push({id:'settings.native-runners',label:'Customer-hosted native runners',state:3,reason:'Available'});
+  await page.route('**/native/runner-placement', route => route.fulfill({status:200, contentType:'application/json', json:{placement:{repository_id:19,pool_id:null,pool_version:null,version:1},pools:[]}}));
+  await page.goto('/alex/demo/settings/runners');
+  await expect(page.getByRole('heading', {name:'Runners',exact:true})).toBeVisible();
+  await expect(page.getByText('Not available on this installation',{exact:true})).toHaveCount(0);
+  const nav = page.getByRole('navigation', {name:'Repository settings',exact:true});
+  await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('href', '/alex/demo/settings/runners');
+  await expect(nav.getByText('Not on this installation')).toContainText('6');
+  // The native runtime has no API credential, provider connection, agent account or activity service.
+  await page.goto('/account/settings');
+  const account = page.getByRole('navigation', {name:'Account settings',exact:true});
+  await expect(account.getByRole('link')).toHaveText(['Profile', 'Invitations']);
+  const methods = state.methods.length;
+  await page.goto('/account/api-credentials');
+  await expect(page.getByText('Not available on this installation',{exact:true})).toBeVisible();
+  expect(state.methods.slice(methods).filter(method=>!['GetSession','GetAuthenticationOptions','ListCapabilities'].includes(method))).toEqual([]);
+});
+
 test('each unavailable native settings route keeps its selected sidebar without probing unsupported APIs', async ({page}) => {
   const state = await fixture(page, 'cloudflare-native');
   for (const suffix of ['git','rules','workflows','runners','secrets','environments','webhooks']) {
     await page.goto(`/alex/demo/settings/${suffix}`);
-    await expect(page.getByRole('heading', {name:'Settings unavailable',exact:true})).toBeVisible();
+    await expect(page.getByText('Not available on this installation',{exact:true})).toBeVisible();
     const nav = page.getByRole('navigation', {name:'Repository settings',exact:true});
     await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('href', `/alex/demo/settings/${suffix}`);
     await expect(nav.getByRole('link')).toHaveCount(9);
