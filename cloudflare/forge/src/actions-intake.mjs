@@ -110,7 +110,7 @@ export async function planRuns(db, env, row, repo, trigger) {
         changedFiles: trigger.event === 'push' ? await changes() : trigger.event === 'pull_request' ? await changes() : null,
         context: { event: identity.event, ref: trigger.ref, commitId: trigger.commitId, beforeSha: trigger.beforeSha || '', defaultBranch: row.default_branch,
           projectPath: ownerSlug(row, env) + '/' + row.name, pullNumber: trigger.pullNumber ?? null, headRef: trigger.headRef || '', baseRef: trigger.baseRef || '',
-          variables: trigger.inputs || {}, commitMessage: trigger.commitMessage || '' } });
+          variables: trigger.inputs || {}, commitMessage: trigger.commitMessage || '', origin: env.PUBLIC_ORIGIN } });
       if (plan?.skipped) continue;
       created.push(await createPipelineRun(db, env, { ...identity, workflowName: plan.workflowName || path, inputs: trigger.inputs || {}, reason: (plan.notes || []).join(' ') }, plan.jobs));
     } catch (error) {
