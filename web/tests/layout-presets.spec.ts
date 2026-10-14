@@ -9,7 +9,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 const presets = { classic: ['primer', 'workbench', 'reader'], golf: ['refined', 'strokes', 'tiles'], flare: ['kumo', 'overview', 'console'] } as const;
 const parts: Record<string, [string, string, string]> = {
   primer: ['top', 'standard', 'crumb headertabs finder create counts'], workbench: ['top', 'panes', 'tree'], reader: ['top', 'standard', 'reader'], refined: ['top', 'standard', ''], strokes: ['top', 'standard', 'keys band'],
-  tiles: ['rail', 'panes', 'contextnav split toptools counts'], kumo: ['sidebar', 'standard', 'contextnav'], overview: ['sidebar', 'standard', 'band'], console: ['rail', 'standard', 'crumb pagehead finder counts'],
+  tiles: ['rail', 'panes', 'contextnav split toptools counts'], kumo: ['sidebar', 'standard', 'contextnav'], overview: ['sidebar', 'standard', 'band overview counts'], console: ['rail', 'standard', 'crumb pagehead finder counts overview'],
 };
 async function choose(page: Page, appearance: string, layout: string, theme = 'light') {
   await page.addInitScript(([a, l, t]) => { localStorage.setItem('golf.appearance', a!); localStorage.setItem(`golf.layout.${a}`, l!); localStorage.setItem('golf.theme', t!); }, [appearance, layout, theme]);
@@ -198,6 +198,12 @@ test('the three designs keep their drawn structure on a repository', async ({ pa
   expect(sections.y).toBeLessThan(heading.y);
   await expect(page.locator('#main-content h1.repository-context')).toBeVisible(); await expect(page.locator('#main-content h1.repository-context > span').first()).toBeHidden();
   await expect(page.locator('.repository-identity-description')).toContainText('FastAPI framework');
+  // The overview reports what is open and what changed last, from the reads the tabs already make.
+  const overview = page.getByRole('region', { name: 'Repository overview', exact: true });
+  await expect(overview.locator('.summary-band')).toContainText('Open pull requests3'); await expect(overview.locator('.summary-band')).toContainText('Open issues12');
+  await expect(overview.getByRole('link', { name: 'Pull request 1', exact: true })).toBeVisible();
+  await expect(overview.getByRole('region', { name: 'Recent commits' }).getByRole('link', { name: 'Release version 0.143.0 (#16477)', exact: true })).toBeVisible();
+  expect((await box(page, '.repository-overview')).y).toBeLessThan((await box(page, '.source-tree')).y);
   // Away from the root the title row's controls join the breadcrumb, with one visibility badge.
   await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: /^Issues/ }).click();
   await expect(page).toHaveURL(/\/alex\/demo\/issues/);

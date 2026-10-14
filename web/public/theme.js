@@ -3,7 +3,7 @@ const root = document.documentElement;
 const layouts = {
   classic: { primer: 'top standard crumb headertabs finder create counts', workbench: 'top panes tree', reader: 'top standard reader' },
   golf: { refined: 'top standard', strokes: 'top standard keys band', tiles: 'rail panes contextnav split toptools counts' },
-  flare: { kumo: 'sidebar standard contextnav', overview: 'sidebar standard band', console: 'rail standard crumb pagehead finder counts' },
+  flare: { kumo: 'sidebar standard contextnav', overview: 'sidebar standard band overview counts', console: 'rail standard crumb pagehead finder counts overview' },
 };
 const preferred = { classic: 'primer', golf: 'tiles', flare: 'console' };
 const saved = key => { try { return localStorage.getItem(key); } catch { return null; } };

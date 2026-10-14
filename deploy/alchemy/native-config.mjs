@@ -27,6 +27,7 @@ export function bindings(config) {
       case 'r2': return { name, type: 'r2_bucket', bucketName: value.name };
       case 'queue': return { name, type: 'queue', queueName: value.name };
       case 'browser': return { name, type: 'browser' };
+      case 'analytics-engine-dataset': return { name, type: 'analytics_engine', dataset: value.name };
       case 'secrets-store-secret': return { name, type: 'secrets_store_secret', storeId: value.storeId, secretName: value.secretName };
       case 'worker': return { name, type: 'service', service: value.worker, entrypoint: value.exportName };
       case 'dispatch-namespace': return { name, type: 'dispatch_namespace', namespace: value.namespace,

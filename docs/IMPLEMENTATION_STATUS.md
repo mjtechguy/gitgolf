@@ -1,5 +1,29 @@
 # Golf implementation status
 
+## 2026-10-14 — Repository overview; PR evidence metrics on the Alchemy path
+
+Console and Overview open a repository with an overview above the files: a band
+with open pull requests, open issues, the latest commit and the default branch,
+then the first open pull requests and recent commits. Every figure comes from a
+bounded read (the first 50 open items, five commits); counts show `50+` when
+another page exists. The tab counts share those reads. Signed-out visitors do
+not get the overview, since it reads private collaboration data. CI status per
+commit, a latest release, star history and contributors are not shown: nothing
+reports them on the native runtime.
+
+The Alchemy deployment path now qualifies the Analytics Engine dataset binding,
+and `cloudflare_alchemy_demo.py enable-analytics DIRECTORY` names a dataset for
+PR evidence metrics. Metrics are sampled completion counts, not billing.
+
+Still not configured on the retained installation: webhooks (needs a Secrets
+Store key and operator-approved destination origins) and PR agent proposals
+(needs Workers AI admission, an approved file path and an agent container,
+none of which the Alchemy stack provisions yet).
+
+Validation: typecheck and the native build pass; `layout-presets.spec.ts` (24
+tests) covers the overview; the Alchemy binding and script unit tests pass. The
+full browser suite was not rerun.
+
 ## 2026-10-14 — Signed-in audit of the retained native site; settings wiring
 
 All 46 signed-in routes of the retained native installation were opened in a

@@ -1971,3 +1971,19 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .clone-address { flex-wrap:wrap; max-width:640px; }
 .clone-address > label { flex-basis:100%; margin:0 0 2px; color:var(--text); font-size:.8125rem; font-weight:600; }
 .clone-address > input { min-height:var(--control-h); background:var(--panel); color:var(--text); }
+
+/* Repository overview: what is open and what changed last, above the files. */
+.repository-overview { display:grid; gap:var(--section-gap); margin-bottom:var(--section-gap); }
+.repository-overview > .summary-band { margin:0; }
+.repository-overview-lists { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--section-gap); }
+.repository-overview-lists > .browser-panel { margin:0; }
+.repository-overview-lists .browser-panel-heading { justify-content:space-between; }
+.repository-overview-lists .browser-panel-heading h2 { display:flex; align-items:center; gap:8px; font-size:.875rem; }
+.overview-list { list-style:none; margin:0; padding:0; }
+.overview-list > li { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px 16px; padding:9px 16px; border-top:1px solid var(--line); font-size:.8125rem; }
+.overview-list > li:first-child { border-top:0; }
+.overview-list-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.875rem; font-weight:500; }
+.overview-list-meta { grid-column:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:.75rem; }
+.overview-list-meta code { font:.75rem var(--mono); }
+.overview-list-time { grid-column:2; grid-row:1 / span 2; align-self:center; color:var(--muted); font-size:.75rem; white-space:nowrap; }
+@media(max-width:900px) { .repository-overview-lists { grid-template-columns:minmax(0,1fr); } }
