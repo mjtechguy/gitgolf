@@ -63,8 +63,15 @@ async function send(db, env, job) {
 }
 // origin is set by trusted callers only: 'manual' for a writer's request, 'push' for automatic intake.
 export async function evidenceAPI(db, env, person, row, artifact, body, origin = 'manual') {
+  if (body.action === 'list' && body.number === undefined) {
+    // Recent runs across the repository come from stored rows alone: no Git read, so no claim about current or stale source.
+    const { results } = await db.prepare(`SELECT id,state,advice_state,test_state,agent_state,created_at,updated_at,expires_at,json_extract(snapshot,'$.selection') AS selection
+      FROM evidence_jobs WHERE repository_id=? ORDER BY created_at DESC,id DESC LIMIT 51`).bind(row.id).all();
+    return reply({ jobs: results.slice(0, 50).map(job => ({ id: job.id, state: job.state, selection: JSON.parse(job.selection), createdAt: job.created_at, updatedAt: job.updated_at, expiresAt: job.expires_at,
+      advisoryOnly: true, adviceState: job.advice_state, testState: job.test_state, agentState: job.agent_state })), truncated: results.length > 50 });
+  }
   if (body.action === 'list') {
-    if (!Number.isInteger(body.number) || body.number < 1) invalid('Use a PR number.');
+    if (!Number.isInteger(body.number) || body.number < 1) invalid('Use a PR number, or omit it for recent repository runs.');
     const { results } = await db.prepare('SELECT * FROM evidence_jobs WHERE repository_id=? ORDER BY created_at DESC,id DESC LIMIT 101').bind(row.id).all();
     const jobs = [], matching = results.slice(0, 100).filter(job => JSON.parse(job.snapshot).selection.number === body.number);
     // One live ref observation per inventory, rather than one paid Git read per row.

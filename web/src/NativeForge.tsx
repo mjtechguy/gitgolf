@@ -2,7 +2,7 @@ import { useLiveStatus } from './RepositoryLive';
 import { currentPullPreviews } from './nativePreviews';
 import { usePageVisible } from './RepositoryUI';
 import { nativeAPI as api } from './nativeAPI';
-import { CopyButton, PageHeader, privateQuery } from './RepositoryUI';
+import { CopyButton, DateLabel, PageHeader, privateQuery } from './RepositoryUI';
 import { RefreshCw } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { repositoryOptions } from './navigation';
@@ -18,6 +18,8 @@ export type Config = { runtimeProfile: string; workspace: string; canCreate: boo
 type Repository = { id: string; name: string; fullName: string; cloneUrl: string; description: string };
 export type Pull = { id: string; number: number; title: string; body: string; state: string; merged: boolean; draft: boolean; revision: string; head: { commitId: string; ref: string }; base: { commitId: string; ref: string } };
 export type Job = { id: string; idempotencyKey: string; state: string; agentState: string; testState: string; adviceState: string; stale: boolean; createdAt: string; updatedAt: string; selection: { repositoryId: string; pullRequestId: string; number: number; baseCommitId: string; headCommitId: string } };
+// A stored row from the repository-wide list: no Git read is made for it, so it carries no current/stale claim.
+type RecentRun = Pick<Job, 'id' | 'state' | 'agentState' | 'testState' | 'adviceState' | 'createdAt' | 'updatedAt' | 'selection'>;
 export type Preview = { kind: 'STATIC' | 'WORKER' | 'IMAGE_STATIC'; imageDigest?: string; id: string; jobId: string; url: string; state: string; expiresAt: string; commitId: string; purged: boolean; captureState: string };
 type Report = { execution?: { workflow?: { format: string; path: string; jobId?: string; catalog?: string } }; agentResult: { state: string; patch?: string; proposalCommitId?: string; tests?: { exitCode: number; stdout: string; stderr: string }; calls?: number; tokens?: number }; tests: { state: string; producer?: { kind: string; machineId: string; generation: number }; build?: { digest: string; bytes: number; sourceCommit: string }; image?: { registry: string; repository: string; tag: string; digest: string; commitId: string }; stdout?: string; stderr?: string; exitCode?: number }; advice: { state: string; answers?: { next: { choice: string } } }; limitations: string[] };
 export type ReportValue = { job: Job; report: Report };
@@ -82,14 +84,24 @@ export function NativePullTools({ context, number, userId, selectedCommitId }: {
 }
 export function NativeRepositoryActions({ context, userId }: { context: Context; userId: string }) {
   const pulls = useQuery({ ...privateQuery, queryKey: ['native-repository', context.repositoryId, 'pulls'], queryFn: ({ signal }) => repositoryAPI<{ pullRequests: Pull[]; page: { nextPage: number } }>('ListPullRequests', { ...context, state: 'ISSUE_STATE_ALL', page: { limit: 100 } }, signal) });
+  const live = useLiveStatus() === 'live', visible = usePageVisible();
+  const runs = useQuery({ ...privateQuery, queryKey: ['native-repository', context.repositoryId, 'recent-runs'], queryFn: ({ signal }) => api<{ jobs: RecentRun[]; truncated: boolean }>('/native/pr-evidence/read', { ...context, action: 'list' }, signal), refetchInterval: visible && !live ? 15000 : false });
   const [number, setNumber] = useState<number>();
   const [runnersOpen, setRunnersOpen] = useState(false);
+  const runColumns: DataTableColumn<RecentRun>[] = [
+    { accessorKey: 'createdAt', header: 'Started', cell: ({ row }) => <DateLabel value={row.original.createdAt} relative /> },
+    { id: 'pull', header: 'PR', accessorFn: run => run.selection.number, cell: ({ row }) => <Link {...repositoryOptions({ ...context.repository, view: 'pulls', pull: row.original.selection.number, pullView: 'checks' })}>#{row.original.selection.number}</Link> },
+    { id: 'kind', header: 'Kind', accessorFn: run => run.agentState !== 'NONE' ? 'Agent proposal' : run.testState !== 'NONE' ? 'Tests' : 'Evidence only' },
+    { accessorKey: 'state', header: 'Report' }, { accessorKey: 'testState', header: 'Execution' }, { accessorKey: 'agentState', header: 'Agent' },
+    { id: 'commit', header: 'Head commit', accessorFn: run => run.selection.headCommitId, cell: ({ row }) => <code title={row.original.selection.headCommitId}>{row.original.selection.headCommitId.slice(0, 12)}</code> },
+    { id: 'open', header: 'Details', enableSorting: false, cell: ({ row }) => <button className="button secondary" aria-label={`Inspect runs for pull request ${row.original.selection.number}`} onClick={() => setNumber(row.original.selection.number)}>Inspect runs</button> },
+  ];
   const columns: DataTableColumn<Pull>[] = [
     { accessorKey: 'number', header: 'PR', cell: ({ row }) => <Link {...repositoryOptions({ ...context.repository, view: 'pulls', pull: row.original.number, pullView: 'checks' })}>#{row.original.number}</Link> },
     { accessorKey: 'title', header: 'Title' },
     { id: 'runs', header: 'Runs and previews', enableSorting: false, cell: ({ row }) => <button className="button secondary" onClick={() => setNumber(row.original.number)}>Inspect runs</button> },
   ];
-  return <div className="page-stack repository-work-page"><PageHeader title="Actions" description="CI runs, test reports and previews for your pull requests." actions={<button className="button secondary" onClick={() => void pulls.refetch()}><RefreshCw size={15}/>Refresh</button>}/><section className="browser-panel"><div className="browser-panel-heading"><h3>Pull requests</h3></div><ErrorMessage error={pulls.error} />{pulls.isSuccess ? <DataTable data={pulls.data.pullRequests} columns={columns} getRowId={p => p.id} label="pull request execution" /> : <p role="status">Reading pull requests…</p>}{pulls.data?.page.nextPage ? <p className="panel-footnote">Only the first 100 pull requests are loaded.</p> : null}</section>{number ? <NativePullTools key={number} context={context} userId={userId} number={number} /> : null}<details className="metadata-details panel-disclosure" onToggle={event => setRunnersOpen(event.currentTarget.open)}><summary>Runner settings</summary>{runnersOpen ? <NativeRunnerPlacement context={context}/> : null}</details></div>;
+  return <div className="page-stack repository-work-page"><PageHeader title="Actions" description="CI runs, test reports and previews for your pull requests." actions={<button className="button secondary" onClick={() => { void pulls.refetch(); void runs.refetch(); }}><RefreshCw size={15}/>Refresh</button>}/><section className="browser-panel" aria-labelledby="native-recent-runs-title"><div className="browser-panel-heading"><h3 id="native-recent-runs-title">Recent runs</h3></div><ErrorMessage error={runs.error} />{runs.isSuccess ? <DataTable data={runs.data.jobs} columns={runColumns} getRowId={run => run.id} label="recent repository runs" emptyMessage="No runs have been admitted for this repository." /> : !runs.isError ? <p role="status">Reading recent runs…</p> : null}<p className="panel-footnote">{runs.data?.truncated ? 'Only the latest 50 runs are loaded; search and sorting apply to those. ' : ''}Runs across every pull request, newest first. Open a pull request’s runs to see whether its source is still current, read reports and cancel.</p></section><section className="browser-panel"><div className="browser-panel-heading"><h3>Pull requests</h3></div><ErrorMessage error={pulls.error} />{pulls.isSuccess ? <DataTable data={pulls.data.pullRequests} columns={columns} getRowId={p => p.id} label="pull request execution" /> : <p role="status">Reading pull requests…</p>}{pulls.data?.page.nextPage ? <p className="panel-footnote">Only the first 100 pull requests are loaded.</p> : null}</section>{number ? <NativePullTools key={number} context={context} userId={userId} number={number} /> : null}<details className="metadata-details panel-disclosure" onToggle={event => setRunnersOpen(event.currentTarget.open)}><summary>Runner settings</summary>{runnersOpen ? <NativeRunnerPlacement context={context}/> : null}</details></div>;
 }
 function NativePullControls({ context, repository, config, number, writable, selectedCommitId }: { context: Context; repository: Repository; config: Config; number: number; writable: boolean; selectedCommitId?: string }) {
   const live = useLiveStatus() === 'live', visible = usePageVisible();

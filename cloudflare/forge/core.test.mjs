@@ -3750,3 +3750,37 @@ test('the workflow inventory reports the repository switch beside the operator a
   await setExecution(f, true, true);
   const restored = await flags(); assert.deepEqual(restored.slice(0, 2), [true, true]); assert.notEqual(restored[2], enabled[2]);
 });
+
+test('recent repository runs come from stored rows for current repository accounts, bounded and without a Git read', async t => {
+  const f = await evidenceFixture(t); allocateAgents(f); f.env.EVIDENCE_DAILY_LIMIT = '20';
+  const list = (body = {}, token = ownerToken, path = '/native/pr-evidence/read') => f.call('', { action: 'list', repository: key, repositoryId: '1', ...body }, token, path);
+  assert.deepEqual(await value(await list()), { jobs: [], truncated: false });
+  const tests = (await value(await f.evidence({ ...f.input, advice: false, runTests: true }))).job;
+  const agent = (await value(await f.evidence({ ...f.input, advice: false, agent: { prompt: 'A private agent prompt.' }, idempotencyKey: nonce() }))).job;
+  const open = f.env.ARTIFACTS.get, fetches = globalThis.fetch.mock.callCount(); let opens = 0;
+  f.env.ARTIFACTS.get = name => { opens++; return open(name); };
+  const recent = await value(await list({}, readerToken));
+  assert.equal(opens, 0); assert.equal(globalThis.fetch.mock.callCount(), fetches);
+  assert.deepEqual(recent.jobs.map(job => job.id).sort(), [tests.id, agent.id].sort()); assert.equal(recent.truncated, false);
+  const { updatedAt, ...row } = recent.jobs.find(job => job.id === tests.id);
+  assert.deepEqual(row, { id: tests.id, state: 'QUEUED', selection: f.selection, createdAt: tests.createdAt, expiresAt: tests.expiresAt, advisoryOnly: true, adviceState: 'NONE', testState: 'REQUESTED', agentState: 'NONE' });
+  assert.equal(recent.jobs.find(job => job.id === agent.id).agentState, 'REQUESTED');
+  // The repository-wide rows make no staleness claim and carry no snapshot content.
+  assert.equal(recent.jobs.some(job => 'stale' in job || 'idempotencyKey' in job), false); assert.equal(JSON.stringify(recent).includes('private agent prompt'), false);
+  assert.deepEqual(await value(await list({}, ownerToken, '/native/pr-evidence')), recent);
+  // A pull request's own list still observes current source once.
+  const perPull = await value(await list({ number: f.selection.number }, readerToken));
+  assert.equal(perPull.jobs.length, 2); assert.equal(perPull.jobs.every(job => job.stale === false), true); assert.ok(opens > 0);
+  for (const number of [0, -1, 1.5, '1', null]) assert.equal((await list({ number })).status, 400);
+  // Newest first, at most 50, and an honest truncation flag.
+  const insert = f.sql.prepare("INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,advice_state,test_state,agent_state,created_at,updated_at,expires_at) VALUES(?,1,1,?,'hash',?,'NONE','PASSED','NONE',?,?,?)");
+  for (let index = 0; index < 55; index++) { const time = new Date(Date.UTC(2031, 0, 1, 0, index)).toISOString(); insert.run(nonce(), nonce(), JSON.stringify({ selection: { ...f.selection, number: index + 10 } }), time, time, time); }
+  const bounded = await value(await list());
+  assert.equal(bounded.jobs.length, 50); assert.equal(bounded.truncated, true);
+  assert.deepEqual(bounded.jobs.slice(0, 2).map(job => job.selection.number), [64, 63]); assert.equal(bounded.jobs.at(-1).selection.number, 15);
+  // No grant, no inventory: neither a former reader nor an anonymous caller, even on a published repository.
+  f.env.PUBLIC_REPOSITORIES = 'true'; f.sql.exec('INSERT INTO repository_visibility(repository_id,is_public) VALUES(1,1)');
+  f.sql.prepare('DELETE FROM grants WHERE repository_id=1 AND user_id=2').run();
+  assert.equal((await list({}, readerToken)).status, 404);
+  assert.equal((await f.dispatch(new Request(f.env.PUBLIC_ORIGIN + '/native/pr-evidence/read', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify({ action: 'list', repository: key, repositoryId: '1' }) }))).status, 401);
+});
