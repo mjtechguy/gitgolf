@@ -31,6 +31,7 @@ import { reserveRefWrite, finishRefWrite, sendRefUpdate, refWriteBlocker } from 
 import { sourceAPI, sourceCapability } from './source-api.mjs';
 import { agenticModeAPI, agenticCapability, landingCapability } from './agentic-mode.mjs';
 import { landAPI } from './land-queue.mjs';
+import { agentInboxAPI, inboxCapability } from './agent-inbox.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
@@ -118,7 +119,7 @@ export async function admitMCP(request) {
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
-  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/search/read', '/native/agentic-mode/read', '/native/land/read'].includes(new URL(request.url).pathname)) return true;
+  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/search/read', '/native/agentic-mode/read', '/native/land/read', '/native/agent-inbox/read'].includes(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
   if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
   if (/^\/rpc\/golf\.v1\.(?:FeaturePolicyService\/GetFeaturePolicy|RepositoryFeatureService\/GetRepositoryFeatures)$/.test(new URL(request.url).pathname)) return true;
@@ -127,7 +128,7 @@ export function concurrentRead(request) {
   if (/^\/rpc\/golf\.v1\.(?:DiscussionAttachmentService\/(?:ListDiscussionAttachments|DownloadDiscussionAttachment)|DiscussionAttachmentUploadService\/GetDiscussionAttachmentUploadState)$/.test(new URL(request.url).pathname)) return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
-const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume|ai|ai-models|ai-usage|search)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
+const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume|ai|ai-models|ai-usage|search|agent-inbox)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
 async function input(request) {
   if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') invalid('Use JSON.');
@@ -513,6 +514,13 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
       return reply(await landAPI(db, env, person, row, request, body, { artifact: action => withArtifact(env, row, action), withArtifact, providerFetch }));
     }
+    if (url.pathname === '/native/agent-inbox' || url.pathname === '/native/agent-inbox/read') {
+      // The agentic inbox (docs/AGENTIC_MODE.md): reading it overlaps other requests; asking for an intent summary admits an AI run.
+      if (url.pathname.endsWith('/read') !== ['inbox', 'summary'].includes(body.action)) invalid(url.pathname.endsWith('/read') ? 'This route only reads the agentic inbox.' : 'This route only asks for intent summaries.');
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
+      return reply(await agentInboxAPI(db, env, person, row, request, body, action => withArtifact(env, row, action)));
+    }
     if (url.pathname === '/native/agent-tasks') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
@@ -667,6 +675,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       await apiTokenCapability(db),
       await agenticCapability(db),
       await landingCapability(db),
+      await inboxCapability(db, env),
       ...[
         ['settings.repository-teams', 'Repository team access', 'Team membership and inherited repository permissions are not implemented on Cloudflare native. Direct collaborators and invitations are available in Access.'],
         ['settings.repository-deploy-keys', 'SSH deploy keys', 'Cloudflare native serves Git over HTTPS. SSH transport and SSH deploy keys are not available.'],

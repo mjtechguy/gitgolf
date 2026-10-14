@@ -122,6 +122,9 @@ const native = {
     after: () => clean({ number: whole(body.number), method: clip(body.method, 10) || 'merge' }) },
   ai: body => body.action === 'create' && { action: 'ai.run_request', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => clip(body.kind, 40),
     after: () => clean({ kind: clip(body.kind, 40), number: whole(body.target?.number), tag: clip(body.target?.tagName, 100) }) },
+  // The agentic inbox asks for an intent summary through the same AI runs (docs/AGENTIC_MODE.md); inbox reads are not recorded.
+  'agent-inbox': body => body.action === 'summarize' && { action: 'ai.run_request', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => 'intent-summary',
+    after: () => clean({ kind: 'intent-summary', number: whole(body.number) }) },
   installation: body => ({ action: 'installation_policy.update', scope: 'installation', batch: true, subject: () => clip(body.key, 40) }),
   'installation/read': () => adminDenial('the installation settings'),
   'ai-models': body => ({ action: body.repository ? 'repository_ai_model.update' : 'ai_model.update', scope: body.repository ? 'repository' : 'installation', batch: true, subject: () => clip(body.use, 40) && 'ai.model.' + clip(body.use, 40) }),

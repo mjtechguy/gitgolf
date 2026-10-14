@@ -60,11 +60,11 @@ function wire(stored, login) {
 }
 export async function agenticSettings(db, row) { return current(db, row); }
 export async function agenticFeature(db, env, row) { return featureState(db, env, row); }
-async function current(db, row) {
+export async function current(db, row) {
   const stored = await db.prepare('SELECT s.*,u.login FROM repository_agentic_settings s LEFT JOIN users u ON u.id=s.updated_by WHERE s.repository_id=?').bind(row.id).first();
   return wire(stored, stored?.login);
 }
-async function featureState(db, env, row) {
+export async function featureState(db, env, row) {
   const feature = (await repositoryFeatures(db, env, row)).get('agentic-mode');
   return { allowed: Boolean(feature?.effective), reason: feature?.reason || '', decidedBy: feature?.decidedBy || '' };
 }
@@ -119,7 +119,8 @@ export async function currentReviews(db, row, d, headCommitId) {
     reviewerIsAuthor: review.author_id === d.author_id, reviewerIsAgent: false }));
 }
 
-async function evaluate(db, env, person, row, body, artifact, settings, feature) {
+// Exported for the agentic inbox (agent-inbox.mjs) too.
+export async function evaluate(db, env, person, row, body, artifact, settings, feature) {
   const { d, ifMergeable, ...value } = await landingEvaluation(db, env, row, body.number, artifact, settings, feature);
   // Whether this caller may land it now (land-queue.mjs decides again when asked): a writer, with the policy saying land, or saying only
   // that a writer who is not the author must approve and the caller is not the author.

@@ -1648,6 +1648,17 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .agent-workspace-summary strong { font-size:18px; overflow-wrap:anywhere; }
 .agent-workspace .data-table [aria-current=page] { font-weight:700; color:var(--accent); }
 @media(max-width:600px) { .agent-workspace-summary { grid-template-columns:1fr; } }
+.agent-inbox-summary { grid-template-columns:repeat(4,minmax(0,1fr)); }
+@media(max-width:900px) { .agent-inbox-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) { .agent-inbox-summary { grid-template-columns:1fr; } }
+.agent-inbox-reasons { min-width:220px; max-width:420px; }
+.agent-inbox-reasons .pull-landing-reasons { margin:0; }
+.agent-inbox-reasons code { margin-right:6px; overflow-wrap:anywhere; }
+.agent-inbox-results { margin:8px 16px; padding-left:18px; font-size:.8125rem; color:var(--muted); }
+.agent-inbox-results li.error { color:var(--error); }
+.agent-inbox-intent h4 { margin:10px 0 4px; font-size:.8125rem; color:var(--muted); }
+.agent-inbox-intent ul { margin:0; padding-left:18px; }
+.agent-inbox-intent li { margin:2px 0; overflow-wrap:anywhere; }
 
 /* ── Layouts ───────────────────────────────────────────────────────────────
    Each appearance offers three layouts (public/theme.js). A layout names its
