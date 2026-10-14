@@ -13,8 +13,9 @@ import { DataTable } from './DataTable';
 import type { DataTableColumn } from './DataTable';
 import { type RuntimeManifest } from './runtimeCapabilities';
 import { NativeRunnerPlacement } from './NativeRunners';
+import { NativeActions } from './NativeActions';
 
-export type Config = { runtimeProfile: string; workspace: string; canCreate: boolean; accessLogin: boolean; evidence: boolean; tests: boolean; agents: boolean; advice: boolean; previews: boolean; apps: boolean; automaticCI: boolean; appPath: string; browser: boolean; agentPath: string; previewPath: string; testModule: string; testWorkflowFormat: string; testWorkflowPath: string; dailyLimit: number; previewTTL: number; appTTL: number };
+export type Config = { runtimeProfile: string; workspace: string; canCreate: boolean; accessLogin: boolean; evidence: boolean; tests: boolean; agents: boolean; advice: boolean; previews: boolean; apps: boolean; automaticCI: boolean; appPath: string; browser: boolean; agentPath: string; previewPath: string; testModule: string; testWorkflowFormat: string; testWorkflowPath: string; dailyLimit: number; previewTTL: number; appTTL: number; pipelines?: boolean };
 type Repository = { id: string; name: string; fullName: string; cloneUrl: string; description: string };
 export type Pull = { id: string; number: number; title: string; body: string; state: string; merged: boolean; draft: boolean; revision: string; head: { commitId: string; ref: string }; base: { commitId: string; ref: string } };
 export type Job = { id: string; idempotencyKey: string; state: string; agentState: string; testState: string; adviceState: string; stale: boolean; createdAt: string; updatedAt: string; selection: { repositoryId: string; pullRequestId: string; number: number; baseCommitId: string; headCommitId: string } };
@@ -82,7 +83,13 @@ export function NativePullTools({ context, number, userId, selectedCommitId }: {
   if (!config.isSuccess || !access.isSuccess) return <p role="status">Checking Cloudflare allocations and current repository access…</p>;
   return <NativePullControls key={`${userId}-${context.repositoryId}-${number}`} context={context} repository={{ id: context.repositoryId, name: context.repository.name, fullName: '', cloneUrl: '', description: '' }} config={config.data} number={number} selectedCommitId={selectedCommitId} writable={['write', 'admin'].includes(access.data.role)} />;
 }
-export function NativeRepositoryActions({ context, userId }: { context: Context; userId: string }) {
+export function NativeRepositoryActions({ context, userId, runId, workflowPath }: { context: Context; userId: string; runId?: string; workflowPath?: string }) {
+  const config = useQuery({ ...privateQuery, queryKey: ['native-config', userId], queryFn: ({ signal }) => api<Config>('/native/config', {}, signal) });
+  if (!config.data) return config.isError ? <ErrorMessage error={config.error} /> : <p role="status">Reading Actions…</p>;
+  if (!config.data.pipelines) return <NativeEvidenceActions context={context} userId={userId} />;
+  return <NativeActions context={context} userId={userId} runId={runId} workflowPath={workflowPath} evidence={config.data.evidence ? <NativeEvidenceActions context={context} userId={userId} /> : undefined} />;
+}
+function NativeEvidenceActions({ context, userId }: { context: Context; userId: string }) {
   const pulls = useQuery({ ...privateQuery, queryKey: ['native-repository', context.repositoryId, 'pulls'], queryFn: ({ signal }) => repositoryAPI<{ pullRequests: Pull[]; page: { nextPage: number } }>('ListPullRequests', { ...context, state: 'ISSUE_STATE_ALL', page: { limit: 100 } }, signal) });
   const live = useLiveStatus() === 'live', visible = usePageVisible();
   const runs = useQuery({ ...privateQuery, queryKey: ['native-repository', context.repositoryId, 'recent-runs'], queryFn: ({ signal }) => api<{ jobs: RecentRun[]; truncated: boolean }>('/native/pr-evidence/read', { ...context, action: 'list' }, signal), refetchInterval: visible && !live ? 15000 : false });

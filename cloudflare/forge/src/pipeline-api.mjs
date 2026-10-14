@@ -6,7 +6,7 @@ import { ownerSlug } from './owners.mjs';
 import { sha } from './git.mjs';
 import { operationsAdmin } from './operations.mjs';
 import { pipelinePolicy, forgejoRunnerVersion, forgejoRunnerSha256 } from './pipeline-policy.mjs';
-import { pipelineAllowed, cancelPipelineRun, rerunPipelineRun, playManualJob, readJobLog, listRunArtifacts, openArtifact, createRegistrationToken, pipelineEngines } from './pipelines.mjs';
+import { pipelineAllowed, cancelPipelineRun, rerunPipelineRun, playManualJob, readJobLog, listRunArtifacts, openArtifact, createRegistrationToken, pipelineEngines, approveEnvironmentJob, saveEnvironmentValue } from './pipelines.mjs';
 import { dispatchWorkflow, listWorkflows, repositoryRefs } from './actions-intake.mjs';
 
 const parse = (value, fallback) => { try { return JSON.parse(value) ?? fallback; } catch { return fallback; } };
@@ -87,6 +87,47 @@ export async function pipelineAPI(db, env, person, row, request, body, withArtif
   }
   if (action === 'cancel') { await mutate(); const value = await run(body.runId); await cancelPipelineRun(db, env, person, value.id); return { ok: true }; }
   if (action === 'rerun') { await mutate(); const value = await run(body.runId); return rerunPipelineRun(db, env, person, value.id, { failedOnly: body.failedOnly === true }); }
+  if (action === 'approve') {
+    // Required reviewers need only read access, as on GitHub; approveEnvironmentJob checks the reviewer list and self-review.
+    if (!await pipelineAllowed(db, env, row.id)) refuse('Actions are turned off for this repository.');
+    const value = await job(body.jobId);
+    await approveEnvironmentJob(db, env, person, value.id, { approve: body.approve === true, comment: typeof body.comment === 'string' ? body.comment : '' });
+    return { ok: true };
+  }
+  if (action === 'environments') {
+    const { results } = await db.prepare('SELECT * FROM pipeline_environments WHERE repository_id=? AND artifact_name=? AND deleted=0 ORDER BY name LIMIT 100').bind(row.id, row.artifact_name).all();
+    const deployments = results.length ? (await db.prepare(`SELECT d.*,u.login FROM pipeline_deployments d LEFT JOIN users u ON u.id=d.actor_id WHERE d.environment_id IN (${results.map(() => '?').join(',')}) ORDER BY d.id DESC LIMIT 200`).bind(...results.map(item => item.id)).all()).results : [];
+    const reviewers = new Map((await db.prepare('SELECT id,login FROM users').all()).results.map(user => [user.id, user.login]));
+    return { canEdit: row.role === 'admin', environments: results.map(item => ({ id: String(item.id), name: item.name, url: item.url, branches: parse(item.branches, []), preventSelfReview: Boolean(item.prevent_self_review),
+      reviewers: parse(item.reviewers, []).map(id => ({ id: String(id), login: reviewers.get(Number(id)) || '' })), version: item.version, updatedAt: item.updated_at,
+      deployments: deployments.filter(d => d.environment_id === item.id).slice(0, 20).map(d => ({ id: String(d.id), runId: String(d.run_id), jobId: String(d.job_id), action: d.action, commitId: d.commit_id, ref: d.ref, url: d.url, state: d.state, actor: d.login || '', createdAt: d.created_at })) })) };
+  }
+  if (action === 'saveEnvironment') {
+    if (row.role !== 'admin') throw new Fault('permission_denied', 403, 'Repository administrators manage environments.');
+    const name = String(body.name || '');
+    if (!/^[A-Za-z0-9 _./-]{1,255}$/.test(name) || name.trim() !== name || !Array.isArray(body.reviewers) || body.reviewers.length > 6 || !Array.isArray(body.branches) || body.branches.length > 20 ||
+        body.branches.some(b => typeof b !== 'string' || !b || b.length > 255) || typeof body.url !== 'string' || body.url && !/^https?:\/\//.test(body.url)) invalid('Name the environment; up to 6 reviewers and 20 branch patterns; an http(s) URL or none.');
+    const reviewerIds = [];
+    for (const login of body.reviewers) {
+      const user = await db.prepare('SELECT u.id FROM users u JOIN grants g ON g.user_id=u.id AND g.repository_id=? WHERE u.login=? AND u.active=1').bind(row.id, String(login)).first();
+      if (!user) invalid(`${login} has no access to this repository.`);
+      reviewerIds.push(user.id);
+    }
+    const time = new Date().toISOString(), existing = await db.prepare('SELECT * FROM pipeline_environments WHERE repository_id=? AND name=? AND deleted=0').bind(row.id, name).first();
+    if (existing) {
+      if (body.expectedVersion !== existing.version) refuse('The environment changed; refresh before saving.');
+      await db.prepare('UPDATE pipeline_environments SET reviewers=?,branches=?,url=?,prevent_self_review=?,version=version+1,updated_at=? WHERE id=? AND version=?').bind(JSON.stringify(reviewerIds), JSON.stringify(body.branches), body.url, body.preventSelfReview === false ? 0 : 1, time, existing.id, existing.version).run();
+    } else await db.prepare('INSERT INTO pipeline_environments(repository_id,artifact_name,name,reviewers,prevent_self_review,branches,url,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+      .bind(row.id, row.artifact_name, name, JSON.stringify(reviewerIds), body.preventSelfReview === false ? 0 : 1, JSON.stringify(body.branches), body.url, person.id, time, time).run();
+    return { ok: true };
+  }
+  if (action === 'saveEnvironmentValue') {
+    if (row.role !== 'admin') throw new Fault('permission_denied', 403, 'Repository administrators manage environment values.');
+    const environment = await db.prepare('SELECT * FROM pipeline_environments WHERE id=? AND repository_id=? AND deleted=0').bind(Number(body.environmentId || 0), row.id).first();
+    if (!environment) deny();
+    await saveEnvironmentValue(db, env, person, environment, { name: body.name, kind: body.kind, value: body.value });
+    return { ok: true };
+  }
   if (action === 'play') { await mutate(); const value = await job(body.jobId); await playManualJob(db, env, person, value.id); return { ok: true }; }
   if (action === 'dispatch') {
     await mutate();

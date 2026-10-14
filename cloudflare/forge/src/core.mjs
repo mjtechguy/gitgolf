@@ -399,7 +399,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       advice: env.EVIDENCE_ALLOW_AI === 'true', previews: previewPolicy(env), apps: Boolean(appPolicy(env)), automaticCI: env.CI_AUTO === 'true', appPath: appPolicy(env)?.entry || '',
       browser: Boolean(env.BROWSER && env.PREVIEW_BROWSER === 'true'), previewPath: env.PREVIEW_PATH || '', agentPath: env.AGENT_PATH || '',
       testModule: env.TEST_MODULE || '', testWorkflowFormat: env.TEST_WORKFLOW_FORMAT || '', testWorkflowPath: env.TEST_WORKFLOW_PATH || '',
-      dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) || 0, previewTTL: Number(env.PREVIEW_TTL) || 0, appTTL: appPolicy(env)?.ttl || 0 });
+      dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) || 0, previewTTL: Number(env.PREVIEW_TTL) || 0, appTTL: appPolicy(env)?.ttl || 0, pipelines: pipelinePolicy(env) });
     if (url.pathname === '/native/installation' || url.pathname === '/native/installation/read') return await installationAPI(db, env, person, request, body, url.pathname.endsWith('/read'));
     if (url.pathname === '/native/runner-admin') return await nativeRunnerAdmin(db, env, person, request, body);
     if (url.pathname === '/native/pipelines') {
