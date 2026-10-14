@@ -281,11 +281,18 @@ async function git(db, env, person, request, url, providerFetch) {
   if (request.headers.has('Git-Protocol') && request.headers.get('Git-Protocol') !== 'version=1' && request.headers.get('Git-Protocol') !== 'version=2') invalid('Invalid Git protocol.');
   // Preserve v2 shallow negotiation; receive-pack keeps its existing v0 contract.
   const protocol = service === 'git-upload-pack' && request.headers.get('Git-Protocol') === 'version=2' ? 'version=2' : null;
-  if (!advertisement && (request.headers.get('Content-Type') !== `application/x-${service}-request` || request.headers.has('Content-Encoding'))) invalid('Invalid Git content.');
+  // Git gzips request bodies above about 1 KiB (a fetch with many wants); the decompressed body keeps the same 8 MiB bound.
+  const encoding = request.headers.get('Content-Encoding');
+  if (!advertisement && (request.headers.get('Content-Type') !== `application/x-${service}-request` || encoding !== null && encoding !== 'gzip')) invalid('Invalid Git content.');
   let body = null;
   if (!advertisement) {
-    try { body = await bounded(request.body, 8 * 1024 * 1024); }
-    catch { throw new Fault('resource_exhausted', 413, 'A push is limited to 8 MiB. Push the history in smaller steps, for example one branch tip at a time.'); }
+    let stream = request.body;
+    if (encoding === 'gzip') stream = stream?.pipeThrough(new DecompressionStream('gzip'));
+    try { body = await bounded(stream, 8 * 1024 * 1024); }
+    catch (error) {
+      if (encoding === 'gzip' && error?.message !== 'payload limit') invalid('Invalid gzip Git request.');
+      throw new Fault('resource_exhausted', 413, service === 'git-receive-pack' ? 'A push is limited to 8 MiB. Push the history in smaller steps, for example one branch tip at a time.' : 'A Git request is limited to 8 MiB.');
+    }
   }
   // Git sends one flush packet before a push larger than http.postBuffer, to learn whether the server needs credentials. Access has already been checked.
   if (!advertisement && service === 'git-receive-pack' && body.length === 4 && new TextDecoder().decode(body) === '0000')
