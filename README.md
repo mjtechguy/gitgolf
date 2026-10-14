@@ -39,12 +39,14 @@ Golf removes those limits one measured milestone at a time, and stays Git: no cu
 
 | Milestone | What it delivers | Status |
 | --- | --- | --- |
-| **AM-0** Measure | Speed bench: racing pushes, parallel branches, clones and reads at 1–64 concurrent agents | Built; hosted baseline next |
-| **AM-1** Concurrent Git | Clones, fetches and pushes overlap; a branch-level push fence replaces the repository-wide one | Built, verified locally |
-| **AM-2** Source API | Read many files and commit on the server, without a clone | Built, verified locally |
-| **AM-3** Agent access | Scoped, revocable API tokens and remote MCP for Claude Code, Codex and OpenCode | Planned |
-| **AM-4** Land at agent speed | Three-way merges, compare-and-swap landing, checks after landing, automatic revert | Planned |
-| **AM-5** Agentic inbox | Intent and risk summaries for every agent change; approve in batches | Planned |
+| **AM-0** Measure | Speed bench: racing pushes, parallel branches, clones and reads at 1–64 concurrent agents | Built; run on the hosted demo |
+| **AM-1** Concurrent Git | Clones, fetches and pushes overlap; a branch-level push fence replaces the repository-wide one | Measured on hosted |
+| **AM-2** Source API | Read many files and commit on the server, without a clone | Measured on hosted |
+| **AM-3** Agent access | Scoped, revocable API tokens and remote MCP for Claude Code, Codex and OpenCode | Verified on hosted |
+| **AM-4** Land at agent speed | Three-way merges, compare-and-swap landing, checks after landing, automatic revert | In progress |
+| **AM-5** Agentic inbox | Intent and risk summaries for every agent change; approve in batches | In progress |
+
+**Measured on the hosted demo** ([evidence](docs/IMPLEMENTATION_STATUS.md)): 16 agents pushing to separate branches of one repository went from 0 of 32 pushes landing to 48 of 48; at 64 agents, 93 of 93. Clones under push load went from 62 of 166 to 70 of 70. Claude Code worked through remote MCP with a branch-scoped token and opened a pull request without a clone.
 
 **People stay in control.** Agentic mode is a per-repository setting, off by default. A change lands without a person only when every changed path is marked low-risk and every required check passed. Sensitive paths always need approval from someone who is neither the author nor an agent. Read the [agentic mode guide](https://docs.gitgolf.app/docs/agentic-mode/) and the [plan](docs/AGENTIC_MODE_PLAN.md).
 
@@ -55,7 +57,7 @@ Golf removes those limits one measured milestone at a time, and stays Git: no cu
 - **Private previews.** A temporary, access-checked preview of the tested commit.
 - **AI review and proposals.** Workers AI advice, review drafts and code proposals that return a tested patch for people to review.
 - **Agents on your machines.** Connect a host with `golf-agent-host`, assign an issue to an agent and follow its task from the pull request.
-- **CLI and MCP.** A scoped JSON CLI and a local MCP server with your permissions.
+- **CLI and MCP.** A scoped JSON CLI, a local MCP server, and on Cloudflare a remote MCP endpoint with scoped `golf_pat_` tokens.
 
 ## Run it where you want
 
