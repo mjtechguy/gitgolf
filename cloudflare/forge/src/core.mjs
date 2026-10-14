@@ -56,7 +56,7 @@ import { discussionAttachments, attachmentMethods } from './attachments.mjs';
 import { featureColumns, publicAllowed, requireFeature, featureOff, policyCapabilities, featurePolicyService, repositoryFeatureService, effectiveFeatures, discussionFeatures } from './feature-policy.mjs';
 import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user, bodyLimit } from './common.mjs';
 export { digest } from './common.mjs';
-import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, remote, sha, validRef, GitProviderError } from './git.mjs';
+import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, refusedRef, remote, sha, validRef, GitProviderError } from './git.mjs';
 
 const jsonHeaders = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 // Admission classes: reads overlap (8 at once); transfers (clone, fetch, push) overlap reads and each other (24); anything else is
@@ -266,7 +266,7 @@ async function git(db, env, person, request, url, providerFetch) {
     rulesVersion = await enforceGitRules(db, row, person, command.ref);
   }
   return withArtifact(env, row, async repo => {
-    let operation, result, applied = !command;
+    let operation, result, applied = !command, refused = false;
     if (command) {
       operation = crypto.randomUUID();
       if (!await reserveRefWrite(db, { id: operation, repositoryId: row.id, userId: person.id, command, guard: { sql: `EXISTS(SELECT 1 FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id
@@ -280,12 +280,14 @@ async function git(db, env, person, request, url, providerFetch) {
     try {
       result = await gitRequest(env, repo, row.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
       if (operation) applied = ((await refs(env, repo, row, providerFetch)).get(command.ref) || '0'.repeat(40)) === command.next;
+      // A refused update (a lost race: "fetch first") goes back to the client as Git's own report.
+      refused = Boolean(operation) && !applied && refusedRef(result.bytes, command.ref);
     } finally {
-      if (operation) await finishRefWrite(db, { id: operation, repositoryId: row.id, applied, ciState: env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE' });
+      if (operation) await finishRefWrite(db, { id: operation, repositoryId: row.id, applied, refused, ciState: env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE' });
     }
-    if (!applied) conflict();
+    if (!applied && !refused) conflict();
     // Actions/CI: the confirmed push is recorded before the response; discovery runs after it.
-    if (operation && pipelinePolicy(env) && command.next !== '0'.repeat(40)) {
+    if (operation && applied && pipelinePolicy(env) && command.next !== '0'.repeat(40)) {
       try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'push', { ref: command.ref, before: command.old, after: command.next, actorId: person.id, operationId: operation }, 'push:' + operation), withArtifact); }
       catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
     }

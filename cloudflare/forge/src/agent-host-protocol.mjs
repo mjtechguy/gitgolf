@@ -4,7 +4,7 @@
 // The task route pushes through the same fenced single-ref write as /git/: one branch, create or this task's own
 // fast-forward, at most 8 MiB.
 import { digest, Fault, invalid, reply, uuidOK, conflict } from './common.mjs';
-import { advertisedRefs, bounded, defaultBranchAdvertisement, defaultBranchRefsV2, gitRequest, gitV2Command, receiveCommand, sha } from './git.mjs';
+import { advertisedRefs, bounded, defaultBranchAdvertisement, defaultBranchRefsV2, gitRequest, gitV2Command, receiveCommand, refusedRef, sha } from './git.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
 import { reserveRefWrite, finishRefWrite } from './ref-writes.mjs';
 import { ownerSlug } from './owners.mjs';
@@ -269,7 +269,7 @@ async function taskGit(db, env, request, url, id, route, withArtifact, providerF
       try { await enforceGitRules(db, repository, { id: task.requested_by }, command.ref); } catch (error) { if (error instanceof Fault) return text(error.message, 403); throw error; }
     }
     return await withArtifact(env, repository, async repo => {
-      let operation, result, applied = !command;
+      let operation, result, applied = !command, refused = false;
       if (command) {
         if (((await refsOf(repo)).get(command.ref) || zero) !== command.old) return text('The branch moved; fetch and push again.', 409);
         operation = crypto.randomUUID();
@@ -284,11 +284,12 @@ async function taskGit(db, env, request, url, id, route, withArtifact, providerF
       try {
         result = await gitRequest(env, repo, repository.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
         if (operation) applied = ((await refsOf(repo)).get(command.ref) || zero) === command.next;
+        refused = Boolean(operation) && !applied && refusedRef(result.bytes, command.ref);
       } finally {
-        if (operation) await finishRefWrite(db, { id: operation, repositoryId: repository.id, applied, statements: [db.prepare('UPDATE agent_tasks SET commit_id=?,updated_at=? WHERE id=?').bind(command.next, now(), task.id)] });
+        if (operation) await finishRefWrite(db, { id: operation, repositoryId: repository.id, applied, refused, statements: [db.prepare('UPDATE agent_tasks SET commit_id=?,updated_at=? WHERE id=?').bind(command.next, now(), task.id)] });
       }
-      // An unconfirmed write keeps the branch and the repository fenced, exactly as /git/ does.
-      if (!applied) conflict();
+      // An unconfirmed write keeps the branch and the repository fenced, exactly as /git/ does; a refused one is Git's own report.
+      if (!applied && !refused) conflict();
       let bytes = result.bytes;
       if (service === 'git-upload-pack') {
         // A v2 advertisement carries only capabilities; HEAD is answered by ls-refs.

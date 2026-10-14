@@ -29,7 +29,17 @@ recorded on the task instead). Otherwise the outcome is `NOT_APPLIED`. Either wa
 releases the ref and `write_pending`, writes a `git_write.settle` audit row and logs
 `golf.ref_write_settled`.
 
-Verified locally: the forge suite (530 tests, 529 pass, 1 skipped; before: 524, 523,
+A push the provider refuses is not an unknown outcome. This is the case where the
+report says `ng <ref>` (for example "fetch first" after losing a race to the same
+branch) and the ref does not hold the new commit:
+- the write is settled `NOT_APPLIED` at once;
+- the repository is not fenced;
+- the client receives Git's own report, so it fetches and retries.
+
+Before this, a lost race left `write_pending` set with nothing to clear it, which
+locked the whole repository against further pushes.
+
+Verified locally: the forge suite (531 tests, 530 pass, 1 skipped; before: 524, 523,
 1). New tests cover the admission classes, limits, the 512 cap and boolean
 compatibility, Workspace ordering (pushes overlap each other and reads; revocations and
 background jobs wait; `CI_AUTO` still runs), the ref fence and the merge trigger, both

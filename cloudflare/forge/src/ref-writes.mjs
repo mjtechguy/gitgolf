@@ -26,8 +26,14 @@ export async function reserveRefWrite(db, { id, repositoryId, userId, command, g
 }
 
 // Confirmed by reading the ref back: APPLIED (the state transition the webhook and email triggers observe) and the fence released, with
-// the caller's own statements. Unknown: the ref stays fenced, and the repository too as before (best effort), until settleRefWrites.
-export async function finishRefWrite(db, { id, repositoryId, applied, ciState = 'NONE', statements = [] }) {
+// the caller's own statements. Refused (the provider reported `ng` and the ref does not hold the new commit): NOT_APPLIED at once, so a
+// lost race costs the client a retry, not the repository. Unknown: the ref stays fenced, and the repository too as before (best
+// effort), until settleRefWrites.
+export async function finishRefWrite(db, { id, repositoryId, applied, refused = false, ciState = 'NONE', statements = [] }) {
+  if (!applied && refused) {
+    await db.prepare("UPDATE git_ref_writes SET outcome='NOT_APPLIED',settled_at=? WHERE operation_id=? AND outcome IS NULL").bind(new Date().toISOString(), id).run();
+    return;
+  }
   if (!applied) {
     try { await db.prepare('UPDATE repositories SET write_pending=? WHERE id=? AND write_pending IS NULL').bind(id, repositoryId).run(); } catch { /* the ref fence holds */ }
     return;

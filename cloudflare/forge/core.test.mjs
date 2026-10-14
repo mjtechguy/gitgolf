@@ -325,6 +325,31 @@ test('the ref fence: a push to another branch proceeds, one to the same branch c
   assert.equal((await send('refs/heads/other')).status, 412); assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_operations').get().n, 2);
 });
 
+test('a push the provider refuses (a lost race) returns Git\'s own report and releases the ref and the repository', async t => {
+  const f = await fixture(t); await f.create();
+  const line = text => { const bytes = new TextEncoder().encode(text); return new Uint8Array([...new TextEncoder().encode((bytes.length + 4).toString(16).padStart(4, '0')), ...bytes]); };
+  const band = inner => line('\x01' + new TextDecoder().decode(inner));
+  const report = new Uint8Array([...band(new Uint8Array([...line('unpack ok\n'), ...line('ng refs/heads/main fetch first\n'), ...new TextEncoder().encode('0000')])), ...new TextEncoder().encode('0000')]);
+  let refuse = true;
+  const providerFetch = async (url, options) => refuse && options.method === 'POST' && options.body && receiveCommand(options.body).ref === 'refs/heads/main'
+    ? new Response(report, { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } }) : f.providerFetch(url, options);
+  const send = () => handle(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + ownerToken, 'Content-Type': 'application/x-git-receive-pack-request' }, body: push('refs/heads/main') }), f.env, providerFetch);
+  const refused = await send();
+  assert.equal(refused.status, 200); assert.deepEqual(new Uint8Array(await refused.arrayBuffer()), report);
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending, null);
+  assert.deepEqual({ ...f.sql.prepare('SELECT outcome FROM git_ref_writes').get() }, { outcome: 'NOT_APPLIED' });
+  // The retry is admitted at once and lands.
+  refuse = false; assert.equal((await send()).status, 200);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM git_operations WHERE state='APPLIED'").get().n, 1);
+  // An unreadable or accepting report is never taken as a refusal.
+  const { refusedRef } = await import('./src/git.mjs');
+  assert.equal(refusedRef(new Uint8Array([...line('unpack ok\n'), ...line('ng refs/heads/main non-fast-forward\n'), ...new TextEncoder().encode('0000')]), 'refs/heads/main'), true);
+  assert.equal(refusedRef(new Uint8Array([...line('unpack ok\n'), ...line('ok refs/heads/main\n')]), 'refs/heads/main'), false);
+  assert.equal(refusedRef(new Uint8Array([...line('unpack ok\n'), ...line('ng refs/heads/other fetch first\n')]), 'refs/heads/main'), false);
+  assert.equal(refusedRef(new TextEncoder().encode('zzzz'), 'refs/heads/main'), false);
+});
+
 test('maintenance settles unknown push outcomes by reading the ref back, once, with an audit row', async t => {
   const f = await fixture(t); await f.create();
   const sent = [], env = { ...f.env, providerFetch: f.providerFetch, PIPELINES_ENABLED: 'true', PIPELINE_BUCKET: {}, PIPELINE_QUEUE: { async send(message) { sent.push(message); } } };
