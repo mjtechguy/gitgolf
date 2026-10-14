@@ -1,5 +1,27 @@
 # Golf implementation status
 
+## 2026-10-14 — Native environments accepted on the retained installation; expired previews were blocking new ones
+
+After `migrate` (applied `0023_repository_environments.sql`, then reported the
+schema current on a second run) and a deploy, the Environments capability
+turned ready about five minutes later. On `mj/review-playground`, signed in
+through Access: another environment name was refused (400); a `preview` policy
+allowing only `release` saved as version 1; publishing a preview for pull
+request 1 (head `feature`) was refused with 412; a save against version 0 was
+refused with 409 `aborted`; after allowing `feature` with a 300-second lifetime
+and one concurrent preview, a static preview published `READY` with a
+301-second lifetime (operator ceiling 14,400) and a second was refused with 429
+naming the limit; deleting the policy succeeded and the inventory read 0. The
+settings page rendered its inventory and Add action. Not exercised on hosted:
+renewal, automatic previews, and Worker-application previews under a policy.
+
+The first publication attempt was refused for a different reason: four
+previews that expired at 2026-10-13T21:57Z were still `READY` and unpurged, and
+the workspace holds at most four. Preview cleanup runs only on the scheduled
+maintenance that is failing on this installation (see the next entry). The four
+were revoked by hand through the product's own action; nothing will clean up
+later previews until the schedule works.
+
 ## 2026-10-14 — Native repository environments govern protected previews
 
 Cloudflare native: repository Environments settings are available when
