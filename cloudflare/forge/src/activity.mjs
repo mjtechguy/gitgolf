@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from '../../../web/node_modules/@bufbuild/protobuf/dist/esm/wire/index.js';
 import { bounded } from './git.mjs';
-import { Fault, invalid } from './common.mjs';
+import { Fault, invalid, bodyLimit } from './common.mjs';
 
 export const activityPath = '/rpc/golf.v1.RepositoryActivityService/WatchRepository';
 export const activityTopics = ['source', 'issues', 'pulls', 'actions', 'agents'];
@@ -145,7 +145,7 @@ export async function activitySelection(event) {
   if (!/\/(?:CreateRepository|SetRepositoryStar|SetRepositoryCollaborator|RemoveRepositoryCollaborator|CreateRepositoryInvitation|RevokeRepositoryInvitation|RespondRepositoryInvitation|UpdateRepositorySettings|UpdateRepositoryTopics|SubmitDiscussionResourceOperation|CreateIssue|UpdateIssue|CreateIssueComment|CreatePullRequest|UpdatePullRequest|CreatePullRequestReview|SubmitPullReviewRequest|SubmitPullReviewLifecycle|SubmitPullReviewAuthoringOperation|SubmitStandardPullMerge|ReportCheck|(?:Save|Delete)RepositoryExecution(?:Value|Binding))$/.test(path) &&
       !['/native/repository-visibility', '/native/repository-grant', '/native/repository-check', '/native/pr-evidence', '/native/pr-preview'].includes(path)) return;
   let body;
-  try { body = JSON.parse(new TextDecoder().decode(await bounded(event.clone().body, 96 * 1024))); } catch { return; }
+  try { body = JSON.parse(new TextDecoder().decode(await bounded(event.clone().body, bodyLimit(path)))); } catch { return; }
   if (path.endsWith('/SubmitPullReviewAuthoringOperation') && ![4, 'PULL_REVIEW_AUTHORING_KIND_SUBMIT_DRAFT'].includes(body.kind)) return;
   if (['/native/pr-evidence', '/native/pr-preview'].includes(path) && ['list', 'get', 'grant', 'status', 'report', 'compare', 'screenshot'].includes(body.action)) return;
   if (path === '/native/repository-visibility' && body.action !== 'set') return;

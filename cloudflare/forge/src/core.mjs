@@ -37,7 +37,7 @@ import { executionDiagnostic, testPolicy } from './test-policy.mjs';
 import { appPolicy } from './app-policy.mjs';
 import { previewAPI, previewPolicy, environmentPolicy, previewRequest, cleanupPreviews } from './delivery.mjs';
 import { repositoryEnvironments, environmentMethods } from './environments.mjs';
-import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user } from './common.mjs';
+import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user, bodyLimit } from './common.mjs';
 export { digest } from './common.mjs';
 import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, remote, sha, validRef, GitProviderError } from './git.mjs';
 
@@ -78,7 +78,7 @@ const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}
 async function input(request) {
   if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') invalid('Use JSON.');
   let bytes;
-  try { bytes = await bounded(request.body, 96 * 1024); } catch (error) {
+  try { bytes = await bounded(request.body, bodyLimit(new URL(request.url).pathname)); } catch (error) {
     if (error.message === 'payload limit') throw new Fault('resource_exhausted', 429, 'JSON request exceeds the native limit.');
     throw error;
   }
