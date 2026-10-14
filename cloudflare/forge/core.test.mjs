@@ -289,11 +289,12 @@ test('membership never implies repository access; grants and revocation are curr
   assert.equal((await f.call('GetRepository', { repository: key })).status, 401);
 });
 
-test('ambiguous Git effects are durably fenced and never automatically redispatched', async t => {
+test('ambiguous Git effects are resent only as the same compare-and-swap, a bounded number of times, then durably fenced', async t => {
   const f = await fixture(t); await f.create(); f.losePush();
+  // While the ref still holds the old commit, the identical update is resent (at most one copy can land); then the outcome is unknown.
   const first = await f.sendPush(); assert.equal(first.status, 503);
   assert.ok(!(await first.text()).includes('sensitive'));
-  assert.equal((await f.sendPush()).status, 412); assert.equal(f.counts().effects, 1);
+  assert.equal((await f.sendPush()).status, 412); assert.equal(f.counts().effects, 3);
   assert.equal(f.sql.prepare('SELECT state FROM git_operations').get().state, 'DISPATCHED');
   assert.equal(f.tokens.size, 0);
 });
@@ -348,6 +349,26 @@ test('a push the provider refuses (a lost race) returns Git\'s own report and re
   assert.equal(refusedRef(new Uint8Array([...line('unpack ok\n'), ...line('ok refs/heads/main\n')]), 'refs/heads/main'), false);
   assert.equal(refusedRef(new Uint8Array([...line('unpack ok\n'), ...line('ng refs/heads/other fetch first\n')]), 'refs/heads/main'), false);
   assert.equal(refusedRef(new TextEncoder().encode('zzzz'), 'refs/heads/main'), false);
+});
+
+test('a push the provider fails while the ref is unchanged is resent and lands; the client gets an ordinary success', async t => {
+  const f = await fixture(t); await f.create();
+  let failures = 1, posts = 0;
+  const providerFetch = async (url, options) => {
+    if (options.method === 'POST' && options.body && new URL(url).pathname.endsWith('/git-receive-pack')) { posts++; if (failures-- > 0) return new Response('busy', { status: 503 }); }
+    return f.providerFetch(url, options);
+  };
+  const response = await handle(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + ownerToken, 'Content-Type': 'application/x-git-receive-pack-request' }, body: push('refs/heads/main') }), f.env, providerFetch);
+  assert.equal(response.status, 200); assert.equal(posts, 2);
+  assert.equal(f.sql.prepare('SELECT state FROM git_operations').get().state, 'APPLIED');
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending, null);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_ref_writes').get().n, 0);
+  // When an earlier copy landed and the provider's last reply refuses the resend, the client still receives its own success.
+  const { acceptedReport, receiveStatus } = await import('./src/git.mjs');
+  assert.equal(receiveStatus(acceptedReport({ ref: 'refs/heads/main', sideband: false }), 'refs/heads/main'), '');
+  const banded = acceptedReport({ ref: 'refs/heads/main', sideband: true });
+  assert.equal(banded[4], 1); assert.match(new TextDecoder().decode(banded), /ok refs\/heads\/main/);
 });
 
 test('maintenance settles unknown push outcomes by reading the ref back, once, with an audit row', async t => {

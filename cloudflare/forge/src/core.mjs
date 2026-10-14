@@ -25,7 +25,7 @@ import { pipelineAPI, pipelineRunnerAPI } from './pipeline-api.mjs';
 import { agentHostsAPI, agentTasksAPI, agentHostCapability } from './agent-hosts.mjs';
 import { agentHostMachine } from './agent-host-protocol.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
-import { reserveRefWrite, finishRefWrite } from './ref-writes.mjs';
+import { reserveRefWrite, finishRefWrite, sendRefUpdate } from './ref-writes.mjs';
 import { sourceAPI, sourceCapability } from './source-api.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
@@ -57,7 +57,7 @@ import { discussionAttachments, attachmentMethods } from './attachments.mjs';
 import { featureColumns, publicAllowed, requireFeature, featureOff, policyCapabilities, featurePolicyService, repositoryFeatureService, effectiveFeatures, discussionFeatures } from './feature-policy.mjs';
 import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user, bodyLimit } from './common.mjs';
 export { digest } from './common.mjs';
-import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, refusedRef, remote, sha, validRef, GitProviderError } from './git.mjs';
+import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, acceptedReport, refusedRef, remote, sha, validRef, GitProviderError } from './git.mjs';
 
 const jsonHeaders = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 // Admission classes: reads overlap (8 at once); transfers (clone, fetch, push) overlap reads and each other (24); anything else is
@@ -280,11 +280,15 @@ async function git(db, env, person, request, url, providerFetch) {
             AND (?='' OR EXISTS(${gitCredentialSQL} AND c.repository_id=? AND c.mode=2)))`,
           values: [row.id,row.artifact_name,person.id,row.access_version||0,person.identity_version||0,rulesVersion,person.credential_digest||'',person.credential_digest||'',person.git_credential_digest||'',person.git_credential_digest||'',row.id] } })) conflict();
     }
+    const send = () => gitRequest(env, repo, row.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
     try {
-      result = await gitRequest(env, repo, row.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
-      if (operation) applied = ((await refs(env, repo, row, providerFetch)).get(command.ref) || '0'.repeat(40)) === command.next;
-      // A refused update (a lost race: "fetch first") goes back to the client as Git's own report.
-      refused = Boolean(operation) && !applied && refusedRef(result.bytes, command.ref);
+      if (!operation) result = await send();
+      else {
+        // A refused update (a lost race: "fetch first") goes back to the client as Git's own report.
+        ({ result, applied, refused } = await sendRefUpdate({ send, command, read: async () => (await refs(env, repo, row, providerFetch)).get(command.ref) || '0'.repeat(40) }));
+        if (applied && !result) result = { bytes: acceptedReport(command), contentType: 'application/x-git-receive-pack-result' };
+        else if (applied && refusedRef(result.bytes, command.ref)) result = { ...result, bytes: acceptedReport(command) };
+      }
     } finally {
       if (operation) await finishRefWrite(db, { id: operation, repositoryId: row.id, applied, refused, ciState: env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE' });
     }

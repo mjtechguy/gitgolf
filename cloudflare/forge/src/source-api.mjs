@@ -5,7 +5,7 @@ import { digest, uuidOK, reply, Fault, invalid, conflict } from './common.mjs';
 import { advertisedRefs, gitRequest, receiveStatus, refusedRef, sha, validRef } from './git.mjs';
 import { GitTreeError, commitObject, emptyTree, packObjects, planTreeEdit, treeReader, treeModes } from './git-objects.mjs';
 import { mergeTrees, changedPaths } from './tree-merge.mjs';
-import { reserveRefWrite, finishRefWrite } from './ref-writes.mjs';
+import { reserveRefWrite, finishRefWrite, sendRefUpdate } from './ref-writes.mjs';
 import { receiveRequest } from './pull-merge.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
 import { gitCredentialSQL } from './git-credentials.mjs';
@@ -167,10 +167,10 @@ async function write(db, env, person, row, repo, command, pack, rulesVersion, ct
   if (record) await record(id);
   let applied = false, refused = false, status = '';
   try {
-    const result = await gitRequest(env, repo, row.artifact_name, 'git-receive-pack', 'git-receive-pack', receiveRequest(command.old, command.next, command.ref, pack), ctx.providerFetch);
-    status = receiveStatus(result.bytes, command.ref);
-    applied = ((await refsOf(env, repo, row, ctx.providerFetch)).get(command.ref) || zero) === command.next;
-    refused = !applied && refusedRef(result.bytes, command.ref);
+    const sent = await sendRefUpdate({ command, send: () => gitRequest(env, repo, row.artifact_name, 'git-receive-pack', 'git-receive-pack', receiveRequest(command.old, command.next, command.ref, pack), ctx.providerFetch),
+      read: async () => (await refsOf(env, repo, row, ctx.providerFetch)).get(command.ref) || zero });
+    ({ applied, refused } = sent);
+    status = sent.result ? receiveStatus(sent.result.bytes, command.ref) : '';
   } finally {
     await finishRefWrite(db, { id, repositoryId: row.id, applied, refused, ciState: ctx.ciState || 'NONE' });
   }

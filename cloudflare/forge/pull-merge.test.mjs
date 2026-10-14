@@ -32,7 +32,7 @@ test('one-commit pack has a v2 header, exact size varint, zlib body and SHA-1 tr
     assert.equal(size, commit.body.length);
     assert.deepEqual(inflateSync(pack.subarray(offset, -20)), Buffer.from(commit.body));
     const request = receiveRequest('a'.repeat(40), commit.id, 'refs/heads/main', pack);
-    assert.deepEqual(receiveCommand(request), { old: 'a'.repeat(40), next: commit.id, ref: 'refs/heads/main' });
+    assert.deepEqual(receiveCommand(request), { old: 'a'.repeat(40), next: commit.id, ref: 'refs/heads/main', sideband: false });
   }
 });
 

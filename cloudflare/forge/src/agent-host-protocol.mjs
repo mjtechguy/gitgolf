@@ -4,9 +4,9 @@
 // The task route pushes through the same fenced single-ref write as /git/: one branch, create or this task's own
 // fast-forward, at most 8 MiB.
 import { digest, Fault, invalid, reply, uuidOK, conflict } from './common.mjs';
-import { advertisedRefs, bounded, defaultBranchAdvertisement, defaultBranchRefsV2, gitRequest, gitV2Command, receiveCommand, refusedRef, sha } from './git.mjs';
+import { advertisedRefs, bounded, defaultBranchAdvertisement, defaultBranchRefsV2, gitRequest, gitV2Command, receiveCommand, refusedRef, acceptedReport, sha } from './git.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
-import { reserveRefWrite, finishRefWrite } from './ref-writes.mjs';
+import { reserveRefWrite, finishRefWrite, sendRefUpdate } from './ref-writes.mjs';
 import { ownerSlug } from './owners.mjs';
 import { admissionRefusal, agentSchema, agentTools, byteLength, maxDuration, now, parse, random, refuse, repositoryRow, scrub, targetURL, terminalStates } from './agent-hosts.mjs';
 
@@ -281,10 +281,13 @@ async function taskGit(db, env, request, url, id, route, withArtifact, providerF
           values: [repository.id, repository.artifact_name, task.requested_by, task.id, task.token_digest] } }))
           return text('The push was not admitted: the task or the repository changed, or another push to the branch is in flight.', 409);
       }
+      const send = () => gitRequest(env, repo, repository.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
       try {
-        result = await gitRequest(env, repo, repository.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
-        if (operation) applied = ((await refsOf(repo)).get(command.ref) || zero) === command.next;
-        refused = Boolean(operation) && !applied && refusedRef(result.bytes, command.ref);
+        if (!operation) result = await send();
+        else {
+          ({ result, applied, refused } = await sendRefUpdate({ send, command, read: async () => (await refsOf(repo)).get(command.ref) || zero }));
+          if (applied && (!result || refusedRef(result.bytes, command.ref))) result = { bytes: acceptedReport(command), contentType: 'application/x-git-receive-pack-result' };
+        }
       } finally {
         if (operation) await finishRefWrite(db, { id: operation, repositoryId: repository.id, applied, refused, statements: [db.prepare('UPDATE agent_tasks SET commit_id=?,updated_at=? WHERE id=?').bind(command.next, now(), task.id)] });
       }
