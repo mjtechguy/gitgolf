@@ -13,7 +13,7 @@ import { gitAvailable, gitFixture } from './git-cli-fixture.mjs';
 const gitTypes = { '040000': 'tree', '100644': 'blob', '100755': 'exec', '120000': 'symlink', '160000': 'gitlink' };
 
 const text = result => result.content[0].text, data = result => JSON.parse(text(result));
-const readTools = ['repo_overview', 'list_tree', 'read_files', 'search_code', 'list_commits', 'compare', 'get_issue', 'list_issues', 'get_pull_request', 'pull_request_diff', 'pipeline_status'];
+const readTools = ['repo_overview', 'list_tree', 'read_files', 'search_code', 'grep', 'blame', 'list_commits', 'compare', 'get_issue', 'list_issues', 'get_pull_request', 'pull_request_diff', 'pipeline_status'];
 const writeTools = ['commit_changes', 'create_branch', 'open_pull_request', 'comment'];
 
 test('protocol: initialize negotiates the version, notifications get 202, GET is 405, and only a bearer credential is accepted', async t => {

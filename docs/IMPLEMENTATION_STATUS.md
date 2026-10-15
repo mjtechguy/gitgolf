@@ -1,5 +1,33 @@
 # Golf implementation status
 
+## 2026-10-15 — AM-6 blame and exact text search as Source API reads (local evidence)
+
+**Built:** `POST /native/source/blame` and `POST /native/source/grep` ([SOURCE_API.md](SOURCE_API.md)), with MCP read tools `blame` and `grep` ([AGENT_ACCESS.md](AGENT_ACCESS.md)).
+- Both are Workspace reads, like `files` and `tree`. They need a grant and are narrowed by a token scope.
+- **Blame:** follows first parents, up to 500 commits and 4 MiB of versions. Lines open at a bound belong to the stopping commit, with `complete: false` and the reason. Renames are not followed.
+- **Line diff:** `line-diff.mjs` ports Git's xdiff Myers path as `git blame` runs it (tail trim, record cleanup, split cut-offs, compaction with the indent heuristic). It is separate from the diff3 work in `text-merge.mjs`.
+- **Grep:**
+  - a literal pattern (case-sensitive or not), with `:(glob)`-style path globs; `regex: true` is refused (`regex_unavailable`) because a hostile pattern would stall the workspace that serves every request;
+  - binary files and files over 1 MiB are skipped and counted;
+  - bounds: `maxResults` ≤ 500, 5,000 files, 32 MiB, 50,000 tree entries, 10 s, each named when hit;
+  - the isolate keeps the last 32 answers per commit.
+
+**Evidence (local, not hosted):**
+- `cloudflare/forge/source-reads.test.mjs`, 8 tests against a real bare repository:
+  - blame equals `git blame --first-parent` across edits, a merge, repeated lines, a missing final newline, `-L` ranges and older refs, and at the 500-commit and 4 MiB bounds (equal to `git blame <boundary>..<ref>`);
+  - the line diff equals Git on 60 adversarial small edits, a 1 KiB-plus common tail and a 3,000-line rewrite;
+  - grep equals `git grep -n --column -I` (literal, `-i`, `:(glob)` pathspecs, `maxResults`); a regex request is refused;
+  - every bound, unsafe-pattern refusals, scope refusals and the MCP tools.
+- Before landing, an ad hoc fuzz run also matched `git blame` in 1,500 small cases, 360 edits to files of 300 to 8,000 lines, and 20 rewrites of 20,000 lines.
+- `node cloudflare/forge/source-api-runtime-check.mjs "$(command -v cf)"` passes in real workerd with blame and grep equal to git.
+- Full suite `node --test cloudflare/forge/*.test.mjs`: 646 tests, 645 pass, 1 skipped (main: 638, 637, 1).
+
+**Not done:**
+- hosted run and speed numbers;
+- rename/copy following;
+- regular-expression search (needs the scan to run outside the workspace);
+- grep's time bound is checked between file reads only.
+
 ## 2026-10-15 — AM-6 line-level three-way merge (diff3), verified locally
 
 **What changed:** Golf merged a file both sides changed only by path. Edits to different lines of one file now merge, in every merge:

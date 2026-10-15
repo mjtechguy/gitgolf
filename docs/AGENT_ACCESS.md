@@ -157,6 +157,8 @@ Every tool takes `owner` and `name`. A `ref` defaults to the default branch.
 | `list_tree` | `ref?`, `path?` | `/native/source/tree` (recursive) |
 | `read_files` | `ref?`, `paths[]` (≤ 100) | `/native/source/files` |
 | `search_code` | `query` | `/native/search/read` (semantic search; needs the index) |
+| `grep` | `pattern`, `ref?`, `regex?`, `caseSensitive?`, `paths[]?` (globs, ≤ 20), `maxResults?` (≤ 500) | `/native/source/grep` (exact text; `regex: true` is refused for now) |
+| `blame` | `path`, `ref?`, `startLine?`, `endLine?` | `/native/source/blame` (first-parent; renames not followed) |
 | `list_commits` | `ref?`, `limit?` (≤ 100) | `ListCommits` |
 | `compare` | `base`, `head` (branches) | `ResolveRepositorySource` ×2, `GetRepositoryComparison` |
 | `get_issue` | `number` | `GetIssue`, `ListIssueComments` (≤ 100) |

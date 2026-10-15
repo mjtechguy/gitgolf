@@ -150,6 +150,17 @@ try {
   assert.equal(listed.truncated, false);
   assert.equal((await call('commit', { branch: 'main', expectedHead: original.commitId, message: 'x', changes: [{ path: 'a', content: 'a' }] }, { person: 'bob', status: 403 })).code, 'permission_denied');
 
+  // Blame and grep (AM-6) for a reader equal git's own answers at the same commit.
+  const blamed = await call('blame', { path: 'README.md' }, { person: 'bob' });
+  assert.deepEqual([blamed.commitId, blamed.complete, blamed.ranges.length], [original.commitId, true, 2]);
+  assert.deepEqual(blamed.ranges.flatMap(range => Array.from({ length: range.end - range.start + 1 }, () => range.commitId)),
+    text(['blame', '--first-parent', '--line-porcelain', 'main', '--', 'README.md']).split('\n').filter(line => /^[0-9a-f]{40} \d+ \d+/.test(line)).map(line => line.slice(0, 40)));
+  const found = await call('grep', { pattern: 'o', ref: 'main' }, { person: 'bob' });
+  assert.ok(found.matches.length > 3); assert.equal(found.truncated, false);
+  assert.deepEqual(found.matches, text(['grep', '-n', '--column', '-I', '-F', '-e', 'o', 'main']).split('\n').map(line => {
+    const [, path, number, column, rest] = /^[^:]+:([^:]+):(\d+):(\d+):(.*)$/s.exec(line); return { path, line: Number(number), column: Number(column), text: rest };
+  }));
+
   // Token scope (AM-3 contract): repository list, read-only and branch pattern refuse before any write; inside the scope it commits.
   const before = pushes;
   assert.match((await call('files', { paths: ['README.md'] }, { scope: { repositories: ['2'], permission: 'write', branchPattern: '' }, status: 403 })).message, /does not include this repository/);
@@ -168,5 +179,5 @@ try {
   assert.equal((await db.prepare('SELECT write_pending FROM repositories').first()).write_pending, null);
   assert.equal((await db.prepare('SELECT operation_id FROM source_commits WHERE idempotency_key=?').bind(idempotencyKey).first()).operation_id !== null, true);
   fsck();
-  console.log(`Real workerd/D1 Source API: ${pushes} commits and branch updates built in workerd, received by git receive-pack and fsck-clean; trees equal Git's own index, stale/merge/conflict, idempotent replay, reads and scope refusals passed`);
+  console.log(`Real workerd/D1 Source API: ${pushes} commits and branch updates built in workerd, received by git receive-pack and fsck-clean; trees equal Git's own index, stale/merge/conflict, idempotent replay, reads, blame and grep equal to git, and scope refusals passed`);
 } finally { await runtime.dispose(); rmSync(root, { recursive: true, force: true }); }

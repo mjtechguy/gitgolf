@@ -93,13 +93,13 @@ export function serialize(handler, classify = () => 'exclusive') {
   });
 }
 const transferRoute = /^\/(?:git\/[^/]+\/[^/]+\.git|native\/agent-host\/tasks\/[0-9a-f-]{36}\/git)\/(info\/refs|git-upload-pack|git-receive-pack)$/;
-const sourceRoute = /^\/native\/source\/(commit|branch|files|tree)$/;
+const sourceRoute = /^\/native\/source\/(commit|branch|files|tree|blame|grep)$/;
 // Smart HTTP Git and Source API writes are transfers: writes to one ref are ordered by the D1 ref fence, not by this queue.
 export function admission(request) {
   if (!(request instanceof Request)) return 'exclusive';
   const path = new URL(request.url).pathname, route = transferRoute.exec(path), source = sourceRoute.exec(path);
   if (route) return request.method === (route[1] === 'info/refs' ? 'GET' : 'POST') ? 'transfer' : 'exclusive';
-  if (source) return request.method !== 'POST' ? 'exclusive' : ['files', 'tree'].includes(source[1]) ? 'read' : 'transfer';
+  if (source) return request.method !== 'POST' ? 'exclusive' : ['files', 'tree', 'blame', 'grep'].includes(source[1]) ? 'read' : 'transfer';
   // Landing (land-queue.mjs) is a transfer: different pull requests land side by side, ordered by the merge reservation in D1.
   if (path === '/native/land') return request.method === 'POST' ? 'transfer' : 'exclusive';
   // MCP: admitMCP read the JSON-RPC body first; a read tool overlaps reads, anything else waits like any mutation.

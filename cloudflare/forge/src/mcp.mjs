@@ -55,8 +55,24 @@ const catalogue = [
       if (!Array.isArray(a.paths) || !a.paths.length || a.paths.length > 100 || a.paths.some(path => typeof path !== 'string' || !path)) fail('paths must list 1 to 100 repository paths.');
       return c.call('/native/source/files', { repository: c.key, ref: await c.ref(a), paths: a.paths });
     }],
-  ['search_code', false, 'Semantic search: finds code and discussions by meaning, not exact text, using the repository’s semantic search index. For an exact string, read the files instead.',
+  ['search_code', false, 'Semantic search: finds code and discussions by meaning, not exact text, using the repository’s semantic search index. For an exact string, use grep.',
     input({ query: str('What to look for, in words (2 to 500 characters).') }, ['query']), async (c, a) => c.call('/native/search/read', { action: 'query', repository: c.key, query: text(a, 'query', { max: 500 }) })],
+  ['grep', false, 'Exact text search of every file at a branch, tag or commit: each matching line with its path, line, column and text, ordered by path and line. pattern is a literal string (regular expressions are not available yet). Binary files and files over 1 MiB are skipped; says when the search stopped early (maxResults, 5,000 files, 32 MiB).',
+    input({ pattern: str('Literal text to find within one line (at most 1,000 characters).'), ref: refArg,
+      regex: { type: 'boolean', description: 'Not available yet: true is refused. Default false.' }, caseSensitive: { type: 'boolean', description: 'Default true.' },
+      paths: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 20, description: 'Only these paths: * matches within a path segment, ** across segments, ? one character; a plain path names a file or a directory.' },
+      maxResults: int('Matching lines to return, 1 to 500 (default 100).', 1, 500) }, ['pattern']), async (c, a) => {
+      for (const key of ['regex', 'caseSensitive']) if (a[key] !== undefined && typeof a[key] !== 'boolean') fail(`${key} must be true or false.`);
+      if (a.paths !== undefined && (!Array.isArray(a.paths) || !a.paths.length || a.paths.length > 20 || a.paths.some(path => typeof path !== 'string' || !path))) fail('paths must list 1 to 20 path globs.');
+      const maxResults = count(a, 'maxResults', { optional: true, max: 500 });
+      return c.call('/native/source/grep', { repository: c.key, ref: await c.ref(a), pattern: text(a, 'pattern'), ...(a.regex !== undefined ? { regex: a.regex } : {}),
+        ...(a.caseSensitive !== undefined ? { caseSensitive: a.caseSensitive } : {}), ...(a.paths ? { paths: a.paths } : {}), ...(maxResults ? { maxResults } : {}) });
+    }],
+  ['blame', false, 'Who last changed each line of a file, following first parents from a branch, tag or commit: line ranges with their commit, and each commit’s author, date and summary. Renames are not followed. Up to 500 commits back; says when that left lines unresolved.',
+    input({ path: str('File path.'), ref: refArg, startLine: int('First line to blame, from 1.', 1), endLine: int('Last line to blame.', 1) }, ['path']), async (c, a) => {
+      const startLine = count(a, 'startLine', { optional: true }), endLine = count(a, 'endLine', { optional: true });
+      return c.call('/native/source/blame', { repository: c.key, ref: await c.ref(a), path: text(a, 'path'), ...(startLine ? { startLine } : {}), ...(endLine ? { endLine } : {}) });
+    }],
   ['list_commits', false, 'Commit history, newest first, of a branch or commit.', input({ ref: refArg, limit: int('Commits to return, 1 to 100 (default 20).', 1, 100) }), async (c, a) => {
     const { commits, page } = await c.call(rpc('ListCommits'), { repository: c.key, ...(a.ref !== undefined ? { ref: text(a, 'ref', { max: 300 }) } : {}), page: { limit: count(a, 'limit', { optional: true, max: 100 }) || 20 } });
     return { commits, more: Boolean(page?.nextPage) };
@@ -173,7 +189,7 @@ export async function mcpEndpoint(request, env, identify, invoke) {
   const params = message.params ?? {}, writer = !person.token_scope || person.token_scope.permission === 'write';
   if (message.method === 'initialize') return respond(id, { protocolVersion: versions.includes(params.protocolVersion) ? params.protocolVersion : '2025-06-18',
     capabilities: { tools: {} }, serverInfo: { name: 'golf', version: release },
-    instructions: `Golf forge at ${env.PUBLIC_ORIGIN}. Repositories are named by owner and name. Read with repo_overview, list_tree, read_files, search_code (semantic) and list_commits; ` +
+    instructions: `Golf forge at ${env.PUBLIC_ORIGIN}. Repositories are named by owner and name. Read with repo_overview, list_tree, read_files, grep (exact text), search_code (semantic), blame and list_commits;` +
       (writer ? 'write with create_branch and commit_changes (pass the head you read as expectedHead), then open_pull_request.' : 'this token is read-only.') });
   if (message.method === 'ping') return respond(id, {});
   if (message.method === 'tools/list') return respond(id, { tools: [...tools.values()].filter(tool => writer || !tool.write).map(tool => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema,
