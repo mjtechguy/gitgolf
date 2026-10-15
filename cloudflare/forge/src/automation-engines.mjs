@@ -51,6 +51,7 @@ export async function engineChat(db, env, { person, repository, useCase, engine 
   if (!handle) throw Error(`Engine ${engine} is not available for this repository.`);
   const answer = await registry.runChat(env, handle, messages, options);
   if (typeof answer?.text !== 'string') throw Error('The engine returned no text.');
+  if (answer.finishReason === 'length') throw Error('The model’s answer was cut off at its token limit.');
   return { text: answer.text, usage: usageOf(answer.usage) };
 }
 // Token counts exactly as reported; anything malformed is dropped rather than guessed.

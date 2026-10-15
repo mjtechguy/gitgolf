@@ -63,7 +63,7 @@ export const issueTriage = {
     if (ctx.engine === 'default') return { wait: 'ai', aiRun: await ctx.aiRun('triage', { number: issue.number }) };
     return { infer: await triage.prepare({ db: ctx.db, row: ctx.row, target: { number: issue.number } }) };
   },
-  engineRequest: input => ({ messages: triageMessages(input), options: { maxTokens: 200 } }),
+  engineRequest: input => ({ messages: triageMessages(input), options: { maxTokens: 200, reasoningEffort: 'low' } }),
   engineParse: triageEngineOutput,
 
   async apply(ctx, { output }) {

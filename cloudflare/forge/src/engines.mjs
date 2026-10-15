@@ -249,11 +249,15 @@ export async function engineCall(env, engineHandle, input, options) {
   if (engine.kind === 'provider-model') return providerCall(env, engine, engineHandle.credential, input, options);
   throw new Fault('failed_precondition', 412, 'Coding CLI engines run tasks on agent hosts or SSH hosts, not model calls.');
 }
-/* runChat(env, engineHandle, messages, { maxTokens, responseFormat, deadlineMs }) → { text, usage }. messages: [{ role, content }].
- * usage holds exactly the token counts the model reported. Throws for coding-cli handles and handles not issued by resolveEngine. */
+/* runChat(env, engineHandle, messages, { maxTokens, responseFormat, reasoningEffort, deadlineMs }) → { text, usage, finishReason }.
+ * messages: [{ role, content }]. reasoningEffort (low, medium or high) reaches Workers AI models only: a reasoning model such as GLM
+ * otherwise spends a small token budget thinking and answers nothing. usage holds exactly the token counts the model reported.
+ * Throws for coding-cli handles and handles not issued by resolveEngine. */
 export async function runChat(env, engineHandle, messages, options = {}) {
   if (!Array.isArray(messages) || !messages.length) throw Error('runChat needs messages');
-  const input = { messages, ...(Number.isInteger(options.maxTokens) ? { max_completion_tokens: options.maxTokens } : {}), ...(options.responseFormat ? { response_format: options.responseFormat } : {}) };
+  const effort = engineHandle?.engine?.kind === 'cloudflare-model' && ['low', 'medium', 'high'].includes(options.reasoningEffort) ? options.reasoningEffort : undefined;
+  const input = { messages, ...(Number.isInteger(options.maxTokens) ? { max_completion_tokens: options.maxTokens } : {}), ...(options.responseFormat ? { response_format: options.responseFormat } : {}),
+    ...(effort ? { reasoning_effort: effort } : {}) };
   const answer = await engineCall(env, engineHandle, input, { deadlineMs: options.deadlineMs });
   const choice = answer?.choices?.[0];
   let text = choice ? choice.message?.content : answer?.response;

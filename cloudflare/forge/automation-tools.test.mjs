@@ -61,6 +61,7 @@ test('PR reviewer: a review-draft AI run on the current head; skips closed or mo
   // The engine path: the request asks for the review schema, the answer is held to it.
   const request = tool.engineRequest({ number: 1, baseCommitId: baseCommit, mergeBaseCommitId: baseCommit, headCommitId: head, files: [], totalFiles: 0, title: 'T', description: '', notRead: [], notReadCount: 0, descriptionTruncated: false });
   assert.equal(request.options.responseFormat.json_schema.name, 'review_draft');
+  assert.equal(request.options.reasoningEffort, 'low');
   assert.throws(() => tool.engineParse('not json', { files: [] }), /not JSON/);
   // Schedules queue reviews of heads not yet reviewed, at most five.
   ctx = context({ openPulls: async () => Array.from({ length: 7 }, (_, i) => ({ number: i + 1, headCommit: head })) });

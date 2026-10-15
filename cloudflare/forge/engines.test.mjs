@@ -169,6 +169,13 @@ test('the automations interface: listEngines, resolveEngine with an explicit eng
   // Workers AI through runChat, and handles that runChat refuses.
   const workers = await resolveEngine(f.DB, f.env, { person: bob, useCase: 'automations', engineId: 'workers-ai:' + flash });
   assert.equal((await runChat(f.env, workers, [{ role: 'user', content: 'Hi' }])).text, '{"summary":"from workers ai"}');
+  // A reasoning effort reaches Workers AI models (GLM otherwise spends a small budget thinking), never a provider request.
+  await runChat(f.env, workers, [{ role: 'user', content: 'Hi' }], { maxTokens: 200, reasoningEffort: 'low' });
+  assert.equal(f.workersAi.at(-1).input.reasoning_effort, 'low');
+  await runChat(f.env, workers, [{ role: 'user', content: 'Hi' }], { reasoningEffort: 'extreme' });
+  assert.equal('reasoning_effort' in f.workersAi.at(-1).input, false);
+  await runChat(f.env, handle, [{ role: 'user', content: 'Hello' }], { reasoningEffort: 'low' });
+  assert.equal(JSON.stringify(f.gateway.at(-1)).includes('reasoning_effort'), false);
   await assert.rejects(runChat(f.env, { ...workers }, [{ role: 'user', content: 'Hi' }]), /Not a resolved engine handle/);
   const cli = await f.engines({ action: 'create', scope: 'installation', name: 'Codex on hosts', kind: 'coding-cli', tool: 'codex', places: ['agent-host', 'ssh-host'] });
   assert.equal(cli.status, 200, cli.text); assert.deepEqual(cli.value.engine.places, ['agent-host', 'ssh-host']);

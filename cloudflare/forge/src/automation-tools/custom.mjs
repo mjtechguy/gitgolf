@@ -78,7 +78,7 @@ export const custom = {
     if (ctx.engine === 'default') return { wait: 'ai', aiRun: await ctx.aiRun('automation', { runId: ctx.run.id }, input) };
     return { infer: input };
   },
-  engineRequest: input => ({ messages: customMessages(input), options: { maxTokens: 1500 } }),
+  engineRequest: input => ({ messages: customMessages(input), options: { maxTokens: 1500, reasoningEffort: 'low' } }),
   engineParse: text => customAnswer(text),
 
   async apply(ctx, result) {
