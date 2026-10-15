@@ -596,6 +596,10 @@ function runContext(db, env, deps, a, run, person, row) {
       const refs = results.length ? await deps.readRefs(row) : new Map();
       return results.map(pull => ({ number: pull.number, headCommit: refs.get('refs/heads/' + pull.head_branch) || '' })).filter(pull => pull.headCommit);
     },
+    // The newest open pull request whose head is this branch of the repository, or null.
+    async openPullForBranch(branch) {
+      return (await db.prepare("SELECT d.number FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE d.repository_id=? AND d.state='OPEN' AND p.head_branch=? ORDER BY d.number DESC LIMIT 1").bind(row.id, branch).first())?.number ?? null;
+    },
     async unlabelledIssues(limit) {
       return (await db.prepare("SELECT d.number FROM discussions d WHERE d.repository_id=? AND d.kind='issue' AND d.state='OPEN' AND NOT EXISTS(SELECT 1 FROM discussion_labels l WHERE l.discussion_id=d.id) ORDER BY d.number DESC LIMIT ?").bind(row.id, limit).all()).results;
     },
