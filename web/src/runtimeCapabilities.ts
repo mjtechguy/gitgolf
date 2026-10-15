@@ -35,12 +35,12 @@ export function settingForRoute(kind: string, view?: string, native = false) {
     if (account[kind]) return account[kind];
   }
   if (native && kind === 'instance-settings') {
-    const nativeAdmin: Record<string, string> = { operations: 'operations.dashboard', execution: 'settings.execution', organizations: 'settings.organization-creation', agents: 'settings.agents-admin', runners: 'settings.native-runners', audit: 'settings.installation-audit', 'ai-models': 'settings.ai-models', 'ai-usage': 'operations.ai-usage' };
+    const nativeAdmin: Record<string, string> = { operations: 'operations.dashboard', execution: 'settings.execution', organizations: 'settings.organization-creation', agents: 'settings.agents-admin', runners: 'settings.native-runners', audit: 'settings.installation-audit', 'ai-models': 'settings.ai-models', 'ai-usage': 'operations.ai-usage', costs: 'operations.costs' };
     if (view && nativeAdmin[view]) return nativeAdmin[view];
   }
   // Feature policies: native installations report this; the portable server does not yet.
   if (kind === 'instance-settings' && view === 'features') return 'settings.feature-policy';
-  if (kind === 'instance-settings') return view === 'audit' ? 'settings.installation-audit' : view === 'infrastructure' ? 'settings.infrastructure' : view === 'runners' ? 'settings.runners' : view === 'notifications' ? 'settings.notifications' : view === 'accounts' || !view ? 'settings.local-auth' : null;
+  if (kind === 'instance-settings') return view === 'costs' ? 'operations.costs' : view === 'audit' ? 'settings.installation-audit' : view === 'infrastructure' ? 'settings.infrastructure' : view === 'runners' ? 'settings.runners' : view === 'notifications' ? 'settings.notifications' : view === 'accounts' || !view ? 'settings.local-auth' : null;
   if (kind === 'repository-runners') return 'settings.runners';
   if (['account-security', 'sessions', 'ssh-keys'].includes(kind)) return 'settings.local-auth';
   return null;

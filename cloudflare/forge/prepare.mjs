@@ -53,6 +53,10 @@ if (mode === 'retire') {
   Object.assign(config.env, rateLimitBindings(settings));
   config.env.OPERATIONS_SERVICE_HEALTH = { type: 'text', value: String(operations.serviceHealth === true) };
   config.env.OPERATIONS_WORKER = { type: 'text', value: settings.worker };
+  // Estimated costs (src/costs.mjs) filter the analytics datasets to this installation's database and buckets.
+  config.env.OPERATIONS_DATABASE_ID = { type: 'text', value: settings.database.uuid };
+  const costBuckets = [settings.evidence?.bucket, settings.pipelines?.bucket].filter(name => typeof name === 'string' && /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(name));
+  if (costBuckets.length) config.env.OPERATIONS_BUCKETS = { type: 'text', value: costBuckets.join(',') };
   config.env.OPERATIONS_OBSERVABILITY = { type: 'text', value: String(operations.observability.enabled) };
   if (operations.analyticsSecret) config.env.OPERATIONS_ANALYTICS_TOKEN = { type: 'secrets-store-secret', storeId: operations.analyticsSecret.store, secretName: operations.analyticsSecret.name };
   if (settings.evidence) config.env.READ_INDEXES = { type: 'text', value: 'true' };

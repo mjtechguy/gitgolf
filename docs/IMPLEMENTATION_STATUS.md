@@ -1,5 +1,65 @@
 # Golf implementation status
 
+## 2026-10-15 — Scale-out S6: estimated costs in the admin UI (built, not yet verified on hosted)
+
+[`SCALE_OUT_PLAN.md`](SCALE_OUT_PLAN.md) S6. Operations administrators see, at `/admin/costs` next to AI usage, what this
+installation's Cloudflare usage costs at list prices so far this month, the month projected at that pace, and a scale-up what-if.
+Every figure is labelled an estimate, not a bill.
+
+**Built:**
+- **Backend:** `cloudflare/forge/src/costs.mjs`, `POST /native/costs/read` (actions `read` and `estimate`), administrators only,
+  checked before and after the reads; served as a concurrent read.
+- **Rates:** a price table in code, Workers Paid list prices and included allowances checked against the pricing pages on
+  2026-10-15, one source URL per rate. Artifacts are counted from 2026-10-14, when Cloudflare starts billing them.
+- **Running now:** one GraphQL Analytics request per dataset, month-to-date and a 7-day window in the same request, 5 s timeout.
+  - Read: Workers requests (this Worker), Durable Object requests and active time (account-wide), D1 rows read and written (this
+    database) and size, R2 Class A and B operations and storage (this installation's buckets), Queues operations (account-wide),
+    Artifacts operations (this namespace).
+  - Each service row says its scope; account-wide figures are labelled as such.
+  - Not read, listed by name and left out of totals, never $0: Durable Object SQLite rows and storage, Artifacts storage.
+    Workers CPU uses `cpuTimeUs`, which no published page confirms; if the API refuses it, that one meter says so.
+  - Configured but not priced here (Containers, Workers AI, Vectorize, Workflows, Workers Logs, Workers for Platforms, Browser
+    Rendering, Email) are listed with their reasons.
+- **Failure states:**
+  - no token: "No Account Analytics Read token is bound (enable-analytics)";
+  - HTTP 401/403: "The analytics token was refused (HTTP 403). It needs Account Analytics Read on this account.";
+  - a GraphQL permission error: "The analytics token lacks permission for this dataset: …";
+  - a timeout: "The analytics API did not answer within 5 seconds.";
+  - an empty Workers, Durable Objects or D1 dataset is not taken as zero.
+- **What-if:**
+  - unit costs measured here over 7 days: usage divided by `git_operations` APPLIED (per write), `land_operations` LANDED (per
+    landed pull request; the two are alternatives, both all-in) and pipeline plus container test runs (R2 and Queues per CI run);
+  - containers from concurrent count and instance size (standard-1 by default); self-hosted runners from an entered hourly rate,
+    empty by default and then listed as not priced;
+  - the TanStack form opens only on "Estimate a scale-up", and every assumption and unit cost is editable;
+  - the server computes the estimate (pure arithmetic in `costs.mjs`; no analytics read).
+- **Golf's exact records** (AI runs, agent tasks, writes, landings, CI runs) are summary rows linking to AI usage and Agent hosts.
+- **Deploy:** `prepare.mjs` binds `OPERATIONS_DATABASE_ID` and `OPERATIONS_BUCKETS`. Without them, D1 rows are read account-wide
+  and D1 size is not read.
+
+**Checks:**
+- `node --test cloudflare/forge/*.test.mjs`: 735 tests, 734 pass, 1 skipped, 0 fail. This includes 4 new tests in `costs.test.mjs`:
+  price math, unit costs, degraded states with fetch stubbed, and administrator-only access through `handle()`.
+- Web: `npm run typecheck`, `npm run build` and `npm run build:native` pass.
+- `node --test web/tests/*.test.ts`: 21 tests, 19 pass. The 2 failures are the known ones on `main`: `navigation-cache` and the
+  native-operations `runtime-capabilities` test.
+- `deploy/alchemy/native-config.test.mjs`: 6 pass.
+- Playwright `tests/estimated-costs.spec.ts`: 2 pass. Its fixture is `costs.mjs`'s own output.
+- Neighbouring admin specs: `ai-models-native` passes. `instance-admin` and `capabilities` have 3 failures, the same 3 with
+  `main`'s `web/` sources.
+- No horizontal overflow at 1440 and 390 px.
+
+**Not verified:**
+- Nothing has been read against the live Analytics API from this code. These fields were confirmed by published documentation or
+  earlier live reads on the hosted demo, but not by this code:
+  - `d1StorageAdaptiveGroups.max.databaseSizeBytes`;
+  - `workersInvocationsAdaptive.sum.cpuTimeUs`;
+  - the `date_gt` filters on the Durable Object datasets.
+- Hosted behaviour is unverified until the demo is deployed.
+- Each page load sends 10 GraphQL requests, against Cloudflare's 300 per 5 minutes per user.
+- The read runs in the Workspace as a concurrent read and can hold a slot for up to 5 s.
+- The S5 tie-in, where a capacity request shows its cost change, is not built.
+
 ## 2026-10-15 — Scale-out S1–S3 on the hosted demo: Git, Source API and MCP reads outside the Workspace queue
 
 [`SCALE_OUT_PLAN.md`](SCALE_OUT_PLAN.md) phases S1, S2 and the MCP part of S3 are built, deployed on the hosted demo and measured

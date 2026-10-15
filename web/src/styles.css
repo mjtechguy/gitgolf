@@ -2310,6 +2310,26 @@ pre.automation-output-text { padding:8px 10px; max-height:20rem; overflow:auto; 
 .ai-gateway-models { margin-top:10px; }
 .ai-gateway-models li { display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:.75rem; }
 @media(max-width:480px) { .ai-usage-bars li { grid-template-columns:minmax(0,1fr) 4rem; gap:4px 10px; } .ai-usage-bars meter { grid-column:1 / -1; grid-row:2; } }
+/* Estimated costs (/admin/costs): service meter tables, the scale-up form and its result. Existing tokens only. */
+.costs-section-title { font-size:1rem; margin:0; }
+.costs-disclaimer { margin:0; }
+.costs-meter { display:grid; min-width:0; }
+.costs-meter small { color:var(--muted); font-size:.75rem; overflow-wrap:anywhere; }
+.costs-profile { margin:0; padding:4px var(--panel-padding) 8px; }
+.costs-form { max-width:none; }
+.costs-fieldset { border:0; margin:0 0 20px; padding:0; min-width:0; }
+.costs-fieldset legend { padding:0; margin-bottom:8px; font-weight:600; font-size:.875rem; }
+.costs-field-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr)); gap:12px 16px; }
+.costs-form .costs-field label { margin:0 0 4px; }
+.costs-form .costs-field .field-help { display:block; margin:4px 0 0; }
+.costs-basis { display:grid; gap:8px; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); margin-top:16px; }
+.costs-basis > .field-help { grid-column:1 / -1; margin:0; }
+.costs-units { display:grid; gap:0; margin:0; padding:0; list-style:none; }
+.costs-units li { display:grid; grid-template-columns:minmax(12rem,1.4fr) repeat(2,minmax(9rem,1fr)); align-items:end; gap:8px 16px; padding:8px 0; border-bottom:1px solid var(--line); }
+.costs-form .costs-unit-input { margin:0; color:var(--muted); font-size:.8125rem; }
+.costs-unit-input input { margin-top:4px; font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.costs-result { border-top:1px solid var(--line); }
+@media(max-width:640px) { .costs-units li { grid-template-columns:minmax(0,1fr); } }
 /* Audit log (installation, organization and repository scope): a server-side filter form, then GitHub-style event rows. Existing tokens only. */
 .audit-filter-form { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px 12px; padding:12px var(--panel-padding); }
 .audit-filter-form label { display:grid; gap:4px; margin:0; min-width:0; color:var(--muted); font-size:.8125rem; }
