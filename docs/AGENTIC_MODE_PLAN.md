@@ -387,6 +387,7 @@ writer in a new `git-objects.mjs`.
   - Landing on the passing check and waiting behind a merge are deployed.
   - The remaining ceiling is the Workspace admission queue's exclusive convoy, not CPU or storage.
   - Classing the D1-guarded writes as overlapping is the next step, ahead of any `RepositoryWrites` split.
+- **Next: [SCALE_OUT_PLAN.md](SCALE_OUT_PLAN.md).** The Workspace object is not CPU-bound (about 4 % of one core) but always waiting. Long I/O work moves to the stateless Worker (S1–S4); runner capacity scales through approved policies (S5); the admin UI shows estimated costs now and when scaling up (S6).
 - **Still open:**
   - removing the exclusive convoy (proposal in the benchmark README);
   - streaming pushes above 8 MiB;
