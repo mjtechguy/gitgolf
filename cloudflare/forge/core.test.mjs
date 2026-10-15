@@ -295,6 +295,16 @@ test('independent immutable reads fail closed if authority is revoked before com
   assert.equal((await handle(request(), { ...f.env, confirmRead: async () => { throw Error('network lost'); } }, f.providerFetch)).status, 503);
 });
 
+test('a clone outside the workspace queue is refused when its grant is revoked while the provider answers', async t => {
+  const f = await fixture(t); await f.create(); await f.sendPush();
+  const clone = () => handle(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/info/refs?service=git-upload-pack', { headers: { Authorization: 'Bearer ' + ownerToken } }), f.env,
+    async (request, ...rest) => { if (new URL(request.url ?? request).pathname.endsWith('/info/refs')) f.sql.prepare('DELETE FROM grants WHERE user_id=1').run(); return f.providerFetch(request, ...rest); });
+  const response = await clone();
+  assert.equal(response.status, 404); assert.ok(!(await response.text()).includes('git-upload-pack'));
+  f.sql.prepare("INSERT INTO grants VALUES(1,1,'admin')").run();
+  assert.equal((await handle(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/info/refs?service=git-upload-pack', { headers: { Authorization: 'Bearer ' + ownerToken } }), f.env, f.providerFetch)).status, 200);
+});
+
 test('membership never implies repository access; grants and revocation are current', async t => {
   const f = await fixture(t); await f.create();
   const key = { owner: 'alice', name: 'project' };

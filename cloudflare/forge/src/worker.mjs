@@ -26,7 +26,7 @@ import { reconcileAi, runAiWorkflow } from './ai-workflow.mjs';
 import { sweepAgentTasks } from './agent-hosts.mjs';
 import { settleRefWrites } from './ref-writes.mjs';
 import { afterPipelineRun, sweepLanding } from './land-queue.mjs';
-import { AgentBudgets } from './agent-budgets.mjs';
+import { AgentBudgets, chargeBudget as chargeAgentBudget } from './agent-budgets.mjs';
 import { sweepAutomations, inferAutomationRuns } from './automations.mjs';
 import { sweepSSHHosts } from './ssh-hosts.mjs';
 // SSH host tasks and connection tests (docs/SSH_HOSTS.md): a container Durable Object, used only where deploy allocates it.
@@ -127,6 +127,9 @@ export class Workspace extends DurableObject {
   cleanupPreviews() { return this.dispatch({ cleanup: true }); }
   runCI() { return this.dispatch({ ci: true }); }
   activityChanged(repositoryId, topics) { return this.dispatch({ notify: true, repositoryId, topics }); }
+  // Rate budgets for requests served outside this object (scale-out S1, docs/SCALE_OUT_PLAN.md): the counters and the cached policy
+  // stay here, in memory; an RPC is not an admission, so the charge never waits behind the queue.
+  chargeBudget(kind, id, write) { return chargeAgentBudget(this.configured, this.env.DB, kind, id, write); }
   agentGit(id, request, phase) { return this.dispatch({ id, git: request, phase }); }
   testRegistry(id, request) { return this.dispatch({ id, registry: request }); }
   testGit(id, request) { return this.dispatch({ id, git: request }); }

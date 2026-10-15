@@ -364,6 +364,9 @@ async function git(db, env, person, request, url, providerFetch) {
     // Automations: a confirmed branch push (and pull_request.updated for pull requests whose head it moved).
     if (operation && applied && command.next !== '0'.repeat(40)) await automationEvent(env, { type: 'push', repositoryId: row.id, ref: command.ref, before: command.old, after: command.next, actorId: person.id });
     await confirmGitCredential(db,person,row);
+    // A fetch served outside the Workspace queue (scale-out S1) cannot rely on a queued revocation fencing it: the grant is read again,
+    // after the provider answered and before anything is returned. A revoked grant gets the same refusal as at the start.
+    if (service==='git-upload-pack') await authorizedRepository(db, person, { owner: route[1], name: route[2] }, env);
     let bytes=result.bytes;
     if (service==='git-upload-pack') {
       if (advertisement) bytes=defaultBranchAdvertisement(bytes,row.default_branch);

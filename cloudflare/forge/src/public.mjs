@@ -21,6 +21,13 @@ export function embeddedAsset(request, assets) {
     const { type, content } = assets[path];
     return new Response(request.method === 'HEAD' ? null : Uint8Array.from(atob(content), c => c.charCodeAt(0)), { headers: { 'Content-Type': type, 'Cache-Control': immutableAsset(path) ? 'private, max-age=31536000, immutable' : 'no-store' } });
 }
+const gitReadRoute = /^\/git\/[^/]+\/[^/]+\.git\/(info\/refs|git-upload-pack)$/;
+// Git reads: the advertisement for upload-pack (GET info/refs?service=git-upload-pack) and the upload-pack exchange itself (POST).
+export function statelessGitRead(request, url = new URL(request.url)) {
+  const route = gitReadRoute.exec(url.pathname);
+  if (!route) return false;
+  return route[1] === 'info/refs' ? request.method === 'GET' && url.search === '?service=git-upload-pack' : request.method === 'POST' && !url.search;
+}
 export async function publicFetch(request, env, ctx) {
     const start = performance.now(), requestId = crypto.randomUUID(), clock = timings();
     let response;
@@ -132,6 +139,12 @@ async function dispatch(request, env, ctx, clock) {
       }
       return new Response(response.body, { status: response.status, headers: outgoing });
     }
+    // Scale-out S1 (docs/SCALE_OUT_PLAN.md): clones and fetches run here, in the stateless Worker, not in the Workspace admission queue.
+    // Their authority is D1 (actor, grant, token scope, re-checked after the provider answers) and their source is Artifacts; the API
+    // token's rate budget is charged on the Workspace's counters by RPC. Pushes and every other route still go to the Workspace.
+    if (statelessGitRead(request, url))
+      return (await import('./core.mjs')).handle(new Request(request, { headers }), { ...env, waitUntil: promise => ctx.waitUntil(promise),
+        workspaceBudget: (kind, id, write) => owner.chargeBudget(kind, id, write) });
     if (ctx.exports.RepositoryReads && request.method === 'POST' && /^\/rpc\/golf\.v1\.RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ResolveRepositorySource|ListCommits|GetCommitDiff|GetRepositoryComparison)$/.test(url.pathname)) {
       let body;
       try { body = JSON.parse(new TextDecoder().decode(await bounded(request.clone().body, 96 * 1024))); } catch { /* Core returns the usual validation error. */ }

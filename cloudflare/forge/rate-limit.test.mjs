@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
-import { publicFetch } from './src/public.mjs';
+import { publicFetch, statelessGitRead } from './src/public.mjs';
 import { handle } from './src/core.mjs';
 import { anonymousLimit, clientKey, rateLimitBindings, rateLimitPolicy, rateLimitService } from './src/rate-limit.mjs';
 
@@ -56,7 +56,11 @@ test('credentialed, signed-in and runner requests are never counted', async () =
     [clone, { headers: { Authorization: 'Basic ' + btoa('alice:golf_git_secret'), 'Content-Type': 'application/x-git-upload-pack-request' } }], [refs, { method: 'GET', headers: { Authorization: 'Basic ' + btoa('alice:secret') } }],
     [read, { access: true }], ['/native/discover', { access: true }],
     ['/api/v4/jobs/request', {}], ['/api/v4/jobs/1/git/info/refs?service=git-upload-pack', { method: 'GET' }], ['/native/runner-machine/claim', { headers: { Authorization: 'Bearer golf_runner_x' } }], ['/native/runner-machine/claim', {}],
-  ]) { for (let i = 0; i < 3; i++) assert.equal((await f.send(path, options)).status, 200, path); admitted.push(path.split('?')[0]); }
+  ]) {
+    // Clones are served by the Worker itself (scale-out S1); without a database in this stub they answer 503, never 429.
+    for (let i = 0; i < 3; i++) assert.equal((await f.send(path, options)).status, statelessGitRead(new Request(origin + path, { method: options.method || 'POST' })) ? 503 : 200, path);
+    if (!path.startsWith('/git/')) admitted.push(path.split('?')[0]);
+  }
   assert.equal(f.keys.length, before); assert.deepEqual(f.forwarded.slice(10), admitted.flatMap(path => [path, path, path]));
   // Requests outside the anonymous read contract reach the workspace as before; it refuses them itself.
   for (const [path, method] of [['/rpc/golf.v1.SessionService/GetSession', 'POST'], ['/rpc/golf.v1.RepositoryService/CreateRepository', 'POST'], ['/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates', 'POST'],
@@ -68,8 +72,8 @@ test('an absent binding, a private installation or a failing limiter leaves requ
   for (const bindings of [{ ANONYMOUS_READS: undefined, ANONYMOUS_READ_LIMIT: undefined }, { ANONYMOUS_READS: undefined }, { ANONYMOUS_READ_LIMIT: undefined }, { ANONYMOUS_READ_LIMIT: '5/30' }, { ANONYMOUS_READ_LIMIT: '20000/60' }]) {
     const f = fixture(bindings);
     assert.equal(rateLimitPolicy(f.env), null); assert.equal(await anonymousLimit(new Request(origin + read, { method: 'POST' }), f.env, null), null);
-    for (let i = 0; i < 12; i++) for (const [path, method] of [[read, 'POST'], [clone, 'POST'], [refs, 'GET']]) assert.equal((await f.send(path, { method })).status, 200);
-    assert.equal(f.forwarded.length, 36); assert.deepEqual(f.keys, []);
+    for (let i = 0; i < 12; i++) for (const [path, method, status] of [[read, 'POST', 200], [clone, 'POST', 503], [refs, 'GET', 503]]) assert.equal((await f.send(path, { method })).status, status);
+    assert.equal(f.forwarded.length, 12); assert.deepEqual(f.keys, []);
   }
   // Without public repositories Access refuses anonymous requests first and nothing is counted.
   const closed = fixture({ PUBLIC_REPOSITORIES: 'false' });
