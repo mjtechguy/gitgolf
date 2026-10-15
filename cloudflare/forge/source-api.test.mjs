@@ -394,10 +394,12 @@ test('concurrent commits: other branches proceed, the same branch is fenced and 
   assert.equal(results.filter(result => result.body.merged).length, 1);
   assert.equal(f.g.text(['show', 'main:one.txt']), 'one.txt'); assert.equal(f.g.text(['show', 'main:two.txt']), 'two.txt'); assert.equal(f.g.text(['show', 'agent/x:three.txt']), 'three.txt');
   assert.equal(f.g.text(['rev-list', '--count', 'main']), '3');
-  // An unsettled write to the branch holds it: three attempts, then a refusal naming it; other branches still proceed.
+  // An unsettled write to the branch holds it: the commit waits its turn within the time budget (shortened here), then a refusal
+  // naming it; other branches still proceed.
   f.sql.prepare("INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) VALUES('held',1,1,'refs/heads/main',?,?,'DISPATCHED',?)").run('1'.repeat(40), '2'.repeat(40), new Date().toISOString());
   f.sql.prepare("INSERT INTO git_ref_writes(operation_id,repository_id,ref) VALUES('held',1,'refs/heads/main')").run();
+  f.env.sourceCommitBudgetMs = 1500;
   const pushes = f.counts.pushes, held = await f.call('commit', { repository: key, branch: 'main', expectedHead: f.head('main'), message: 'x', changes: [{ path: 'held.txt', content: 'x' }] });
-  assert.equal(held.status, 409); assert.match(held.body.message, /in flight.*3 attempts/); assert.equal(f.counts.pushes, pushes);
+  assert.equal(held.status, 409); assert.match(held.body.message, /in flight; nothing was committed after \d+ attempts in \d+ s/); delete f.env.sourceCommitBudgetMs; assert.equal(f.counts.pushes, pushes);
   assert.equal((await f.call('branch', { repository: key, branch: 'other', action: 'create', from: 'main' })).status, 200);
 });

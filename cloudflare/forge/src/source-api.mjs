@@ -16,7 +16,7 @@ import { blame, grep } from './source-reads.mjs';
 
 export const sourceActions = new Set(['commit', 'branch', 'files', 'tree', 'blame', 'grep']);
 const reads = { files, tree, blame, grep };
-const MiB = 1024 * 1024, limits = { changes: 500, total: 8 * MiB, file: 4 * MiB, message: 64 * 1024, paths: 100, inline: MiB, read: 4 * MiB, entries: 10000, attempts: 3 };
+const MiB = 1024 * 1024, limits = { changes: 500, total: 8 * MiB, file: 4 * MiB, message: 64 * 1024, paths: 100, inline: MiB, read: 4 * MiB, entries: 10000, attempts: 40, budgetMs: 30_000 };
 const zero = '0'.repeat(40), encoder = new TextEncoder(), decoder = new TextDecoder();
 const kinds = { __proto__: null, blob: 'file', exec: 'executable', symlink: 'symlink', tree: 'directory', gitlink: 'submodule' };
 const modeTypes = Object.fromEntries(Object.entries(treeModes).map(([type, mode]) => [mode, type]));
@@ -164,10 +164,14 @@ function authority(person, row, rulesVersion) {
 // unsettled); an unknown outcome stays fenced for maintenance and is reported as unavailable.
 async function write(db, env, person, row, repo, command, pack, rulesVersion, ctx, record, guard) {
   const id = crypto.randomUUID();
-  if (!await reserveRefWrite(db, { id, repositoryId: row.id, userId: person.id, command, guard: guard || authority(person, row, rulesVersion) })) {
+  const authorityNow = guard || authority(person, row, rulesVersion);
+  if (!await reserveRefWrite(db, { id, repositoryId: row.id, userId: person.id, command, guard: authorityNow })) {
     const state = await db.prepare('SELECT write_pending,EXISTS(SELECT 1 FROM git_ref_writes WHERE repository_id=r.id AND ref=? AND outcome IS NULL) AS busy FROM repositories r WHERE id=?').bind(command.ref, row.id).first();
     if (state?.write_pending) conflict();
     if (state?.busy) return { outcome: 'busy' };
+    // The other write may have finished between the reservation and this read: if the same authority guard (grant, versions, rules,
+    // credential and token liveness) still holds, it was a lost race for the ref, not a changed access.
+    if (await db.prepare(`SELECT 1 WHERE ${authorityNow.sql}`).bind(...authorityNow.values).first()) return { outcome: 'busy' };
     throw new Fault('failed_precondition', 412, 'Your access to this repository or its branch rules changed during the request; nothing was sent.');
   }
   if (record) await record(id);
@@ -335,7 +339,9 @@ async function commitAttempts(db, env, person, row, repo, input, rulesVersion, c
   if (parent && (start?.hash !== parent || !sha(start.treeHash))) throw new Fault('not_found', 404, (creating ? 'The base' : 'The expectedHead') + ' commit does not exist in this repository.');
   const baseTree = start?.treeHash || null, edit = await planTreeEdit(repo, baseTree, input.changes);
   if (edit.treeId === (baseTree || emptyTree)) invalid('The changes leave every file as it is; nothing was committed.');
-  const time = Math.floor(Date.now() / 1000), author = identity(env, person, time);
+  const time = Math.floor(Date.now() / 1000), author = identity(env, person, time), started = Date.now();
+  // Writes to one branch take turns (the ref fence), so a commit waits for its turn and re-merges within a time budget, not a few tries.
+  // env.sourceCommitBudgetMs is a test-only shortening; deployments use limits.budgetMs.
   for (let attempt = 1; ; attempt++) {
     // The new commit's parent: the base when creating, else the branch head (expectedHead, or the moved head being merged onto).
     let treeId = edit.treeId, objects = edit.objects, paths = edit.changedPaths, merged = false, head = creating ? parent : current;
@@ -355,8 +361,9 @@ async function commitAttempts(db, env, person, row, repo, input, rulesVersion, c
     const record = input.key && (id => db.prepare('UPDATE source_commits SET operation_id=?,result=? WHERE user_id=? AND idempotency_key=?').bind(id, JSON.stringify(value), person.id, input.key).run());
     const sent = await write(db, env, person, row, repo, { ref: input.ref, old: creating ? zero : current, next: object.id }, await packObjects([...reachable(objects, treeId), object]), rulesVersion, ctx, record);
     if (sent.outcome === 'applied') return value;
-    if (attempt >= limits.attempts) throw new Refused('aborted', 409, (sent.outcome === 'busy' ? `Another write to ${input.name} stayed in flight` : `Branch ${input.name} kept changing`) + `; nothing was committed after ${limits.attempts} attempts.` + (sent.status ? ' Last provider status: ' + sent.status : ''), { currentHead: current || '' });
-    if (sent.outcome === 'busy') await new Promise(resolve => setTimeout(resolve, 200 * attempt));
+    if (attempt >= limits.attempts || Date.now() - started >= (env.sourceCommitBudgetMs ?? limits.budgetMs)) throw new Refused('aborted', 409, (sent.outcome === 'busy' ? `Another write to ${input.name} stayed in flight` : `Branch ${input.name} kept changing`) + `; nothing was committed after ${attempt} attempts in ${Math.round((Date.now() - started) / 1000)} s.` + (sent.status ? ' Last provider status: ' + sent.status : ''), { currentHead: current || '' });
+    // Jittered wait for the branch's turn: 100 ms doubling to at most 1.5 s.
+    if (sent.outcome === 'busy') { const cap = Math.min(1500, 100 * 2 ** Math.min(attempt, 4)); await new Promise(resolve => setTimeout(resolve, cap / 2 + Math.random() * cap / 2)); }
     refs = await refsOf(env, repo, row, ctx.providerFetch); current = refs.get(input.ref);
     if (creating && current) throw new Refused('already_exists', 409, `Branch ${input.name} was created by another write.`, { currentHead: current });
     if (!creating && !current) throw new Fault('not_found', 404, `Branch ${input.name} was deleted.`);
