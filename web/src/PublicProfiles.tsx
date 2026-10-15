@@ -8,6 +8,7 @@ import { MapPin, Link2, Building2, UserRound } from 'lucide-react';
 import { nativeAPI } from './NativeForge';
 import { repositoryOptions } from './navigation';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
+import { ResourceError } from './ErrorScreens';
 
 const MarkdownBody = lazy(() => import('./RepositoryContent').then(m => ({ default: m.MarkdownBody })));
 type Repository = { id: string; name: string; owner: string; fullName: string; description: string; topics: string[]; updatedAt: string };
@@ -43,7 +44,7 @@ export function PublicOwnerProfile({ owner, userId }: { owner: string; userId: s
   const key = ['public-profile', userId, owner];
   const query = useQuery({ ...privateQuery, queryKey: key, queryFn: ({ signal }) => nativeAPI<Profile>('/native/public-profile', { action: 'get', owner }, signal) });
   const value = query.data;
-  if (query.error) return <PanelError error={query.error} retry={() => void query.refetch()} />;
+  if (query.error) return <ResourceError subject="profile" level={1} error={query.error} retry={() => void query.refetch()} />;
   if (!value) return <Loading label="Opening profile…" />;
   const Icon = value.kind === 'ORGANIZATION' ? Building2 : UserRound;
   return <><Breadcrumbs location={{kind:'public-profile',owner}} currentLabel={value.displayName || value.slug} /><div className="public-profile-layout"><aside className="public-profile-identity"><div className="public-profile-avatar" aria-hidden="true"><Icon size={40} /></div>

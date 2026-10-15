@@ -40,6 +40,25 @@ test('configured Access fails closed before native assets, bearer or spoofed ide
   assert.equal(calls, 0);
 });
 
+test('browser navigations to an edge 404 or 503 get a small Golf page; every other client keeps the plain body', async () => {
+  const env = { PUBLIC_ORIGIN: 'https://golf.example.com' }, html = { Accept: 'text/html,application/xhtml+xml,*/*;q=0.8' };
+  const missing = await publicFetch(new Request('https://other.example.com/%3Cscript%3Ealert(1)', { headers: html }), env, {});
+  assert.equal(missing.status, 404); assert.equal(missing.headers.get('Content-Type'), 'text/html; charset=utf-8'); assert.equal(missing.headers.get('Cache-Control'), 'no-store');
+  assert.match(missing.headers.get('Content-Security-Policy'), /default-src 'none'/); assert.doesNotMatch(missing.headers.get('Content-Security-Policy'), /script-src/);
+  const page = await missing.text();
+  assert.match(page, /Page not found/); assert.ok(page.includes(missing.headers.get('X-Request-ID'))); assert.doesNotMatch(page, /<script|alert/i);
+  assert.equal(await (await publicFetch(new Request('https://other.example.com/'), env, {})).text(), 'Unavailable');
+  assert.equal(await (await publicFetch(new Request('https://other.example.com/', { headers: { Accept: 'application/json' } }), env, {})).text(), 'Unavailable');
+  const broken = await publicFetch(new Request(env.PUBLIC_ORIGIN + '/alex/demo', { headers: html }), env, {});
+  assert.equal(broken.status, 503); assert.equal(broken.headers.get('Cache-Control'), 'no-store'); assert.match(await broken.text(), /Golf is temporarily unavailable/);
+  for (const path of ['/rpc/golf.v1.SessionService/GetSession', '/git/alex/demo.git/info/refs', '/alex/demo.git/info/refs', '/alex/demo/git-upload-pack', '/mcp', '/api/v4/user', '/native/installation', '/auth/login']) {
+    const response = await publicFetch(new Request(env.PUBLIC_ORIGIN + path, { headers: html }), env, {});
+    assert.equal(response.status, 503, path); assert.equal(await response.text(), 'Temporarily unavailable', path);
+  }
+  const post = await publicFetch(new Request(env.PUBLIC_ORIGIN + '/alex/demo', { method: 'POST', headers: html }), env, {});
+  assert.equal(post.status, 503); assert.equal(await post.text(), 'Temporarily unavailable');
+});
+
 test('machine protocol routes reach the coordinator without a browser Access identity',async()=>{
   const forwarded=[];
   const env={PUBLIC_ORIGIN:'https://golf.example.com',ACCESS_AUD:'aud',WORKSPACE_SLUG:'team'};

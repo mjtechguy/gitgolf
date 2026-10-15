@@ -9,6 +9,7 @@ import { Code, ConnectError } from '@connectrpc/connect';
 import { Link } from '@tanstack/react-router';
 import { ArrowDown, ArrowLeft, Building2, LoaderCircle, RefreshCw, Users } from 'lucide-react';
 import { OrganizationCreate } from './OrganizationCreate';
+import { ResourceError } from './ErrorScreens';
 import { errorMessage, organizationClient, repositoryClient } from './api';
 import { OrganizationVisibility, TeamPermission, TeamVisibility } from './gen/golf/v1/golf_pb';
 import type { PageResponse } from './gen/golf/v1/golf_pb';
@@ -105,7 +106,7 @@ function OrganizationDetail({ organization: name, teamId, userId }: { organizati
   } });
   const organization = query.isSuccess && !query.isFetching ? query.data : undefined;
   return <><Link to="/organizations" className="text-button repository-back"><ArrowLeft size={15} />All organizations</Link>
-    {query.isError ? <Failure error={query.error} retry={() => void query.refetch()} /> : !organization ? <Loading label="Opening organization…" /> : <>
+    {query.isError ? <ResourceError subject="organization" level={1} error={query.error} retry={() => void query.refetch()} /> : !organization ? <Loading label="Opening organization…" /> : <>
       <header className="repository-intro"><div><span className="eyebrow">ORGANIZATION</span><h1><Building2 size={29} />{organization.name}<span className="visibility">{OrganizationVisibility[organization.visibility]?.toLowerCase() || 'unknown'}</span></h1>{organization.fullName ? <p>{organization.fullName}</p> : null}<p>{organization.description || 'No description provided.'}</p></div><div className="panel-actions">{native && document.documentElement.dataset.golfPublic === 'true' ? <Link className="button secondary" to="/$owner" params={{owner:name}}>Public profile</Link> : null}<Link className="button secondary" to="/organizations/$organization/settings" params={{ organization: organization.name }}>Settings</Link><Refresh label="Refresh organization access" busy={query.isFetching} refresh={() => void query.refetch()} /></div></header>
       {native && !teamId ? <div className="organization-overview"><PagedPanel title="Repositories" queryKey={[...queryKey, 'repositories']} empty="No accessible repositories in this workspace."
         load={async (page, signal) => { const response = await repositoryClient.listRepositories({ owner: name, metadataOnly: true, page: { page, limit: 20 } }, { signal, timeoutMs: 8000 }); return { items: response.repositories.filter(r => r.fullName.startsWith(name + '/')), page: response.page }; }}
