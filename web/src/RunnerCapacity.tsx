@@ -7,25 +7,28 @@ import { nativeAPI } from './nativeAPI';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { CopyButton, DateLabel, Loading, PanelError, privateQuery } from './RepositoryUI';
 import { SummaryBand } from './Layout';
+import { RunnerPolicyPanels, type RunnerPolicies, type ShareRow } from './RunnerShares';
 
 // Mirrors cloudflare/forge/src/capacity.mjs. Golf never starts machines; an unknown allocation is shown as unknown, never as a number.
-type Pool = { id: string; engine: 'forgejo-actions' | 'gitlab-ci'; labels: string[]; registered: number; active: number; online: number; running: number; queued: number; oldestWaitSeconds: number | null; scopes: string[] };
+type Pool = { id: string; engine: 'forgejo-actions' | 'gitlab-ci'; labels: string[]; registered: number; active: number; online: number; running: number; queued: number; oldestWaitSeconds: number | null; scopes: string[];
+  // Slice 2: the pool's cap (null: none) and the queued jobs a cap or a share holds; claimable = queued − held.
+  cap: number | null; heldByCap: number; heldByShares: number; held: number; claimable: number };
 type NativePool = { id: string; name: string; state: string; trustClass: string; maxParallel: number; activeMachines: number; running: number; queued: number };
 type Count = number | null;
 type ContainerClass = { id: string; label: string; binding: string; configured: boolean; allocation: number | null; allocationReason: string; limit: { value: Count; inUse: Count; source: string }; running: Count; queued: Count };
 type Hosts = { id: string; label: string; hosts: Count; capacity: Count; online: Count; running: Count; queued: Count; onlineNote: string };
 type Setting = { key: string; field: string; label: string; unit: string; policyLabel: string; version: string; cost: string | null; allocated: boolean; reason?: string; current?: number; ceiling?: number; deployMax?: number | null; fixed?: string; deploySetting?: string };
 type Deploy = { setting: string; value: number; command: string; steps: string };
-export type CapacityRequest = { id: string; key: string; field: string; label: string; unit: string; current: number; requested: number; ceiling: number; needsDeploy: boolean; estimatedMonthlyDelta: number | null; estimateBasis: string;
+export type CapacityRequest = { id: string; key: string; field: string; label: string; unit: string; scope: 'installation' | 'organization'; organization: string; confirmation: string; current: number; requested: number; ceiling: number; needsDeploy: boolean; estimatedMonthlyDelta: number | null; estimateBasis: string;
   reason: string; requestedBy: string; requestedAt: string; mine: boolean; state: 'PENDING' | 'APPROVED' | 'DECLINED' | 'WITHDRAWN' | 'APPLIED' | 'FAILED'; decidedBy: string; decidedAt: string; decisionNote: string;
   appliedBy: string; appliedAt: string; deploy: Deploy | null };
 type MetricsToken = { id: string; label: string; createdBy: string; createdAt: string; expiresAt: string; lastUsedAt: string; revokedAt: string; state: 'active' | 'expired' | 'revoked' };
 export type Capacity = { generatedAt: string; selfHosted: { configured: boolean; pools: Pool[]; unmatched: { queued: number; oldestWaitSeconds: number | null; byEngine: Record<string, number> }; truncated: boolean; onlineWindowSeconds: number };
-  nativePools: NativePool[]; containers: ContainerClass[]; hosts: Hosts[]; settings: Setting[]; requests: CapacityRequest[]; tokens: MetricsToken[]; schema: string; editing: string; metricsPath: string; origin: string; you: string };
+  nativePools: NativePool[]; containers: ContainerClass[]; hosts: Hosts[]; runnerPolicies: RunnerPolicies; shares: { rows: ShareRow[]; schema: string }; settings: Setting[]; requests: CapacityRequest[]; tokens: MetricsToken[]; schema: string; editing: string; metricsPath: string; origin: string; you: string };
 type Preview = { current: number; requested: number; ceiling: number; needsDeploy: boolean; estimatedMonthlyDelta: number | null; estimateBasis: string; deploy: Deploy | null };
 
 // One row of the inventory table, whatever the source.
-type Row = { id: string; source: string; name: string; capacity: string; online: string; running: Count; queued: Count; wait: number | null; note: string };
+type Row = { id: string; source: string; name: string; capacity: string; online: string; running: Count; queued: Count; held: Count; wait: number | null; note: string };
 const engines: Record<string, string> = { 'forgejo-actions': 'Forgejo runners', 'gitlab-ci': 'GitLab runners' };
 const shown = (value: Count) => value === null ? 'Unknown' : String(value);
 export const waitText = (seconds: number | null) => seconds === null ? '—' : seconds < 60 ? `${seconds} s` : seconds < 3600 ? `${Math.floor(seconds / 60)} min` : `${Math.floor(seconds / 3600)} h ${Math.floor(seconds % 3600 / 60)} min`;
@@ -36,16 +39,16 @@ const stateLabels: Record<CapacityRequest['state'], [string, string]> = { PENDIN
 export function inventoryRows(data: Capacity): Row[] {
   const self = data.selfHosted;
   return [
-    ...self.pools.map(pool => ({ id: 'pool:' + pool.id, source: engines[pool.engine] || pool.engine, name: pool.labels.join(', ') || 'No labels', capacity: `${pool.active} active of ${pool.registered} registered`,
-      online: String(pool.online), running: pool.running, queued: pool.queued, wait: pool.oldestWaitSeconds, note: `Scope: ${pool.scopes.join(', ')}` })),
-    { id: 'unmatched', source: 'Self-hosted runners', name: 'Queued with no runner', capacity: 'No active runner has these labels and scope', online: '—', running: null, queued: self.unmatched.queued, wait: self.unmatched.oldestWaitSeconds,
+    ...self.pools.map(pool => ({ id: 'pool:' + pool.id, source: engines[pool.engine] || pool.engine, name: pool.labels.join(', ') || 'No labels', capacity: `${pool.active} active of ${pool.registered} registered${pool.cap === null ? '' : ` · cap ${pool.cap}`}`,
+      online: String(pool.online), running: pool.running, queued: pool.queued, held: pool.held, wait: pool.oldestWaitSeconds, note: `Scope: ${pool.scopes.join(', ')}` })),
+    { id: 'unmatched', source: 'Self-hosted runners', name: 'Queued with no runner', capacity: 'No active runner has these labels and scope', online: '—', running: null, queued: self.unmatched.queued, held: null, wait: self.unmatched.oldestWaitSeconds,
       note: Object.entries(self.unmatched.byEngine).map(([engine, n]) => `${engines[engine] || engine}: ${n}`).join(' · ') || (self.configured ? 'None waiting' : 'Actions pipelines are not allocated on this installation') },
     ...data.nativePools.map(pool => ({ id: 'native:' + pool.id, source: 'Native runner pool', name: pool.name, capacity: `${pool.maxParallel} parallel · ${pool.activeMachines} active machines`, online: '—',
-      running: pool.running, queued: pool.queued, wait: null, note: `${pool.state.toLowerCase()} · ${pool.trustClass.toLowerCase()}` })),
+      running: pool.running, queued: pool.queued, held: null, wait: null, note: `${pool.state.toLowerCase()} · ${pool.trustClass.toLowerCase()}` })),
     ...data.containers.map(item => ({ id: 'containers:' + item.id, source: 'Cloudflare containers', name: item.label, capacity: item.allocation === null ? 'Allocation not known to the Worker' : String(item.allocation),
-      online: '—', running: item.running, queued: item.queued, wait: null, note: item.configured ? `Golf limit ${shown(item.limit.value)} (${shown(item.limit.inUse)} in use). ${item.limit.source}` : `${item.binding} is not configured on this installation.` })),
+      online: '—', running: item.running, queued: item.queued, held: null, wait: null, note: item.configured ? `Golf limit ${shown(item.limit.value)} (${shown(item.limit.inUse)} in use). ${item.limit.source}` : `${item.binding} is not configured on this installation.` })),
     ...data.hosts.map(item => ({ id: 'hosts:' + item.id, source: item.label, name: `${shown(item.hosts)} active`, capacity: `${shown(item.capacity)} concurrent tasks`, online: item.online === null ? '—' : shown(item.online),
-      running: item.running, queued: item.queued, wait: null, note: item.onlineNote })),
+      running: item.running, queued: item.queued, held: null, wait: null, note: item.onlineNote })),
   ];
 }
 const inventoryColumns: DataTableColumn<Row>[] = [
@@ -55,6 +58,7 @@ const inventoryColumns: DataTableColumn<Row>[] = [
   { id: 'online', header: 'Online', accessorFn: row => row.online },
   { id: 'running', header: 'Running', accessorFn: row => row.running ?? -1, sortFn: 'basic', cell: ({ row }) => shown(row.original.running) },
   { id: 'queued', header: 'Queued', accessorFn: row => row.queued ?? -1, sortFn: 'basic', cell: ({ row }) => shown(row.original.queued) },
+  { id: 'held', header: 'Held by a cap or share', accessorFn: row => row.held ?? -1, sortFn: 'basic', cell: ({ row }) => row.original.held === null ? '—' : String(row.original.held) },
   { id: 'wait', header: 'Oldest wait', accessorFn: row => row.wait ?? -1, sortFn: 'basic', cell: ({ row }) => waitText(row.original.wait) },
 ];
 
@@ -73,7 +77,7 @@ export function RunnerCapacity({ userId, signingOut }: { userId: string; signing
     try { await nativeAPI('/native/capacity', body); setNotice(done); await refresh(); } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   };
   const ready = data.schema === 'ready', pending = data.requests.filter(item => item.state === 'PENDING').length;
-  const queued = data.selfHosted.pools.reduce((sum, pool) => sum + pool.queued, 0);
+  const queued = data.selfHosted.pools.reduce((sum, pool) => sum + pool.queued, 0), held = data.selfHosted.pools.reduce((sum, pool) => sum + pool.held, 0);
   const requestColumns: DataTableColumn<CapacityRequest>[] = [
     { id: 'setting', header: 'Setting', accessorFn: item => item.label, cell: ({ row: { original: item } }) => <span className="capacity-name">{item.label}<small>{item.reason}</small></span> },
     { id: 'change', header: 'Current → requested', accessorFn: item => item.requested, sortFn: 'basic', cell: ({ row: { original: item } }) => `${item.current} → ${item.requested} ${item.unit}` },
@@ -102,7 +106,7 @@ export function RunnerCapacity({ userId, signingOut }: { userId: string; signing
       <Link className="button secondary" to="/admin/settings/runners"><Server size={15} />Runners</Link>
       <Link className="button secondary" to="/admin/costs"><BarChart3 size={15} />Estimated costs</Link></div>
     <SummaryBand label="Runner capacity summary" items={[
-      ['Queued for self-hosted pools', String(queued), `${data.selfHosted.pools.length} pools`],
+      ['Queued for self-hosted pools', String(queued), held ? `${held} held by a cap or share · ${data.selfHosted.pools.length} pools` : `${data.selfHosted.pools.length} pools`],
       ['Queued with no runner', String(data.selfHosted.unmatched.queued), data.selfHosted.unmatched.oldestWaitSeconds === null ? 'Nothing waiting' : `Oldest ${waitText(data.selfHosted.unmatched.oldestWaitSeconds)}`],
       ['Pending requests', String(pending), pending ? 'Another administrator decides' : 'None'],
       ['Metrics tokens', String(data.tokens.filter(t => t.state === 'active').length), 'Active'],
@@ -111,11 +115,12 @@ export function RunnerCapacity({ userId, signingOut }: { userId: string; signing
     {error && !deciding ? <p className="error" role="alert">{error}</p> : null}
     <section className="browser-panel" aria-labelledby="capacity-inventory"><div className="browser-panel-heading"><h2 id="capacity-inventory">Capacity by source</h2><span className="policy-card-note">Current snapshot from Golf’s records</span></div>
       <DataTable data={inventoryRows(data)} columns={inventoryColumns} getRowId={row => row.id} label="runner capacity" pagination={false} />
-      <p className="panel-footnote">Self-hosted runners are pooled by engine and label names (a Forgejo label <code>name:docker://image</code> counts as <code>name</code>), as the claim matches them. A pool’s queue is the jobs its labels take in repositories its runners’ scope covers; a job several pools can take is counted in each. Online means seen in the last {data.selfHosted.onlineWindowSeconds / 60} minutes.{data.selfHosted.truncated ? ' Only the newest runners and oldest queued jobs were read; counts are partial.' : ''}</p>
+      <p className="panel-footnote">Self-hosted runners are pooled by engine and label names (a Forgejo label <code>name:docker://image</code> counts as <code>name</code>), as the claim matches them. A pool’s queue is the jobs its labels take in repositories its runners’ scope covers; a job several pools can take is counted in each. Held jobs wait for their pool’s cap or their organization’s or repository’s share; a job held by both is counted once, under the share. Online means seen in the last {data.selfHosted.onlineWindowSeconds / 60} minutes.{data.selfHosted.truncated ? ' Only the newest runners and oldest queued jobs were read; counts are partial.' : ''}</p>
     </section>
+    <RunnerPolicyPanels policies={data.runnerPolicies} pools={data.selfHosted.pools} shares={data.shares.rows} sharesSchema={data.shares.schema} refresh={refresh} />
     <section className="browser-panel" aria-labelledby="capacity-requests"><div className="browser-panel-heading"><h2 id="capacity-requests">Capacity requests</h2>
       {ready && !requesting ? <button type="button" className="button primary" onClick={() => { setRequesting(true); setNotice(''); setError(''); }}><Plus size={15} />Request more capacity</button> : null}</div>
-      <p className="field-help">A request raises one installation limit. Another operations administrator approves it, and approval applies it with the same rules as the Installation page: type the setting name, and an Access sign-in from the last 10 minutes when it widens. A value above the deploy ceiling cannot be applied here: approval records it, and it is applied after a deploy raises the ceiling.</p>
+      <p className="field-help">A request raises one installation limit, or one organization’s runner share (asked for by its owner). Another operations administrator approves it, and approval applies it with the same rules as the Installation page: type the setting name, and an Access sign-in from the last 10 minutes when it widens. A value above the deploy ceiling cannot be applied here: approval records it, and it is applied after a deploy raises the ceiling.</p>
       {data.editing ? <p className="error" role="alert">{data.editing}</p> : null}
       {!ready ? <p className="panel-footnote">{data.schema}</p> : <DataTable data={data.requests} columns={requestColumns} getRowId={item => item.id} label="capacity requests" emptyMessage="No capacity requests yet. Choose Request more capacity to ask for a higher limit." />}
       {data.requests.filter(item => item.deploy && item.state === 'APPROVED').map(item => <div key={item.id} className="pipeline-runner-command"><strong>Deploy to raise the ceiling for {item.label.toLowerCase()}</strong><p className="field-help">{item.deploy!.steps}</p><pre>{item.deploy!.command}</pre></div>)}
@@ -190,12 +195,12 @@ function DecisionForm({ request, approve, version, close, done }: { request: Cap
     <h3>{verb} {request.label.toLowerCase()}: {request.current} → {request.requested}</h3>
     <dl className="settings-profile"><div><dt>Requested by</dt><dd>{request.requestedBy}: {request.reason}</dd></div><div><dt>Estimated cost change</dt><dd>{money(request.estimatedMonthlyDelta)}. {request.estimateBasis}</dd></div>
       {request.needsDeploy && request.deploy ? <div><dt>Needs a deploy</dt><dd>Above the ceiling of {request.ceiling}. Approval records it; nothing changes until {request.deploy.steps}</dd></div> : null}</dl>
-    {approve ? <form.Field name="confirmation">{field => <label>Type <code>{request.key}</code> to confirm<input autoComplete="off" spellCheck={false} required value={field.state.value} onChange={event => field.handleChange(event.target.value)} />
+    {approve ? <form.Field name="confirmation">{field => <label>Type <code>{request.confirmation}</code> to confirm<input autoComplete="off" spellCheck={false} required value={field.state.value} onChange={event => field.handleChange(event.target.value)} />
       <span className="field-help">Applying a wider value also needs an Access sign-in from the last 10 minutes.</span></label>}</form.Field> : null}
     <form.Field name="note">{field => <label>Note (optional)<textarea rows={2} maxLength={500} value={field.state.value} onChange={event => field.handleChange(event.target.value)} /></label>}</form.Field>
     {failure ? <p className="error" role="alert">{failure}{/last 10 minutes/.test(failure) ? <> <a href="/cdn-cgi/access/logout">Sign out of Access</a>, sign in again, then retry.</> : null}</p> : null}
     <form.Subscribe selector={state => [state.isSubmitting, state.values.confirmation] as const}>{([submitting, confirmation]) => <div className="credential-actions">
-      <button className="button primary" disabled={submitting || approve && confirmation !== request.key}>{submitting ? 'Saving…' : verb}</button>
+      <button className="button primary" disabled={submitting || approve && confirmation !== request.confirmation}>{submitting ? 'Saving…' : verb}</button>
       <button type="button" className="button secondary" disabled={submitting} onClick={close}>Cancel</button></div>}</form.Subscribe>
   </form>;
 }
