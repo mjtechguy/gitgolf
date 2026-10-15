@@ -42,7 +42,7 @@ at about 30, 60 and 110 agents in one repository. Data and method: [benchmarks/2
 
 **Open:**
 - **Distance to D1:** each D1 call from the Worker costs about 100 ms against about 20 ms from the object next to the primary.
-  Smart Placement for the Worker needs the deploy tooling.
+  Smart Placement for the Worker is noted as a future deploy option.
 - **Rest of S3:** the Source API reads, and `RepositoryReads`' confirmation.
 - **S4–S6:** per-repository coordination, runner capacity with approval, estimated costs.
 

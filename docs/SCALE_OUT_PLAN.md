@@ -176,12 +176,12 @@ An **Estimated costs** page under Admin → Operations.
     with every write stalled.
   - It is now settled as `provider_refused` at once, and the land retries it.
   - At about 110 agents, applied writes went from bursts with four-minute gaps to 48–67 a minute.
-- **Distance to D1 (open).**
+- **Distance to D1 (future support, not scheduled).**
   - The Workspace runs next to the D1 primary (`ENAM` on the demo). The stateless Worker runs where the request lands: Seattle or
     Dublin in these runs.
   - Each D1 call from the Worker took about 100 ms, against about 20 ms from the object. A clone makes 5–6 calls.
   - Smart Placement (`placement: { mode: 'smart' }`) or a placement hint for the Worker would remove most of this. The Alchemy
-    Worker resource does not expose placement yet; that change belongs to the deploy tooling.
+    Worker resource does not expose placement yet. Support for it is a future deploy option, not part of this plan.
 - **Logging.** `golf.land_soon_skipped` says why a targeted landing did not land a head. `golf.request_unconfirmed` records the error
   behind a generic 503.
 
