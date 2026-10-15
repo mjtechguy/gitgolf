@@ -29,6 +29,8 @@ export function statelessRoute(request, url = new URL(request.url)) {
   if (request.method === 'POST' && /^\/native\/source\/(?:files|tree|blame|grep)$/.test(url.pathname)) return 'read';
   // Estimated costs (S6): D1 and the Analytics API only, waiting up to 5 s on the API; never a slot in the Workspace queue.
   if (request.method === 'POST' && url.pathname === '/native/costs/read') return 'read';
+  // Runner capacity (S5): the administrators' inventory and the autoscaler queue-depth metric, D1 only.
+  if (request.method === 'POST' && url.pathname === '/native/capacity/read' || request.method === 'GET' && url.pathname === '/native/capacity/metrics') return 'read';
   const route = gitRoute.exec(url.pathname);
   if (!route) return null;
   if (route[1] === 'info/refs') return request.method === 'GET' && /^\?service=git-(?:upload|receive)-pack$/.test(url.search) ? 'read' : null;
@@ -108,7 +110,8 @@ async function dispatch(request, env, ctx, clock) {
       const identity = await clock.measure('access', () => access.getIdentity());
       if (typeof identity?.email === 'string' && identity.email.length <= 254) headers.set('X-Golf-Native-Access-Email', identity.email);
       // Installation policy changes record when and from where the person signed in; only that route pays for the extra verification.
-      if (url.pathname === '/native/installation' && headers.has('X-Golf-Native-Access-Email')) {
+      // Approving a capacity request applies installation policy through the same path, with the same rule.
+      if ((url.pathname === '/native/installation' || url.pathname === '/native/capacity') && headers.has('X-Golf-Native-Access-Email')) {
         const issued = await accessIssuedAt(request, env, access);
         if (issued) headers.set('X-Golf-Native-Access-Issued-At', String(issued));
       }
