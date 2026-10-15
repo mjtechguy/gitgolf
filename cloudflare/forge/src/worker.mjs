@@ -136,7 +136,24 @@ export class Workspace extends DurableObject {
   recordPerformance(sample) { this.performance.record(sample); }
   preview(input) { return this.dispatch({ preview: input }); }
   cleanupPreviews() { return this.dispatch({ cleanup: true }); }
-  runCI() { return this.dispatch({ ci: true }); }
+  // Automatic CI: one pass at a time, as for automations. Every write asks for a pass, and each pass is exclusive work in the
+  // admission queue, so writes arriving during a pass share one more round instead of queueing one each. A pass takes at most ten
+  // pushes and ten admissions; a full one asks for another. At most five rounds; the maintenance schedule picks up anything left.
+  runCI() {
+    if (this.ciPass) { this.ciAgain = true; return this.ciPass; }
+    this.ciPass = (async () => {
+      try {
+        let result;
+        for (let round = 0; round < 5; round++) {
+          this.ciAgain = false;
+          result = await this.dispatch({ ci: true });
+          if (!this.ciAgain && !result?.more) break;
+        }
+        return result;
+      } finally { this.ciPass = null; }
+    })();
+    return this.ciPass;
+  }
   activityChanged(repositoryId, topics) { return this.dispatch({ notify: true, repositoryId, topics }); }
   // Rate budgets for requests served outside this object (scale-out S1, docs/SCALE_OUT_PLAN.md): the counters and the cached policy
   // stay here, in memory; an RPC is not an admission, so the charge never waits behind the queue.

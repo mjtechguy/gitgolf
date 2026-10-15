@@ -1075,7 +1075,8 @@ export async function runCI(env) {
       // Provider uncertainty keeps the original admission key; queue dispatch is already bounded.
     }
   }
-  return { admitted };
+  // A full batch of either kind may have left work behind: the Workspace runs another pass (worker.mjs runCI).
+  return pushes.length === 10 || admissions.length === 10 ? { admitted, more: true } : { admitted };
 }
 
 export async function advanceEvidence(env, id, phase, workflows) {

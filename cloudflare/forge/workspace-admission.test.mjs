@@ -284,3 +284,21 @@ test('a write served by the stateless Worker settles here by RPC without waiting
   assert.deepEqual(calls, [['publish', '7', ['source']], ['runCI']]);
   background.resolve(); await held;
 });
+
+test('automatic CI passes are coalesced: writes during a pass share one more round, a full batch asks for another', async () => {
+  const passes = [], gates = [];
+  const workspace = new Workspace({ storage: { sql: { exec() {} }, getAlarm: async () => 1, setAlarm: async () => {} }, exports: {}, waitUntil() {} },
+    { DB: { withSession: () => ({ prepare: () => ({ bind() { return this; }, all: async () => ({ results: [] }) }) }) },
+      ci: async () => { const gate = deferred(); gates.push(gate); passes.push(passes.length); return gate.promise; } });
+  const first = workspace.runCI(); await tick();
+  const writes = Array.from({ length: 20 }, () => workspace.runCI());
+  assert.equal(passes.length, 1); assert.ok(writes.every(write => write === first));
+  gates[0].resolve({ admitted: 0 }); await tick(); await tick();
+  assert.equal(passes.length, 2);
+  gates[1].resolve({ admitted: 10, more: true }); await tick(); await tick();
+  assert.equal(passes.length, 3);
+  gates[2].resolve({ admitted: 1 });
+  assert.deepEqual(await first, { admitted: 1 }); assert.equal(passes.length, 3);
+  // The next write starts a fresh pass.
+  const next = workspace.runCI(); await tick(); assert.equal(passes.length, 4); gates[3].resolve({ admitted: 0 }); await next;
+});
