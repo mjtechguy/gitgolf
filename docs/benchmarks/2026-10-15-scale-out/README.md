@@ -92,3 +92,33 @@ about 60 agents). Served by the Worker, `open_pull_request` waited 1.6 s at p50 
   - one fetch answered without a packfile.
   None is investigated yet.
 - **Expensive D1 reads:** around 19:56, D1 read 0.7–1.3 million rows a minute, which points to unindexed scans in a sweep.
+
+## Follow-up runs after the fixes (22:41–23:50 UTC)
+
+Deployed between them:
+- #133: pull requests open while a merge holds the repository;
+- #134: the push reservation race;
+- #135 and #137: D1 indexes;
+- #139: the stateless Worker's isolate object cache.
+
+| Run | Agents | Minutes | Deployed |
+| --- | --- | --- | --- |
+| `s2f` | ~60 | 10 | #133–#137 |
+| `s2g` | ~30 | 4 | #139 as well |
+| `s2h` | ~60 | 6 | #139 as well |
+
+| Operation (about 60 agents) | `s2c` | `s2f` | `s2h` |
+| --- | --- | --- | --- |
+| `open_pull_request` | 23 of 23, p50 19.9 s | 65 of 68, p50 2.5 s | **49 of 49, p50 2.0 s** |
+| CI report | 23 of 23, p50 22.7 s | 65 of 65, p50 2.5 s | **49 of 49, p50 0.7 s** |
+| Pull requests landed in 15 min | 8 of 23 | 51 of 65 | **38 of 49, p50 5.8 s** |
+| Git push, a branch each | 133 of 133, p50 1.7 s | 126 of 133 (7 × 503) | **88 of 88, p50 1.6 s, p95 2.9 s** |
+| Source API commit, shared branch | 172 of 172 | 140 of 162 (21 × 409, 1 × 503) | **112 of 112, p95 8.0 s** |
+| Workspace admission probe, p95 / max | — | 4.8 s / 59.5 s | **0.8 s / 3.5 s** |
+
+**Unexplained 503s in `s2f`.**
+- They were "could not be confirmed" errors: 7 pushes, 5 commits, a fetch and an `ls-remote`. D1 query latency stayed under 1.6 ms at p90 throughout.
+- They did not recur after #139, which removed most provider reads, in `s2g` (~30 agents) or `s2h` (~60). An unsampled tail on `golf.request_unconfirmed` recorded none in those runs.
+- The cause is not established.
+
+**Landing:** 11 of 49 pull requests in `s2h` still did not land within 15 minutes. That is the next thing to measure, with the `golf.land_soon_skipped` tail running.
