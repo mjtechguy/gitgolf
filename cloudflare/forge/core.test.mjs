@@ -327,6 +327,12 @@ test('reads confirmed from D1 (RepositoryReads, the stateless Worker): the crede
   f.env.PUBLIC_REPOSITORIES = 'true'; f.sql.exec('INSERT INTO repository_visibility(repository_id,is_public,version) VALUES(1,1,1)');
   assert.equal((await read({})).status, 200);
   assert.equal((await read({}, () => f.sql.prepare('UPDATE repository_visibility SET is_public=0,version=2 WHERE repository_id=1').run())).status, 404);
+  f.sql.prepare('UPDATE repository_visibility SET is_public=1,version=3 WHERE repository_id=1').run();
+  for (const method of ['GetRepository', 'GetRepositoryOverview']) {
+    const req = new Request(f.env.PUBLIC_ORIGIN + '/rpc/golf.v1.RepositoryService/' + method, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify({ repository: { owner: 'alice', name: 'project' } }) });
+    const response = await handle(req, { ...f.env, confirmRead: confirmReadFromD1(req, f.env) }, f.providerFetch);
+    assert.equal(response.status, 200, method + ' ' + await response.clone().text());
+  }
 });
 
 test('membership never implies repository access; grants and revocation are current', async t => {

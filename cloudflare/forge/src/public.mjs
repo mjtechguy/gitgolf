@@ -27,6 +27,8 @@ const gitRoute = /^\/git\/[^/]+\/[^/]+\.git\/(info\/refs|git-upload-pack|git-rec
 export function statelessRoute(request, url = new URL(request.url)) {
   if (request.method === 'POST' && (url.pathname === '/native/source/commit' || url.pathname === '/native/source/branch')) return 'write';
   if (request.method === 'POST' && /^\/native\/source\/(?:files|tree|blame|grep)$/.test(url.pathname)) return 'read';
+  // Estimated costs (S6): D1 and the Analytics API only, waiting up to 5 s on the API; never a slot in the Workspace queue.
+  if (request.method === 'POST' && url.pathname === '/native/costs/read') return 'read';
   const route = gitRoute.exec(url.pathname);
   if (!route) return null;
   if (route[1] === 'info/refs') return request.method === 'GET' && /^\?service=git-(?:upload|receive)-pack$/.test(url.search) ? 'read' : null;

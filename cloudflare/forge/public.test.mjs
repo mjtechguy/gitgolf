@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { publicFetch, embeddedAsset } from './src/public.mjs';
+import { publicFetch, embeddedAsset, statelessRoute } from './src/public.mjs';
 import { readUIAssets } from './ui-assets.mjs';
 import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -205,4 +205,12 @@ test('app host grant redirects to its own root and shares no preview identity wi
   assert.equal(response.headers.get('Set-Cookie'), `__Host-golf_preview_${id}=${session}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=300`);
   const sibling = crypto.randomUUID();
   assert.equal((await gateway.fetch(new Request(`https://${sibling}.preview.example.net/`, { headers: { Cookie: response.headers.get('Set-Cookie') } }), env, ctx)).status, 404);
+});
+
+test('stateless routes: Git, the Source API and estimated costs; everything else is the Workspace', () => {
+  const route = (path, method = 'POST') => statelessRoute(new Request('https://golf.example.com' + path, { method }));
+  assert.equal(route('/git/a/b.git/info/refs?service=git-upload-pack', 'GET'), 'read'); assert.equal(route('/git/a/b.git/git-receive-pack'), 'write');
+  assert.equal(route('/native/source/tree'), 'read'); assert.equal(route('/native/source/commit'), 'write'); assert.equal(route('/native/costs/read'), 'read');
+  for (const path of ['/native/costs/read', '/native/source/tree']) assert.equal(route(path, 'GET'), null);
+  for (const path of ['/native/costs', '/native/ai-usage/read', '/rpc/golf.v1.RepositoryService/GetRepository', '/mcp']) assert.equal(route(path), null, path);
 });
