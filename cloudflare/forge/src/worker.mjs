@@ -26,7 +26,7 @@ import { reconcileAi, runAiWorkflow } from './ai-workflow.mjs';
 import { sweepAgentTasks } from './agent-hosts.mjs';
 import { settleRefWrites } from './ref-writes.mjs';
 import { afterPipelineRun, sweepLanding } from './land-queue.mjs';
-import { AgentBudgets } from './agent-budgets.mjs';
+import { AgentBudgets, chargeBudget as chargeAgentBudget } from './agent-budgets.mjs';
 import { sweepAutomations, inferAutomationRuns } from './automations.mjs';
 import { sweepSSHHosts } from './ssh-hosts.mjs';
 // SSH host tasks and connection tests (docs/SSH_HOSTS.md): a container Durable Object, used only where deploy allocates it.
@@ -67,17 +67,7 @@ export class Workspace extends DurableObject {
         if (selection ? result?.ok || !(event instanceof Request) : result?.ok && event instanceof Request && /\/golf\.v1\.EmailNotificationService\/RedeliverOwnEmail$|^\/native\/runner-machine\/[a-f0-9-]{36}\/finish$|^\/api\/v4\/jobs\/[1-9][0-9]{0,15}$/.test(new URL(event.url).pathname))
           this.ctx.waitUntil(this.deliverEmail().catch(() => console.log(JSON.stringify({ event:'golf.email_delivery_failed' }))));
         // Definite refusals have no activity; ambiguous provider failures can have effects.
-        if (selection && (!(event instanceof Request) || !result || result.ok || result.status >= 500)) {
-          try {
-            const db = env.DB.withSession('first-primary');
-            let rows;
-            if (selection.job) rows = (await db.prepare('SELECT repository_id AS id FROM evidence_jobs WHERE id=?').bind(selection.job).all()).results;
-            else if (selection.invitation) rows = (await db.prepare('SELECT repository_id AS id FROM repository_invitations WHERE id=?').bind(selection.invitation).all()).results;
-            else if (selection.name || selection.id) rows = (await db.prepare("SELECT id FROM repositories WHERE state='ACTIVE' AND (name=? OR id=?)").bind(selection.name || '', selection.id || '').all()).results;
-            else rows = (await db.prepare("SELECT id FROM repositories WHERE state='ACTIVE'").all()).results;
-            for (const row of rows) this.activity.publish(String(row.id), selection.topics);
-          } catch { console.log(JSON.stringify({ event: 'golf.activity_publication_failed' })); }
-        }
+        if (selection && (!(event instanceof Request) || !result || result.ok || result.status >= 500)) await this.publishActivity(selection);
       }
     }, admission);
     // Client mutations fence authority reads; background jobs cannot change membership.
@@ -85,6 +75,27 @@ export class Workspace extends DurableObject {
     this.authority = serialize(event => event.activity ? activityAuthority(event.request, configured, event.input)
       : new URL(event.url).pathname === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' ? handle(event, configured) : this.dispatch(event),
     event => event?.activity ? 'read' : admission(event));
+  }
+  async publishActivity(selection) {
+    try {
+      const db = this.env.DB.withSession('first-primary');
+      let rows;
+      if (selection.job) rows = (await db.prepare('SELECT repository_id AS id FROM evidence_jobs WHERE id=?').bind(selection.job).all()).results;
+      else if (selection.invitation) rows = (await db.prepare('SELECT repository_id AS id FROM repository_invitations WHERE id=?').bind(selection.invitation).all()).results;
+      else if (selection.name || selection.id) rows = (await db.prepare("SELECT id FROM repositories WHERE state='ACTIVE' AND (name=? OR id=?)").bind(selection.name || '', selection.id || '').all()).results;
+      else rows = (await db.prepare("SELECT id FROM repositories WHERE state='ACTIVE'").all()).results;
+      for (const row of rows) this.activity.publish(String(row.id), selection.topics);
+    } catch { console.log(JSON.stringify({ event: 'golf.activity_publication_failed' })); }
+  }
+  // A push or Source API write served by the stateless Worker (scale-out S2, docs/SCALE_OUT_PLAN.md): what the admission queue does
+  // after a write it served (webhook and email drains, live activity, the CI pass), reached by RPC and not itself queued.
+  async writeSettled(selection, ok, status) {
+    if (selection && ok) {
+      this.ctx.waitUntil(this.deliverWebhooks().catch(() => console.log(JSON.stringify({ event:'golf.webhook_delivery_failed' }))));
+      this.ctx.waitUntil(this.deliverEmail().catch(() => console.log(JSON.stringify({ event:'golf.email_delivery_failed' }))));
+    }
+    if (selection && (ok || status >= 500)) await this.publishActivity(selection);
+    if (this.env.CI_AUTO === 'true') this.ctx.waitUntil(this.runCI().catch(() => {}));
   }
   // Drains read the installation policy in force at their start: removed origins, limits and email turned off.
   async deliverWebhooks() { return drainWebhooks(await withInstallationPolicy(this.configured)); }
@@ -125,8 +136,28 @@ export class Workspace extends DurableObject {
   recordPerformance(sample) { this.performance.record(sample); }
   preview(input) { return this.dispatch({ preview: input }); }
   cleanupPreviews() { return this.dispatch({ cleanup: true }); }
-  runCI() { return this.dispatch({ ci: true }); }
+  // Automatic CI: one pass at a time, as for automations. Every write asks for a pass, and each pass is exclusive work in the
+  // admission queue, so writes arriving during a pass share one more round instead of queueing one each. A pass takes at most ten
+  // pushes and ten admissions; a full one asks for another. At most five rounds; the maintenance schedule picks up anything left.
+  runCI() {
+    if (this.ciPass) { this.ciAgain = true; return this.ciPass; }
+    this.ciPass = (async () => {
+      try {
+        let result;
+        for (let round = 0; round < 5; round++) {
+          this.ciAgain = false;
+          result = await this.dispatch({ ci: true });
+          if (!this.ciAgain && !result?.more) break;
+        }
+        return result;
+      } finally { this.ciPass = null; }
+    })();
+    return this.ciPass;
+  }
   activityChanged(repositoryId, topics) { return this.dispatch({ notify: true, repositoryId, topics }); }
+  // Rate budgets for requests served outside this object (scale-out S1, docs/SCALE_OUT_PLAN.md): the counters and the cached policy
+  // stay here, in memory; an RPC is not an admission, so the charge never waits behind the queue.
+  chargeBudget(kind, id, write) { return chargeAgentBudget(this.configured, this.env.DB, kind, id, write); }
   agentGit(id, request, phase) { return this.dispatch({ id, git: request, phase }); }
   testRegistry(id, request) { return this.dispatch({ id, registry: request }); }
   testGit(id, request) { return this.dispatch({ id, git: request }); }

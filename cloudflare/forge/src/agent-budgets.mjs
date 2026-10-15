@@ -114,6 +114,8 @@ export const budgetLimits = (policy, kind) => policy && { requests: policy[kind 
 // Count one request for a token or task; returns null when admitted, or the refusal. Without a counter (a runtime other than the
 // Workspace) nothing is counted or refused.
 export async function chargeBudget(env, db, kind, id, write) {
+  // The stateless Worker (scale-out S1, docs/SCALE_OUT_PLAN.md) has no counters: the Workspace charges its own, under its cached policy.
+  if (env.workspaceBudget) return env.workspaceBudget(kind, String(id), Boolean(write));
   const budgets = env.agentBudgets;
   if (!budgets) return null;
   const policy = await budgetPolicy(env, db);

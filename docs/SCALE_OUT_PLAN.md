@@ -1,6 +1,6 @@
 # Scale-out plan: moving long I/O-bound work out of the Workspace Durable Object
 
-Status: proposed 2026-10-15. Follows AGENTIC_MODE_PLAN AM-1 item 5 and AM-6, and replaces the "RepositoryWrites split only if CPU
+Status: S1, S2 and the MCP part of S3 built and measured on the hosted demo, 2026-10-15; S4–S6 proposed. Follows AGENTIC_MODE_PLAN AM-1 item 5 and AM-6, and replaces the "RepositoryWrites split only if CPU
 is the limit" condition with measured evidence. Benchmark: [benchmarks/2026-10-15-100-agents](benchmarks/2026-10-15-100-agents/README.md).
 
 ## Evidence
@@ -57,6 +57,11 @@ At about 110 paced agents in one repository (`mj/agent-bench-3`, hosted):
 - **Expected effect:** clones and fetches leave the queue. They are the longest transfers, and every exclusive request waits for
   them.
 - **Risk:** low. Reads only, with precedent.
+- **Status (2026-10-15): built and deployed on the hosted demo.**
+  - `public.mjs` `statelessRoute()` sends `info/refs` and `git-upload-pack` to `core.mjs` `handle()` in the Worker.
+  - The budget is charged by the Workspace's `chargeBudget` RPC, which charges its own counters under its cached policy.
+  - After the provider answers, `git()` reads the grant again with `authorizedRepository()`.
+  - Measured with S2 and S3 at about 30, 60 and 110 agents: [benchmarks/2026-10-15-scale-out](benchmarks/2026-10-15-scale-out/README.md).
 
 ### S2: pushes and Source API writes in the stateless Worker
 
@@ -66,6 +71,17 @@ At about 110 paced agents in one repository (`mj/agent-bench-3`, hosted):
   `PipelineRun`), and automation events through `owner.automations()`.
 - **Risk:** medium. Every side effect the Workspace's `dispatch` runs in its `finally` (activity, webhooks, email, `runCI`,
   automations) needs an explicit post-write call. List them, test each.
+- **Status (2026-10-15): built and deployed on the hosted demo.**
+  - Routes: `git-receive-pack` and its advertisement, `/native/source/commit` and `/native/source/branch`.
+  - Side effects:
+    - after the response, the Worker calls the Workspace's `writeSettled(selection, ok, status)` RPC. It runs what the queue's
+      `finally` ran (webhook and email drains, live activity) and the CI pass. It is not an admission.
+    - `automationsQueued`, `notifyLanding` and `notifyPipeline` call the Workspace by RPC, as `PipelineRun` does.
+    - `pipelineCoordinator` is the `PipelineRun` namespace.
+  - Ordering and authority: the D1 ref reservation each write already takes. Its guard carries the grant, credential, identity
+    and rules versions, so a committed revocation fences a write without queue order.
+  - Found while measuring: every write also asked for an exclusive CI pass in the queue. Passes are now coalesced
+    (`worker.mjs` `runCI`): writes during a pass share one more round, and a full batch asks for another.
 
 ### S3: Source reads and per-repository reads without the Workspace hop
 
@@ -73,11 +89,22 @@ At about 110 paced agents in one repository (`mj/agent-bench-3`, hosted):
 - `confirmRead` re-checks D1 directly instead of calling `GetRepositoryAccess` on the Workspace, which today puts every
   per-repository read back into the Workspace queue.
 - **Decision needed:** revocation semantics change from queued to committed, as in S1.
+- **Status (2026-10-15): the MCP part is built and deployed on the hosted demo.** Remote MCP was most of the Workspace's load:
+  agents poll `get_pull_request`.
+  - The Worker reads the JSON-RPC body and serves what the Workspace would admit as a read or a transfer (`mcp.mjs` `mcpClass`):
+    read tools, `initialize`, `tools/list`, `commit_changes` and `create_branch`.
+  - Every repository read a tool makes is confirmed against D1 after it runs (`core.mjs` `confirmReadFromD1`): the request's
+    credential, grant and role are read again, so a revocation committed during the read refuses its result.
+  - Other tools (`open_pull_request`, `comment`) still go to the Workspace.
+  - Still open in S3: `/native/source/files|tree|blame|grep`, and `RepositoryReads` calling `confirmReadFromD1` instead of the
+    Workspace's `GetRepositoryAccess`.
 
 ### S4 (only if still needed): per-repository coordination object
 
 - If, after S1–S3, collaboration writes (pull requests, checks, comments) still convoy, move the remaining exclusive work for a
   repository into a per-repository object.
+- **After the S1–S3 runs, not needed yet.** At about 110 agents the Workspace's admission wait was 0 ms at p50 and 1.8 s at p95
+  (`s2e`). `open_pull_request` took 2.2 s at p50 and CI reports 1.1 s.
 - Repositories then stop sharing one queue. One hot repository still has one queue for its exclusive work, but without the
   transfers in it.
 
@@ -132,6 +159,31 @@ An **Estimated costs** page under Admin → Operations.
 - **Tie-in with S5:** every capacity request and ceiling change shows the cost change before it is approved.
 - **Usage Golf already records exactly** stays as recorded: AI runs (Workers AI usage, provider tokens and costs as reported) and
   agent tasks (usage as the tool reports it).
+
+## Found while measuring
+
+- **Merge bases on long histories (fixed).**
+  - `repository-diff.mjs` `comparison()` fell back to reading the full ancestry of both tips, capped at 500 commits, whenever the
+    base had moved by a merge.
+  - On a repository past that size, every pull request whose base had moved failed its landing evaluation (`resource_exhausted`),
+    and `autoLand` skipped it without a trace.
+  - The fallback is now Git's date-ordered `paint_down_to_common`, bounded at 2,000 commits.
+  - Verified on hosted: pull request #530 had waited 18 minutes with a passing check, and landed at the first sweep after the deploy.
+- **Automatic CI passes (fixed).** Every write asked for an exclusive CI pass in the queue. Passes are now coalesced.
+- **Busy merges (fixed).**
+  - Artifacts answers a receive-pack it cannot take now with `ERR artifacts_git_receive_pack_busy`, before running any command.
+  - The merge journal kept that as an unknown outcome, which fenced the whole repository until maintenance: two to seven minutes,
+    with every write stalled.
+  - It is now settled as `provider_refused` at once, and the land retries it.
+  - At about 110 agents, applied writes went from bursts with four-minute gaps to 48–67 a minute.
+- **Distance to D1 (future support, not scheduled).**
+  - The Workspace runs next to the D1 primary (`ENAM` on the demo). The stateless Worker runs where the request lands: Seattle or
+    Dublin in these runs.
+  - Each D1 call from the Worker took about 100 ms, against about 20 ms from the object. A clone makes 5–6 calls.
+  - Smart Placement (`placement: { mode: 'smart' }`) or a placement hint for the Worker would remove most of this. The Alchemy
+    Worker resource does not expose placement yet. Support for it is a future deploy option, not part of this plan.
+- **Logging.** `golf.land_soon_skipped` says why a targeted landing did not land a head. `golf.request_unconfirmed` records the error
+  behind a generic 503.
 
 ## Outside Golf
 

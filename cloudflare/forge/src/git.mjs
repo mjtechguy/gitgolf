@@ -81,6 +81,18 @@ export function receiveStatus(bytes, ref) {
 
 // True only when the receive-pack result reports this ref refused (`ng <ref> <reason>`), plainly or inside side-band 1. Anything
 // unreadable is not a refusal: the caller then treats the outcome as unknown.
+// True when the provider ended the receive-pack session with Git's error packet (`ERR <message>`, for example Artifacts'
+// `ERR artifacts_git_receive_pack_busy`) instead of a report-status: the session stopped before it ran any command.
+export function sessionRefused(bytes) {
+  try {
+    for (let offset = 0; offset < bytes.length;) {
+      const row = packet(bytes, offset); offset = row.end;
+      if (row.flush) continue;
+      return /^ERR /.test(row.text);
+    }
+  } catch { /* unreadable is not a refusal */ }
+  return false;
+}
 export function refusedRef(bytes, ref) {
   const rows = data => {
     const out = [];

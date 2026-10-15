@@ -6,8 +6,9 @@ import assert from 'node:assert/strict';
 import { accessFixture, bearer, basic, origin, repository, feature, zero } from './agent-access-fixture.mjs';
 import { tokens } from './object-fixture.mjs';
 import { digest } from './src/core.mjs';
-import { AgentBudgets, budgetDefaults, budgetPolicy } from './src/agent-budgets.mjs';
+import { AgentBudgets, budgetDefaults, budgetPolicy, chargeBudget } from './src/agent-budgets.mjs';
 import { packetLine } from './src/git.mjs';
+import { publicFetch } from './src/public.mjs';
 
 const limits = (requests, writes) => ({ requests, writes });
 function clock(start = 1_000_000) { const c = { t: start, now: () => c.t }; return c; }
@@ -93,6 +94,40 @@ test('Git: a fetch over budget is 429 text with Retry-After; a push over its wri
   const probe = await f.git(basic(writer), 'git-receive-pack', { method: 'POST', type: 'git-receive-pack', body: Buffer.from('0000') });
   assert.equal(probe.status, 200);
   assert.deepEqual(f.env.agentBudgets.usage('token', (await f.session({ action: 'list' }, 'bob')).tokens[0].id), { requests: 2, writes: 1, resetsInSeconds: 60 });
+});
+
+test('Git and Source API writes served by the stateless Worker never enter the Workspace; budgets and settling go by RPC', async t => {
+  const f = await budgets(t, { tokenRequestsPerMinute: 2, tokenWritesPerMinute: 2 });
+  const reader = (await f.create({ permission: 'read' })).secret, { secret: writer, token } = await f.create({ branchPattern: 'agent/*' }, 'bob');
+  const charged = [], forwarded = [], settled = [], waits = [];
+  const ctx = { waitUntil: promise => waits.push(promise), exports: { Workspace: { idFromName: key => key, get: () => ({
+    fetch: async request => { forwarded.push(new URL(request.url).pathname + new URL(request.url).search); return new Response(null, { status: 204 }); },
+    chargeBudget: async (...args) => { charged.push(args); return chargeBudget(f.env, f.env.DB, ...args); },
+    writeSettled: async (...args) => { settled.push(args); }, automations: async () => {}, activityChanged: async () => {} }) } } };
+  const env = { ...f.env, WORKSPACE_SLUG: 'alice' };
+  const send = (path, authorization, init = {}) => publicFetch(new Request(origin + '/git/alice/project.git/' + path, { ...init, headers: { Authorization: authorization, ...init.headers } }), env, ctx);
+  // S1: clones; the request budget is charged on the Workspace's counters.
+  const clone = () => send('info/refs?service=git-upload-pack', basic(reader));
+  assert.equal((await clone()).status, 200); assert.equal((await clone()).status, 200);
+  assert.equal((await clone()).status, 429);
+  const readerId = (await f.session({ action: 'list' })).tokens[0].id;
+  assert.deepEqual(charged, [['token', readerId, false], ['token', readerId, false], ['token', readerId, false]]);
+  assert.deepEqual(f.env.agentBudgets.usage('token', readerId), { requests: 2, writes: 0, resetsInSeconds: 60 });
+  // S2: a push lands through the provider, is charged as a write and settles once in the Workspace with its activity selection.
+  const pushed = await send('git-receive-pack', basic(writer), { method: 'POST', headers: { 'Content-Type': 'application/x-git-receive-pack-request' },
+    body: Buffer.concat([packetLine(`${zero} ${feature} refs/heads/agent/one\0report-status side-band-64k agent=git/2.43.0\n`), Buffer.from('0000PACK0000')]) });
+  assert.equal(pushed.status, 200); assert.deepEqual(f.pushes.map(p => p.ref), ['refs/heads/agent/one']);
+  // A Source API branch, the same way.
+  const branched = await publicFetch(new Request(origin + '/native/source/branch', { method: 'POST', headers: { Authorization: bearer(writer), 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    body: JSON.stringify({ repository, repositoryId: '1', branch: 'agent/two', action: 'create', from: 'feature' }) }), env, ctx);
+  assert.equal(branched.status, 200);
+  await Promise.all(waits);
+  assert.deepEqual(settled, [[{ name: 'project', topics: ['source', 'pulls', 'actions'] }, true, 200], [{ name: 'project', id: '1', topics: ['source', 'pulls', 'actions'] }, true, 200]]);
+  assert.deepEqual(f.env.agentBudgets.usage('token', token.id), { requests: 2, writes: 2, resetsInSeconds: 60 });
+  assert.deepEqual(forwarded, []);
+  // Everything else still goes to the Workspace, including a malformed Git route.
+  assert.equal((await send('git-upload-pack?x=1', basic(reader), { method: 'POST' })).status, 204);
+  assert.deepEqual(forwarded, ['/git/alice/project.git/git-upload-pack?x=1']);
 });
 
 test('MCP: over budget is a tool error (HTTP 200, isError) naming the budget; one write tool call is one write', async t => {

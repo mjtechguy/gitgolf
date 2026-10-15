@@ -364,6 +364,9 @@ async function git(db, env, person, request, url, providerFetch) {
     // Automations: a confirmed branch push (and pull_request.updated for pull requests whose head it moved).
     if (operation && applied && command.next !== '0'.repeat(40)) await automationEvent(env, { type: 'push', repositoryId: row.id, ref: command.ref, before: command.old, after: command.next, actorId: person.id });
     await confirmGitCredential(db,person,row);
+    // A fetch served outside the Workspace queue (scale-out S1) cannot rely on a queued revocation fencing it: the grant is read again,
+    // after the provider answered and before anything is returned. A revoked grant gets the same refusal as at the start.
+    if (service==='git-upload-pack') await authorizedRepository(db, person, { owner: route[1], name: route[2] }, env);
     let bytes=result.bytes;
     if (service==='git-upload-pack') {
       if (advertisement) bytes=defaultBranchAdvertisement(bytes,row.default_branch);
@@ -377,7 +380,7 @@ async function git(db, env, person, request, url, providerFetch) {
 // An API token's or agent task's MCP message with an id is one request; a write tool is also a write. Over budget, the agent sees a
 // tool error (JSON-RPC result, isError) naming the budget. Notifications, batches and malformed messages run nothing and are not counted.
 async function mcpBudget(request, env, db, identify) {
-  if (!env.agentBudgets || request.method !== 'POST' || !/^Bearer golf_(?:pat|agent_task)_/.test(request.headers.get('Authorization') || '')) return null;
+  if (!env.agentBudgets && !env.workspaceBudget || request.method !== 'POST' || !/^Bearer golf_(?:pat|agent_task)_/.test(request.headers.get('Authorization') || '')) return null;
   const person = await identify();
   const subject = budgetSubject(person);
   if (!subject) return null;
@@ -439,6 +442,17 @@ async function sourceEntry(repo, entry, path) {
 
 // How long a push waits for its branch or a merge holding the repository before it is refused (env.pushWaitMs shortens it in tests).
 const pushWaitMs = 20_000;
+// Read authority answered from D1 (scale-out S3, docs/SCALE_OUT_PLAN.md) for reads served outside the Workspace: after a read, the
+// request's credential, its grant and role are read again, so a revocation committed meanwhile refuses the response.
+export function confirmReadFromD1(request, env) {
+  return async authority => {
+    const db = env.DB.withSession('first-primary');
+    const person = await actor(db, request, false, env);
+    const row = await authorizedRepository(db, person, authority.repository, { ...env, publicRead: authority.role === 'public' && env.PUBLIC_REPOSITORIES === 'true' }, authority.repositoryId);
+    if (row.role !== authority.role) deny();
+  };
+}
+
 export async function handle(request, env, providerFetch = fetch, imageFetch = fetch) {
   const start = performance.now(), clock = timings();
   const configured = { ...env, timings: clock, DB: timedDatabase(env.DB, clock) };
@@ -1013,6 +1027,9 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (/^\/rpc\/golf\.v1\.RepositoryExecutionValueService\/(Save|Delete)/.test(new URL(request.url).pathname)) response.headers.set('Golf-Execution-Effect', 'none');
       return response;
     }
+    // Not a refusal: record what failed (message only, bounded) so the operator can tell a provider or database fault from a bug.
+    console.log(JSON.stringify({ event: 'golf.request_unconfirmed', path: new URL(request.url).pathname.slice(0, 200), error: String(error?.name || 'Error').slice(0, 60),
+      message: String(error?.message || error).slice(0, 200) }));
     return reply({ code: 'unavailable', message: 'Native repository operation could not be confirmed.' }, 503);
   }
 }
@@ -1072,7 +1089,8 @@ export async function runCI(env) {
       // Provider uncertainty keeps the original admission key; queue dispatch is already bounded.
     }
   }
-  return { admitted };
+  // A full batch of either kind may have left work behind: the Workspace runs another pass (worker.mjs runCI).
+  return pushes.length === 10 || admissions.length === 10 ? { admitted, more: true } : { admitted };
 }
 
 export async function advanceEvidence(env, id, phase, workflows) {

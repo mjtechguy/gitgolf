@@ -96,3 +96,40 @@ test('linear optimization agrees with exhaustive DAG comparison on generated his
     else { const result=await comparison(f.repo,base,head);assert.equal(result.mergeBase,[...best][0]);assert.deepEqual(new Set(result.commits.map(c=>c.hash)),new Set([...newer].filter(id=>!older.has(id)))); }
   }
 });
+
+test('merge bases with commit times, in order or skewed, match the exhaustive answer', async () => {
+  let seed = 7;
+  const random = n => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % n; };
+  for (const skew of [false, true]) for (let round = 0; round < 80; round++) {
+    const commits = new Map(), at = new Map();
+    const add = (n, parents) => { at.set(n, skew ? random(1000) : Math.max(0, ...parents.map(p => at.get(p))) + 1 + random(5)); commits.set(hash(n), { hash: hash(n), treeHash: hash(999999), parents: parents.map(hash), authoredAt: at.get(n) }); };
+    add(1, []);
+    for (let n = 2; n <= 30; n++) add(n, [...new Set([1 + random(n - 1), ...(random(3) === 0 ? [1 + random(n - 1)] : [])])]);
+    const repo = { readCommit: async id => commits.get(id) };
+    const reachable = start => { const seen = new Set(), pending = [start]; while (pending.length) { const id = pending.pop(); if (seen.has(id)) continue; seen.add(id); pending.push(...commits.get(id).parents); } return seen; };
+    const base = hash(1 + random(30)), head = hash(1 + random(30)), older = reachable(base), newer = reachable(head);
+    const common = new Set([...older].filter(id => newer.has(id))), best = new Set(common);
+    for (const id of common) for (const parent of commits.get(id).parents) for (const ancestor of reachable(parent)) best.delete(ancestor);
+    if (best.size !== 1) { await assert.rejects(comparison(repo, base, head), error => error.code === 'unimplemented'); continue; }
+    const result = await comparison(repo, base, head);
+    assert.equal(result.mergeBase, [...best][0], `skew ${skew} round ${round}`);
+    // Without skew the commit list is exact; with it, the merge base still is.
+    if (!skew) assert.deepEqual(new Set(result.commits.map(c => c.hash)), new Set([...newer].filter(id => !older.has(id))));
+  }
+});
+
+test('a pull request whose base moved by merges resolves on a long merge history with few reads', async () => {
+  // main: 3,000 landed pull requests, each a merge commit of a one-commit branch; then a pull request opened from main and ten more
+  // landings. The merge base is where the pull request started, whatever the age of the repository.
+  const commits = new Map(); let n = 1, time = 1;
+  const add = parents => { const id = hash(n++); commits.set(id, { hash: id, treeHash: hash(999999), parents, authoredAt: time++ }); return id; };
+  let main = add([]);
+  const land = () => { const branch = add([main]); main = add([main, branch]); };
+  for (let i = 0; i < 3000; i++) land();
+  const start = main, head = add([start]);
+  for (let i = 0; i < 10; i++) land();
+  const reads = [], repo = { readCommit: async id => { reads.push(id); return commits.get(id); } };
+  const result = await comparison(repo, main, head);
+  assert.equal(result.mergeBase, start); assert.deepEqual(result.commits.map(c => c.hash), [head]);
+  assert.ok(new Set(reads).size < 100, `${new Set(reads).size} commits read`);
+});

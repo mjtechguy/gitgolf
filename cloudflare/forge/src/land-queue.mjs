@@ -213,7 +213,10 @@ async function land(db, env, principal, row, op, ctx, options = {}) {
     if (receipt.phase === phase('DISPATCH_UNKNOWN')) return transition(db, op, 'LANDING', { reasons: ['the merge was sent but its outcome is not confirmed yet; maintenance reads the branch back'] });
     const code = receipt.refusalCode;
     if (code === 'merge_conflict') return rebaseNeeded(db, env, principal, row, op, d.base_branch, receipt.conflicts || [], receipt.conflictCount, ctx.artifact);
-    if (code === 'pull_request_changed' || code === 'write_unresolved') { last = code === 'write_unresolved' ? 'the repository stayed busy with another write' : 'the base branch kept moving'; continue; }
+    // Git storage refusing with the base unchanged (busy, or a race it lost) is retried like a moved base, with the same backoff.
+    if (code === 'pull_request_changed' || code === 'write_unresolved' || code === 'provider_refused') {
+      last = code === 'write_unresolved' ? 'the repository stayed busy with another write' : code === 'provider_refused' ? refusals.provider_refused : 'the base branch kept moving'; continue;
+    }
     return transition(db, op, 'BLOCKED', { reasons: [refusals[code] || code || 'the merge was refused'] });
   }
   return transition(db, op, 'FAILED', { reasons: [`${last || 'the base branch kept moving'}; gave up after ${attempt - 1} attempts in ${Math.round((Date.now() - started) / 1000)} s`] });
@@ -311,7 +314,12 @@ export async function autoLand(env, repositoryId, { commitId, limit = landLimits
     try { value = await landingEvaluation(db, env, { ...row, write_pending: null }, pull.number, artifact, settings, feature); }
     catch (error) { if (error instanceof Fault) continue; throw error; }
     const conflicted = onlyConflict(value) && value.ifMergeable.decision === 'land';
-    if (value.evaluation.decision !== 'land' && !conflicted || value.headCommitId !== head) continue;
+    if (value.evaluation.decision !== 'land' && !conflicted || value.headCommitId !== head) {
+      // A targeted pass (landSoon: a check reported, a pull request opened) says why this head did not land; the sweep stays quiet.
+      if (commitId) console.log(JSON.stringify({ event: 'golf.land_soon_skipped', repositoryId: String(row.id), number: pull.number, decision: value.evaluation.decision,
+        reasons: (value.evaluation.reasons || []).slice(0, 5).map(reason => String(reason).slice(0, 160)), headMoved: value.headCommitId !== head }));
+      continue;
+    }
     const op = await create(db, row, value.d, { trigger: 'policy', actorId: 0, method: 'merge', headCommitId: head,
       detail: { decision: 'land', reasons: (conflicted ? value.ifMergeable : value.evaluation).reasons, principal: principal.login } });
     if (!op) continue;

@@ -266,3 +266,39 @@ test('a workspace object left behind by a rename stops its own maintenance alarm
   await workspace.alarm();
   assert.equal(deleted, 1); assert.equal(statements.length, 0);
 });
+
+test('a write served by the stateless Worker settles here by RPC without waiting in the admission queue', async () => {
+  const db = { prepare: sql => ({ bind(...values) { this.values = values; return this; }, all: async () => ({ results: sql.includes('FROM repositories') ? [{ id: 7 }] : [] }) }) };
+  const background = deferred(), calls = [];
+  const workspace = new Workspace({ storage: { sql: { exec() {} }, getAlarm: async () => 1, setAlarm: async () => {} }, exports: {}, waitUntil() {} },
+    { CI_AUTO: 'true', DB: { withSession: () => db }, background: async () => { await background.promise; return {}; } });
+  workspace.activity.publish = (id, topics) => calls.push(['publish', id, topics]);
+  for (const name of ['deliverWebhooks', 'deliverEmail', 'runCI']) workspace[name] = async () => { calls.push([name]); };
+  const held = workspace.evidence('job', 'advice'); await tick();
+  await workspace.writeSettled({ name: 'project', topics: ['source', 'pulls', 'actions'] }, true, 200);
+  assert.deepEqual(calls, [['deliverWebhooks'], ['deliverEmail'], ['publish', '7', ['source', 'pulls', 'actions']], ['runCI']]);
+  // A refusal publishes nothing and drains nothing; an ambiguous provider failure publishes, as in the queue.
+  calls.length = 0; await workspace.writeSettled({ name: 'project', topics: ['source'] }, false, 409);
+  assert.deepEqual(calls, [['runCI']]);
+  calls.length = 0; await workspace.writeSettled({ name: 'project', topics: ['source'] }, false, 503);
+  assert.deepEqual(calls, [['publish', '7', ['source']], ['runCI']]);
+  background.resolve(); await held;
+});
+
+test('automatic CI passes are coalesced: writes during a pass share one more round, a full batch asks for another', async () => {
+  const passes = [], gates = [];
+  const workspace = new Workspace({ storage: { sql: { exec() {} }, getAlarm: async () => 1, setAlarm: async () => {} }, exports: {}, waitUntil() {} },
+    { DB: { withSession: () => ({ prepare: () => ({ bind() { return this; }, all: async () => ({ results: [] }) }) }) },
+      ci: async () => { const gate = deferred(); gates.push(gate); passes.push(passes.length); return gate.promise; } });
+  const first = workspace.runCI(); await tick();
+  const writes = Array.from({ length: 20 }, () => workspace.runCI());
+  assert.equal(passes.length, 1); assert.ok(writes.every(write => write === first));
+  gates[0].resolve({ admitted: 0 }); await tick(); await tick();
+  assert.equal(passes.length, 2);
+  gates[1].resolve({ admitted: 10, more: true }); await tick(); await tick();
+  assert.equal(passes.length, 3);
+  gates[2].resolve({ admitted: 1 });
+  assert.deepEqual(await first, { admitted: 1 }); assert.equal(passes.length, 3);
+  // The next write starts a fresh pass.
+  const next = workspace.runCI(); await tick(); assert.equal(passes.length, 4); gates[3].resolve({ admitted: 0 }); await next;
+});

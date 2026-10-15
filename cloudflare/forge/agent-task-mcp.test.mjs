@@ -101,9 +101,11 @@ test('the public Worker lets a task token through Access only on /mcp and /nativ
   const send = (path, authorization) => publicFetch(new Request(origin + path, { method: 'POST', body: '{}',
     headers: { Authorization: authorization, Cookie: 'CF_Authorization=forged', 'X-Golf-Native-Access-Email': 'forged@example.com' } }), env, ctx);
   assert.equal(await (await send('/mcp', bearer(token))).text(), 'workspace');
-  assert.equal(await (await send('/native/source/commit', bearer(token))).text(), 'workspace');
+  assert.equal(await (await send('/native/source/files', bearer(token))).text(), 'workspace');
+  // A Source API write passes Access the same way and is served by the Worker itself (scale-out S2); this stub has no database.
+  assert.equal((await send('/native/source/commit', bearer(token))).status, 503);
   for (const path of ['/git/alice/project.git/git-receive-pack', '/rpc/golf.v1.RepositoryService/GetRepository', '/native/agent-tasks']) assert.equal((await send(path, bearer(token))).status, 401, path);
-  assert.deepEqual(forwarded, [['/mcp', null, null], ['/native/source/commit', null, null]]);
+  assert.deepEqual(forwarded, [['/mcp', null, null], ['/native/source/files', null, null]]);
 });
 
 test('claim names the MCP endpoint for the task token, and null while agent access is off for the repository', async t => {
