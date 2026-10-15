@@ -11,7 +11,9 @@ const byPath = (a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 const named = async (read, hash) => new Map((await read(hash)).map(entry => [entry.name, entry]));
 const regular = entry => entry?.type === 'blob' || entry?.type === 'exec';
 // Per merge: at most this many files are merged line by line, reading at most this many bytes of their three versions.
-export const mergeBudget = Object.freeze({ files: 200, bytes: 16 << 20 });
+// lines bounds the diff work of one merge across files (each file's diff is already bounded by xdiff's cost cut-offs), so hostile
+// inputs cannot exhaust a Worker's CPU: about 200,000 lines is a few seconds at worst.
+export const mergeBudget = Object.freeze({ files: 200, bytes: 16 << 20, lines: 200_000 });
 
 // One side changed: take it. Both changed identically: take it once. Both changed a regular file differently with the
 // same mode on every side that has it: merge its text line by line like `git merge-file` (text-merge.mjs; an add/add
@@ -42,7 +44,12 @@ export async function mergeTrees(repo, baseTree, oursTree, theirsTree) {
     // The first file that does not fit uses up the budget, so later files are not read either.
     if (spent.bytes + size > mergeBudget.bytes) { spent.bytes = mergeBudget.bytes; return 'merge_budget'; }
     spent.bytes += size;
-    const result = mergeText(...await Promise.all(sides.map(side => side.bytes())));
+    const contents = await Promise.all(sides.map(side => side.bytes()));
+    const counts = contents.map(bytes => { let n = 0; for (const byte of bytes) if (byte === 10) n++; return n; });
+    // One file over the line limit is reported as such; only files that could merge spend the shared line budget.
+    if (counts.some(n => n > textMergeLimits.lines)) return 'too_large_to_merge';
+    if ((spent.lines = (spent.lines || 0) + counts[0] + counts[1] + counts[2]) > mergeBudget.lines) return 'merge_budget';
+    const result = mergeText(...contents);
     if (result.conflict) return result.reason === 'both_modified' && !base ? 'both_added' : result.reason;
     const blob = await blobObject(result.merged);
     if (![base?.hash, ours.hash, theirs.hash].includes(blob.id)) objects.set(blob.id, blob);

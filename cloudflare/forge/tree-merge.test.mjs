@@ -142,6 +142,16 @@ test('mergeTrees stops merging lines beyond the per-merge budget', { skip }, asy
   assert.equal(read, fit * (3 * big.length + 4));
 });
 
+test('mergeTrees bounds the total lines diffed in one merge, so hostile inputs cannot exhaust a Worker', { skip }, async t => {
+  const git = gitFixture(t), file = Array.from({ length: 30_000 }, (_, i) => `l${i}\n`).join('');
+  // Three versions of 30,000 lines are 90,000 lines a file: two files fit in 200,000, the third does not.
+  const base = git.tree(Object.fromEntries(Array.from({ length: 3 }, (_, i) => [`long${i}.txt`, file])));
+  const side = edit => git.edit(base, Array.from({ length: 3 }, (_, i) => ({ path: `long${i}.txt`, content: edit(file) })));
+  const result = await mergeTrees(git.repo, base, side(text => 'top\n' + text), side(text => text + 'end\n'));
+  assert.equal(mergeBudget.lines, 200_000);
+  assert.deepEqual(result.conflicts.map(conflict => [conflict.path, conflict.reason]), [['long2.txt', 'merge_budget']]);
+});
+
 test('mergeTrees takes unchanged and one-sided subtrees wholesale without reading them', { skip }, async t => {
   const git = gitFixture(t), base = git.tree(baseFiles);
   const ours = git.edit(base, [{ path: 'wide/d7/f.txt', content: 'seven\n' }, { path: 'src/lib/deep/x.js', content: 'X\n' }]), theirs = git.edit(base, [{ path: 'wide/d93/f.txt', content: 'ninety-three\n' }]);
