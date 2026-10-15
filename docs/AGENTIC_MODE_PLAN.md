@@ -297,7 +297,7 @@ writer in a new `git-objects.mjs`.
 
 ### AM-4 Landing at agent speed
 
-**Status (2026-10-14): built and merged; hosted exit run pending.** #94 (diverged merge and squash, hosted-verified: merge commit tree equals `git merge-tree`), #96 (setting and policy, schema 41), #100 (land queue, landing without a person, revert on failure, schema 42).
+**Status (2026-10-15): done, hosted-verified.** Exit met on `mj/agent-bench-3`: ten concurrent lands all landed after #103; a sensitive `.github/` change waits for a person; a policy-landed change whose required check then failed was reverted automatically with an issue (see `docs/IMPLEMENTATION_STATUS.md`). #94 (diverged merge and squash, hosted-verified: merge commit tree equals `git merge-tree`), #96 (setting and policy, schema 41), #100 (land queue, landing without a person, revert on failure, schema 42).
 
 1. **Better merges** (`pull-merge.mjs` on `tree-merge.mjs`):
    - Merge diverged branches with a real three-way tree merge.
