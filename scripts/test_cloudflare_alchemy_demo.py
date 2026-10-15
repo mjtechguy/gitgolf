@@ -315,6 +315,10 @@ class Observability(unittest.TestCase):
             saved=json.loads((directory/'alchemy-input.json').read_text())
             self.assertIs(saved['sshHosts'],True)
             self.assertEqual(saved['settings'],{'evidence':{}})
+            tunnel='d44bf2a4-2cb5-4004-911f-0d90569674f1'
+            with self.assertRaises(ValueError): demo.enable_ssh_hosts(directory,{'settings':{},'executionValueKey':'k'},'not-a-tunnel')
+            with patch('builtins.print'): demo.enable_ssh_hosts(directory,{'settings':{},'executionValueKey':'k'},tunnel)
+            self.assertEqual(json.loads((directory/'alchemy-input.json').read_text())['settings'],{'ssh_vpc':{'tunnel_id':tunnel}})
             stack=(demo.ROOT/'deploy/alchemy/alchemy.run.ts').read_text()
             # The build context is staged, never the repository root with its .tmp installation directories.
             self.assertIn("for (const part of ['go.mod', 'go.sum', 'cmd/golf-agent-host'])",stack)

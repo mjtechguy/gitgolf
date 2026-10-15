@@ -366,3 +366,17 @@ test('the SSHAgentTask Durable Object: the job only on standard input, the token
   assert.deepEqual([view.probe.state, view.probe.matched, store4.get('ssh').stage], ['FAILED', false, 'done']);
   void next;
 });
+
+test('the Workers VPC bridge connects only once the container listens, then pipes to the VPC network', async () => {
+  const events = [], closed = () => ({ opened: Promise.resolve(), readable: new ReadableStream({ start: c => c.close() }), writable: new WritableStream() });
+  let checks = 0;
+  const container = {
+    exec: async args => { events.push('check'); assert.match(args[2], /:08AE \[0-9A-F\]\+:\[0-9A-F\]\+ 0A /); return { exitCode: Promise.resolve(++checks >= 3 ? 0 : 1) }; },
+    getTcpPort: port => ({ connect: address => { events.push(`inner ${port} ${address}`); return closed(); } }) };
+  const env = { SSH_VPC_NETWORK: { connect: address => { events.push(`outer ${address}`); return closed(); } } };
+  const object = new SSHAgentTask({ container, storage: { kv: { get: () => undefined, put: () => {} } }, exports: {} }, env);
+  await object.bridge({ vpc: { listenPort: 2222 }, address: '10.0.0.5', port: 22 });
+  assert.deepEqual(events, ['check', 'check', 'check', 'inner 2222 10.0.0.1:2222', 'outer 10.0.0.5:22']);
+  await object.bridge({ vpc: { listenPort: 2222 }, address: 'fd00::5', port: 2200 });
+  assert.equal(events.at(-1), 'outer [fd00::5]:2200');
+});

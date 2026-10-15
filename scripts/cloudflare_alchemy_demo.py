@@ -202,6 +202,9 @@ def renew_deploy(directory, value):
     if value['settings'].get('search'):
         # Creates the search index and its metadata index; the Worker only reads and writes vectors through its binding.
         account_names.add('Vectorize Write')
+    if value['settings'].get('ssh_vpc'):
+        # Binds the SSH hosts Tunnel as a Workers VPC network; it never edits the Tunnel.
+        account_names |= {'Connectivity Directory Admin', 'Cloudflare Tunnel Read'}
     zone_names = {'Zone Read', 'DNS Write', 'Workers Routes Write'}
     policies = []
     for scope, names, resource in [('com.cloudflare.api.account', account_names, value['account']),
@@ -398,10 +401,15 @@ def enable_secrets(directory, value):
         ' Secrets and variables stay unavailable until this installation has an approved Actions workflow profile.'))
 
 
-def enable_ssh_hosts(directory, value):
+def enable_ssh_hosts(directory, value, vpc_tunnel_id=None):
     # SSH host keys and reach secrets are sealed with the repository value encryption key (docs/SSH_HOSTS.md).
     if not value.get('executionValueKey'):
         raise ValueError('Run enable-secrets first; SSH host keys are sealed with its encryption key')
+    if vpc_tunnel_id is not None:
+        # The Workers VPC reach connects through this Cloudflare Tunnel (a vpc_networks binding named SSH_VPC_NETWORK).
+        if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', vpc_tunnel_id):
+            raise ValueError('Use the Cloudflare Tunnel UUID for --vpc-tunnel-id')
+        value['settings']['ssh_vpc'] = {'tunnel_id': vpc_tunnel_id}
     value['sshHosts'] = True
     replace_private_json(directory/'alchemy-input.json', value)
     print('SSH host tasks prepared; deploy to build the SSH image and bind the SSHAgentTask Durable Object.')
@@ -664,6 +672,7 @@ def build_parser():
     parser.add_argument('--dimensions', type=int, default=1024, help='Vectorize index dimension for enable-search; must match the embedding model')
     parser.add_argument('--actions-url', help='HTTPS origin that resolves unqualified marketplace actions for enable-pipelines, such as https://code.forgejo.org')
     parser.add_argument('--agent-path', help='one approved source file; lets enable-ai also turn on agent proposals')
+    parser.add_argument('--vpc-tunnel-id', help='Cloudflare Tunnel UUID for enable-ssh-hosts: binds it as SSH_VPC_NETWORK for the Workers VPC reach')
     parser.add_argument('--workflow-path', help='the one approved Actions workflow path for enable-workflow, .github/workflows/NAME.yml')
     parser.add_argument('directory', nargs='?', help='the installation directory printed by init or prepare; for prepare, the old ownership.json')
     fresh = parser.add_argument_group('init (fresh installation; nothing is read from a previous installation)')
@@ -722,7 +731,7 @@ def main():
     if args.action == 'rename-workspace': return rename_workspace(directory, value, args.slug)
     if args.action == 'migrate': return migrate(directory, value)
     if args.action == 'enable-secrets': return enable_secrets(directory, value)
-    if args.action == 'enable-ssh-hosts': return enable_ssh_hosts(directory, value)
+    if args.action == 'enable-ssh-hosts': return enable_ssh_hosts(directory, value, args.vpc_tunnel_id)
     if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)
     if args.action == 'receipt': return receipt(directory, value)

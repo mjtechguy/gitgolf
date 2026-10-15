@@ -43,7 +43,9 @@ python3 scripts/golf_cloudflare.py install --yes \
 ```
 
 Services: `observability`, `analytics`, `dead-letter`, `operations`, `ai`,
-`search` (adds `ai`), `email`, `pipelines`, `webhooks`, `public`, `rate-limit`.
+`search` (adds `ai`), `email`, `pipelines`, `webhooks`, `public`, `rate-limit`,
+`secrets` (repository secrets and variables, the credential vault), and `ssh-hosts`
+(adds `secrets`; `--ssh-vpc-tunnel-id TUNNEL_UUID` also binds Workers VPC).
 Progress is saved in the private directory (`install-progress.json`). After a
 failure, fix the cause and continue from the failed step:
 
@@ -401,13 +403,21 @@ Turn on coding agents on SSH hosts ([SSH_HOSTS.md](../../docs/SSH_HOSTS.md)) aft
 SSH host keys are sealed with the same repository value key:
 
 ```sh
-python3 scripts/cloudflare_alchemy_demo.py enable-ssh-hosts NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py migrate NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py enable-ssh-hosts NEW_DIRECTORY [--vpc-tunnel-id TUNNEL_UUID]
+python3 scripts/cloudflare_alchemy_demo.py renew-deploy NEW_DIRECTORY   # only with --vpc-tunnel-id
 python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
 ```
 
 The stack builds the SSH image from a context staged in `NEW_DIRECTORY/ssh-image`. It binds
 the `SSHAgentTask` Durable Object to that image and sets `SSH_HOSTS_EXECUTION`. If the first deploy
 stops with "requires a resolved Durable Object namespace", run it again.
+
+`--vpc-tunnel-id` binds an existing Cloudflare Tunnel as `SSH_VPC_NETWORK` for the Workers VPC
+reach. The deployment token then gains **Connectivity Directory Admin** and **Cloudflare Tunnel
+Read**, which is why `renew-deploy` is needed. Setting up each reach (Tailscale tags and keys, a
+Tunnel with an Access service token, Workers VPC) is described in
+[SSH_HOSTS.md](../../docs/SSH_HOSTS.md#setting-up-reach).
 
 Prepare repository secrets and variables on a retained installation:
 

@@ -61,3 +61,11 @@ test('the search binding names one Vectorize index and refuses any other shape',
   for (const value of [{}, { name: '' }, { name: 'Demo_Search' }, { name: 'demo-search', dev: { remote: true } }, { name: 7 }])
     assert.throws(() => bindings({ env: { SEARCH_INDEX: { type: 'vectorize', ...value } } }), /Unqualified Alchemy Vectorize binding/, JSON.stringify(value));
 });
+
+test('the SSH hosts VPC binding names one tunnel or the Mesh network and refuses any other shape', () => {
+  const tunnelId = 'd44bf2a4-2cb5-4004-911f-0d90569674f1';
+  assert.deepEqual(bindings({ env: { SSH_VPC_NETWORK: { type: 'vpc-network', tunnelId } } }), [{ name: 'SSH_VPC_NETWORK', type: 'vpc_network', tunnelId }]);
+  assert.deepEqual(bindings({ env: { SSH_VPC_NETWORK: { type: 'vpc-network', networkId: 'cf1:network' } } }), [{ name: 'SSH_VPC_NETWORK', type: 'vpc_network', networkId: 'cf1:network' }]);
+  for (const value of [{}, { tunnelId, networkId: 'cf1:network' }, { tunnelId: 'not-a-uuid' }, { networkId: 'other' }, { tunnelId, extra: 1 }])
+    assert.throws(() => bindings({ env: { SSH_VPC_NETWORK: { type: 'vpc-network', ...value } } }), /Unqualified/);
+});

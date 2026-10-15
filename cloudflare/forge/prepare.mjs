@@ -159,6 +159,12 @@ if (mode === 'retire') {
     // The scheduled sweep retries lost intakes and advances runs whose coordinator alarm was lost.
     if (!config.triggers?.some(trigger => trigger.type === 'scheduled')) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '*/5 * * * *' }];
   }
+  // SSH hosts over Workers VPC (docs/SSH_HOSTS.md): the Tunnel the SSHAgentTask bridge connects through.
+  if (settings.ssh_vpc !== undefined) {
+    const v = settings.ssh_vpc;
+    if (!v || typeof v !== 'object' || Object.keys(v).join() !== 'tunnel_id' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v.tunnel_id)) throw Error('Invalid SSH hosts VPC allocation');
+    config.env.SSH_VPC_NETWORK = { type: 'vpc-network', tunnelId: v.tunnel_id };
+  }
   if (settings.analytics_dataset !== undefined) {
     if (!settings.evidence || typeof settings.analytics_dataset !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(settings.analytics_dataset)) throw Error('Invalid evidence analytics dataset');
     config.env.USAGE_ANALYTICS = { type: 'analytics-engine-dataset', name: settings.analytics_dataset };

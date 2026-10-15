@@ -63,6 +63,9 @@ SERVICES = collections.OrderedDict([
     ('webhooks', {'enable': 'enable-webhooks', 'about': 'repository webhooks to approved receiver origins'}),
     ('public', {'enable': 'enable-public', 'migrate': True, 'about': 'anonymous read access to explicitly published repositories'}),
     ('rate-limit', {'enable': 'enable-rate-limit', 'about': 'throttle anonymous public reads and clones'}),
+    ('secrets', {'enable': 'enable-secrets', 'about': 'repository secrets and variables, the credential vault (its own Secrets Store key)'}),
+    ('ssh-hosts', {'enable': 'enable-ssh-hosts', 'migrate': True, 'requires': 'secrets',
+                   'about': 'coding agents on SSH hosts via an SSH container (needs secrets; Workers VPC with --ssh-vpc-tunnel-id)'}),
 ])
 
 MINUTES = {'build-image': '5-15 minutes the first time, under a minute when cached', 'init': 'under a minute',
@@ -452,7 +455,7 @@ def validate_content(value):
 def resolve_options(args, prompter, cf_for):
     """Collect every install answer: flags first, then read-only discovery, then questions."""
     o = {'profile': args.profile, 'admin_login': args.admin_login, 'agent_path': args.agent_path,
-         'actions_url': args.actions_url, 'webhook_origins': list(args.webhook_origin or [])}
+         'actions_url': args.actions_url, 'ssh_vpc_tunnel_id': args.ssh_vpc_tunnel_id, 'webhook_origins': list(args.webhook_origin or [])}
     accounts, email_hint = discover_identity(cf_for(None))
     account = args.account_id
     if account is None:
@@ -579,10 +582,13 @@ def service_steps(name, o, directory, migrated):
     extra = []
     if name == 'ai' and o.get('agent_path'): extra = ['--agent-path', o['agent_path']]
     if name == 'pipelines' and o.get('actions_url'): extra = ['--actions-url', o['actions_url']]
+    # The Workers VPC binding needs the deployment token to bind the Tunnel (Connectivity Directory).
+    vpc = name == 'ssh-hosts' and o.get('ssh_vpc_tunnel_id')
+    if vpc: extra = ['--vpc-tunnel-id', o['ssh_vpc_tunnel_id']]
     if name == 'webhooks':
         extra = [arg for origin in o.get('webhook_origins', []) for arg in ['--origin', origin]]
     steps.append(step(name+':enable', 'Enable '+name+' ('+spec['about']+')', wrapper(spec['enable'], directory, *extra), kind='enable'))
-    if spec.get('renew'):
+    if spec.get('renew') or vpc:
         steps.append(step(name+':renew-deploy', 'Renew the deployment token with the new permission', wrapper('renew-deploy', directory)))
     steps.append(step(name+':deploy', 'Deploy with '+name, wrapper('deploy', directory), retry=True))
     if name == 'public' and o.get('public_manifest'):
@@ -819,6 +825,8 @@ def summary(o, out=print):
         out('  %-19s %s' % ('Public content:', o.get('public_manifest') or 'none published (pass --public-manifest)'))
     if 'webhooks' in o['services']:
         out('  %-19s %s' % ('Webhook origins:', ', '.join(o['webhook_origins'])))
+    if 'ssh-hosts' in o['services']:
+        out('  %-19s %s' % ('SSH hosts VPC:', o.get('ssh_vpc_tunnel_id') or 'none (direct, Tailscale and Cloudflare Tunnel reach only)'))
     out('This creates Workers, D1, R2, queues, a Workflow, Access applications, API tokens and Secrets Store entries on the account.')
     out('Costs: Workers Paid usage'+(' plus Workers AI inference' if 'ai' in o['services'] else '')+'. Expect 20-60 minutes in total.')
 
@@ -946,7 +954,7 @@ def update(args, run=stream, ask=input, out=print, http=probe, sleep=time.sleep,
         if not all(core in done for core in CORE):
             raise Stop('The install has not finished', SELF+' install --resume '+str(directory))
     if adding:
-        for key in ['agent_path', 'actions_url']:
+        for key in ['agent_path', 'actions_url', 'ssh_vpc_tunnel_id']:
             if getattr(args, key): o[key] = getattr(args, key)
         if args.webhook_origin: o['webhook_origins'] = list(args.webhook_origin)
         wanted = parse_services(args.with_services, args.all)
@@ -1054,6 +1062,7 @@ def service_arguments(parser):
     group.add_argument('--agent-path', help='ai: the one source file agent proposals may change')
     group.add_argument('--actions-url', help='pipelines: origin for unqualified marketplace actions, e.g. https://code.forgejo.org')
     group.add_argument('--webhook-origin', action='append', help='webhooks: approved receiver origin (repeatable)')
+    group.add_argument('--ssh-vpc-tunnel-id', help='ssh-hosts: Cloudflare Tunnel UUID to bind as the Workers VPC network (docs/SSH_HOSTS.md)')
     group.add_argument('--public-manifest', help='public: what to publish; default '+EXAMPLE_PUBLIC+' with --content example')
 
 

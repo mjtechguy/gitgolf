@@ -111,14 +111,22 @@ export class SSHAgentTask extends DurableObject {
   }
 
   // Workers VPC: the container's listener (it starts listening after it reads its job) to the private address through the VPC network.
+  // The container's TCP port reports a connection opened even before anything listens on it, so the bridge first waits until the
+  // kernel shows a listening socket on that port; a connection made earlier is dropped and the tunnel side closes with it.
   async bridge(ssh) {
-    const port = ssh.vpc.listenPort;
-    let inner;
-    for (let attempt = 0; attempt < 30 && !inner; attempt++) {
-      try { const socket = this.container.getTcpPort(port).connect(`10.0.0.1:${port}`); await socket.opened; inner = socket; }
-      catch { await new Promise(resolve => setTimeout(resolve, 1000)); }
+    const port = ssh.vpc.listenPort, hex = port.toString(16).toUpperCase().padStart(4, '0');
+    const listening = async () => {
+      const check = await this.container.exec(['/bin/sh', '-c', `grep -qE '^ *[0-9]+: [0-9A-F]+:${hex} [0-9A-F]+:[0-9A-F]+ 0A ' /proc/net/tcp /proc/net/tcp6`], { stdout: 'ignore', stderr: 'ignore' });
+      return await check.exitCode === 0;
+    };
+    let ready = false;
+    for (let attempt = 0; attempt < 60 && !ready; attempt++) {
+      try { ready = await listening(); } catch { /* the container is still starting the process */ }
+      if (!ready) await new Promise(resolve => setTimeout(resolve, 500));
     }
-    if (!inner) throw Error('The container did not listen for the VPC bridge');
+    if (!ready) throw Error('The container did not listen for the VPC bridge');
+    const inner = this.container.getTcpPort(port).connect(`10.0.0.1:${port}`);
+    await inner.opened;
     const outer = this.env.SSH_VPC_NETWORK.connect(`${ssh.address.includes(':') ? `[${ssh.address}]` : ssh.address}:${ssh.port}`);
     await outer.opened;
     await Promise.allSettled([inner.readable.pipeTo(outer.writable), outer.readable.pipeTo(inner.writable)]);
