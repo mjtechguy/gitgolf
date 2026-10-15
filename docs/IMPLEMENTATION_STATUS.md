@@ -1,5 +1,25 @@
 # Golf implementation status
 
+## 2026-10-15 — AM-5 agentic inbox and intent summaries walked through on the hosted demo
+
+**Inbox:** `https://demo.gitgolf.mjtechguy.com/mj/agent-bench-3/agents`, with agentic mode on, shows:
+- **In progress:** 0.
+- **Ready to land:** 0.
+- **Needs a person:** 1, PR #11 adding `.github/workflows/bench.yml`, with its sensitive-path reason.
+- **Landed:** 16 recent landings, including #17, landed by the policy and shown as reverted by `77440cc`.
+
+**Intent summary:** "Summarize intent" on #11 ran Workers AI (`@cf/zai-org/glm-5.3`) through the installation's AI Gateway and stored it once for head `8051eaa8f277`. The panel, marked "AI-written":
+- describes the change;
+- names its areas (CI workflows, GitHub Actions);
+- lists three accurate risks: the empty `jobs` map, triggering on every push, and no benchmark actually added;
+- shows confidence, coverage (1 of 1 files, 0.1 KiB of 48 KiB) and the model;
+- links to the diff.
+
+**Not verified on hosted:**
+- "Land selected" from the inbox (the same `/native/land` path verified in the AM-4 run);
+- live updates while a task runs;
+- the inbox in all nine layouts.
+
 ## 2026-10-15 — AM-4 landing verified on the hosted demo (exit criteria met)
 
 On `https://demo.gitgolf.mjtechguy.com`, repository `mj/agent-bench-3`, schema 43, after #100, #103 and #104.
