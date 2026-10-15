@@ -1,5 +1,41 @@
 # Golf implementation status
 
+## 2026-10-15 — AM-4 landing verified on the hosted demo (exit criteria met)
+
+On `https://demo.gitgolf.mjtechguy.com`, repository `mj/agent-bench-3`, schema 43, after #100, #103 and #104.
+
+**Setting:** agentic mode on, low-risk paths `docs/**`, the default sensitive paths, landing without a person on, required check `bench/ci`, revert on failure on. Checks were reported through `/native/repository-check`.
+
+**Policy evaluation**
+- Ten docs-only pull requests evaluated `land`: "every changed path is low-risk, landing without a person is on and every required check passed".
+- One that adds `.github/workflows/bench.yml` evaluated `needs_person` as sensitive, cannot be landed, and is not on `main`.
+
+**Concurrent landing**
+- **First run, before #103:** ten lands requested at once ended 5 LANDED and 5 FAILED after 5 attempts (about 12 s). Two failures falsely reported lost write access.
+- **#103:**
+  - a land waits its turn while another write holds the repository, within 45 s;
+  - a 404 while the account still writes is contention;
+  - a merge the provider refuses with `ng`, whose branch does not hold the merge commit, is `REJECTED` and releases the repository at once instead of staying unknown.
+- **Re-run after #103:** ten lands requested at once, the five that had failed plus five new ones, all LANDED in 22.5 s (1–10 attempts each).
+- **Result:** `main` has all 15 notes, 15 merge commits, and `git fsck --strict` is clean.
+
+**Landing without a person and revert**
+1. PR #17 (docs-only, `bench/ci` passing) was landed by the maintenance sweep with `trigger: policy`, commit `4a3484f`.
+2. Reporting `bench/ci` as failed on the landed commit led, within one sweep, to:
+   - revert commit `77440cc` by `Golf (agentic mode) <agentic@golf.invalid>` ("Automatic revert: required checks failed after landing: bench/ci");
+   - the land operation set to `REVERTED`;
+   - issue #18 assigned to `mj`.
+3. After the revert, `main`'s tree equals the tree before the landing, and fsck is clean.
+
+**Also found and fixed:** `git clone` of a repository with many branches failed with HTTP 400 "Invalid Git content.". Git gzips large fetch requests and `/git/` refused any `Content-Encoding`. #104 decompresses gzip with the same 8 MiB bound. A full clone of `agent-bench-3` (21 branches) now works.
+
+**Cleanup:**
+- The temporary API tokens are revoked, and a revoked token gets 401 on `/mcp`.
+- The one-hour Git credentials have expired.
+- Agentic mode stays on for `agent-bench-3` only.
+
+**Not verified:** the agentic inbox walkthrough (AM-5) and intent summaries on hosted.
+
 ## 2026-10-14 — Agentic inbox and intent summaries (agentic mode AM-5, first slice, schema 43)
 
 See `docs/AGENTIC_MODE.md`, "Inbox and intent summaries". This adds:
