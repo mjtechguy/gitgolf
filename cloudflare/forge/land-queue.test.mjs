@@ -40,7 +40,7 @@ async function fixture(t) {
     },
   };
   const git = args => spawnSync('git', ['--git-dir', g.directory, ...args], { env: g.env, maxBuffer: 1 << 28 });
-  const hooks = { beforePush: null, afterAdvertise: null }, counts = { pushes: 0, adverts: 0 }, queued = [];
+  const hooks = { beforePush: null, afterAdvertise: null, busy: 0 }, counts = { pushes: 0, adverts: 0 }, queued = [];
   const env = { DB: db, ACCOUNT_ID: 'c'.repeat(32), ARTIFACTS_NAMESPACE: 'test-space', WORKSPACE_SLUG: 'alice', PUBLIC_ORIGIN: origin,
     PIPELINES_ENABLED: 'true', PIPELINE_BUCKET: {}, PIPELINE_QUEUE: { async send(message) { queued.push(message); } },
     ARTIFACTS: { async get(name) { assert.equal(name, artifact); return {
@@ -64,6 +64,8 @@ async function fixture(t) {
     if (options.method === 'POST') {
       counts.pushes++;
       if (hooks.beforePush) { const hook = hooks.beforePush; hooks.beforePush = null; await hook(); }
+      // Git storage busy: the session ends with Git's error packet before any command runs.
+      if (hooks.busy > 0) { hooks.busy--; return new Response(Buffer.concat([packetLine('ERR artifacts_git_receive_pack_busy\n'), Buffer.from('0000')]), { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } }); }
       const received = spawnSync('git', ['receive-pack', '--stateless-rpc', g.directory], { env: g.env, input: Buffer.from(options.body) });
       return new Response(received.stdout, { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } });
     }
@@ -225,6 +227,19 @@ test('six lands requested at once all land, each waiting its turn, without journ
   for (let i = 0; i < 6; i++) assert.equal(f.g.text(['show', `main:src/f${i}.js`]), String(i));
   assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM pull_merge_operations WHERE phase='REJECTED' AND detail='write_unresolved'").get().n, 0);
   f.g.run(['fsck', '--strict', '--full', '--no-dangling']);
+});
+
+test('Git storage answering busy is retried within the land, and the repository is never left fenced', { skip }, async t => {
+  const f = await fixture(t);
+  f.settings();
+  const a = f.pull('feature-a', { 'src/a.js': 'a\n' });
+  f.hooks.busy = 2;
+  const done = await f.land(a.number, 'bob', a.head);
+  assert.equal(done.operation.state, 'LANDED', JSON.stringify(done)); assert.equal(done.operation.attempts, 3);
+  assert.deepEqual(f.sql.prepare('SELECT phase,detail FROM pull_merge_operations ORDER BY created_at').all().map(row => [row.phase, row.detail]),
+    [['REJECTED', 'provider_refused'], ['REJECTED', 'provider_refused'], ['SUCCEEDED', '']]);
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending, null);
+  assert.equal(f.g.text(['show', 'main:src/a.js']), 'a');
 });
 
 test('a base that moves between the read and the merge is re-planned; a moved head stops the land', { skip }, async t => {

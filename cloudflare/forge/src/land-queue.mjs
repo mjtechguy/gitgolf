@@ -213,7 +213,10 @@ async function land(db, env, principal, row, op, ctx, options = {}) {
     if (receipt.phase === phase('DISPATCH_UNKNOWN')) return transition(db, op, 'LANDING', { reasons: ['the merge was sent but its outcome is not confirmed yet; maintenance reads the branch back'] });
     const code = receipt.refusalCode;
     if (code === 'merge_conflict') return rebaseNeeded(db, env, principal, row, op, d.base_branch, receipt.conflicts || [], receipt.conflictCount, ctx.artifact);
-    if (code === 'pull_request_changed' || code === 'write_unresolved') { last = code === 'write_unresolved' ? 'the repository stayed busy with another write' : 'the base branch kept moving'; continue; }
+    // Git storage refusing with the base unchanged (busy, or a race it lost) is retried like a moved base, with the same backoff.
+    if (code === 'pull_request_changed' || code === 'write_unresolved' || code === 'provider_refused') {
+      last = code === 'write_unresolved' ? 'the repository stayed busy with another write' : code === 'provider_refused' ? refusals.provider_refused : 'the base branch kept moving'; continue;
+    }
     return transition(db, op, 'BLOCKED', { reasons: [refusals[code] || code || 'the merge was refused'] });
   }
   return transition(db, op, 'FAILED', { reasons: [`${last || 'the base branch kept moving'}; gave up after ${attempt - 1} attempts in ${Math.round((Date.now() - started) / 1000)} s`] });

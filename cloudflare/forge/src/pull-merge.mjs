@@ -1,6 +1,6 @@
 import { ownerSlug } from './owners.mjs';
 import { digest, uuidOK, Fault, deny, invalid, conflict } from './common.mjs';
-import { gitRequest, packetLine, receiveCommand, receiveStatus, refusedRef, sha, validRef, GitProviderError } from './git.mjs';
+import { gitRequest, packetLine, receiveCommand, receiveStatus, refusedRef, sessionRefused, sha, validRef, GitProviderError } from './git.mjs';
 import { inventory, pullReviewContext } from './collaboration.mjs';
 import { comparison } from './repository-diff.mjs';
 import { discussionEvent } from './discussion-engagement.mjs';
@@ -205,7 +205,8 @@ export async function standardPullMerge(db, env, person, row, method, body, arti
       try { await settle(db, env, person, row, await find(), repo, providerFetch); } catch { detail ||= 'readback_unavailable'; }
       // The provider refused this update (ng, typically because another merge moved the base first) and the branch does not hold the merge: nothing was
       // applied, so the receipt is a refusal like any other moved base and the repository is released at once, not left for maintenance.
-      if (reply && refusedRef(reply, command.ref) && (await find())?.phase === 'DISPATCH_UNKNOWN') {
+      // So did a session the provider ended with Git's error packet before running any command (ERR, e.g. busy).
+      if (reply && (refusedRef(reply, command.ref) || sessionRefused(reply)) && (await find())?.phase === 'DISPATCH_UNKNOWN') {
         let observed = null;
         try { observed = (await inventory(env, row, repo, providerFetch)).get(command.ref) || null; } catch { /* unknown stays unknown */ }
         if (observed && observed !== command.next) {

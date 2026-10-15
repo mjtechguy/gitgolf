@@ -74,7 +74,7 @@ async function fixture(t) {
       catch (error) { sql.exec('ROLLBACK'); throw error; }
     },
   };
-  const repos = new Map(), tokens = new Set(); let creates = 0, effects = 0, losePush = false, loseReply = false, refuseRef = false, held, forks = 0, loseFork = false;
+  const repos = new Map(), tokens = new Set(); let creates = 0, effects = 0, losePush = false, loseReply = false, refuseRef = false, busy = false, held, forks = 0, loseFork = false;
   const env = { DB: db, pushWaitMs: 100, ACCOUNT_ID: 'c'.repeat(32), ARTIFACTS_NAMESPACE: 'test-space', WORKSPACE_SLUG: 'alice', PUBLIC_ORIGIN: 'https://golf.example.com',
     ARTIFACTS: {
       async create(name) {
@@ -113,6 +113,7 @@ async function fixture(t) {
       // A lost push may still land later (land); a lost reply follows an applied write.
       if (losePush) { held = apply; throw Error('unknown provider outcome containing sensitive metadata'); }
       // The provider keeps the unpacked object but refuses the ref update, as for a lost compare-and-swap.
+      if (busy) { busy = false; return new Response(Buffer.concat([packetLine('ERR artifacts_git_receive_pack_busy\n'), Buffer.from('0000')]), { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } }); }
       if (refuseRef) { (repos.get(name).commits ||= new Map()).set(command.next, unpackCommit(pack, repos.get(name).trees ||= new Map())); return new Response(Buffer.concat([packetLine('unpack ok\n'), packetLine(`ng ${command.ref} failed to update ref\n`), Buffer.from('0000')]), { headers: { 'Content-Type': 'application/x-git-receive-pack-result' } }); }
       apply();
       if (loseReply) { loseReply = false; throw Error('lost provider reply'); }
@@ -132,7 +133,7 @@ async function fixture(t) {
   const sendPush = () => dispatch(new Request(env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', {
     method: 'POST', headers: { Authorization: 'Bearer ' + ownerToken, 'Content-Type': 'application/x-git-receive-pack-request' }, body: push(),
   }));
-  return { sql, env, call, create, sendPush, tokens, providerFetch, dispatch, advance: (id, phase) => dispatch({ id, phase }), setRefs: refs => { for (const r of repos.values()) r.refs = new Map(refs); }, counts: () => ({ creates, effects, forks }), losePush: () => { losePush = true; }, loseReply: () => { loseReply = true; }, refuseRef: () => { refuseRef = true; }, land: () => held(), loseFork: () => { loseFork = true; }, forks: () => forks };
+  return { sql, env, call, create, sendPush, tokens, providerFetch, dispatch, advance: (id, phase) => dispatch({ id, phase }), setRefs: refs => { for (const r of repos.values()) r.refs = new Map(refs); }, counts: () => ({ creates, effects, forks }), losePush: () => { losePush = true; }, loseReply: () => { loseReply = true; }, refuseRef: () => { refuseRef = true; }, busy: () => { busy = true; }, land: () => held(), loseFork: () => { loseFork = true; }, forks: () => forks };
 }
 
 test('native runner HTTP routes separate current admin sign-in from machine credentials', async t => {
@@ -399,6 +400,12 @@ test('a push the provider refuses (a lost race) returns Git\'s own report and re
   assert.equal(refusedRef(new Uint8Array([...line('unpack ok\n'), ...line('ok refs/heads/main\n')]), 'refs/heads/main'), false);
   assert.equal(refusedRef(new Uint8Array([...line('unpack ok\n'), ...line('ng refs/heads/other fetch first\n')]), 'refs/heads/main'), false);
   assert.equal(refusedRef(new TextEncoder().encode('zzzz'), 'refs/heads/main'), false);
+  // Git's error packet as the session's first line is a refused session; anywhere else, or an ordinary report, is not.
+  const { sessionRefused } = await import('./src/git.mjs');
+  assert.equal(sessionRefused(new Uint8Array([...line('ERR artifacts_git_receive_pack_busy\n'), ...new TextEncoder().encode('0000')])), true);
+  assert.equal(sessionRefused(new Uint8Array([...line('unpack ok\n'), ...line('ERR late\n')])), false);
+  assert.equal(sessionRefused(new Uint8Array([...line('unpack ok\n'), ...line('ok refs/heads/main\n')])), false);
+  assert.equal(sessionRefused(new TextEncoder().encode('zzzz')), false);
 });
 
 test('a push the provider fails while the ref is unchanged is resent and lands; the client gets an ordinary success', async t => {
@@ -3228,6 +3235,18 @@ test('a lost provider reply after an applied native merge is confirmed by the im
   assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);
   // The lost reply stays recorded on the confirmed operation.
   assert.equal(f.journal()[0].detail,'provider_unavailable');
+});
+
+test('a provider that ends the session busy (ERR) refused the merge: the repository is released at once, not after maintenance', async t => {
+  const f=await mergeFixture(t), body=f.input(); f.busy();
+  const refused=(await value(await f.submit(body))).operation;
+  assert.equal(refused.phase,mergePhase('REJECTED'));assert.equal(refused.refusalCode,'provider_refused');
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending,null);
+  const git=f.sql.prepare('SELECT * FROM git_operations').get();
+  assert.equal(f.sql.prepare('SELECT outcome FROM git_ref_writes WHERE operation_id=?').get(git.id).outcome,'NOT_APPLIED');
+  // The next merge goes through.
+  const merged=(await value(await f.submit({...f.input(),operationId:crypto.randomUUID()}))).operation;
+  assert.equal(merged.phase,mergePhase('SUCCEEDED'));
 });
 
 test('a provider that stores the object but refuses the ref is a refused merge: nothing applied, the repository released', async t => {
