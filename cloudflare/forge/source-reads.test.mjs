@@ -256,10 +256,6 @@ test('grep equals git grep for literal, case-insensitive and regular-expression 
   assert.ok(!literal.matches.some(m => m.path === 'link')); assert.equal(literal.matches.find(m => m.path === 'long.txt').text.length, 400);
   assert.equal(literal.matches.find(m => m.path === 'crlf.txt').text, 'TODO two\r');
   await same({ pattern: 'todo', caseSensitive: false }, ['-i', '-F', '-e', 'todo']);
-  await same({ pattern: 'fo+\\b', regex: true }, ['-P', '-e', 'fo+\\b']);
-  await same({ pattern: '^export (async )?function', regex: true }, ['-P', '-e', '^export (async )?function']);
-  await same({ pattern: 'TODO|todo', regex: true, caseSensitive: true }, ['-P', '-e', 'TODO|todo']);
-  await same({ pattern: 'T.D[O]', regex: true, caseSensitive: false }, ['-P', '-i', '-e', 'T.D[O]']);
   await same({ pattern: 'TODO', paths: ['src/**/*.js'] }, ['-F', '-e', 'TODO'], [':(glob)src/**/*.js']);
   await same({ pattern: 'TODO', paths: ['docs'] }, ['-F', '-e', 'TODO'], ['docs']);
   await same({ pattern: 'TODO', paths: ['*.md', 'src/lib/**'] }, ['-F', '-e', 'TODO'], [':(glob)*.md', ':(glob)src/lib/**']);
@@ -280,13 +276,8 @@ test('grep refuses unsafe or invalid patterns and bad arguments before reading',
   const f = await fixture(t);
   grepTree(f);
   const refused = async (body, pattern) => { const result = await f.call('grep', body); assert.equal(result.status, 400, JSON.stringify(result.body)); assert.match(result.body.message, pattern); return result.body; };
-  for (const pattern of ['(a+)+$', '(\\w*x)*', '((ab)+c)+', '(a{2,})*', '(x+){3}', '(?:a|b+)+'])
-    assert.equal((await refused({ pattern, regex: true }, /nested quantifier/)).reason, 'unsafe_regex', pattern);
-  for (const pattern of ['(a)\\1', '(?<x>a)\\k<x>']) assert.equal((await refused({ pattern, regex: true }, /backreference/)).reason, 'unsafe_regex', pattern);
-  // Quantified groups without an inner quantifier, optional groups and escaped parentheses are allowed.
-  for (const pattern of ['(ab)+', '(a+)?', '\\(a+\\)+', '[(a+)]+', '(foo|bar)+', '(a{1})*']) assert.equal((await f.call('grep', { pattern, regex: true })).status, 200, pattern);
-  await refused({ pattern: '(', regex: true }, /not valid/);
-  await refused({ pattern: 'x'.repeat(201), regex: true }, /1 to 200 characters/);
+  // Regular expressions are refused until the scan runs outside the workspace: a slow pattern would stall every request.
+  for (const pattern of ['(a+)+$', 'fo+\\b', 'TODO|todo']) assert.equal((await refused({ pattern, regex: true }, /not available yet/)).reason, 'regex_unavailable', pattern);
   await refused({ pattern: 'x'.repeat(1001) }, /1 to 1000 characters/);
   await refused({ pattern: '' }, /1 to 1000/);
   await refused({ pattern: 'a\nb' }, /newline/);
@@ -344,6 +335,6 @@ test('blame and grep are reads: admitted alongside reads, refused outside a toke
   assert.equal(blamed.isError, undefined, JSON.stringify(blamed));
   assert.deepEqual(JSON.parse(blamed.content[0].text).ranges, [{ start: 2, end: 2, commitId: id }]);
   const unsafe = await f.mcp('grep', { pattern: '(a+)+', regex: true, ref: 'main' });
-  assert.equal(unsafe.isError, true); assert.match(unsafe.content[0].text, /nested quantifier/);
+  assert.equal(unsafe.isError, true); assert.match(unsafe.content[0].text, /not available yet/);
   assert.match((await f.mcp('blame', { path: 'src/app.js', startLine: 0, ref: 'main' })).content[0].text, /startLine must be a whole number/);
 });

@@ -25,7 +25,7 @@ Errors are `{code, message}` with an HTTP status; some add fields:
 
 | Status | code | When |
 | --- | --- | --- |
-| 400 | `invalid_argument` | bad input; tree edits add `path` and `reason` (`invalid_path`, `missing_path`, `duplicate_path`, `path_conflict`, `gitlink_edit`, `unrepresentable_name`, `invalid_change`); blame of a binary file adds `reason: "binary"`, a refused grep expression `reason: "unsafe_regex"` |
+| 400 | `invalid_argument` | bad input; tree edits add `path` and `reason` (`invalid_path`, `missing_path`, `duplicate_path`, `path_conflict`, `gitlink_edit`, `unrepresentable_name`, `invalid_change`); blame of a binary file adds `reason: "binary"`, a grep with `regex: true` `reason: "regex_unavailable"` |
 | 403 | `permission_denied` | no write grant, a token scope (the message names it), or a branch rule |
 | 404 | `not_found` | repository not visible, branch, ref, base or path missing |
 | 409 | `aborted` | head moved (`currentHead`), merge conflicts (`currentHead`, `conflicts[{path,reason}]`), another write to the branch stayed in flight |
@@ -200,16 +200,12 @@ line, as `git grep -n --column -I` returns them.
  "limits": {"maxResults": 100, "fileBytes": 1048576, "readBytes": 33554432, "files": 5000}}
 ```
 
-- **`pattern`:** a literal substring of 1 to 1,000 characters. With `regex: true` it is
-  a JavaScript `RegExp` of 1 to 200 characters, with no flags, or `i` when
+- **`pattern`:** a literal substring of 1 to 1,000 characters, matched case-insensitively when
   `caseSensitive` is false. A pattern cannot contain a newline or NUL.
-- **Regular-expression guard (a heuristic):** a 400 with `reason: "unsafe_regex"` for
-  - a backreference (`\1`, `\k<name>`);
-  - a group that holds a quantifier and is itself repeated: `(a+)+`, `(\w*x)*`,
-    `(x+){3}`. `?` and `{0,1}` do not count as repeating.
-
-  Overlapping alternatives such as `(a|a)*` are not detected; the Workers CPU limit
-  ends such a request.
+- **No regular expressions yet:** `regex: true` is refused with 400 and
+  `reason: "regex_unavailable"`. The scan runs inside the workspace that serves every request,
+  and JavaScript's engine can backtrack for seconds on a hostile pattern. Regex search will
+  return once the scan runs outside it.
 - **Results:**
   - `column` is the 1-based position of the first match in the line, in UTF-16 code
     units. It equals Git's byte column for ASCII.

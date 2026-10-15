@@ -55,11 +55,11 @@ const catalogue = [
       if (!Array.isArray(a.paths) || !a.paths.length || a.paths.length > 100 || a.paths.some(path => typeof path !== 'string' || !path)) fail('paths must list 1 to 100 repository paths.');
       return c.call('/native/source/files', { repository: c.key, ref: await c.ref(a), paths: a.paths });
     }],
-  ['search_code', false, 'Semantic search: finds code and discussions by meaning, not exact text, using the repository’s semantic search index. For an exact string or a regular expression, use grep.',
+  ['search_code', false, 'Semantic search: finds code and discussions by meaning, not exact text, using the repository’s semantic search index. For an exact string, use grep.',
     input({ query: str('What to look for, in words (2 to 500 characters).') }, ['query']), async (c, a) => c.call('/native/search/read', { action: 'query', repository: c.key, query: text(a, 'query', { max: 500 }) })],
-  ['grep', false, 'Exact text search of every file at a branch, tag or commit: each matching line with its path, line, column and text, ordered by path and line. pattern is a literal string, or a JavaScript regular expression with regex: true. Binary files and files over 1 MiB are skipped; says when the search stopped early (maxResults, 5,000 files, 32 MiB).',
-    input({ pattern: str('Text to find within one line: a literal string, or a regular expression (at most 200 characters, no backreferences or nested quantifiers) with regex: true.'), ref: refArg,
-      regex: { type: 'boolean', description: 'Treat pattern as a JavaScript regular expression. Default false.' }, caseSensitive: { type: 'boolean', description: 'Default true.' },
+  ['grep', false, 'Exact text search of every file at a branch, tag or commit: each matching line with its path, line, column and text, ordered by path and line. pattern is a literal string (regular expressions are not available yet). Binary files and files over 1 MiB are skipped; says when the search stopped early (maxResults, 5,000 files, 32 MiB).',
+    input({ pattern: str('Literal text to find within one line (at most 1,000 characters).'), ref: refArg,
+      regex: { type: 'boolean', description: 'Not available yet: true is refused. Default false.' }, caseSensitive: { type: 'boolean', description: 'Default true.' },
       paths: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 20, description: 'Only these paths: * matches within a path segment, ** across segments, ? one character; a plain path names a file or a directory.' },
       maxResults: int('Matching lines to return, 1 to 500 (default 100).', 1, 500) }, ['pattern']), async (c, a) => {
       for (const key of ['regex', 'caseSensitive']) if (a[key] !== undefined && typeof a[key] !== 'boolean') fail(`${key} must be true or false.`);

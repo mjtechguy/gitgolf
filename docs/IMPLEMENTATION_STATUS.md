@@ -7,7 +7,7 @@
 - **Blame:** follows first parents, up to 500 commits and 4 MiB of versions. Lines open at a bound belong to the stopping commit, with `complete: false` and the reason. Renames are not followed.
 - **Line diff:** `line-diff.mjs` ports Git's xdiff Myers path as `git blame` runs it (tail trim, record cleanup, split cut-offs, compaction with the indent heuristic). It is separate from the diff3 work in `text-merge.mjs`.
 - **Grep:**
-  - a literal or a guarded JavaScript regular expression, with `:(glob)`-style path globs;
+  - a literal pattern (case-sensitive or not), with `:(glob)`-style path globs; `regex: true` is refused (`regex_unavailable`) because a hostile pattern would stall the workspace that serves every request;
   - binary files and files over 1 MiB are skipped and counted;
   - bounds: `maxResults` ≤ 500, 5,000 files, 32 MiB, 50,000 tree entries, 10 s, each named when hit;
   - the isolate keeps the last 32 answers per commit.
@@ -16,7 +16,7 @@
 - `cloudflare/forge/source-reads.test.mjs`, 8 tests against a real bare repository:
   - blame equals `git blame --first-parent` across edits, a merge, repeated lines, a missing final newline, `-L` ranges and older refs, and at the 500-commit and 4 MiB bounds (equal to `git blame <boundary>..<ref>`);
   - the line diff equals Git on 60 adversarial small edits, a 1 KiB-plus common tail and a 3,000-line rewrite;
-  - grep equals `git grep -n --column -I` (literal, `-i`, `-P` regexes, `:(glob)` pathspecs, `maxResults`);
+  - grep equals `git grep -n --column -I` (literal, `-i`, `:(glob)` pathspecs, `maxResults`); a regex request is refused;
   - every bound, unsafe-pattern refusals, scope refusals and the MCP tools.
 - Before landing, an ad hoc fuzz run also matched `git blame` in 1,500 small cases, 360 edits to files of 300 to 8,000 lines, and 20 rewrites of 20,000 lines.
 - `node cloudflare/forge/source-api-runtime-check.mjs "$(command -v cf)"` passes in real workerd with blame and grep equal to git.
@@ -25,7 +25,7 @@
 **Not done:**
 - hosted run and speed numbers;
 - rename/copy following;
-- regex guard is a heuristic: overlapping alternatives such as `(a|a)*` are not detected, and the Workers CPU limit is the backstop;
+- regular-expression search (needs the scan to run outside the workspace);
 - grep's time bound is checked between file reads only.
 
 ## 2026-10-15 — AM-6 line-level three-way merge (diff3), verified locally

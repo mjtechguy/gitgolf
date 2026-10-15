@@ -9,7 +9,7 @@ import { lineMatches, splitLines } from './line-diff.mjs';
 
 const KiB = 1024, MiB = 1024 * KiB;
 export const readLimits = { blameFile: MiB, blameRead: 4 * MiB, blameCommits: 500, grepFile: MiB, grepRead: 32 * MiB, grepFiles: 5000, grepEntries: 50000,
-  grepResults: 500, grepDefaultResults: 100, grepText: 400, grepTime: 10000, regex: 200, literal: 1000, globs: 20 };
+  grepResults: 500, grepDefaultResults: 100, grepText: 400, grepTime: 10000, literal: 1000, globs: 20 };
 const textTypes = new Set(['blob', 'exec', 'symlink']);
 
 // One character per byte, so line ends and lengths are byte-exact whatever the encoding.
@@ -122,49 +122,18 @@ function globMatcher(globs) {
   return path => tests.some(test => test(path));
 }
 
-// Catastrophic backtracking guard (a heuristic): no backreferences, and no quantified group that itself holds a quantifier, such as
-// (a+)+ or (\w*x)*. Character classes and escapes are skipped while scanning.
-// A quantifier that repeats: *, +, {n,}, or {n,m} / {n} allowing two or more. ? and {0,1} do not repeat.
-function repeats(pattern, i) {
-  if (pattern[i] === '*' || pattern[i] === '+') return true;
-  const bound = /^\{(\d+)(,(\d*))?\}/.exec(pattern.slice(i));
-  return Boolean(bound) && (bound[2] ? bound[3] === '' || Number(bound[3]) >= 2 : Number(bound[1]) >= 2);
-}
-function unsafePattern(pattern) {
-  const groups = [];
-  let quantified = false;
-  for (let i = 0; i < pattern.length; i++) {
-    const c = pattern[i];
-    if (c === '\\') {
-      if (/[1-9]/.test(pattern[i + 1] || '') || pattern.startsWith('k<', i + 1)) return 'a backreference';
-      i++; continue;
-    }
-    if (c === '[') { for (i++; i < pattern.length && pattern[i] !== ']'; i++) if (pattern[i] === '\\') i++; continue; }
-    if (c === '(') { groups.push(quantified); quantified = false; continue; }
-    if (c === ')') {
-      const inner = quantified;
-      if (inner && repeats(pattern, i + 1)) return 'a nested quantifier';
-      quantified = (groups.pop() ?? false) || inner;
-      continue;
-    }
-    if (repeats(pattern, i)) quantified = true;
-  }
-  return null;
-}
-
 function matcher(body) {
   const { pattern } = body, regex = body.regex ?? false, caseSensitive = body.caseSensitive ?? true;
   if (typeof regex !== 'boolean' || typeof caseSensitive !== 'boolean') invalid('regex and caseSensitive are true or false.');
-  const max = regex ? readLimits.regex : readLimits.literal;
-  if (typeof pattern !== 'string' || !pattern || pattern.length > max) invalid(`pattern is 1 to ${max} characters${regex ? ' for a regular expression' : ''}.`);
+  const max = readLimits.literal;
+  if (typeof pattern !== 'string' || !pattern || pattern.length > max) invalid(`pattern is 1 to ${max} characters.`);
   if (/[\n\0]/.test(pattern)) invalid('pattern matches within one line; it cannot contain a newline or NUL.');
   if (!regex && caseSensitive) return line => line.indexOf(pattern);
   let expression;
-  if (regex) {
-    const unsafe = unsafePattern(pattern);
-    if (unsafe) throw new Refused('invalid_argument', 400, `The regular expression has ${unsafe}, which can take exponential time; simplify it.`, { reason: 'unsafe_regex' });
-    try { expression = new RegExp(pattern, caseSensitive ? '' : 'i'); } catch (error) { invalid('The regular expression is not valid JavaScript RegExp syntax: ' + String(error.message).slice(0, 200)); }
-  } else expression = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  // A regular expression would run inside the workspace that serves every request, and JavaScript's engine can backtrack for
+  // seconds on a hostile pattern; until the scan runs outside it, only literal search (linear) is offered.
+  if (regex) throw new Refused('invalid_argument', 400, 'Regular-expression search is not available yet: a slow pattern would stall the workspace that serves every request. Use a literal pattern, with caseSensitive: false if needed.', { reason: 'regex_unavailable' });
+  expression = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   return line => { const found = expression.exec(line); return found ? found.index : -1; };
 }
 
