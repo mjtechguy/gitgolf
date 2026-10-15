@@ -4,6 +4,9 @@ import { installationPolicies, installationSettings, installationPolicyState, ap
 import { costsRead, estimate, validUnits, defaultScenario, daysPerMonth, pricesAsOf, serviceLabels } from './costs.mjs';
 import { capacityTokenPattern } from './api-tokens.mjs';
 import { pipelinePolicy } from './pipeline-policy.mjs';
+import { labelName, poolLabels, poolId, capFor, shareLabels } from './capacity-policy.mjs';
+import { shareInventory, approveShareRequest, shareRequestOrganization, sharesMigration } from './capacity-shares.mjs';
+import { installationPolicyView } from './installation.mjs';
 
 /* Runner capacity (docs/SCALE_OUT_PLAN.md S5, docs/RUNNER_CAPACITY.md), slice 1.
  *
@@ -30,9 +33,7 @@ const iso = ms => new Date(ms).toISOString();
 // The claim rule (pipelines.mjs claimPipelineJob): a runner takes a QUEUED job of its engine whose every runs-on label it carries, by
 // name: a Forgejo label "name:docker://image" matches by "name"; GitLab tags have no image part. Scope: an installation runner takes
 // every repository, an organization runner its organization's repositories, a repository runner its own.
-export const labelName = label => String(label).split(':')[0];
-export const poolLabels = labels => [...new Set((Array.isArray(labels) ? labels : []).map(labelName))].sort();
-export const poolId = (engine, labels) => `${engine}:${labels.join(',')}`;
+export { labelName, poolLabels, poolId };
 export const labelsTake = (labels, runsOn) => runsOn.every(label => labels.has(labelName(label)));
 export const covers = (runner, job) => runner.scope === 'installation' || runner.scope === 'repository' && Number(runner.scope_id) === job.repository_id ||
   runner.scope === 'organization' && job.owner_id !== null && Number(runner.scope_id) === job.owner_id;
@@ -41,12 +42,14 @@ const older = (a, b) => a === null ? b : b === null ? a : Math.max(a, b);
 
 /* Pools from runner and queued job rows. A pool's queued count is the jobs its labels take, in repositories the scope of any of its
  * registered runners covers (disabled ones included: an ephemeral runner is disabled after its one job, and a pool scaled to zero still
- * needs its queue). A job several pools can take is counted in each. Unmatched: jobs no ACTIVE runner can take at all. */
-export function runnerPools(runners, jobs, now = Date.now()) {
+ * needs its queue). A job several pools can take is counted in each. Unmatched: jobs no ACTIVE runner can take at all.
+ * Held (slice 2): of the queued jobs, those a share holds (heldBy, capacity-shares.mjs) and, while the pool runs as many jobs as its cap
+ * (caps: the runner-pools policy value), all the others. claimable = queued − held: what more runners in this pool could start now. */
+export function runnerPools(runners, jobs, now = Date.now(), { caps = null, heldBy = () => false } = {}) {
   const pools = new Map();
   for (const runner of runners) {
     const labels = poolLabels(parse(runner.labels, [])), id = poolId(runner.engine, labels);
-    if (!pools.has(id)) pools.set(id, { id, engine: runner.engine, labels, registered: 0, active: 0, online: 0, running: 0, queued: 0, oldestWaitSeconds: null, scopes: new Set(), members: [] });
+    if (!pools.has(id)) pools.set(id, { id, engine: runner.engine, labels, registered: 0, active: 0, online: 0, running: 0, queued: 0, oldestWaitSeconds: null, cap: capFor(caps, runner.engine, labels), heldByShares: 0, scopes: new Set(), members: [] });
     const pool = pools.get(id), active = runner.state === 'ACTIVE';
     pool.registered++; pool.members.push(runner); pool.scopes.add(runner.scope);
     if (active) pool.active++;
@@ -62,10 +65,14 @@ export function runnerPools(runners, jobs, now = Date.now()) {
       if (pool.members.some(runner => runner.state === 'ACTIVE' && covers(runner, job))) taken = true;
       if (!pool.members.some(runner => covers(runner, job))) continue;
       pool.queued++; pool.oldestWaitSeconds = older(pool.oldestWaitSeconds, wait);
+      if (heldBy(job)) pool.heldByShares++;
     }
     if (!taken) { unmatched.queued++; unmatched.oldestWaitSeconds = older(unmatched.oldestWaitSeconds, wait); unmatched.byEngine[job.engine] = (unmatched.byEngine[job.engine] || 0) + 1; }
   }
-  const list = [...pools.values()].map(({ members, scopes, ...pool }) => ({ ...pool, scopes: [...scopes].sort() }))
+  const list = [...pools.values()].map(({ members, scopes, ...pool }) => {
+    const heldByCap = pool.cap !== null && pool.running >= pool.cap ? pool.queued - pool.heldByShares : 0, held = pool.heldByShares + heldByCap;
+    return { ...pool, heldByCap, held, claimable: pool.queued - held, scopes: [...scopes].sort() };
+  })
     .sort((a, b) => b.queued - a.queued || a.id.localeCompare(b.id));
   return { pools: list, unmatched };
 }
@@ -75,8 +82,8 @@ async function pipelineRows(db, engine = null) {
     (SELECT count(*) FROM pipeline_jobs j WHERE j.runner_id=n.id AND j.state='RUNNING') AS running FROM pipeline_runners n WHERE n.deleted=0${engine ? ' AND n.engine=?' : ''} ORDER BY n.id DESC LIMIT ${runnerLimit + 1}`)
     .bind(...(engine ? [engine] : [])).all();
   // The claim's own filter: the job's run is current, not cancelled and still open.
-  const { results: jobs } = await db.prepare(`SELECT j.id,j.engine,j.runs_on,COALESCE(j.queued_at,j.created_at) AS since,r.repository_id,o.owner_id FROM pipeline_jobs j
-    JOIN pipeline_runs r ON r.id=j.run_id AND r.attempt=j.attempt LEFT JOIN repository_owners o ON o.repository_id=r.repository_id
+  const { results: jobs } = await db.prepare(`SELECT j.id,j.engine,j.runs_on,COALESCE(j.queued_at,j.created_at) AS since,r.repository_id,o.owner_id,CASE WHEN k.kind='ORGANIZATION' THEN k.id END AS organization_id FROM pipeline_jobs j
+    JOIN pipeline_runs r ON r.id=j.run_id AND r.attempt=j.attempt LEFT JOIN repository_owners o ON o.repository_id=r.repository_id LEFT JOIN native_owners k ON k.id=o.owner_id
     WHERE j.state='QUEUED'${engine ? ' AND j.engine=?' : ''} AND r.cancel_requested=0 AND r.state IN ('QUEUED','RUNNING','WAITING') ORDER BY j.id LIMIT ${jobLimit + 1}`).bind(...(engine ? [engine] : [])).all();
   return { runners: runners.slice(0, runnerLimit), jobs: jobs.slice(0, jobLimit), truncated: runners.length > runnerLimit || jobs.length > jobLimit };
 }
@@ -134,10 +141,15 @@ async function hosts(db, now) {
 
 export async function capacityInventory(db, env, now = Date.now()) {
   const { runners, jobs, truncated } = await pipelineRows(db);
-  const { pools, unmatched } = runnerPools(runners, jobs, now);
+  const shares = await shareInventory(db, env, jobs, { named: true, now });
+  const { pools, unmatched } = runnerPools(runners, jobs, now, { caps: shares.policies.pools, heldBy: shares.heldBy });
   const hostRows = await hosts(db, now), ssh = hostRows[1];
+  // The two runner policies as the Installation page reads them, so this page edits them through /native/installation.
+  const settings = await installationSettings(db), policy = key => installationPolicyView(env, key, settings?.get(key)) || null;
   return { generatedAt: iso(now),
     selfHosted: { configured: Boolean(pipelinePolicy(env)), pools, unmatched, truncated, onlineWindowSeconds: runnerOnline / 1000 },
+    runnerPolicies: { pools: policy('runner-pools'), shares: policy('runner-shares') },
+    shares: { rows: shares.rows, schema: shares.schema === false ? sharesMigration : 'ready' },
     nativePools: await nativePools(db, now),
     containers: await containers(db, env, now, { capacity: ssh.capacity, running: ssh.running, queued: ssh.queued }),
     hosts: hostRows };
@@ -222,10 +234,17 @@ export async function capacitySchema(db) {
 }
 const needSchema = async db => { if (!await capacitySchema(db)) refuse('Apply the schema 49 migration to request capacity and issue capacity metrics tokens.'); };
 
-const requestSelect = `SELECT c.*,u.login AS requested_login,d.login AS decided_login,a.login AS applied_login FROM capacity_requests c JOIN users u ON u.id=c.requested_by
-  LEFT JOIN users d ON d.id=c.decided_by LEFT JOIN users a ON a.id=c.applied_by`;
-const wireRequest = (row, person) => ({ id: String(row.id), key: row.policy_key, field: row.field, label: spec(row.policy_key, row.field)?.label || `${row.policy_key}.${row.field}`,
-  unit: spec(row.policy_key, row.field)?.unit || '', current: row.current_value, requested: row.requested_value, ceiling: row.ceiling, needsDeploy: Boolean(row.needs_deploy),
+// An organization's runner share request (capacity-shares.mjs) has policy_key 'organization:<id>'; the organization is named by a join.
+const requestSelect = `SELECT c.*,u.login AS requested_login,d.login AS decided_login,a.login AS applied_login,so.slug AS organization_slug FROM capacity_requests c JOIN users u ON u.id=c.requested_by
+  LEFT JOIN users d ON d.id=c.decided_by LEFT JOIN users a ON a.id=c.applied_by LEFT JOIN native_owners so ON c.policy_key='organization:'||so.id`;
+const shareUnits = { maxRunning: 'running jobs', maxRunsPerDay: 'runs a day' };
+const requestLabel = row => shareRequestOrganization(row.policy_key) ? `Runner share of ${row.organization_slug || 'a deleted organization'}: ${shareLabels[row.field]?.toLowerCase() || row.field}`
+  : spec(row.policy_key, row.field)?.label || `${row.policy_key}.${row.field}`;
+const wireRequest = (row, person) => ({ id: String(row.id), key: row.policy_key, field: row.field, label: requestLabel(row),
+  scope: shareRequestOrganization(row.policy_key) ? 'organization' : 'installation', organization: row.organization_slug || '',
+  // What the approver types: the setting's policy key, or the organization's name for a runner share.
+  confirmation: shareRequestOrganization(row.policy_key) ? row.organization_slug || '' : row.policy_key,
+  unit: shareRequestOrganization(row.policy_key) ? shareUnits[row.field] || '' : spec(row.policy_key, row.field)?.unit || '', current: row.current_value, requested: row.requested_value, ceiling: row.ceiling, needsDeploy: Boolean(row.needs_deploy),
   estimatedMonthlyDelta: row.estimated_monthly_delta, estimateBasis: row.estimate_basis, reason: row.reason, requestedBy: row.requested_login, requestedAt: row.requested_at, mine: row.requested_by === person.id,
   state: row.state, decidedBy: row.decided_login || '', decidedAt: row.decided_at || '', decisionNote: row.decision_note, appliedBy: row.applied_login || '', appliedAt: row.applied_at || '',
   deploy: row.needs_deploy && ['PENDING', 'APPROVED'].includes(row.state) ? deployStep(row.policy_key, row.field, row.requested_value) : null });
@@ -322,6 +341,15 @@ export async function capacityAPI(db, env, person, request, body, read, provider
   async function approve(row, why) {
     if (row.requested_by === person.id) forbidden('Another operations administrator approves a request; you made this one.');
     if (!['PENDING', 'APPROVED'].includes(row.state)) refuse(`This request is already ${row.state.toLowerCase()}.`);
+    if (shareRequestOrganization(row.policy_key)) {
+      // An organization's runner share: the grant is written in capacity_shares, not installation policy.
+      const { failed } = await approveShareRequest(db, env, person, request, row, { confirmation: body.confirmation, note: why, admin: { sql: admin, values: [person.id, email] } });
+      if (failed) {
+        await db.prepare(`UPDATE capacity_requests SET state='FAILED',decided_by=?,decided_at=?,decision_note=? WHERE id=? AND state='PENDING'`).bind(person.id, time, failed, row.id).run();
+        return answer(row.id);
+      }
+      return settled(row, 'APPLIED');
+    }
     if (body.confirmation !== row.policy_key) refuse(`Type ${row.policy_key} to confirm this approval.`);
     const key = row.policy_key, field = row.field, policy = installationPolicies[key], subject = `${key}.${field}`;
     const rows = await installationSettings(db), { deploy, value } = installationPolicyState(env, key, rows?.get(key));
@@ -393,7 +421,7 @@ export async function capacityAPI(db, env, person, request, body, read, provider
  * nowhere else: core.mjs actor() knows no such credential, so the token reads nothing else in Golf. A label set with no registered
  * runners yet (a pool scaled to zero before its first runner) counts the jobs its labels take in every repository. */
 const unauthenticated = message => { throw new Fault('unauthenticated', 401, message); };
-export async function capacityMetrics(db, request, url) {
+export async function capacityMetrics(db, env, request, url) {
   if (request.method !== 'GET') invalid('Use GET.');
   const authorization = request.headers.get('Authorization') || '', secret = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
   if (!capacityTokenPattern.test(secret)) unauthenticated('A capacity metrics token is required (Authorization: Bearer golf_capacity_…).');
@@ -406,12 +434,14 @@ export async function capacityMetrics(db, request, url) {
   const listed = text.split(',').map(label => label.trim()).filter(Boolean);
   if (listed.length > 32 || listed.some(label => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?::[\x21-\x7e]{1,200})?$/.test(label))) invalid('Labels are up to 32 comma-separated runner labels.');
   const labels = poolLabels(listed), id = poolId(engine, labels);
-  const { runners, jobs, truncated } = await pipelineRows(db, engine);
+  const { runners, jobs, truncated } = await pipelineRows(db, engine), shares = await shareInventory(db, env, jobs);
   // A virtual installation-scope member stands in for a pool with no runners, so its queue is still published.
   const members = runners.filter(runner => poolId(runner.engine, poolLabels(parse(runner.labels, []))) === id);
-  const pool = runnerPools(members.length ? members : [{ engine, scope: 'installation', scope_id: '', labels: JSON.stringify(labels), state: 'NONE', last_seen_at: null, running: 0 }], jobs, now).pools[0];
+  const pool = runnerPools(members.length ? members : [{ engine, scope: 'installation', scope_id: '', labels: JSON.stringify(labels), state: 'NONE', last_seen_at: null, running: 0 }], jobs, now,
+    { caps: shares.policies.pools, heldBy: shares.heldBy }).pools[0];
   if (!token.last_used_at || Date.parse(token.last_used_at) <= now - 60_000)
     try { await db.prepare('UPDATE capacity_metrics_tokens SET last_used_at=? WHERE id=?').bind(iso(now), token.id).run(); } catch { /* best effort */ }
+  // held: queued jobs that cannot start now because of the pool's cap or a share; claimable = queued − held, what more runners could start.
   return Response.json({ pool: id, engine, labels, queued: pool.queued, running: pool.running, online: pool.online, oldestWaitSeconds: pool.oldestWaitSeconds ?? 0,
-    registered: members.length, truncated, at: iso(now) }, { headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+    registered: members.length, truncated, held: pool.held, claimable: pool.claimable, cap: pool.cap, at: iso(now) }, { headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 }

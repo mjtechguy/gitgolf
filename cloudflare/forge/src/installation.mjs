@@ -13,9 +13,10 @@ import { executionValueState } from './execution-values.mjs';
 import { previewSlots } from './environments.mjs';
 import { defaultAppearance } from './public.mjs';
 import { agentBudgetsPolicy, budgetOverlayValue } from './agent-budgets.mjs';
+import { runnerPoolsPolicy, runnerSharesPolicy } from './capacity-policy.mjs';
 
 // Newest first: the first table present names the applied schema.
-const schemaTables = [[49, 'capacity_requests'], [47, 'ssh_hosts'], [46, 'automation_runs'], [45, 'vault_credentials'], [43, 'pull_intent_summaries'], [42, 'land_operations'], [41, 'repository_agentic_settings'], [40, 'git_ref_unknown'], [39, 'api_tokens'], [38, 'source_commits'], [37, 'git_ref_writes'], [36, 'agent_tasks'], [35, 'pipeline_intake'], [34, 'search_state'], [33, 'repository_ai_models'], [32, 'ai_runs'], [31, 'policy_revisions'], [30, 'installation_audit'], [29, 'discussion_attachment_operations'], [28, 'repository_release_operations'], [27, 'email_deliveries'], [26, 'execution_value_brokers'],
+const schemaTables = [[52, 'capacity_shares'], [49, 'capacity_requests'], [47, 'ssh_hosts'], [46, 'automation_runs'], [45, 'vault_credentials'], [43, 'pull_intent_summaries'], [42, 'land_operations'], [41, 'repository_agentic_settings'], [40, 'git_ref_unknown'], [39, 'api_tokens'], [38, 'source_commits'], [37, 'git_ref_writes'], [36, 'agent_tasks'], [35, 'pipeline_intake'], [34, 'search_state'], [33, 'repository_ai_models'], [32, 'ai_runs'], [31, 'policy_revisions'], [30, 'installation_audit'], [29, 'discussion_attachment_operations'], [28, 'repository_release_operations'], [27, 'email_deliveries'], [26, 'execution_value_brokers'],
   [25, 'repository_execution_policy'], [24, 'pull_merge_operations'], [23, 'repository_environment_operations'], [22, 'repository_visibility'], [21, 'native_owners'],
   [20, 'gitlab_runner_jobs'], [19, 'native_runner_pools'], [18, 'pull_review_operations'], [17, 'git_credentials'], [16, 'repository_rule_operations'],
   [15, 'webhook_subscriptions'], [14, 'discussion_events'], [13, 'discussion_resources'], [12, 'repository_invitations'], [11, 'repository_access_operations'],
@@ -168,6 +169,9 @@ export const installationPolicies = {
   'rate-limit': toggle('Anonymous rate limit', env => rateLimitPolicy(env), { ANONYMOUS_LIMIT_OFF: 'true' },
     { queued: 'Nothing is queued by the limit.', inFlight: 'Requests already admitted are unaffected.', new: 'The next anonymous request is limited, or not.' }, true),
   'agent-budgets': agentBudgetsPolicy,
+  // Runner capacity (capacity-policy.mjs): self-hosted pool caps and organization and repository shares, enforced in the claim.
+  'runner-pools': runnerPoolsPolicy,
+  'runner-shares': runnerSharesPolicy,
   evidence: { label: 'Daily evidence admissions', deploy: env => evidencePolicy(env) ? { dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) } : null,
     bounds: (env, deploy) => ({ dailyLimit: [1, deploy.dailyLimit] }),
     validate(env, value, deploy) { if (!shape(value, ['dailyLimit']) || !int(value.dailyLimit, 1, deploy.dailyLimit)) invalid(`Daily admissions must be a whole number from 1 to the deploy value ${deploy.dailyLimit}.`); return { dailyLimit: value.dailyLimit }; },
@@ -224,6 +228,8 @@ function policyView(env, key, row) {
   return deploy && { key, label: policy.label, version: String(row?.version || 0), value, deploy, source: row && !locked(env) ? 'installation' : 'deploy', unreadable,
     updatedAt: row?.updated_at || '', updatedBy: row?.updated_by || '', bounds: policy.bounds?.(env, deploy) || {}, effect: policy.effect, confirmation: key };
 }
+// One policy as the Installation page reads it (capacity.mjs shows the runner policies on the Runner capacity page); null when not allocated.
+export const installationPolicyView = (env, key, row) => policyView(env, key, row);
 const stale = () => { throw new Fault('failed_precondition', 412, 'This setting changed since you read it. Refresh before editing.'); };
 const recentSignIn = 600;
 export const clientHeaders = request => Object.fromEntries([['colo', /^[A-Z]{3}$/], ['country', /^[A-Z]{2}$/]]

@@ -7,15 +7,22 @@ import type { Capacity, CapacityRequest } from '../src/RunnerCapacity';
 // A Cloudflare-native installation answering /native/capacity/read and /native/capacity as cloudflare/forge/src/capacity.mjs does.
 const capabilities = ['settings.repository-general', 'settings.repository-access', 'settings.feature-policy', 'operations.dashboard', 'settings.native', 'operations.costs', 'operations.capacity'];
 const now = new Date().toISOString();
-const pending: CapacityRequest = { id: '7', key: 'evidence', field: 'dailyLimit', label: 'Daily evidence admissions', unit: 'a day', current: 10, requested: 40, ceiling: 50, needsDeploy: false,
+const pending: CapacityRequest = { id: '7', key: 'evidence', field: 'dailyLimit', label: 'Daily evidence admissions', unit: 'a day', scope: 'installation', organization: '', confirmation: 'evidence', current: 10, requested: 40, ceiling: 50, needsDeploy: false,
   estimatedMonthlyDelta: 0.97, estimateBasis: 'Upper bound: 30 more admissions a day × 30.4 days = up to 912 more CI runs a month.', reason: 'Bench at 200 agents', requestedBy: 'bob', requestedAt: now, mine: false,
   state: 'PENDING', decidedBy: '', decidedAt: '', decisionNote: '', appliedBy: '', appliedAt: '', deploy: null };
-const waiting: CapacityRequest = { ...pending, id: '6', key: 'previews', field: 'lifetimeSeconds', label: 'Preview lifetime', unit: 'seconds', current: 3600, requested: 7200, ceiling: 3600, needsDeploy: true,
+const waiting: CapacityRequest = { ...pending, id: '6', key: 'previews', confirmation: 'previews', field: 'lifetimeSeconds', label: 'Preview lifetime', unit: 'seconds', current: 3600, requested: 7200, ceiling: 3600, needsDeploy: true,
   estimatedMonthlyDelta: null, estimateBasis: 'No cost model for this setting.', requestedBy: 'alice', mine: true, state: 'APPROVED', decidedBy: 'bob',
   deploy: { setting: 'settings.previews.ttl', value: 7200, command: 'python3 scripts/golf_cloudflare.py update DIR', steps: 'Set settings.previews.ttl to 7200 in DIR/alchemy-input.json (the installation directory), then run python3 scripts/golf_cloudflare.py update DIR; it shows the plan before it deploys.' } };
 const fixture: Capacity = { generatedAt: now, schema: 'ready', editing: '', metricsPath: '/native/capacity/metrics', origin: 'https://golf.example.com', you: 'alice',
   selfHosted: { configured: true, truncated: false, onlineWindowSeconds: 300, unmatched: { queued: 3, oldestWaitSeconds: 600, byEngine: { 'forgejo-actions': 3 } },
-    pools: [{ id: 'forgejo-actions:docker,ubuntu-latest', engine: 'forgejo-actions', labels: ['docker', 'ubuntu-latest'], registered: 4, active: 3, online: 2, running: 2, queued: 5, oldestWaitSeconds: 125, scopes: ['installation'] }] },
+    pools: [{ id: 'forgejo-actions:docker,ubuntu-latest', engine: 'forgejo-actions', labels: ['docker', 'ubuntu-latest'], registered: 4, active: 3, online: 2, running: 2, queued: 5, oldestWaitSeconds: 125, scopes: ['installation'],
+      cap: 2, heldByCap: 4, heldByShares: 1, held: 5, claimable: 0 }] },
+  runnerPolicies: {
+    pools: { key: 'runner-pools', label: 'Runner pool caps', version: '2', value: { pools: [{ engine: 'forgejo-actions', labels: ['docker', 'ubuntu-latest'], maxConcurrent: 2 }] }, deploy: { pools: [] }, source: 'installation', unreadable: false,
+      updatedAt: now, updatedBy: 'bob', confirmation: 'runner-pools', effect: { queued: 'Queued jobs stay queued.', inFlight: 'Running jobs are not stopped.', new: 'A runner in a capped pool gets no job.' } },
+    shares: { key: 'runner-shares', label: 'Runner shares', version: '0', value: { maxRunning: 4, maxRunsPerDay: null, enforced: false }, deploy: { maxRunning: null, maxRunsPerDay: null, enforced: false }, source: 'deploy', unreadable: false,
+      updatedAt: '', updatedBy: '', confirmation: 'runner-shares', effect: { queued: 'Jobs over a share stay queued.', inFlight: 'Running jobs are not stopped.', new: 'The next claim counts.' } } },
+  shares: { schema: 'ready', rows: [{ scope: 'organization', id: '10', name: 'acme', limit: { maxRunning: 4, maxRunsPerDay: null }, ceiling: { maxRunning: 4, maxRunsPerDay: null }, own: null, granted: null, enforced: false, running: 4, queued: 3, held: 3, runsToday: 12 }] },
   nativePools: [{ id: 'p1', name: 'metal', state: 'ACTIVE', trustClass: 'UNTRUSTED', maxParallel: 3, activeMachines: 1, running: 0, queued: 1 }],
   containers: [{ id: 'pr-tests', label: 'PR test containers', binding: 'PRTestTask', configured: true, allocation: null, allocationReason: 'Not bound.', limit: { value: 2, inUse: 1, source: 'Golf admits at most 2.' }, running: 1, queued: 1 },
     { id: 'ssh-tasks', label: 'SSH task containers', binding: 'SSHAgentTask', configured: false, allocation: null, allocationReason: 'Not bound.', limit: { value: 0, inUse: 0, source: 'Per host.' }, running: 0, queued: 0 }],
@@ -31,6 +38,14 @@ async function capacityBackend(page: Page) {
     const body = route.request().postDataJSON(); reads.push(body);
     if (body.action === 'preview') return route.fulfill({ json: { current: 10, requested: body.value, ceiling: 50, needsDeploy: false, estimatedMonthlyDelta: 0.97, estimateBasis: 'Upper bound: measured per CI run.', deploy: null } });
     return route.fulfill({ json: fixture });
+  });
+  await page.route('**/native/installation', route => {
+    const body = route.request().postDataJSON(); writes.push(body);
+    // As capacity-policy.mjs: removing or raising the existing cap (forgejo-actions docker,ubuntu-latest: 2) widens; a new cap does not.
+    const existing = body.key === 'runner-pools' && body.value.pools.find((pool: { engine: string; labels: string[] }) => pool.engine === 'forgejo-actions' && pool.labels.join(',') === 'docker,ubuntu-latest');
+    const widening = body.key === 'runner-pools' ? !existing || existing.maxConcurrent > 2 : body.value.maxRunning === null || body.value.maxRunning > 4;
+    if (widening && body.confirmation !== body.key) return route.fulfill({ status: 412, json: { code: 'failed_precondition', message: `Type ${body.key} to confirm it.` } });
+    return route.fulfill({ json: { key: body.key, version: '3', value: body.value, widening, operationId: body.operationId, at: now } });
   });
   await page.route('**/native/capacity', route => {
     const body = route.request().postDataJSON(); writes.push(body);
@@ -83,4 +98,78 @@ test('runner capacity leads with the inventory; request and approval forms open 
   expect(writes.at(-1)).toMatchObject({ action: 'approve', id: '7', expectedVersion: '3', confirmation: 'evidence' });
   expect(String(writes.at(-1)!.operationId)).toMatch(/^[0-9a-f-]{36}$/);
   await expect(page.getByRole('table', { name: 'capacity metrics tokens' })).toContainText('keda-golf-ci');
+});
+
+test('pool caps and runner shares lead with current values; Add and Edit open forms, and widening asks for the setting name', async ({ page }) => {
+  const { writes } = await capacityBackend(page);
+  await page.goto('/admin/capacity');
+  const pool = page.getByRole('table', { name: 'runner capacity' }).getByRole('row', { name: /docker, ubuntu-latest/ });
+  await expect(pool).toContainText('cap 2');
+  await expect(page.getByRole('table', { name: 'pool caps' }).getByRole('row', { name: /docker, ubuntu-latest/ })).toContainText('2 running');
+  await expect(page.getByLabel('Installation runner share')).toContainText('4 at once for each organization');
+  await expect(page.getByRole('table', { name: 'runner shares' }).getByRole('row', { name: /acme/ })).toContainText('4 of 4');
+  await expect(page.getByRole('form')).toHaveCount(0);
+  // A new cap narrows: no confirmation.
+  await page.getByRole('button', { name: 'Add pool cap' }).click();
+  const add = page.getByRole('form', { name: 'Add pool cap' });
+  await add.getByLabel('Engine').selectOption('gitlab-ci');
+  await add.getByLabel('Runner labels').fill('docker, kind');
+  await add.getByLabel('Running jobs at most').fill('3');
+  await expect(add.getByLabel(/Type runner-pools/)).toHaveCount(0);
+  await add.getByRole('button', { name: 'Save cap' }).click();
+  await expect(page.getByRole('status')).toContainText('The pool cap was saved');
+  expect(writes.at(-1)).toMatchObject({ action: 'update', key: 'runner-pools', expectedVersion: '2', value: { pools: [{ engine: 'forgejo-actions', labels: ['docker', 'ubuntu-latest'], maxConcurrent: 2 }, { engine: 'gitlab-ci', labels: ['docker', 'kind'], maxConcurrent: 3 }] } });
+  expect(writes.at(-1)!.confirmation).toBeUndefined();
+  // Raising a cap widens: the setting name is typed first.
+  await page.getByRole('button', { name: 'Edit cap for docker, ubuntu-latest' }).click();
+  const edit = page.getByRole('form', { name: 'Edit pool cap' });
+  await edit.getByLabel('Running jobs at most').fill('6');
+  await expect(edit.getByRole('button', { name: 'Save cap' })).toBeDisabled();
+  await edit.getByLabel(/Type runner-pools/).fill('runner-pools');
+  await edit.getByRole('button', { name: 'Save cap' }).click();
+  await expect(page.getByRole('status')).toContainText('The pool cap was saved');
+  expect(writes.at(-1)).toMatchObject({ key: 'runner-pools', confirmation: 'runner-pools', value: { pools: [{ maxConcurrent: 6 }] } });
+  // The installation share: lowering saves directly; removing the limit widens.
+  await page.getByRole('region', { name: 'Runner shares' }).getByRole('button', { name: 'Edit' }).click();
+  const shares = page.getByRole('form', { name: 'Edit installation runner share' });
+  await shares.getByLabel('Running jobs for each organization and personal repository').fill('');
+  await expect(shares.getByLabel(/Type runner-shares/)).toBeVisible();
+  await shares.getByLabel('Running jobs for each organization and personal repository').fill('3');
+  await shares.getByLabel('Runs a day for each organization and personal repository').fill('200');
+  await expect(shares.getByLabel(/Type runner-shares/)).toHaveCount(0);
+  await shares.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('status')).toContainText('The installation runner share was saved');
+  expect(writes.at(-1)).toMatchObject({ key: 'runner-shares', value: { maxRunning: 3, maxRunsPerDay: 200, enforced: false } });
+});
+
+test('a repository’s runner share shows what applies and what it inherits; Edit opens the form only for its administrators', async ({ page }) => {
+  await featureBackend(page);
+  const writes: Record<string, unknown>[] = [];
+  let own: number | null = null;
+  const view = () => ({ scope: 'repository', name: 'alex/demo', allocated: true, schema: 'ready', own: { maxRunning: own, maxRunsPerDay: null }, ceiling: { maxRunning: 4, maxRunsPerDay: 50 }, limit: { maxRunning: own ?? 4, maxRunsPerDay: 50 },
+    granted: null, installation: { maxRunning: 4, maxRunsPerDay: 50, enforced: false }, parent: { scope: 'installation', name: 'the installation' }, version: own === null ? '0' : '1', updatedAt: '',
+    usage: { running: 4, queued: 2, held: 2, runsToday: 9, parentRunning: null }, canEdit: true, canRequest: false, editReason: '', requests: [] });
+  await page.route('**/native/config', route => route.fulfill({ json: { runtimeProfile: 'cloudflare-native', workspace: 'alex', pipelines: true, tests: false } }));
+  await page.route('**/native/pipeline-runners', route => route.fulfill({ json: { scope: 'repository', scopeId: '', engines: ['forgejo-actions', 'gitlab-ci'], forgejoRunner: { version: 'v13.2.0', sha256: 'a'.repeat(64) }, instance: 'https://golf.example', runners: [], inherited: [], tokens: [] } }));
+  await page.route('**/native/capacity/shares/read', route => route.fulfill({ json: view() }));
+  await page.route('**/native/capacity/shares', route => {
+    const body = route.request().postDataJSON(); writes.push(body);
+    if (body.maxRunning > 4) return route.fulfill({ status: 400, json: { code: 'invalid_argument', message: 'Concurrent pipeline jobs can be at most the installation’s 4.' } });
+    own = body.maxRunning; return route.fulfill({ json: view() });
+  });
+  await page.goto('/alex/demo/settings/runners');
+  const current = page.getByLabel('Current runner share');
+  await expect(current).toContainText('4 running jobs · 50 runs a day (UTC)');
+  await expect(current).toContainText('None: the installation’s applies');
+  await expect(current).toContainText('2 held by the share');
+  await expect(page.getByRole('form', { name: 'Edit runner share' })).toHaveCount(0);
+  await page.getByRole('region', { name: 'Runner share' }).getByRole('button', { name: 'Edit' }).click();
+  const form = page.getByRole('form', { name: 'Edit runner share' });
+  await form.getByLabel('Running jobs').fill('5');
+  await expect(form.getByRole('alert')).toHaveText('At most 4, the inherited limit.');
+  await form.getByLabel('Running jobs').fill('2');
+  await form.getByRole('button', { name: 'Save share' }).click();
+  await expect(page.getByRole('status')).toContainText('The runner share was saved');
+  expect(writes.at(-1)).toMatchObject({ action: 'set', repository: { owner: 'alex', name: 'demo' }, maxRunning: 2, maxRunsPerDay: null, expectedVersion: '0' });
+  await expect(current).toContainText('2 running jobs');
 });

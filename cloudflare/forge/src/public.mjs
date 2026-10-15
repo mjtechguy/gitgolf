@@ -34,7 +34,7 @@ export function statelessRoute(request, url = new URL(request.url)) {
   // Estimated costs (S6): D1 and the Analytics API only, waiting up to 5 s on the API; never a slot in the Workspace queue.
   if (request.method === 'POST' && url.pathname === '/native/costs/read') return 'read';
   // Runner capacity (S5): the administrators' inventory and the autoscaler queue-depth metric, D1 only.
-  if (request.method === 'POST' && url.pathname === '/native/capacity/read' || request.method === 'GET' && url.pathname === '/native/capacity/metrics') return 'read';
+  if (request.method === 'POST' && (url.pathname === '/native/capacity/read' || url.pathname === '/native/capacity/shares/read') || request.method === 'GET' && url.pathname === '/native/capacity/metrics') return 'read';
   const route = gitRoute.exec(url.pathname);
   if (!route) return null;
   if (route[1] === 'info/refs') return request.method === 'GET' && /^\?service=git-(?:upload|receive)-pack$/.test(url.search) ? 'read' : null;

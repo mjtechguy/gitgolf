@@ -157,6 +157,11 @@ const native = {
     subject: async c => ['createMetricsToken', 'revokeMetricsToken'].includes(body.action) ? clip(body.label, 64) || (whole(body.id) && (await one(c.db, 'SELECT label FROM capacity_metrics_tokens WHERE id=?', whole(body.id)))?.label) || token(body.id)
       : body.action === 'request' ? clip(`${body.key}.${body.field}`, 80) : (whole(body.id) && await one(c.db, "SELECT policy_key||'.'||field AS name FROM capacity_requests WHERE id=?", whole(body.id)))?.name || token(body.id) },
   'capacity/read': () => adminDenial('runner capacity'),
+  // Runner shares (capacity-shares.mjs): each change writes its own row in the same batch at organization or repository scope; these record denials.
+  'capacity/shares': body => ({ set: 'capacity_share.update', request: 'capacity_request.create', withdraw: 'capacity_request.withdraw' })[body.action] && {
+    action: ({ set: 'capacity_share.update', request: 'capacity_request.create', withdraw: 'capacity_request.withdraw' })[body.action], batch: true, scope: body.organization !== undefined ? 'organization' : 'repository',
+    scopeId: async c => (await one(c.db, "SELECT id FROM native_owners WHERE slug=? AND kind='ORGANIZATION'", clip(body.organization, 40) || ''))?.id,
+    subject: () => body.action === 'set' ? 'runner-share' : clip(body.field, 40) ? 'runner share ' + clip(body.field, 40) : 'runner share' },
   'ai-models': body => ({ action: body.repository ? 'repository_ai_model.update' : 'ai_model.update', scope: body.repository ? 'repository' : 'installation', batch: true, subject: () => clip(body.use, 40) && 'ai.model.' + clip(body.use, 40) }),
   'audit/read': body => body.scope === 'installation' && adminDenial('the installation audit log'),
   // Credential vault and engines (docs/CREDENTIAL_VAULT.md, docs/ENGINES.md): each change writes its own row in the same batch (vault.mjs,
@@ -368,7 +373,7 @@ export async function audited(request, env, run, identify) {
 
 /* Reading. Categories are the action prefix; the first installation policy rows used the bare action 'update'. */
 const categories = [['installation_policy', 'Installation policy', ['update', 'installation_policy.']], ['feature_policy', 'Feature policy'], ['ai_model', 'AI models', ['ai_model.', 'repository_ai_model.']],
-  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['capacity', 'Runner capacity', ['capacity_request.', 'capacity_metrics_token.']], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.', 'ssh_host.']], ['api_token', 'API tokens'], ['credential', 'Credentials'], ['engine', 'Engines', ['engine.', 'engine_selection.']], ['agentic_mode', 'Agentic mode'], ['automation', 'Automations'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
+  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['capacity', 'Runner capacity', ['capacity_request.', 'capacity_metrics_token.', 'capacity_share.']], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.', 'ssh_host.']], ['api_token', 'API tokens'], ['credential', 'Credentials'], ['engine', 'Engines', ['engine.', 'engine_selection.']], ['agentic_mode', 'Agentic mode'], ['automation', 'Automations'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
   ['repository_invitation', 'Invitations'], ['protected_branch', 'Rules', ['protected_branch.', 'protected_tag.']], ['hook', 'Webhooks'], ['repository_secret', 'Secrets and variables', ['repository_secret.', 'repository_variable.']],
   ['environment', 'Environments'], ['git_credential', 'Git credentials'], ['git_write', 'Git writes'], ['preview', 'Previews'], ['release', 'Releases', ['release.', 'release_asset.']], ['pull_request', 'Pull requests', ['pull_request.', 'pull_request_review.']],
   ['label', 'Labels and milestones', ['label.', 'milestone.']], ['ai', 'AI runs', ['ai.']], ['actions', 'Actions runs']].map(([id, label, prefixes]) => ({ id, label, prefixes: prefixes || [id + '.'] }));
@@ -439,6 +444,7 @@ const phrases = {
   'capacity_request.approve': ['approved', 'approve', e => `the capacity request for ${e.subject}${e.after?.state === 'APPLIED' ? ', applied' : e.after?.needsDeploy ? ', waiting for a deploy' : ''}`],
   'capacity_request.apply': ['applied', 'apply', e => `the approved capacity request for ${e.subject}`],
   'capacity_request.decline': ['declined', 'decline', e => `the capacity request for ${e.subject}`], 'capacity_request.withdraw': ['withdrew', 'withdraw', e => `the capacity request for ${e.subject}`],
+  'capacity_share.update': ['changed', 'change', e => `the runner share${e.after ? ` to ${e.after.maxRunning ?? 'inherited'} concurrent jobs and ${e.after.maxRunsPerDay ?? 'inherited'} runs a day` : ''}`],
   'capacity_metrics_token.create': ['created', 'create', e => named('capacity metrics token', e.subject)], 'capacity_metrics_token.revoke': ['revoked', 'revoke', e => named('capacity metrics token', e.subject)],
   'api_token.create': ['created', 'create', e => `${e.after?.permission ? e.after.permission + ' ' : ''}API token ${e.subject}`], 'api_token.revoke': ['revoked', 'revoke', e => named('API token', e.subject)],
   'api_token.use_denied': ['was refused with', 'use', e => `${e.after?.agentTaskId ? 'an agent task token' : 'an API token'} (${e.after?.reason === 'branch' ? 'branch outside its pattern' : e.after?.reason === 'permission' ? 'read-only token' : 'repository outside its scope'})`],

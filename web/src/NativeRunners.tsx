@@ -7,6 +7,7 @@ import { DataTable } from './DataTable';
 import type { DataTableColumn } from './DataTable';
 import { nativeAPI } from './NativeForge';
 import { NativePipelineRunners } from './NativePipelineRunners';
+import { RunnerSharePanel } from './RunnerShares';
 
 type Pool = { id: string; name: string; version: number; state: 'ACTIVE' | 'DRAINING'; trust_class: 'UNTRUSTED' | 'TRUSTED'; max_parallel: number; image_id: string };
 type Machine = { id: string; pool_id: string; name: string; protocol: 'native' | 'gitlab'; version: number; state: 'ACTIVE' | 'DRAINING' | 'QUARANTINED' | 'REVOKED'; expires_at: number; last_seen_at: string | null; active_job_id: string | null; cleanup_state: 'CONFIRMED' | 'UNKNOWN' };
@@ -89,7 +90,7 @@ export function NativeRepositoryRunners({ userId, owner, name, signingOut }: { u
   const { access, error, refresh } = useRepositorySettingsAccess(userId, owner, name, signingOut);
   const config = useQuery({ ...privateQuery, queryKey: ['native-config', userId], queryFn: ({ signal }) => nativeAPI<{ tests?: boolean }>('/native/config', {}, signal) });
   return <section className="page-stack"><header className="repository-intro"><div><h1>Runners</h1><p>Self-hosted runners for this repository's workflows and pipelines, and the runner pool for approved pull request checks.</p></div></header>
-    {error ? <PanelError error={error} retry={refresh} /> : !access ? <Loading label="Verifying repository access…" /> : signingOut ? null : <><NativePipelineRunners key={`pipelines-${access.repositoryId}`} userId={userId} target={{ scope: 'repository', repository: { owner, name }, repositoryId: access.repositoryId }} />{config.data?.tests ? <NativeRunnerPlacement key={access.repositoryId} context={{ repository: { owner, name }, repositoryId: access.repositoryId }} /> : null}</>}
+    {error ? <PanelError error={error} retry={refresh} /> : !access ? <Loading label="Verifying repository access…" /> : signingOut ? null : <><NativePipelineRunners key={`pipelines-${access.repositoryId}`} userId={userId} target={{ scope: 'repository', repository: { owner, name }, repositoryId: access.repositoryId }} /><RunnerSharePanel key={`share-${access.repositoryId}`} userId={userId} target={{ repository: { owner, name }, repositoryId: access.repositoryId }} />{config.data?.tests ? <NativeRunnerPlacement key={access.repositoryId} context={{ repository: { owner, name }, repositoryId: access.repositoryId }} /> : null}</>}
   </section>;
 }
 

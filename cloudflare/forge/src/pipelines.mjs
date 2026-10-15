@@ -5,6 +5,7 @@ import { digest, Fault, invalid } from './common.mjs';
 import { repositoryFeatures } from './feature-policy.mjs';
 import { openRepositoryValues } from './execution-values.mjs';
 import { pipelinePolicy } from './pipeline-policy.mjs';
+import { claimPlan, poolFull, claimFilter, claimSkipped, claimGuard, claimMissed, dailyRunGuard } from './capacity-shares.mjs';
 
 export { pipelinePolicy };
 export const pipelineEngines = ['forgejo-actions', 'gitlab-ci'];
@@ -69,7 +70,8 @@ const environmentNameOK = name => typeof name === 'string' && /^[A-Za-z0-9 _./-]
 const environmentOK = e => e && typeof e === 'object' && environmentNameOK(e.name) && (e.url === undefined || typeof e.url === 'string' && e.url.length <= 2048) && (e.action === undefined || environmentActions.includes(e.action));
 const environmentJSON = e => e ? JSON.stringify({ name: e.name, url: typeof e.url === 'string' && !e.url.includes('${{') ? e.url : '', action: e.action || 'start' }) : null;
 const runColumns = 'repository_id,artifact_name,engine,number,workflow_path,workflow_name,workflow_blob,event,ref,commit_id,before_sha,pull_number,head_ref,base_ref,actor_id,trusted,inputs,event_payload,title,state,reason,attempt,concurrency_group,concurrency_cancel,intake_id,created_at,updated_at';
-async function insertRun(db, run, state, reason) {
+// guard: { sql, values } ANDed into the INSERT (the daily runner share); null is returned when it does not hold.
+async function insertRun(db, run, state, reason, guard = null) {
   const { payload, inputs } = checkRun(run), time = now();
   const repository = await db.prepare("SELECT id,artifact_name FROM repositories WHERE id=? AND state='ACTIVE'").bind(Number(run.repositoryId)).first();
   if (!repository) refuse('Repository unavailable.');
@@ -78,17 +80,20 @@ async function insertRun(db, run, state, reason) {
     if (existing) return { runId: existing.id, number: existing.number, replayed: true };
   }
   const created = await db.prepare(`INSERT INTO pipeline_runs(${runColumns})
-    SELECT ?,?,?,COALESCE((SELECT MAX(number) FROM pipeline_runs WHERE repository_id=? AND engine=?),0)+1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,? RETURNING id,number`)
+    SELECT ?,?,?,COALESCE((SELECT MAX(number) FROM pipeline_runs WHERE repository_id=? AND engine=?),0)+1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?${guard ? ' WHERE ' + guard.sql : ''} RETURNING id,number`)
     .bind(repository.id, repository.artifact_name, run.engine, repository.id, run.engine, run.workflowPath, run.workflowName || run.workflowPath, run.workflowBlob || '', run.event, run.ref, run.commitId,
       run.beforeSha || '', run.pullNumber ?? null, run.headRef || '', run.baseRef || '', Number(run.actorId), run.trusted ? 1 : 0, inputs, payload, String(run.title || '').slice(0, 512), state,
-      String(reason || run.reason || '').slice(0, 2000), run.concurrency?.group ? String(run.concurrency.group).slice(0, 400) : null, run.concurrency?.cancelInProgress ? 1 : 0, run.intakeId || null, time, time).first();
-  return { runId: created.id, number: created.number, replayed: false };
+      String(reason || run.reason || '').slice(0, 2000), run.concurrency?.group ? String(run.concurrency.group).slice(0, 400) : null, run.concurrency?.cancelInProgress ? 1 : 0, run.intakeId || null, time, time, ...(guard?.values || [])).first();
+  return created ? { runId: created.id, number: created.number, replayed: false } : null;
 }
 
 export async function createPipelineRun(db, env, run, jobs) {
   checkJobs(jobs);
   await requireAllowed(db, env, run?.repositoryId);
-  const created = await insertRun(db, run, 'QUEUED');
+  // The daily runner share (capacity-shares.mjs) is a count in the run's own INSERT; a run over it is recorded refused, with the reason.
+  const daily = await dailyRunGuard(db, env, Number(run.repositoryId));
+  const created = await insertRun(db, run, 'QUEUED', undefined, daily);
+  if (!created) return { ...await refusePipelineRun(db, env, run, await daily.reason()), replayed: false, refused: true, jobs: [] };
   if (created.replayed) {
     const { results } = await db.prepare('SELECT id,job_key AS key,name FROM pipeline_jobs WHERE run_id=? ORDER BY id').bind(created.runId).all();
     return { ...created, jobs: results };
@@ -211,22 +216,37 @@ export async function claimPipelineJob(db, env, runner, { requestKey } = {}) {
     }
   }
   const labels = new Set(parse(runner.labels, []).map(labelName)), scope = scopeClause(runner);
-  const { results } = await db.prepare(`SELECT j.*,r.repository_id FROM pipeline_jobs j JOIN pipeline_runs r ON r.id=j.run_id AND r.attempt=j.attempt
-    WHERE j.engine=? AND j.state='QUEUED' AND r.cancel_requested=0 AND r.state IN ('QUEUED','RUNNING','WAITING')${scope.sql} ORDER BY j.id LIMIT 50`).bind(runner.engine, ...scope.values).all();
+  // Runner capacity (capacity-shares.mjs): a pool at its cap gets no job, exactly as an empty queue; repositories and organizations at
+  // their running share are left out of the candidates, so the runner takes the next eligible job. Both are rechecked inside the UPDATE.
+  const plan = await claimPlan(db, env, runner);
+  if (await poolFull(db, plan)) return null;
   const allowed = new Map();
-  for (const candidate of results) {
-    if (!parse(candidate.runs_on, []).every(label => labels.has(labelName(label)))) continue;
-    if (!allowed.has(candidate.repository_id)) allowed.set(candidate.repository_id, await pipelineAllowed(db, env, candidate.repository_id));
-    if (!allowed.get(candidate.repository_id)) continue;
-    const run = await db.prepare('SELECT * FROM pipeline_runs WHERE id=?').bind(candidate.run_id).first();
-    const token = await mintToken(candidate, run), time = now(), expires = Date.now() + candidate.timeout_seconds * 1000 + tokenGrace;
-    const changed = await db.prepare("UPDATE pipeline_jobs SET state='RUNNING',runner_id=?,request_key=?,token_digest=?,token_expires_at=?,started_at=?,updated_at=? WHERE id=? AND state='QUEUED'")
-      .bind(runner.id, requestKey || null, await digest(token), expires, time, time, candidate.id).run();
-    if (changed.meta.changes !== 1) continue;
-    await db.prepare("UPDATE pipeline_runs SET state='RUNNING',started_at=COALESCE(started_at,?),updated_at=? WHERE id=? AND state IN ('QUEUED','WAITING')").bind(time, time, run.id).run();
-    if (runner.ephemeral) await db.prepare("UPDATE pipeline_runners SET state='DISABLED' WHERE id=?").bind(runner.id).run();
-    const job = await db.prepare('SELECT * FROM pipeline_jobs WHERE id=?').bind(candidate.id).first();
-    return claimed(db, job, { ...run, state: 'RUNNING' }, token);
+  // A share reached by a concurrent claim during this one is excluded on a second read, so the claim does not stop behind a page of its jobs.
+  for (let pass = 0, again = true; again && pass < 3; pass++) {
+    again = false;
+    const filter = claimFilter(plan);
+    const { results } = await db.prepare(`SELECT j.*,r.repository_id${filter.columns} FROM pipeline_jobs j JOIN pipeline_runs r ON r.id=j.run_id AND r.attempt=j.attempt
+      WHERE j.engine=? AND j.state='QUEUED' AND r.cancel_requested=0 AND r.state IN ('QUEUED','RUNNING','WAITING')${scope.sql}${filter.sql} ORDER BY j.id LIMIT 50`).bind(runner.engine, ...scope.values, ...filter.values).all();
+    for (const candidate of results) {
+      if (!parse(candidate.runs_on, []).every(label => labels.has(labelName(label)))) continue;
+      if (claimSkipped(plan, candidate)) continue;
+      if (!allowed.has(candidate.repository_id)) allowed.set(candidate.repository_id, await pipelineAllowed(db, env, candidate.repository_id));
+      if (!allowed.get(candidate.repository_id)) continue;
+      const run = await db.prepare('SELECT * FROM pipeline_runs WHERE id=?').bind(candidate.run_id).first();
+      const token = await mintToken(candidate, run), time = now(), expires = Date.now() + candidate.timeout_seconds * 1000 + tokenGrace, guard = await claimGuard(db, plan, candidate);
+      const changed = await db.prepare(`UPDATE pipeline_jobs SET state='RUNNING',runner_id=?,request_key=?,token_digest=?,token_expires_at=?,started_at=?,updated_at=? WHERE id=? AND state='QUEUED'${guard.sql}`)
+        .bind(runner.id, requestKey || null, await digest(token), expires, time, time, candidate.id, ...guard.values).run();
+      if (changed.meta.changes !== 1) {
+        const missed = guard.sql ? await claimMissed(db, plan, candidate) : null;
+        if (missed === 'pool') return null;
+        if (missed === 'share') again = true;
+        continue;
+      }
+      await db.prepare("UPDATE pipeline_runs SET state='RUNNING',started_at=COALESCE(started_at,?),updated_at=? WHERE id=? AND state IN ('QUEUED','WAITING')").bind(time, time, run.id).run();
+      if (runner.ephemeral) await db.prepare("UPDATE pipeline_runners SET state='DISABLED' WHERE id=?").bind(runner.id).run();
+      const job = await db.prepare('SELECT * FROM pipeline_jobs WHERE id=?').bind(candidate.id).first();
+      return claimed(db, job, { ...run, state: 'RUNNING' }, token);
+    }
   }
   return null;
 }

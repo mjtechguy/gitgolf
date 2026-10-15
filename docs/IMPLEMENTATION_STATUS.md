@@ -1,5 +1,73 @@
 # Golf implementation status
 
+## 2026-10-15 — Scale-out S5 slice 2: self-hosted pool caps and organization and repository runner shares (schema 52, not on hosted)
+
+[`SCALE_OUT_PLAN.md`](SCALE_OUT_PLAN.md) S5, second slice; details in [`RUNNER_CAPACITY.md`](RUNNER_CAPACITY.md). Built and tested locally.
+Not deployed: migration 0052 is not applied on the hosted demo.
+
+**Built:**
+- **Pool caps:** a new installation policy, `runner-pools` (`capacity-policy.mjs`): `{ engine, labels, maxConcurrent }` per self-hosted
+  pool, where the pool is slice 1's (engine plus sorted label names).
+  - The deploy value is "no caps"; each cap is 1–1000.
+  - Narrowing saves at once. Raising or removing a cap needs `runner-pools` typed and an Access sign-in from the last 10 minutes,
+    through `applyInstallationChange`. Audited.
+- **Runner shares:** running pipeline jobs and runs started per UTC day.
+  - The installation sets them (installation policy `runner-shares`) for each organization (all its repositories together) and each
+    personal repository, and may enforce them.
+  - Organization owners narrow the organization's, and repository administrators narrow the repository's within its organization's.
+    These values are stored in the new `capacity_shares` table (schema 52), edited under a verified Access sign-in, version-fenced, and
+    audited at their own scope.
+  - Why a table and not `feature_policies`: that table's mode is a CHECKed enum, its scope excludes repositories, and a replayable
+    migration cannot relax a CHECK.
+- **Organization requests:** an organization owner requests a higher share.
+  - It is a `capacity_requests` row with `policy_key` `organization:<id>`. A replayable migration cannot add columns, and the existing
+    unique open-request index then gives one open request per organization and field.
+  - A different operations administrator approves on the Runner capacity page, typing the organization's name, with a recent sign-in.
+    The grant and the audit row are written in the same batch.
+- **Enforcement where work starts** (`pipelines.mjs`):
+  - **Pool caps and running shares:** counts inside `claimPipelineJob`'s conditional `UPDATE`. The pool is matched in SQL by label names
+    (`json_each`), so a relabelled runner is counted.
+  - **Skipping blocked jobs:** repositories and organizations at their share are excluded from the candidate query, and re-read when a
+    concurrent claim fills a share, so runners take other jobs instead of stalling.
+  - **When a pool is at its cap:** the runner sees an empty queue (GitLab 204, Forgejo empty task).
+  - **Daily share:** a count inside `createPipelineRun`'s conditional `INSERT`. A run over it is recorded `REFUSED` with the reason.
+  - **No configuration:** nothing changes.
+- **Inventory and metric:**
+  - Each pool shows its cap and held jobs; each organization and repository with a share shows running, queued, held and runs today.
+  - `GET /native/capacity/metrics` adds `held`, `claimable` and `cap` without changing `queued`. The KEDA example now scales on
+    `claimable`.
+- **UI:**
+  - Runner capacity page: Pool caps (Add, Edit, Remove) and Runner shares (installation value with Edit, and a shares table).
+  - Organization settings and repository Settings → Runners: a Runner share panel with the current and inherited values, Edit, and for
+    organization owners Request more.
+
+**Verified locally:**
+- `node --test cloudflare/forge/*.test.mjs`: 757 tests, 756 pass, 1 skipped. The new `capacity-shares.test.mjs` (9 tests) covers:
+  - a cap stopping six concurrent claims at two;
+  - the GitLab 204;
+  - a share skipping more than a page of held jobs;
+  - concurrent claims not overshooting a share;
+  - the hierarchy refused above the parent, and enforcement;
+  - each scope's authorization, including tokens;
+  - an organization request approved with two people;
+  - the daily share refusing a run with the reason;
+  - the inventory and metric fields.
+- Web:
+  - `npm run typecheck`, `npm run build` and `npm run build:native` pass.
+  - `node --test web/tests/*.test.ts`: 22 tests, 20 pass. The 2 failures are the known `navigation-cache` and one
+    `runtime-capabilities` test.
+  - Playwright `runner-capacity.spec.ts`: 3 of 3 pass, 2 of them new: the caps and shares panels, and the repository share panel.
+  - The neighbouring specs (native-actions, organization-admin, organization-settings-navigation, settings, native-agent-hosts,
+    organizations, native-installation-settings): 61 pass, 15 skipped.
+
+**Not done:**
+- Hosted deploy and migration 0052.
+- A browser test of the organization settings panel. It uses the same component as the repository panel, which has one.
+- A request that raises a pool cap.
+- A native pool's `max_parallel` as policy.
+- Shares for PR test containers, agent proposals and host tasks.
+- The bench run at a raised limit.
+
 ## 2026-10-15 — After the 110-agent run: pull requests during merges, the push reservation race, D1 indexes (schemas 50, 51)
 
 Each fix comes from the hosted runs in [benchmarks/2026-10-15-scale-out](benchmarks/2026-10-15-scale-out/README.md). All are merged,
