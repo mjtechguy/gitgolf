@@ -45,6 +45,8 @@ Every figure is labelled an estimate, not a bill.
   native-operations `runtime-capabilities` test.
 - `deploy/alchemy/native-config.test.mjs`: 6 pass.
 - Playwright `tests/estimated-costs.spec.ts`: 2 pass. Its fixture is `costs.mjs`'s own output.
+- Neighbouring admin specs: `ai-models-native` passes. `instance-admin` and `capabilities` have 3 failures, the same 3 with
+  `main`'s `web/` sources.
 - No horizontal overflow at 1440 and 390 px.
 
 **Not verified:**
