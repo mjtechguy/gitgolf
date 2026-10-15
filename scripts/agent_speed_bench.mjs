@@ -156,7 +156,8 @@ class Recorder {
   constructor(cfg) { Object.assign(this, { cfg, ops: new Map(), local: [], samples: new Set(), release: new Set(), workerRelease: new Set(), timing: new Map() }); }
   // Server-Timing of an HTTP operation: queue (waiting for admission in the repository's Workspace) and worker (the whole request).
   timed(op, h) {
-    const st = h.get('server-timing') || '', dur = name => { const m = new RegExp(`(?:^|,)\\s*${name};dur=([\\d.]+)`).exec(st); return m ? Number(m[1]) : null; };
+    // A request can carry a stage twice (the Workspace admission queue, and a nested request's own queue): the largest is the wait.
+    const st = h.get('server-timing') || '', dur = name => { const all = [...st.matchAll(new RegExp(`(?:^|,)\\s*${name};dur=([\\d.]+)`, 'g'))].map(m => Number(m[1])); return all.length ? Math.max(...all) : null; };
     const queue = dur('queue'), worker = dur('worker');
     if (queue === null && worker === null) return;
     if (!this.timing.has(op)) this.timing.set(op, { queue: [], worker: [] });

@@ -123,7 +123,29 @@ Server-Timing: `queue` is the time waiting for admission in the Workspace, and `
 **Throughput:** successful writes 0.75/s (baseline), 0.70/s (`fixed`), 0.78/s (`fixed2`). Successful reads were 0.18/s, 0.11/s and
 0.15/s.
 
-**The key finding:** for every HTTP write, the server's admission queue is about zero.
+**Correction (16:40 UTC):**
+- The server-queue columns above are wrong. A response carries two `queue` stages: the Workspace's admission queue, and a nested
+  request's own (tens of milliseconds). The bench parsed only the first. The bench now takes the largest.
+- Three Source API commits sampled during `fixed3`, with the whole Server-Timing header:
+
+  | Client | Admission queue | Work (`native`) | D1 | Artifacts |
+  | --- | --- | --- | --- | --- |
+  | 16.4 s | 14.5 s | 1.26 s | 0.44 s (7 calls) | 0.51 s (8 calls) |
+  | 33.5 s | 31.4 s | 1.15 s | 0.60 s | 0.23 s |
+  | 49.0 s | 47.4 s | 0.95 s | 0.30 s | 0.30 s |
+
+**What the latency really is:** waiting in the Workspace admission queue. The work itself takes about a second.
+- `serialize()` in `cloudflare/forge/src/core.mjs` admits overlapping `read` (up to 8) and `transfer` (up to 24) requests.
+- An `exclusive` request at the head of the queue waits until every running read and transfer has finished, and **nothing behind it
+  is admitted meanwhile**.
+- Transfers such as clones and pushes run for tens of seconds under load. Exclusive requests (opening a pull request, reporting a
+  check, comments, other RPC writes) arrive every few seconds. Each one starts a convoy.
+- The fix direction is to class the D1-guarded writes that do not need repository-wide exclusivity as overlapping. A rewrite is not
+  needed. See "Next" below.
+
+The paragraph that follows was written before the correction:
+
+**The superseded finding:** for every HTTP write, the server's admission queue is about zero.
 - The Worker-side time is almost exactly what the client sees: S6 17.5 s server against 17.7 s client.
 - Requests get in at once (commits and Git transfers are the overlapping `transfer` class), and are slow while they run.
 - The limit is execution inside the one Workspace Durable Object, which holds every repository of the installation. Admission
