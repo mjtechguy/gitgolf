@@ -377,17 +377,20 @@ writer in a new `git-objects.mjs`.
 
 ### AM-6 Budgets and later work
 
-**Status (2026-10-15): line-level merge done locally, not hosted-verified.**
-- `text-merge.mjs` matches `git merge-file` on more than 700 cases.
-- `tree-merge.mjs` uses it in every three-way merge (see "Line-level merges" in
-  `docs/AGENTIC_MODE.md`).
-- The rest of AM-6 is open. So is re-measuring S6 shared-branch commits with
-  line-level merges.
+**Status (2026-10-15): budgets, line-level merge, blame and literal grep merged and deployed; hosted check pending.**
+- **Rate budgets (#108):** per API token and agent task, requests and writes per minute.
+  - Counted inside the Workspace rather than with a Rate Limiting binding, because bindings belong to the deploy scripts.
+  - Defaults are in installation policy. Over budget: Git's own report for pushes, 429 elsewhere, a tool error in MCP.
+- **Line-level merge (#109):** matches `git merge-file`, with a per-merge budget of files, bytes and lines.
+- **Blame and literal grep (#110):** match `git blame --first-parent` and `git grep`. Regular-expression grep is refused until the scan runs outside the Workspace.
+- **Still open:**
+  - streaming pushes above 8 MiB;
+  - the conditional `RepositoryWrites` split;
+  - re-measuring S6 shared-branch commits with line-level merges.
 
 - **Rate budgets** for each API token and agent task: requests and pushes per
   minute.
-  - They use the Workers Rate Limiting binding that already throttles anonymous
-    reads.
+  - Counted in the Workspace Durable Object (see status above).
   - A 429 names the budget.
   - Administrators set defaults in installation policy.
 - **Line-level three-way merge (diff3)** for text files in `tree-merge.mjs`.
