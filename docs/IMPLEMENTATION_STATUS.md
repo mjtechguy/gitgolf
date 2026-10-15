@@ -1,5 +1,79 @@
 # Golf implementation status
 
+## 2026-10-15 — Scale-out S5 slice 1: runner capacity, autoscaler queue metric, approved capacity requests (schema 49, not yet on hosted)
+
+[`SCALE_OUT_PLAN.md`](SCALE_OUT_PLAN.md) S5, first slice; details in [`RUNNER_CAPACITY.md`](RUNNER_CAPACITY.md). Golf never starts
+machines: it reports capacity and queue depth, and limits rise through requests a second administrator approves.
+
+**Built:**
+- **Inventory:** `cloudflare/forge/src/capacity.mjs`, `POST /native/capacity/read` (actions `read` and `preview`). It is for
+  operations administrators only, checked before and after the reads, and runs in the stateless Worker (`statelessRoute` `'read'`).
+  Page `/admin/capacity` ("Runner capacity", capability `operations.capacity`) leads with one shared DataTable across sources:
+  - self-hosted Forgejo and GitLab pools (engine plus label names, matched as `claimPipelineJob` does, `name:image` by name, scope
+    included): registered, active and online (5 minutes) runners, running, queued and the oldest wait;
+  - jobs no active runner can take;
+  - native pools (`max_parallel`, active machines, running, queued);
+  - Cloudflare containers (PR tests, agent proposals, SSH tasks): the allocation is "not known to the Worker" because no
+    `max_instances` is bound, plus Golf's own admission limit;
+  - agent and SSH hosts (summed `max_concurrent`, online, running, queued).
+- **Metric:** `GET /native/capacity/metrics?engine=…&labels=…` returns `{ pool, engine, labels, queued, running, online,
+  oldestWaitSeconds, registered, truncated, at }`.
+  - It is a stateless read and authenticated only by a `golf_capacity_` token, which `api-tokens.mjs` `machineTokenRoute` passes
+    through Access on this path only.
+  - Tokens are created and revoked on the page, shown once, stored as SHA-256, expire after 30, 90 or 365 days, at most 20 active,
+    and audited. `actor()` knows no such credential, so the token reads nothing else.
+  - A label set with no runners publishes its queue for scale-from-zero.
+  - `docs/RUNNER_CAPACITY.md` has a KEDA `metrics-api` ScaledObject with bearer auth and no secrets.
+- **Requests:** migration `0049_capacity_requests.sql` (`capacity_requests`, `capacity_metrics_tokens`; `schema.sql`, `release.mjs`
+  schema 49 and `schemaTables` updated). On `POST /native/capacity`:
+  - `request`: any operations administrator. The value is validated by the policy's own `validate`. Above the ceiling, up to the
+    deploy maximum (daily admissions 50, preview lifetime 14,400 s), it is accepted as `needs_deploy`. Preview slots and agent
+    budgets are fixed in code and refused above their bound. One open request per setting.
+  - Cost change: daily admissions are priced as up to that many more CI runs a day at S6's measured cost per CI run (an upper
+    bound; container time named as left out). Without a measurement, and for other settings, the estimate is null with the reason.
+  - `withdraw`: the requester only. `decline` and `approve`: a different operations administrator only.
+  - Approval goes through `installation.mjs` `applyInstallationChange`, extracted from `/native/installation` without changing its
+    behaviour. It brings the typed confirmation, the 10-minute Access sign-in for widening, the revision fence, the receipt and
+    the `update` audit row. The request becomes APPLIED in the same D1 batch, guarded on the request still being undecided.
+  - Needs-deploy approval records APPROVED with the `golf_cloudflare.py update` step. Once a deploy raises the ceiling, **Apply**
+    runs the same path. A request that can no longer apply becomes FAILED with the reason.
+  - Every action writes its audit row in its batch (`capacity_request.*`, `capacity_metrics_token.*`, category "Runner capacity").
+    Denials and failed approvals are recorded by the audit hook.
+- **UI:** the requests inventory lists pending first, with current → requested, the ceiling, a needs-deploy badge, the cost change
+  and the requester. "Request more capacity" opens a TanStack form with "Estimate cost". Approve, Apply and Decline open a form;
+  approval needs the setting name typed. "New metrics token" shows the secret once.
+
+**Checks:**
+- `node --test cloudflare/forge/*.test.mjs`: 745 tests, 744 pass, 1 skipped, 0 fail. New in `capacity.test.mjs` (6 tests):
+  - pool grouping and label and scope matching;
+  - queued, unmatched and oldest wait;
+  - inventory sources and admin-only access;
+  - metrics token create, use, expiry and revoke, and that it reads nothing else;
+  - cost math;
+  - request validation, `needs_deploy`, the two-person rule, approval applying the policy and refusing without the recent sign-in or
+    the typed name, apply after a deploy, withdraw, decline, FAILED, a locked installation, and audit rows.
+  - `public.test.mjs` adds the stateless-route test. Diagnostics tests now expect schema 49.
+- Web: `npm run typecheck`, `npm run build` and `npm run build:native` pass.
+- `node --test web/tests/*.test.ts`: 22 tests, 20 pass. The 2 failures are the known ones on `main` (`navigation-cache` and the
+  native-operations `runtime-capabilities` test).
+- Playwright `tests/runner-capacity.spec.ts`: 1 pass, with fixture data; `estimated-costs` still passes 2.
+- Neighbouring specs: `native-installation-settings` and `agent-budgets` pass 12; the 5 review-screenshot tests skip by default. `instance-admin` and `capabilities` have 3
+  failures, the same 3 with `main`'s `web/` sources.
+
+**Not verified / deliberately left out:**
+- Not deployed; the migration is not applied on the hosted demo.
+- The KEDA example has not been run against a cluster (`golf-ci` kind).
+- `public.mjs` gained one line beyond `statelessRoute`: `/native/capacity` now gets `X-Golf-Native-Access-Issued-At` like
+  `/native/installation`. Without it, approval could never satisfy the 10-minute sign-in rule.
+- A request's cost reads the Analytics API (up to 5 s). Requests run on the Workspace's exclusive route.
+- Remaining S5 work is listed in the plan:
+  - organization and repository shares;
+  - pool concurrency caps as policies;
+  - container `max_instances` bound into the Worker;
+  - container time in the cost;
+  - organization-owner requests;
+  - a bench run at a newly approved limit.
+
 ## 2026-10-15 — Scale-out S6: estimated costs in the admin UI (built, not yet verified on hosted)
 
 [`SCALE_OUT_PLAN.md`](SCALE_OUT_PLAN.md) S6. Operations administrators see, at `/admin/costs` next to AI usage, what this
