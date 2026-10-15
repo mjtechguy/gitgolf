@@ -265,3 +265,18 @@ test('Source API reads run in the stateless Worker and are confirmed against D1 
   try { const revoked = await tree(); assert.equal(revoked.status, 404); assert.ok(!JSON.stringify(await revoked.json()).includes('hello')); }
   finally { globalThis.fetch = original; }
 });
+
+test('requests served by the stateless Worker share one isolate object cache: a second read of the same commit reads nothing again', async t => {
+  const f = await accessFixture(t);
+  f.env.agentBudgets = new AgentBudgets();
+  const { secret } = await f.create({ repositories: ['1'] });
+  const ctx = { waitUntil() {}, exports: { Workspace: { idFromName: key => key, get: () => ({ fetch: async () => new Response(null, { status: 204 }), chargeBudget: (...args) => chargeBudget(f.env, f.env.DB, ...args) }) } } };
+  const reads = [], get = f.env.ARTIFACTS.get.bind(f.env.ARTIFACTS);
+  f.env.ARTIFACTS = { get: async name => { const repo = await get(name); return { ...repo, info: repo.info, [Symbol.dispose]: repo[Symbol.dispose],
+    readCommit: async hash => { reads.push(hash); return repo.readCommit(hash); }, readTree: repo.readTree, readBlob: repo.readBlob, readBlobSize: repo.readBlobSize, log: repo.log }; } };
+  const tree = () => publicFetch(new Request(origin + '/native/source/tree', { method: 'POST', headers: { Authorization: bearer(secret), 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    body: JSON.stringify({ repository, repositoryId: '1', commitId: feature }) }), { ...f.env, WORKSPACE_SLUG: 'alice' }, ctx);
+  // The first read may already find objects an earlier request in this isolate read; the repeat reads nothing new.
+  assert.equal((await tree()).status, 200); const first = reads.length;
+  assert.equal((await tree()).status, 200); assert.equal(reads.length, first);
+});

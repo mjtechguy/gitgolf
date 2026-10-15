@@ -21,6 +21,10 @@ export function embeddedAsset(request, assets) {
     const { type, content } = assets[path];
     return new Response(request.method === 'HEAD' ? null : Uint8Array.from(atob(content), c => c.charCodeAt(0)), { headers: { 'Content-Type': type, 'Cache-Control': immutableAsset(path) ? 'private, max-age=31536000, immutable' : 'no-store' } });
 }
+// Immutable Git objects (keyed by account, namespace, repository and hash) read by requests this isolate serves statelessly: a merge-base
+// walk or a tree read reuses what an earlier request in the isolate already read, as the Workspace's own cache did. Each Artifacts read
+// is a billed operation. Reads are authorized before any object is read; the cache never decides access.
+const isolateObjects = { objects: new Map(), pending: new Map(), bytes: 0, maxEntries: 4096, maxBytes: 16 * 1024 * 1024 };
 const gitRoute = /^\/git\/[^/]+\/[^/]+\.git\/(info\/refs|git-upload-pack|git-receive-pack)$/;
 // Served by the stateless Worker (docs/SCALE_OUT_PLAN.md): 'read' for Git advertisements and upload-pack (S1) and the Source API reads
 // (S3), 'write' for a push or a Source API commit or branch (S2); null for everything else, which the Workspace serves.
@@ -168,7 +172,7 @@ async function dispatch(request, env, ctx, clock) {
       const response = await core.handle(forwarded, { ...env, waitUntil: promise => ctx.waitUntil(promise),
         // Repository reads (MCP tools, Source API reads) are confirmed against D1 after they run; Git reads check their grant themselves.
         confirmRead: core.confirmReadFromD1(forwarded, env),
-        workspaceBudget: (kind, id, write) => owner.chargeBudget(kind, id, write), pipelineCoordinator: ctx.exports.PipelineRun,
+        workspaceBudget: (kind, id, write) => owner.chargeBudget(kind, id, write), pipelineCoordinator: ctx.exports.PipelineRun, gitObjectCache: isolateObjects,
         notifyPipeline: id => ctx.waitUntil(owner.activityChanged(String(id), ['actions']).catch(() => {})),
         automationsQueued: () => ctx.waitUntil(owner.automations().catch(() => {})),
         notifyLanding: id => ctx.waitUntil(owner.activityChanged(String(id), ['source', 'pulls', 'issues']).catch(() => {})) });

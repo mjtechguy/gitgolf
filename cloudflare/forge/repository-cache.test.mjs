@@ -63,3 +63,11 @@ test('immutable blob sizes survive body eviction without retaining oversized bod
  for(let i=1;i<=4100;i++)assert.equal(await cheap.readBlobSize(hash(i)),0);
  assert.equal(state.blobSizes.size,4096);await assert.rejects(repo.readBlobSize('main'));
 });
+
+test('a cache can set its own bounds (the stateless Worker keeps more objects per isolate)', async () => {
+  const state = { ...cache(), maxEntries: 300, maxBytes: 64 * 1024 }; let reads = 0;
+  const repo = cachedRepository({ async readCommit(id) { reads++; return { hash: id, parents: [] }; } }, state, 'one');
+  for (let i = 1; i <= 300; i++) await repo.readCommit(hash(i));
+  assert.equal(state.objects.size, 300); await repo.readCommit(hash(1)); assert.equal(reads, 300);
+  await repo.readCommit(hash(301)); assert.equal(state.objects.size, 300); assert.ok(state.bytes <= 64 * 1024);
+});
