@@ -41,6 +41,12 @@ export function bindings(config) {
         if (Object.keys(value).some(key => !['type', 'allowedSenderAddresses'].includes(key)) || !Array.isArray(value.allowedSenderAddresses) || value.allowedSenderAddresses.length !== 1 || typeof value.allowedSenderAddresses[0] !== 'string')
           throw Error('Unqualified Alchemy email binding');
         return { name, type: 'send_email', allowedSenderAddresses: value.allowedSenderAddresses };
+      // Workers VPC (SSH hosts): one Tunnel by id, or a Mesh network; the Worker connects through it (env.NAME.connect).
+      case 'vpc-network':
+        if (Object.keys(value).some(key => !['type', 'tunnelId', 'networkId'].includes(key)) || (value.tunnelId === undefined) === (value.networkId === undefined) ||
+            (value.tunnelId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value.tunnelId)) || (value.networkId !== undefined && value.networkId !== 'cf1:network'))
+          throw Error('Unqualified Alchemy VPC network binding');
+        return { name, type: 'vpc_network', ...(value.tunnelId ? { tunnelId: value.tunnelId } : { networkId: value.networkId }) };
       case 'dispatch-namespace': return { name, type: 'dispatch_namespace', namespace: value.namespace,
         outbound: { worker: { service: value.outbound.worker } } };
       default: throw Error('Unqualified Alchemy binding: ' + value.type);

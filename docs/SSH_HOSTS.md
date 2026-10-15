@@ -311,14 +311,31 @@ docker build --platform linux/amd64 -f cloudflare/ssh-hosts/Dockerfile -t <repos
 
 ## Deploy
 
-**Alchemy (the hosted demo):** run `enable-secrets` first if the installation has no
-repository value key, then:
+**One-command installer:** add the `ssh-hosts` service. It brings `secrets` with it, applies
+schema 47 and deploys. With `--ssh-vpc-tunnel-id`, it also renews the deployment token so the
+token may bind the Tunnel:
 
 ```sh
-python3 scripts/cloudflare_alchemy_demo.py enable-ssh-hosts DIRECTORY
+python3 scripts/golf_cloudflare.py install ... --with ssh-hosts [--ssh-vpc-tunnel-id TUNNEL_UUID]
+python3 scripts/golf_cloudflare.py update DIR --with ssh-hosts [--ssh-vpc-tunnel-id TUNNEL_UUID]
+```
+
+**Alchemy actions:** run `enable-secrets` first if the installation has no repository value
+key, then:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py migrate DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py enable-ssh-hosts DIRECTORY [--vpc-tunnel-id TUNNEL_UUID]
+python3 scripts/cloudflare_alchemy_demo.py renew-deploy DIRECTORY   # only with --vpc-tunnel-id
 python3 scripts/cloudflare_alchemy_demo.py plan DIRECTORY
 python3 scripts/cloudflare_alchemy_demo.py deploy DIRECTORY
 ```
+
+`--vpc-tunnel-id` binds that Cloudflare Tunnel as the `vpc_networks` binding `SSH_VPC_NETWORK`,
+which turns on the `workers-vpc` reach. The deployment token then also carries **Connectivity
+Directory Admin** and **Cloudflare Tunnel Read**. Without the Admin role, Cloudflare refuses the
+binding with "Workers VPC binding configuration failed because your credentials are not authorized";
+**Connectivity Directory Bind** alone was not enough on the hosted account.
 
 The stack then stages a build context in `DIRECTORY/ssh-image` holding only `go.mod`, `go.sum`,
 `cmd/golf-agent-host` (without tests) and the Dockerfile, never the repository root. From it, it:
@@ -356,27 +373,67 @@ application.
 5. **Optional, Workers VPC:** a `vpc_networks` binding named `SSH_VPC_NETWORK` with
    either `tunnel_id` or `network_id: "cf1:network"` (Mesh). Binding a tunnel needs the
    Connectivity Directory Admin role. Without it the `workers-vpc` reach reports itself
-   unavailable. The Alchemy stack does not bind one yet.
+   unavailable. The Alchemy stack binds one with `--vpc-tunnel-id`.
 6. **Schema 47:** apply `0047_ssh_hosts.sql`.
 7. **Nothing else.** No new secrets: Golf generates the SSH keys. `PUBLIC_ORIGIN` must be
    the origin the container reaches, because the clone, log and finish go there over
    HTTPS from the container.
 
+## Setting up reach
+
+Every reach ends at an ordinary `sshd`. On the machine:
+1. Create a dedicated account for Golf (no sudo).
+2. Sign the coding tools in as that account, for example `sudo -iu golf-agent claude`, then `/login`.
+3. Install the `restrict` line Golf shows after **Add SSH host** in that account's
+   `~/.ssh/authorized_keys`. Each host entry in Golf has its own key.
+4. Run **Test connection**.
+5. Compare the offered fingerprint with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the
+   machine, then **Trust this host key**.
+
+- **Direct:** the SSH port must be reachable from Cloudflare's network. Most machines behind NAT
+  are not; use one of the reaches below.
+- **Tailscale:**
+  1. Add a tag owner to the tailnet policy, for example `"tagOwners": {"tag:golf-ssh": ["autogroup:admin"]}`.
+     A tagged node is not one of your own devices, so `autogroup:self` SSH rules do not cover it.
+  2. If the policy is not allow-all, let the tag reach the machine's port 22.
+  3. Generate an auth key that is **reusable** and **ephemeral**, tagged with that tag. Use a short
+     expiry and replace it under **Connection** when it expires.
+  4. In Golf, choose reach **Tailscale**, the machine's tailnet address, the key and the same tag.
+
+  Each task joins as an ephemeral node `golf-<id8>` and logs out at the end.
+- **Cloudflare Tunnel:**
+  1. Create a remotely managed tunnel with one ingress rule, `<hostname> → ssh://localhost:22`,
+     and a proxied CNAME `<hostname> → <tunnel id>.cfargotunnel.com`.
+  2. Run `cloudflared tunnel run --token-file …` on the machine.
+  3. Protect the hostname with an Access application of type `self_hosted`, whose only policy is
+     **Service Auth** (`non_identity`) for a dedicated Access service token.
+  4. In Golf, choose reach **Cloudflare Tunnel** with that hostname and the token's client ID and
+     secret. Golf seals the secret.
+
+  Without the token, Access refuses the WebSocket ("bad handshake"), so `sshd` (which may still
+  accept passwords) is never exposed publicly.
+- **Workers VPC:** the same tunnel can serve. Deploy with `--vpc-tunnel-id <tunnel id>`, then use the
+  machine's private address as Golf sees it from the connector, for example its LAN address with
+  port 22. The Worker connects through the tunnel's connector, so `sshd` sees the connector's
+  address.
+
 ## Not done, and what remains to verify
 
-- **Hosted run (2026-10-15):** direct reach and Tailscale reach are verified from the hosted
-  container. Details are in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
-  - **Direct reach:** a direct probe of `github.com:22` pinned GitHub's published host key and
-    reported the refused key.
-  - **Tailscale reach:** a host on a tailnet ran a Claude Code task end to end and left no node
-    behind.
+- **Hosted run (2026-10-15):** every reach is verified from the hosted container. Details are in
+  [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
+  - **Direct:** a probe of `github.com:22` pinned GitHub's published host key and reported the
+    refused key.
+  - **Tailscale, Cloudflare Tunnel and Workers VPC:** each ran a Claude Code task end to end on the
+    same machine.
+  - **The first Workers VPC test failed:** the container's TCP port reports a connection opened before
+    anything listens. The bridge now waits for a listening socket in `/proc/net/tcp` before it
+    connects.
 
   Still to verify:
-  - Cloudflare Access (Tunnel) from inside Cloudflare Containers;
   - an agent that may run the repository's tests on the host. Claude Code asked for approval to
-    run `npm test` and was refused, as on outbound hosts.
-- **Workers VPC** against a real `vpc_networks` binding, and Durable Object lifetime
-  while it only bridges.
+    run `npm test` and was refused, as on outbound hosts;
+  - Durable Object lifetime while a long Workers VPC task only bridges (tasks of about a minute
+    are verified).
 - **Golf MCP** for SSH host tasks. That would need the task token on the remote host,
   or a relay through the container, which is a deliberate follow-up.
 - **Login shells.** Remote commands assume a POSIX-compatible login shell: bash, zsh,

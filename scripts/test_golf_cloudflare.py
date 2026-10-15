@@ -157,7 +157,8 @@ class Sequencing(unittest.TestCase):
             'ai': ['enable-ai', 'renew-deploy', 'deploy'], 'search': ['migrate', 'enable-search', 'renew-deploy', 'deploy'],
             'email': ['migrate', 'enable-email', 'renew-deploy', 'deploy'], 'pipelines': ['migrate', 'enable-pipelines', 'deploy'],
             'webhooks': ['enable-webhooks', 'deploy'], 'public': ['migrate', 'enable-public', 'deploy', 'seed-public'],
-            'rate-limit': ['enable-rate-limit', 'deploy']}
+            'rate-limit': ['enable-rate-limit', 'deploy'], 'secrets': ['enable-secrets', 'deploy'],
+            'ssh-hosts': ['migrate', 'enable-ssh-hosts', 'deploy']}
         self.assertEqual(set(expected), set(gc.SERVICES))
         o = {**OPTIONS, 'webhook_origins': ['https://hooks.example.com'], 'public_manifest': gc.EXAMPLE_PUBLIC}
         for name, sequence in expected.items():
@@ -167,6 +168,12 @@ class Sequencing(unittest.TestCase):
         self.assertEqual(gc.service_steps('webhooks', o, '/dir', set())[0]['argv'][-2:], ['--origin', 'https://hooks.example.com'])
         self.assertIn('--agent-path', gc.service_steps('ai', {**o, 'agent_path': 'calc.py'}, '/dir', set())[0]['argv'])
         self.assertEqual(actions(gc.service_steps('public', {**o, 'public_manifest': None}, '/dir', set())), ['migrate', 'enable-public', 'deploy'])
+        # SSH hosts need secrets; a Workers VPC tunnel adds its argument and a deployment token that may bind it.
+        self.assertEqual(gc.parse_services('ssh-hosts'), ['secrets', 'ssh-hosts'])
+        tunnel = 'd44bf2a4-2cb5-4004-911f-0d90569674f1'
+        vpc = gc.service_steps('ssh-hosts', {**o, 'ssh_vpc_tunnel_id': tunnel}, '/dir', set())
+        self.assertEqual(actions(vpc), ['migrate', 'enable-ssh-hosts', 'renew-deploy', 'deploy'])
+        self.assertEqual(vpc[1]['argv'][-2:], ['--vpc-tunnel-id', tunnel])
 
     def test_full_install_order_migrates_once(self):
         o = {**OPTIONS, 'services': gc.parse_services('email,search,public'), 'public_manifest': gc.EXAMPLE_PUBLIC}

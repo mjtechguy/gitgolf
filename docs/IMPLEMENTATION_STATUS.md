@@ -1,5 +1,46 @@
 # Golf implementation status
 
+## 2026-10-15 — SSH hosts: Cloudflare Tunnel and Workers VPC verified on hosted; installer support
+
+**Setup:** one Cloudflare Tunnel, `golf-ssh-beastnode1`, remotely managed.
+- Ingress `golf-ssh-beastnode1.mjtechguy.com → ssh://localhost:22`, with a proxied CNAME.
+- `cloudflared` 2026.10.0 (sha256-checked) runs on the machine.
+- A new Access application for that hostname has one Service Auth policy for a dedicated service token with a 30-day expiry. The demo's own Access applications and login provider were not touched.
+
+**Tunnel check from the workstation:**
+- With the service token, `sshd` offered `SHA256:H2UgqQbF30nuh+hOlxZxnx8LoUsOlQWzPYp/BgVSsIc`.
+- Without it, Access refused the WebSocket.
+
+**Cloudflare Tunnel reach:**
+- Host `beastnode1 (tunnel)`:
+  - the connection test pinned that fingerprint;
+  - `sshd` accepted Golf's key from `127.0.0.1`, through the connector;
+  - the host turned Ready.
+- A Claude Code task on issue #7 opened Cloudflare Access from the container, ran, and pushed `golf-agent/f084279f` (`39cad1e873ad`).
+
+**Workers VPC reach:**
+- The same tunnel is bound as `SSH_VPC_NETWORK` with `enable-ssh-hosts --vpc-tunnel-id`.
+  - The deployment token needed **Connectivity Directory Admin**; Bind was refused.
+  - Every deploy kept `Login`, `ControlAccess` and `PreviewAccess` noop.
+- Host `beastnode1 (vpc)` at `10.10.69.200:22`.
+- **The first test failed**: "the Workers VPC bridge did not connect within 60 seconds".
+  - The container port reported the Durable Object's connection as opened before `ssh-probe` listened, so the bridge piped into a dead connection.
+  - `sshd` logged the tunnel side closing.
+- **The fix:** the bridge now waits for a LISTEN socket on the port in `/proc/net/tcp`.
+- **After the fix:**
+  - the test pinned the same fingerprint;
+  - `sshd` accepted Golf's key from `10.10.69.200`, the connector's LAN address;
+  - a Claude Code task pushed `golf-agent/a5da091f` (`0ccdf3f4dee2`).
+
+**Installer:** `scripts/golf_cloudflare.py` gains the services `secrets` and `ssh-hosts`, which requires `secrets`.
+- `ssh-hosts` migrates, enables and deploys.
+- `--ssh-vpc-tunnel-id` passes `--vpc-tunnel-id` and renews the deployment token first.
+- Docs: `deploy/alchemy/README.md` and `docs/SSH_HOSTS.md`, including a new "Setting up reach" section.
+
+**Checks:**
+- `node --test` `ssh-hosts.test.mjs` (8) and `deploy/alchemy/native-config.test.mjs` (6) pass.
+- `python3 -m unittest test_golf_cloudflare test_cloudflare_alchemy_demo` passes (63).
+
 ## 2026-10-15 — Automations verified on hosted: PR reviewer, Issue → PR, CI fixer, Clef
 
 All runs were on `mj/actions-demo` at `https://demo.gitgolf.mjtechguy.com`. Each automation acts as `mj`.
