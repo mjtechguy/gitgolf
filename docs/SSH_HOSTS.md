@@ -364,14 +364,17 @@ application.
 
 ## Not done, and what remains to verify
 
-- **Hosted run, done in part (2026-10-15):** a connection test from the hosted container to
-  `github.com:22` was offered GitHub's published ed25519 host key, pinned it, and on the
-  next test reported that the host refused Golf's key. Container start, egress on port 22,
-  host key pinning and the refusal are verified.
+- **Hosted run (2026-10-15):** direct reach and Tailscale reach are verified from the hosted
+  container. Details are in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
+  - **Direct reach:** a direct probe of `github.com:22` pinned GitHub's published host key and
+    reported the refused key.
+  - **Tailscale reach:** a host on a tailnet ran a Claude Code task end to end and left no node
+    behind.
 
   Still to verify:
-  - a task end to end on a machine that accepts Golf's key;
-  - Tailscale and Cloudflare Access from inside Cloudflare Containers.
+  - Cloudflare Access (Tunnel) from inside Cloudflare Containers;
+  - an agent that may run the repository's tests on the host. Claude Code asked for approval to
+    run `npm test` and was refused, as on outbound hosts.
 - **Workers VPC** against a real `vpc_networks` binding, and Durable Object lifetime
   while it only bridges.
 - **Golf MCP** for SSH host tasks. That would need the task token on the remote host,

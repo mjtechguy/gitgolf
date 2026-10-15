@@ -1,6 +1,6 @@
 # Golf implementation status
 
-## 2026-10-15 — SSH hosts deployed on the hosted demo
+## 2026-10-15 — SSH hosts deployed on the hosted demo; a task over Tailscale verified
 
 **Deploy config:** the Alchemy stack builds the SSH image and binds `SSHAgentTask` on `enable-ssh-hosts`
 ([SSH_HOSTS.md](SSH_HOSTS.md#deploy)).
@@ -15,9 +15,30 @@
   2. after confirming it, the second test failed with "the host refused Golf's key for git".
 - The probe host was then deleted.
 
+**A task over SSH through Tailscale:**
+- **The machine:** beastnode1, on the owner's tailnet.
+  - A dedicated `golf-agent` account, with no password and no sudo.
+  - Claude Code 2.1.300 is installed and signed in there.
+  - Golf's key is installed with `restrict`.
+- **The tailnet:**
+  - The policy file gained only `tagOwners` for `tag:golf-ssh`; its ACL is allow-all.
+  - The auth key is reusable, ephemeral, tagged `tag:golf-ssh` and expires after 7 days.
+  - It went from the Tailscale page into Golf's form without being printed or logged.
+- **The host:** `beastnode1 (ssh)`, Tailscale reach, address `100.116.90.61`.
+- **The connection test:**
+  1. The container joined the tailnet as the tagged ephemeral node `golf-ede5b6d1`.
+  2. It was offered `SHA256:H2UgqQbF30nuh+hOlxZxnx8LoUsOlQWzPYp/BgVSsIc`, which matches
+     `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the machine.
+  3. After confirming the key, sshd logged `Accepted publickey for golf-agent` from a tailnet address.
+  4. The host turned Ready, reporting linux/amd64 and Claude Code 2.1.300 signed in.
+- **The task:** issue #7 in `mj/actions-demo` ("Add a power function with tests") was assigned to Claude Code on the SSH host.
+  1. Golf cloned the repository, joined the tailnet, sent the working copy and ran `claude` on `golf-agent/aba9305a`.
+  2. The task reached "Proposal ready" in 29 s: commit `fa3ffa17c738`, 2 files (`sum.js`, `sum.test.js`), pushed.
+  3. Claude Code said it could not run `npm test`, because running it needs approval in the non-interactive session.
+- **Afterwards:** no `golf-` node remained on the tailnet, and the remote working directory was removed.
+
 **Not verified on hosted:**
-- a task end to end on a machine that accepts Golf's key;
-- Tailscale and Cloudflare Tunnel reach;
+- Cloudflare Tunnel reach;
 - Workers VPC (no `SSH_VPC_NETWORK` binding).
 
 ## 2026-10-15 — Hosted checks: agent tasks on MCP, automations, vault, engines

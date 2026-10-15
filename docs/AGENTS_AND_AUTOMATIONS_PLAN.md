@@ -140,7 +140,7 @@ and limits, or create a custom automation from scratch.
    - "Assign to agent" on issues and pull requests;
    - proposal branches with a live log.
 
-   **Status (2026-10-15): phase 1a hosted. Phase 1b (SSH hosts) is deployed on the hosted demo: `agents.ssh-hosts` READY, and a connection test from the hosted container pinned a real host key. A task over SSH on hosted is not verified yet.**
+   **Status (2026-10-15): phase 1a hosted. Phase 1b (SSH hosts) is hosted and verified: Claude Code on an SSH host reached through Tailscale took an issue to a proposal branch.**
    Phase 1b is described in [SSH_HOSTS.md](SSH_HOSTS.md), schema 47:
    - SSH hosts are agent hosts that Golf reaches itself, with the same sharing, admission, task states and protocol;
    - Golf generates a sealed Ed25519 key per host;
@@ -185,7 +185,7 @@ and limits, or create a custom automation from scratch.
      ACLs;
    - Cloudflare Tunnel / Workers VPC / Mesh for SSH hosts on private networks.
 
-   **Status (2026-10-15): reach for SSH hosts built and verified locally with stand-ins. Direct reach works from the hosted container; Tailscale, Tunnel and Workers VPC are not verified on hosted.**
+   **Status (2026-10-15): reach for SSH hosts built and verified locally with stand-ins. Direct and Tailscale reach are verified from the hosted container; Cloudflare Tunnel and Workers VPC are not verified on hosted.**
    See [SSH_HOSTS.md](SSH_HOSTS.md#reach):
    - **Tailscale:** an ephemeral node per task, in userspace networking, with a sealed auth key and tags;
    - **Cloudflare Tunnel:** `cloudflared access ssh`, with an optional Access service token;
