@@ -1,5 +1,35 @@
 # Golf implementation status
 
+## 2026-10-15 — Review tasks: PR review by Claude Code under its OAuth sign-in (schema 48), hosted-verified
+
+**Built:** agent tasks gain a read-only **review** mode ([AGENT_HOSTS.md](AGENT_HOSTS.md#review-tasks-schema-48)).
+- A review task reviews a pull request only, with a read-only tool:
+  - Claude Code `--permission-mode plan`;
+  - Codex `--sandbox read-only`;
+  - Grok without write allowances;
+  - OpenCode is refused.
+- Outbound hosts need golf-agent-host 0.2.0, reported on each heartbeat. SSH hosts use the deploy's image.
+- The task is listed in `agent_task_reviews` (migration 0048) and gets no MCP endpoint.
+- Its token cannot push, and its finish names no commit. The review is the summary, up to 12 KiB.
+- The PR reviewer automation accepts coding CLI engines and posts the review as a comment, its only CLI output.
+- "Assign to agent" on a pull request offers **Review only**.
+
+**Hosted** (`mj/actions-demo`; schema 48 migrated; `Login`, `ControlAccess` and `PreviewAccess` noop):
+1. The PR reviewer was switched to Claude Code on the agent host `beastnode1`, rebuilt as 0.2.0. Claude Code is signed in with a Claude subscription; there is no API key.
+2. Run now on PR #4, which has a deliberately reversed `subtract`.
+3. The review task finished in 28 s: SUCCEEDED, mode review, no commit, and the branch `golf-agent/3a4ff0d4` was never created.
+4. The review:
+   - named `sum.js:2` swapping the operands;
+   - traced it to the "Refactor subtract" commit and the failing CI run;
+   - proposed the revert;
+   - noted that the earlier GLM review had misjudged one test.
+5. The automation run: "Reviewed by claude, posted as a comment"; 106,039 in, 1,554 out, $0.19 as Claude Code reported.
+
+**Checks:**
+- Go: `go test ./...` in `cmd/golf-agent-host` passes (36, one opt-in real-tool test skipped).
+- Forge: `node --test` for agent-hosts, ssh-hosts, automations, automation-tools, engines, agent-task-mcp and agent-worker passes. The release test passes, pinned to schema 48.
+- Web: `tsc` clean.
+
 ## 2026-10-15 — SSH hosts: Cloudflare Tunnel and Workers VPC verified on hosted; installer support
 
 **Setup:** one Cloudflare Tunnel, `golf-ssh-beastnode1`, remotely managed.

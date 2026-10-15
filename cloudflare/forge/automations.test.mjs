@@ -152,7 +152,10 @@ test('engines and places are validated honestly: cloud sandboxes are phase 3, SS
   assert.match((await f.repo({ action: 'create', tool: 'issue-to-pr', engine: 'claude', place: 'cloud' })).message, /phase 3/);
   assert.match((await f.repo({ action: 'create', tool: 'issue-to-pr', engine: 'claude', place: 'ssh-host' })).message, /SSH hosts are not available/);
   assert.equal((await f.repo({ action: 'create', tool: 'issue-to-pr', engine: 'default' })).status, 400);
-  assert.equal((await f.repo({ action: 'create', tool: 'pr-reviewer', engine: 'claude', place: 'agent-host', hostId: host.hostId })).status, 400);
+  // The PR reviewer on a coding CLI reviews read-only: its only output is a comment, never a review draft.
+  const cliReview = await f.repo({ action: 'create', tool: 'pr-reviewer', engine: 'claude', place: 'agent-host', hostId: host.hostId });
+  assert.equal(cliReview.status, 400); assert.match(cliReview.message, /Choose outputs from comment\./);
+  assert.equal((await f.repo({ action: 'create', tool: 'pr-reviewer', engine: 'claude', place: 'agent-host', hostId: host.hostId, output: ['comment'] })).status, 200);
   const unknown = await f.repo({ action: 'create', tool: 'pr-reviewer', engine: 'some-provider-model' });
   assert.equal(unknown.status, 412); assert.match(unknown.message, /not available in this scope/);
   assert.equal((await f.repo({ action: 'create', tool: 'issue-to-pr', engine: 'claude', place: 'agent-host', hostId: '999' })).status, 412);

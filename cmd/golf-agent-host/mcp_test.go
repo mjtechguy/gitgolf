@@ -127,7 +127,7 @@ func TestConfigureMCPPerTool(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatal(ok, err)
 	}
-	base := toolSpecs["codex"].args(toolConfig{}, "workspace-write", "", "/w", "")
+	base := toolSpecs["codex"].args(toolConfig{}, "workspace-write", "", "/w", "", false)
 	got := strings.Join(codex.withArgs(base), " ")
 	if got != `exec --json --color never --sandbox workspace-write --ephemeral -c mcp_servers.golf.url="https://golf.example.invalid/mcp" -c mcp_servers.golf.bearer_token_env_var="GOLF_MCP_TOKEN" -c mcp_servers.golf.default_tools_approval_mode="approve" -c shell_environment_policy.ignore_default_excludes=false -- -` {
 		t.Fatalf("codex argv %q", got)

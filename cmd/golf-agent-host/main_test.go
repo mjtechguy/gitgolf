@@ -51,6 +51,7 @@ type fakeGolf struct {
 	claims     map[string]*fakeTask
 	tasks      map[string]*fakeTask
 	heartbeats [][]toolReport
+	versions   []string // hostVersion of each heartbeat
 	gitBadAuth int
 	gitOK      int
 	mcpCalls   []string // tools/call names the stub /mcp answered
@@ -183,11 +184,13 @@ func (f *fakeGolf) serve(w http.ResponseWriter, r *http.Request, backend http.Ha
 	switch path {
 	case "heartbeat":
 		var in struct {
-			Tools []toolReport `json:"tools"`
+			Tools       []toolReport `json:"tools"`
+			HostVersion string       `json:"hostVersion"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&in)
 		f.mu.Lock()
 		f.heartbeats = append(f.heartbeats, in.Tools)
+		f.versions = append(f.versions, in.HostVersion)
 		cancel := []string{}
 		for id, ft := range f.tasks {
 			if ft.heartbeatStop && ft.started && ft.finish == nil {
@@ -320,6 +323,12 @@ case "$prompt" in
   mkdir -p docs && echo note > docs/NOTE.md
   echo "a warning on stderr" >&2
   echo '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"result":"Created HELLO.md and docs/NOTE.md.","total_cost_usd":0.25,"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":3}}'
+  ;;
+*MODE=review*)
+  echo stray > STRAY.md
+  long=$(printf '%06000d' 0 | tr 0 r)
+  echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the diff"}]}}'
+  echo '{"type":"result","subtype":"success","is_error":false,"num_turns":3,"result":"Review: '"$long"' END","usage":{"input_tokens":20,"output_tokens":7}}'
   ;;
 *MODE=selfcommit*)
   echo one > ONE.txt
@@ -640,6 +649,73 @@ func TestNoChangesAndFailure(t *testing.T) {
 	}
 }
 
+// asReview makes a fake task a review of pull request #7; MODE=review prints reviewText
+// (more than the 4 KiB change-mode summary) and leaves a stray file.
+func asReview(ft *fakeTask) {
+	ft.task.Mode = "review"
+	ft.task.Target = taskTarget{Kind: "pull_request", Number: 7, Title: "Add greeting"}
+}
+
+var reviewText = "Review: " + strings.Repeat("r", 6000) + " END"
+
+func TestReviewTaskRunsReadOnlyAndPushesNothing(t *testing.T) {
+	h := newHarness(t)
+	ft := h.f.addTask("Review this pull request. MODE=review", 5*time.Minute, func(ft *fakeTask) {
+		asReview(ft)
+		ft.task.MCP = &taskMCP{URL: h.f.srv.URL + "/mcp"} // ignored for a review
+	})
+	h.run(t, ft)
+	fin := ft.finish
+	if fin.State != "succeeded" || fin.ExitCode != 0 || fin.CommitID != "" || fin.ChangedFiles == nil || len(fin.ChangedFiles) != 0 {
+		t.Fatalf("finish %+v\nlog:\n%s", fin, h.logText(ft))
+	}
+	if fin.Summary != reviewText || fin.Usage == nil || fin.Usage.InputTokens != 20 {
+		t.Fatalf("summary of %d bytes, usage %+v", len(fin.Summary), fin.Usage)
+	}
+	args, _ := os.ReadFile(h.dump + ".args")
+	if !bytes.Contains(args, []byte("--permission-mode\nplan\n")) || bytes.Contains(args, []byte("acceptEdits")) || bytes.Contains(args, []byte("--mcp-config")) {
+		t.Fatalf("argv %q", args)
+	}
+	if prompt, _ := os.ReadFile(h.dump + ".prompt"); strings.Contains(string(prompt), "Golf MCP tools") {
+		t.Fatal("review prompt offers Golf MCP tools")
+	}
+	if out := gitCommand(t, h.f.bare, "branch", "--list", ft.task.Branch); out != "" {
+		t.Fatalf("review pushed %s", ft.task.Branch)
+	}
+	if _, err := os.Stat(filepath.Join(h.state, "work", ft.task.ID)); !os.IsNotExist(err) {
+		t.Fatal("working copy not removed")
+	}
+	if !strings.Contains(h.logText(ft), "review finished; nothing committed or pushed") {
+		t.Fatalf("log:\n%s", h.logText(ft))
+	}
+	// A failing review fails as a change task does. The same tool output as a change task:
+	// the stray file is committed and pushed, and the summary keeps the 4 KiB limit.
+	failing := h.f.addTask("MODE=fail", 5*time.Minute, asReview)
+	change := h.f.addTask("MODE=review", 5*time.Minute, nil)
+	h.run(t, failing, change)
+	if f := failing.finish; f.State != "failed" || f.ExitCode != 3 || f.CommitID != "" {
+		t.Fatalf("failed review %+v", f)
+	}
+	h.f.mu.Lock()
+	versions := h.f.versions
+	h.f.mu.Unlock()
+	if len(versions) == 0 || versions[0] != "0.2.0" {
+		t.Fatalf("heartbeat hostVersion %q", versions)
+	}
+	if f := change.finish; f.State != "succeeded" || f.CommitID == "" || strings.Join(f.ChangedFiles, ",") != "STRAY.md" || f.Summary != reviewText[:maxSummary] {
+		t.Fatalf("change finish %+v", f)
+	}
+}
+
+func TestReviewWithOpenCodeFailsWithoutRunning(t *testing.T) {
+	h := newHarness(t)
+	ft := h.f.addTask("MODE=review", 5*time.Minute, func(ft *fakeTask) { asReview(ft); ft.task.Tool = "opencode" })
+	h.run(t, ft)
+	if f := ft.finish; f.State != "failed" || !strings.HasPrefix(f.Failure, "review_unsupported_tool") || ft.started {
+		t.Fatalf("finish %+v started %v", f, ft.started)
+	}
+}
+
 func waitGone(t *testing.T, pidFile string) {
 	t.Helper()
 	data, err := os.ReadFile(pidFile)
@@ -921,7 +997,7 @@ func TestDetectToolsReportsVersionsAndRefusesBrokenCodexSandbox(t *testing.T) {
 	if len(reports) != 1 || reports[0].Tool != "codex" || reports[0].Version != "0.162.1" || reports[0].Account != "ChatGPT" {
 		t.Fatalf("reports %+v", reports)
 	}
-	if args := toolSpecs["codex"].args(cfg.tool("codex"), cfg.codexSandbox(), "gpt-x", "/w", ""); strings.Join(args, " ") != "exec --json --color never --sandbox danger-full-access --ephemeral --model gpt-x -- -" {
+	if args := toolSpecs["codex"].args(cfg.tool("codex"), cfg.codexSandbox(), "gpt-x", "/w", "", false); strings.Join(args, " ") != "exec --json --color never --sandbox danger-full-access --ephemeral --model gpt-x -- -" {
 		t.Fatalf("codex argv %q", args)
 	}
 }
@@ -964,8 +1040,12 @@ func TestValidateTask(t *testing.T) {
 		BaseRef: "refs/heads/main", BaseCommit: strings.Repeat("a", 40), Tool: "codex", Prompt: "p",
 		Deadline: time.Now().Add(time.Hour).UnixMilli(), Token: "golf_agent_task_" + id + "_" + strings.Repeat("d", 64),
 		Target: taskTarget{Kind: "pull_request", Number: 3}}
-	if err := validateTask(good, origin, time.Now()); err != nil {
-		t.Fatal(err)
+	for _, mode := range []string{"", "change", "review"} {
+		c := good
+		c.Mode = mode
+		if err := validateTask(c, origin, time.Now()); err != nil {
+			t.Fatalf("mode %q: %v", mode, err)
+		}
 	}
 	for name, edit := range map[string]func(*claimedTask){
 		"token for another task": func(c *claimedTask) { c.Token = "golf_agent_task_" + newUUID() + "_" + strings.Repeat("d", 64) },
@@ -979,6 +1059,8 @@ func TestValidateTask(t *testing.T) {
 		"far deadline":           func(c *claimedTask) { c.Deadline = time.Now().Add(5 * time.Hour).UnixMilli() },
 		"clone elsewhere":        func(c *claimedTask) { c.CloneURL = "https://evil.example/native/agent-host/tasks/" + id + "/git" },
 		"target":                 func(c *claimedTask) { c.Target.Kind = "commit" },
+		"bogus mode":             func(c *claimedTask) { c.Mode = "bogus" },
+		"review of an issue":     func(c *claimedTask) { c.Mode, c.Target.Kind = "review", "issue" },
 	} {
 		c := good
 		edit(&c)
@@ -1004,12 +1086,26 @@ func TestToolArgvTable(t *testing.T) {
 		"grok":     "--output-format streaming-messages-json --permission-mode acceptEdits --allow Write(./**) --allow Edit(./**) --verbatim --prompt-file /p",
 	}
 	for name, w := range want {
-		if got := strings.Join(toolSpecs[name].args(toolConfig{}, "workspace-write", "", "/w", "/p"), " "); got != w {
+		if got := strings.Join(toolSpecs[name].args(toolConfig{}, "workspace-write", "", "/w", "/p", false), " "); got != w {
 			t.Errorf("%s: %q", name, got)
 		}
 	}
-	got := strings.Join(toolSpecs["claude"].args(toolConfig{ExtraArgs: []string{"--effort", "low"}}, "", "sonnet", "/w", ""), " ")
+	got := strings.Join(toolSpecs["claude"].args(toolConfig{ExtraArgs: []string{"--effort", "low"}}, "", "sonnet", "/w", "", false), " ")
 	if !strings.HasSuffix(got, "--model sonnet --effort low") {
 		t.Errorf("claude with model: %q", got)
+	}
+	// Review: read-only modes, whatever sandbox the host configured; OpenCode has none.
+	review := map[string]string{
+		"codex":  "exec --json --color never --sandbox read-only --ephemeral -- -",
+		"claude": "-p --output-format stream-json --verbose --permission-mode plan --permission-prompts none --setting-sources user --no-session-persistence",
+		"grok":   "--output-format streaming-messages-json --permission-mode acceptEdits --verbatim --prompt-file /p",
+	}
+	for name, w := range review {
+		if got := strings.Join(toolSpecs[name].args(toolConfig{}, "danger-full-access", "", "/w", "/p", true), " "); got != w || toolSpecs[name].noReview {
+			t.Errorf("%s review: %q", name, got)
+		}
+	}
+	if !toolSpecs["opencode"].noReview {
+		t.Error("opencode must refuse review tasks")
 	}
 }

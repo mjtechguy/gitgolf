@@ -16,7 +16,7 @@ export type TaskTarget = { kind: 'issue' | 'pull_request'; number: number; title
 export type TaskState = 'QUEUED' | 'CLAIMED' | 'RUNNING' | 'SUCCEEDED' | 'NO_CHANGES' | 'FAILED' | 'CANCELLED' | 'TIMED_OUT' | 'LOST';
 export type TaskUsage = { inputTokens?: number; outputTokens?: number; costUsd?: number; reported?: boolean };
 // requestedBy is { id, login }; a bare login is accepted too.
-export type AgentTask = { id: string; state: TaskState; tool: string; model: string; host: { id: string; name: string; kind?: 'agent' | 'ssh' }; requestedBy: string | { id: string; login: string }; target: TaskTarget;
+export type AgentTask = { id: string; state: TaskState; tool: string; model: string; mode?: 'change' | 'review'; host: { id: string; name: string; kind?: 'agent' | 'ssh' }; requestedBy: string | { id: string; login: string }; target: TaskTarget;
   branch: string; baseRef: string; baseCommit: string; commitId: string; changedFiles: string[]; summary: string; usage: TaskUsage | null; exitCode: number | null;
   failureReason: string; createdAt: string; claimedAt?: string | null; startedAt: string | null; finishedAt: string | null; deadline?: number | null; logLines: number; logTruncated?: boolean; cancelRequested?: boolean };
 export type TaskLog = { lines: string[]; nextOffset: number; complete: boolean; truncated: boolean; state?: TaskState };

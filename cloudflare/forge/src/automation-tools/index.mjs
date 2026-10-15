@@ -12,5 +12,5 @@ export const automationTools = Object.freeze({ 'pr-reviewer': prReviewer, 'issue
 export const toolIds = Object.keys(automationTools);
 // What the settings UI shows for each tool, never the functions.
 export const toolCatalogue = () => Object.values(automationTools).map(tool => ({ id: tool.id, label: tool.label, description: tool.description, engines: tool.engines,
-  schedule: tool.schedule, events: [...tool.events], outputs: [...tool.outputs], opensPullRequests: Boolean(tool.opensPullRequests),
+  schedule: tool.schedule, events: [...tool.events], outputs: [...tool.outputs], ...(tool.cliOutputs ? { cliOutputs: [...tool.cliOutputs] } : {}), opensPullRequests: Boolean(tool.opensPullRequests),
   defaults: { name: tool.defaults.name, events: [...tool.defaults.events], output: [...tool.defaults.output], limits: { ...tool.defaults.limits }, instructions: tool.defaults.instructions } }));

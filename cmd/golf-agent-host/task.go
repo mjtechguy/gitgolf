@@ -27,6 +27,7 @@ const (
 	maxChunkLines  = 200      // contract: ≤ 200 lines per log call
 	maxChunkBytes  = 60 << 10 // contract: ≤ 64 KiB per log call (JSON-encoded)
 	maxSummary     = 4 << 10
+	maxReview      = 12 << 10 // a review task's summary is the review
 	maxFailure     = 512
 	maxEventLine   = 1 << 20 // stdout JSON events larger than this are not parsed
 	maxChanged     = 1000
@@ -206,7 +207,11 @@ func (r *taskRun) flushLogs() {
 }
 
 func (r *taskRun) finish(f finishRequest) {
-	f.Summary = clip(f.Summary, maxSummary)
+	if r.t.review() {
+		f.Summary = clip(f.Summary, maxReview)
+	} else {
+		f.Summary = clip(f.Summary, maxSummary)
+	}
 	f.Failure = clip(redact(f.Failure, r.secrets), maxFailure)
 	f.Summary = redact(f.Summary, r.secrets)
 	if f.ChangedFiles == nil {
@@ -263,6 +268,9 @@ func (r *taskRun) execute(parent context.Context) (result finishRequest) {
 	path, lookErr := exec.LookPath(t.Tool)
 	reported := slices.ContainsFunc(h.currentTools(), func(r toolReport) bool { return r.Tool == t.Tool })
 	switch {
+	case t.review() && spec.noReview:
+		result.State, result.Failure = "failed", "review_unsupported_tool: "+t.Tool+" has no read-only mode for reviews"
+		return
 	case !h.cfg.enabled(t.Tool):
 		result.State, result.Failure = "failed", "tool_unavailable: "+t.Tool+" is disabled in this host's configuration"
 		return
@@ -358,9 +366,10 @@ func (r *taskRun) execute(parent context.Context) (result finishRequest) {
 		return
 	}
 	// Golf's MCP endpoint for this run only, with the task token in the tool's environment
-	// (never in argv, a file or a log); the prompt then says how to use it.
+	// (never in argv, a file or a log); the prompt then says how to use it. A review only
+	// reads, so it gets no MCP tools (which could publish).
 	prompt, mcp, mcpOn := t.Prompt, mcpSetup{}, false
-	if t.MCP != nil {
+	if t.MCP != nil && !t.review() {
 		var err error
 		if mcp, mcpOn, err = configureMCP(t.Tool, t.MCP.URL, t.Token, dir); err != nil {
 			result.State, result.Failure = "failed", "mcp config: "+err.Error()
@@ -379,7 +388,7 @@ func (r *taskRun) execute(parent context.Context) (result finishRequest) {
 		result.State, result.Failure = "failed", "prompt file: "+err.Error()
 		return
 	}
-	args := mcp.withArgs(spec.args(tc, h.cfg.codexSandbox(), t.Model, repo, promptFile))
+	args := mcp.withArgs(spec.args(tc, h.cfg.codexSandbox(), t.Model, repo, promptFile, t.review()))
 	// Some CLIs (OpenCode) take the project directory from $PWD, so it must name repo/.
 	env := h.scrubbedEnv([]string{t.Token}, append(append([]string{"PWD=" + repo}, spec.env...), mcp.env...)...)
 	r.hostLine("running %s on branch %s", t.Tool, t.Branch)
@@ -403,6 +412,10 @@ func (r *taskRun) execute(parent context.Context) (result finishRequest) {
 	}
 	r.hostLine("%s exited with code %d", t.Tool, outcome.exitCode)
 	toolFailed := outcome.exitCode != 0 || outcome.parsed.isError
+	if t.review() {
+		r.reviewResult(&result, toolFailed)
+		return
+	}
 
 	// With MCP the tool may have published the branch itself (commit_changes); then that
 	// branch is the proposal and the host pushes nothing.
@@ -456,6 +469,19 @@ func (r *taskRun) execute(parent context.Context) (result finishRequest) {
 		r.hostLine("%s", result.Failure)
 	}
 	return
+}
+
+// reviewResult ends a review task after its tool run: nothing is committed, adopted or
+// pushed (changes left in the working copy are discarded with it), and the summary is
+// the review.
+func (r *taskRun) reviewResult(result *finishRequest, toolFailed bool) {
+	if toolFailed {
+		result.State, result.Failure = "failed", fmt.Sprintf("%s failed (exit %d) during the review", r.t.Tool, result.ExitCode)
+		r.hostLine("%s", result.Failure)
+		return
+	}
+	result.State, result.CommitID, result.ChangedFiles = "succeeded", "", []string{}
+	r.hostLine("review finished; nothing committed or pushed")
 }
 
 type toolOutcome struct {

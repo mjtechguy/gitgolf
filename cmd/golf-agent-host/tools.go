@@ -18,8 +18,11 @@ import (
 type toolSpec struct {
 	name   string
 	format string // output parser: "claude" (Claude Code and Grok), "codex" or "opencode"
-	// args builds argv after the binary name; dir is the working copy.
-	args func(c toolConfig, sandbox, model, dir, promptFile string) []string
+	// args builds argv after the binary name; dir is the working copy. review asks for
+	// the tool's read-only mode (a review task changes nothing).
+	args func(c toolConfig, sandbox, model, dir, promptFile string, review bool) []string
+	// noReview marks a tool without a read-only mode; its review tasks fail.
+	noReview bool
 	// env adds tool-specific variables to the scrubbed environment.
 	env        []string
 	statusArgs []string
@@ -42,8 +45,12 @@ var toolSpecs = map[string]*toolSpec{
 		name: "codex", format: "codex",
 		// codex exec: non-interactive; --sandbox workspace-write confines writes to the
 		// working directory (and temp) and blocks network for commands it runs;
-		// --ephemeral keeps no session files; "-" reads the prompt from stdin.
-		args: func(c toolConfig, sandbox, model, _, _ string) []string {
+		// --ephemeral keeps no session files; "-" reads the prompt from stdin. A review
+		// runs in the read-only sandbox.
+		args: func(c toolConfig, sandbox, model, _, _ string, review bool) []string {
+			if review {
+				sandbox = "read-only"
+			}
 			a := []string{"exec", "--json", "--color", "never", "--sandbox", sandbox, "--ephemeral"}
 			return append(withModel(a, model, c.ExtraArgs), "--", "-")
 		},
@@ -70,9 +77,14 @@ var toolSpecs = map[string]*toolSpec{
 		// claude -p: print mode reads the prompt from stdin. acceptEdits lets file tools
 		// write inside the working directory only; --permission-prompts none denies
 		// everything else that would ask (shell commands, paths outside). Only the
-		// user's own settings load (not the repository's .claude/settings.json).
-		args: func(c toolConfig, _, model, _, _ string) []string {
-			a := []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
+		// user's own settings load (not the repository's .claude/settings.json). A review
+		// runs in plan mode, which only reads.
+		args: func(c toolConfig, _, model, _, _ string, review bool) []string {
+			mode := "acceptEdits"
+			if review {
+				mode = "plan"
+			}
+			a := []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", mode,
 				"--permission-prompts", "none", "--setting-sources", "user", "--no-session-persistence"}
 			return withModel(a, model, c.ExtraArgs)
 		},
@@ -102,10 +114,11 @@ var toolSpecs = map[string]*toolSpec{
 		// $PWD, not the process directory, so --dir names it explicitly (and PWD is set).
 		// OPENCODE_PERMISSION is merged after every config file (including the
 		// repository's), so edits stay allowed, shell commands and paths outside the
-		// directory are denied.
-		args: func(c toolConfig, _, model, dir, _ string) []string {
+		// directory are denied. It has no read-only mode, so it takes no review tasks.
+		args: func(c toolConfig, _, model, dir, _ string, _ bool) []string {
 			return withModel([]string{"run", "--format", "json", "--dir", dir}, model, c.ExtraArgs)
 		},
+		noReview:   true,
 		env:        []string{`OPENCODE_PERMISSION={"edit":"allow","bash":"deny","external_directory":"deny"}`},
 		statusArgs: []string{"providers", "list"},
 		status: func(out []byte, code int) (*bool, string) {
@@ -125,10 +138,14 @@ var toolSpecs = map[string]*toolSpec{
 		// grok --prompt-file: headless single turn (same as -p, from a file). In headless
 		// mode acceptEdits alone cancels writes, so writes and edits are allowed by rule
 		// for ./** only; other non-read-only calls are cancelled. --verbatim sends the
-		// prompt as given (no @file expansion).
-		args: func(c toolConfig, _, model, _, promptFile string) []string {
-			a := []string{"--output-format", "streaming-messages-json", "--permission-mode", "acceptEdits",
-				"--allow", "Write(./**)", "--allow", "Edit(./**)", "--verbatim"}
+		// prompt as given (no @file expansion). A review gets no write or edit rule, so
+		// its writes are cancelled.
+		args: func(c toolConfig, _, model, _, promptFile string, review bool) []string {
+			a := []string{"--output-format", "streaming-messages-json", "--permission-mode", "acceptEdits"}
+			if !review {
+				a = append(a, "--allow", "Write(./**)", "--allow", "Edit(./**)")
+			}
+			a = append(a, "--verbatim")
 			return append(withModel(a, model, c.ExtraArgs), "--prompt-file", promptFile)
 		},
 		// Grok has no status command; signed-in is reported as unknown.

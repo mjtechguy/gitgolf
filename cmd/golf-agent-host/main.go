@@ -23,7 +23,7 @@ import (
 	"unicode/utf8"
 )
 
-const hostVersion = "0.1.0"
+const hostVersion = "0.2.0"
 
 var (
 	uuidPattern       = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

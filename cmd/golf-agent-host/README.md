@@ -90,6 +90,26 @@ Optional configuration (JSON, not group or world writable; all fields optional):
 7. The working copy is removed unless `keepWork`. Leftover task directories are removed
    when `run` starts.
 
+### Review mode
+
+A claim with `"mode": "review"` (only for a `pull_request` target; any `mode` other than
+absent, `change` or `review` is refused) asks the tool to review, not change, the
+repository under its own sign-in. The tool runs as in steps 3–5 but read-only:
+
+- **Claude Code:** `--permission-mode plan` instead of `acceptEdits` (other flags unchanged).
+- **Codex:** `--sandbox read-only`, whatever `tools.codex.sandbox` says.
+- **Grok:** without the `--allow 'Write(./**)' --allow 'Edit(./**)'` rules, so writes are cancelled.
+- **OpenCode:** no read-only mode; the task fails `review_unsupported_tool` before
+  anything runs (Golf does not create such tasks either).
+
+There is no Golf MCP for a review (an `mcp` in the claim is ignored). After exit 0 the
+host commits, adopts and pushes nothing (anything the tool left in the working copy is
+discarded with it) and finishes `succeeded` with an empty `commitId` and
+`changedFiles`, the tool's final message as `summary` (≤ 12 KiB) and `usage`. A non-zero
+exit or error result is `failed`. `ssh-run` does the same and does not bring the tree
+back. Heartbeats carry `hostVersion`; Golf sends review tasks only to hosts at 0.2.0 or
+later.
+
 ### Golf MCP
 
 When the claim names `mcp.url` (it must be `<registered origin>/mcp`), the tool is
@@ -213,7 +233,8 @@ finish) and serving a bare repository over Smart HTTP through `git http-backend`
 covers success, tool-made commits, no changes, failure, cancel from a log response,
 cancel from the heartbeat while silent, cancel at start, deadline, Golf no longer
 accepting the task, refused tasks, the scrubbed environment and process-group kill,
-and Golf MCP: the per-task Claude Code config (no token in argv or the file, 0600,
+review mode (read-only argv, nothing pushed, a 12 KiB summary, OpenCode refused), and
+Golf MCP: the per-task Claude Code config (no token in argv or the file, 0600,
 removed after the run), each tool's MCP arguments and environment, the `mcp.url`
 origin check, and a branch the tool published itself (adopted, or refused when the
 working copy diverges).

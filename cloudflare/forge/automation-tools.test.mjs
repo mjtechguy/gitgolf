@@ -33,12 +33,13 @@ function context(over = {}) {
 
 test('the catalogue: five tools, each with events, outputs and defaults it accepts', () => {
   const catalogue = toolCatalogue();
-  assert.deepEqual(catalogue.map(tool => [tool.id, tool.engines, tool.schedule]), [['pr-reviewer', 'model', true], ['issue-triage', 'model', true], ['issue-to-pr', 'cli', false], ['ci-fixer', 'cli', false], ['custom', 'any', true]]);
+  assert.deepEqual(catalogue.map(tool => [tool.id, tool.engines, tool.schedule]), [['pr-reviewer', 'any', true], ['issue-triage', 'model', true], ['issue-to-pr', 'cli', false], ['ci-fixer', 'cli', false], ['custom', 'any', true]]);
   for (const tool of catalogue) {
     assert.ok(tool.defaults.events.every(event => tool.events.includes(event)), tool.id);
     assert.ok(tool.defaults.output.every(output => tool.outputs.includes(output)), tool.id);
     assert.ok(!('start' in tool) && !('apply' in tool));
   }
+  assert.deepEqual(catalogue.find(tool => tool.id === 'pr-reviewer').cliOutputs, ['comment']);
   assert.equal(automationTools['pr-reviewer'].dedupe({ number: 14, headCommit: head }), `pull_request:14:${head}`);
   assert.equal(automationTools['issue-triage'].dedupe({ number: 12 }), 'issue:12');
   assert.equal(automationTools['ci-fixer'].dedupe({ runId: 7 }), 'pipeline_run:7');
@@ -190,4 +191,18 @@ test('text helpers and the engines adapter', async () => {
   // A module without the interface is not registered.
   useEngines({ listEngines() {} });
   assert.equal(await engineAllowed(null, {}, { id: 1 }, {}, 'provider:x'), false);
+});
+
+test('PR reviewer on a coding CLI: a read-only review task on the pull request; its final text becomes the comment', async () => {
+  const tool = automationTools['pr-reviewer'];
+  let ctx = context({ cli: true, engine: 'claude', outputs: ['comment'] });
+  assert.deepEqual(await tool.start(ctx), { wait: 'task', task: { id: 'task-1' } });
+  assert.deepEqual(ctx.calls, [['assignAgent', { kind: 'pull_request', number: 14, instructions: 'Be brief.', mode: 'review' }]]);
+  const task = { id: 'task-1', state: 'SUCCEEDED', tool: 'claude', target_number: 14, base_commit: head, result: JSON.stringify({ summary: 'One finding: src/a.js:3 can throw.' }) };
+  ctx = context({ cli: true, engine: 'claude', outputs: ['comment'] });
+  const applied = await tool.apply(ctx, { task });
+  assert.deepEqual(applied, { outputs: { agentTaskId: 'task-1', commentId: 'c1' }, reason: 'Reviewed by claude, posted as a comment.' });
+  assert.match(ctx.calls[0][1].body, new RegExp(`^Review by claude on an agent host \\(read-only, at \`${head.slice(0, 12)}\`\\):\n\nOne finding`));
+  assert.match((await tool.apply(context({ cli: true }), { task: { ...task, state: 'FAILED', failure_reason: 'timed out' } })).failed, /The agent task failed \(timed out\)/);
+  assert.match((await tool.apply(context({ cli: true }), { task: { ...task, result: '{}' } })).failed, /without a review/);
 });

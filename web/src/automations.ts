@@ -16,7 +16,7 @@ export type InstructionVersion = { version: number; createdBy: string; createdAt
 export type AutomationDetail = { automation: Automation & { instructions: string }; instructionVersions: InstructionVersion[] };
 export type InstructionsText = InstructionVersion & { text: string };
 // targets is not part of the catalogue today; runKinds below falls back to what each built-in accepts.
-export type Tool = { id: ToolId; label: string; description: string; engines: 'model' | 'cli' | 'any'; schedule: boolean; events: string[]; outputs: string[]; opensPullRequests: boolean;
+export type Tool = { id: ToolId; label: string; description: string; engines: 'model' | 'cli' | 'any'; schedule: boolean; events: string[]; outputs: string[]; cliOutputs?: string[]; opensPullRequests: boolean;
   targets?: string[]; defaults: { name: string; events: string[]; output: string[]; limits: Limits; instructions: string } };
 export type Engine = { id: string; kind: 'model' | 'cli'; label: string; detail: string };
 export type AutomationHost = { id: string; name: string; scope: string };
@@ -69,9 +69,10 @@ export function runKinds(tool: Tool | undefined, toolId: string): RunTarget['kin
   const kinds = (tool?.targets || builtInTargets[toolId] || ['issue', 'pull_request', 'pipeline_run', 'repository']) as RunTarget['kind'][];
   return [...new Set([...kinds, ...(tool?.schedule ? ['repository' as const] : [])])];
 }
-// Custom automations: a model writes a comment, an issue or a report; a coding CLI opens a draft pull request.
+// Custom automations: a model writes a comment, an issue or a report; a coding CLI opens a draft pull request. Other tools may name
+// what a coding CLI can produce (the PR reviewer's read-only review is a comment only).
 export function allowedOutputs(tool: Tool, engineKind: Engine['kind'] | undefined) {
-  return tool.id === 'custom' ? engineKind === 'cli' ? ['draft-pr'] : ['comment', 'issue', 'report'] : tool.outputs;
+  return tool.id === 'custom' ? engineKind === 'cli' ? ['draft-pr'] : ['comment', 'issue', 'report'] : engineKind === 'cli' && tool.cliOutputs ? tool.cliOutputs : tool.outputs;
 }
 export const enginesFor = (tool: Tool, engines: Engine[]) => engines.filter(engine => tool.engines === 'any' || engine.kind === tool.engines);
 export const scheduleText = (minutes: number) => minutes % 1440 === 0 ? `every ${minutes / 1440 === 1 ? 'day' : `${minutes / 1440} days`}` : minutes % 60 === 0 ? `every ${minutes / 60 === 1 ? 'hour' : `${minutes / 60} hours`}` : `every ${minutes} minutes`;

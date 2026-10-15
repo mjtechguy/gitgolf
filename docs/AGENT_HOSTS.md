@@ -283,6 +283,31 @@ finishedAt, deadline, logLines, logTruncated }`. `usage` is the host's report wi
 `branch` into the issue's default branch, or into the pull request's head branch.
 The agent may open that pull request itself through MCP (below); it never merges.
 
+## Review tasks (schema 48)
+
+A review task reviews a pull request **read-only**. The coding CLI runs under the host's own sign-in (for example Claude Code with
+an OAuth subscription), so no API key is involved, and its final text is the review.
+
+**Creating one:**
+- Use `create` with `"mode": "review"`; the default is `"change"`. "Assign to agent" on a pull request offers **Review only**, and the
+  PR reviewer automation uses it with a coding CLI engine.
+- Golf refuses review mode for an issue target.
+- Only tools with a read-only mode are allowed: Claude Code (`--permission-mode plan`), Codex (`--sandbox read-only`) and Grok (no
+  write allowances). OpenCode is refused.
+- Outbound hosts need golf-agent-host **0.2.0** or later. Hosts report their version on every heartbeat (`hostVersion`); an older host
+  is refused with a message to update it. SSH hosts always qualify, because they run the binary from the deploy's container image.
+
+**How Golf runs it:**
+- The task row is listed in `agent_task_reviews` (`migrations/0048_agent_task_reviews.sql`).
+- The prompt asks for a review with `path:line` findings and says no file may change.
+- The claimed job carries `"mode": "review"` and no `mcp` endpoint.
+
+**What the host and Golf enforce:**
+- The host runs the tool with its read-only flags, then commits, pushes and adopts nothing. It finishes `succeeded` with an empty
+  `commitId` and the review as `summary`, up to **12 KiB** (change tasks: 4 KiB).
+- Golf refuses a review finish that names a commit, and refuses any push with the task's token.
+- Any change the tool makes anyway is discarded with the working copy.
+
 ## Golf MCP for the task
 
 The claim's `mcp.url` is Golf's remote MCP endpoint (`docs/AGENT_ACCESS.md`), and the

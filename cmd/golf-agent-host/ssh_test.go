@@ -298,6 +298,37 @@ func TestSSHRunNoChangesFailureAndFoldedCommits(t *testing.T) {
 	}
 }
 
+func TestSSHRunReviewReadsOnlyAndPushesNothing(t *testing.T) {
+	s := newTestSSHD(t)
+	f := newFakeGolf(t)
+	ft := f.addTask("Review this pull request. MODE=review", 10*time.Minute, asReview)
+	runSSH(t, f, ft, s.target(true))
+	fin := ft.finish
+	if fin.State != "succeeded" || fin.ExitCode != 0 || fin.CommitID != "" || fin.ChangedFiles == nil || len(fin.ChangedFiles) != 0 || fin.Summary != reviewText {
+		t.Fatalf("finish: state %s commit %q files %v summary of %d bytes\nlog: %s", fin.State, fin.CommitID, fin.ChangedFiles, len(fin.Summary), strings.Join(ft.lines, "\n"))
+	}
+	args, _ := os.ReadFile(s.dump + ".args")
+	if !strings.Contains(string(args), "--permission-mode\nplan\n") || strings.Contains(string(args), "acceptEdits") {
+		t.Fatalf("args %s", args)
+	}
+	if out := gitCommand(t, f.bare, "branch", "--list", ft.task.Branch); out != "" {
+		t.Fatalf("review pushed %s", ft.task.Branch)
+	}
+	if left := remoteWorkLeft(t, s); len(left) != 0 {
+		t.Fatalf("remote work left: %v", left)
+	}
+	// OpenCode has no read-only mode: refused before start, nothing reaches the host.
+	oc := f.addTask("MODE=review", 10*time.Minute, func(ft *fakeTask) { asReview(ft); ft.task.Tool = "opencode" })
+	_ = os.Remove(s.dump + ".args")
+	runSSH(t, f, oc, s.target(true))
+	if oc.finish.State != "failed" || !strings.HasPrefix(oc.finish.Failure, "review_unsupported_tool") || oc.started {
+		t.Fatalf("opencode review %+v started %v", oc.finish, oc.started)
+	}
+	if _, err := os.Stat(s.dump + ".args"); err == nil {
+		t.Fatal("a tool ran for the refused review")
+	}
+}
+
 func TestSSHRunCancelStopsTheRemoteToolAndCleansUp(t *testing.T) {
 	s := newTestSSHD(t)
 	f := newFakeGolf(t)
@@ -484,6 +515,11 @@ func TestSSHJobValidation(t *testing.T) {
 	good := `{"origin":"https://golf.example","ssh":{"address":"h.example.net","port":22,"user":"agent","reach":"direct","privateKey":"x"}}`
 	if _, err := readJob(strings.NewReader(good)); err != nil {
 		t.Fatal(err)
+	}
+	// The task's mode is part of the job (unknown fields are refused).
+	withMode := `{"origin":"https://golf.example","task":{"id":"x","mode":"review"},"ssh":{"address":"h.example.net","port":22,"user":"agent","reach":"direct","privateKey":"x"}}`
+	if job, err := readJob(strings.NewReader(withMode)); err != nil || job.Task == nil || job.Task.Mode != "review" {
+		t.Fatalf("job with mode: %+v %v", job.Task, err)
 	}
 	for _, bad := range []string{
 		`{"ssh":{"address":"h","port":0,"user":"agent","reach":"direct"}}`,
