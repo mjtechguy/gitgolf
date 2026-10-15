@@ -59,6 +59,11 @@ test('native operations route is available explicitly while unsupported portable
  assert.equal(settingForRoute('instance-settings','overview',true),null);
 });
 
+test('estimated costs mount only where the installation reports them',()=>{
+ assert.equal(settingForRoute('instance-settings','costs',true),'operations.costs');
+ assert.equal(settingForRoute('instance-settings','costs',false),'operations.costs');
+});
+
 test('feature policies narrow what the installation reports; unallocated features and missing reads fall back',()=>{
  const native={runtimeProfile:'cloudflare-native',capabilities:[{id:'repository.releases',state:3,reason:''}]};
  assert.equal(settingForRoute('instance-settings','features',true),'settings.feature-policy');

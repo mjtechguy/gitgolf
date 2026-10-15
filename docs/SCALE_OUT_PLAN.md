@@ -1,6 +1,6 @@
 # Scale-out plan: moving long I/O-bound work out of the Workspace Durable Object
 
-Status: S1–S3 built; S1, S2 and the MCP part of S3 measured on the hosted demo, 2026-10-15. S4 not needed yet; S5 and S6 in progress. Follows AGENTIC_MODE_PLAN AM-1 item 5 and AM-6, and replaces the "RepositoryWrites split only if CPU
+Status: S1–S3 built; S1, S2 and the MCP part of S3 measured on the hosted demo, 2026-10-15. S6 built, its analytics reads checked against the live API. S4 not needed yet; S5 proposed. Follows AGENTIC_MODE_PLAN AM-1 item 5 and AM-6, and replaces the "RepositoryWrites split only if CPU
 is the limit" condition with measured evidence. Benchmark: [benchmarks/2026-10-15-100-agents](benchmarks/2026-10-15-100-agents/README.md).
 
 ## Evidence
@@ -166,6 +166,22 @@ An **Estimated costs** page under Admin → Operations.
     Durable Object requests per landed pull request, from the bench and from live analytics);
   - each assumption is shown and editable.
 - **Tie-in with S5:** every capacity request and ceiling change shows the cost change before it is approved.
+- **Status (2026-10-15): built, tested locally; not yet verified on the hosted demo.**
+  - `cloudflare/forge/src/costs.mjs`, route `POST /native/costs/read` (`read` and `estimate`), operations administrators only;
+    page `/admin/costs` (`web/src/EstimatedCosts.tsx`), next to AI usage in the admin navigation.
+  - Price table in code, Workers Paid list prices checked against the pricing pages on 2026-10-15, one source URL per rate.
+  - Usage: one GraphQL request per dataset, each with a month-to-date and a 7-day window alias, 5 s timeout each. A refused field,
+    a refused token or a timeout degrades only that dataset's meters, with the reason.
+  - Read: Workers requests (this Worker), Durable Object requests and active time (account), D1 rows (this database) and size,
+    R2 Class A/B and storage (this installation's buckets), Queues operations (account), Artifacts operations (this namespace).
+  - Not read, named as such: Workers CPU (`cpuTimeUs` is unconfirmed; read if the API accepts it), Durable Object SQLite rows and
+    storage, Artifacts storage, Containers, Workers AI neurons (Golf's ledger is on AI usage), Vectorize.
+  - What-if: unit costs per applied write, per landed pull request (both all-in) and per CI run, from the 7-day window over
+    `git_operations` APPLIED, `land_operations` LANDED, `pipeline_runs` and container test runs; containers from concurrent
+    count and instance size; self-hosted runners from an entered hourly rate. Every assumption is editable.
+  - Deploy: `prepare.mjs` now binds `OPERATIONS_DATABASE_ID` and `OPERATIONS_BUCKETS`. Without them, D1 rows are read for the
+    whole account and D1 size is not read.
+  - **Open:** the S5 tie-in (capacity requests show the cost change); a hosted read to confirm each dataset and field.
 - **Usage Golf already records exactly** stays as recorded: AI runs (Workers AI usage, provider tokens and costs as reported) and
   agent tasks (usage as the tool reports it).
 
