@@ -75,7 +75,8 @@ Errors are `{code, message}` with an HTTP status; some add fields:
     `deleted_by_them` or `file_directory`.
   - No conflict markers are ever committed.
 - If the head moves again or the provider refuses the update, the read, merge and push
-  are retried, at most 3 attempts in all.
+  are retried: the commit waits its turn for the branch (jittered, 50 ms to 1.5 s) and re-merges onto the new head,
+  for up to 30 s or 40 attempts.
 - `idempotencyKey`: a replay with the same inputs returns the original response
   without a second commit; other inputs return 409 `already_exists`. A key whose
   write was refused, or abandoned for five minutes before any write, can be used again.
