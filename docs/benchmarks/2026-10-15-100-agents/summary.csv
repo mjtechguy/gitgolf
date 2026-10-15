@@ -1,0 +1,12 @@
+run,scenario,agents,operation,attempts,successes,failure_pct,p50_s,p95_s,max_s,outcomes
+baseline,S1,5,fetch,65,65,0.0,36.2,93.4,108.3,
+baseline,S1,5,push,65,23,64.6,26.7,60.8,74.8,nonff_rejected=23 remote_rejected=19
+baseline,S2,25,push,462,430,6.9,29.8,69.7,82.3,503=1 remote_rejected=31
+baseline,S2,25,fetch,32,32,0.0,25.4,39.6,40.3,
+baseline,S4,10,clone,122,122,0.0,42.7,99.0,108.9,
+baseline,S4,10,ls_remote,113,113,0.0,30.7,60.3,70.8,
+baseline,S6/branch-per-writer,30,source_commit,382,329,13.9,13.8,36.6,45.2,412=53
+baseline,S6/shared-branch,30,source_commit,371,270,27.2,24.6,40.4,48.5,503=3 412=98
+baseline,S7,30,source_commit,71,70,1.4,21.6,37.2,41.5,412=1
+baseline,S7,30,open_pr,70,69,1.4,28.4,44.8,46.9,tool_error=1
+baseline,S7,30,land,69,14,79.7,904.9,931.5,935.0,land_timeout=55
