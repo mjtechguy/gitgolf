@@ -108,7 +108,7 @@ Coding agents on Cloudflare sandboxes and on machines users connect (agent hosts
 Tailscale, Workers VPC), the credential vault and the built-in automation library
 (PR reviewer, triage, Issue → PR, CI fixer, improvement loops and more) are planned
 in [AGENTS_AND_AUTOMATIONS_PLAN.md](AGENTS_AND_AUTOMATIONS_PLAN.md). Model selection
-per use case becomes engine selection there.
+per use case becomes engine selection there; phase 2a built it ([ENGINES.md](ENGINES.md)).
 
 ## 3. Remaining capability work
 

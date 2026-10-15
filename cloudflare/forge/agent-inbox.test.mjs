@@ -65,7 +65,7 @@ test('sections: agent tasks in progress, pull requests ready to land or needing 
   const capabilities = (await f.call('/rpc/golf.v1.CapabilityService/ListCapabilities', {})).capabilities;
   const capability = capabilities.find(c => c.id === 'repository.agent-inbox');
   assert.equal(capability.state, 'CAPABILITY_STATE_READY'); assert.match(capability.reason, /intent summary/);
-  assert.equal((await f.call('/native/diagnostics', {})).schema, 43);
+  assert.equal((await f.call('/native/diagnostics', {})).schema, 45);
   f.sql.exec(`INSERT INTO agent_hosts(id,uuid,name,scope,scope_id,registered_by,credential_digest,created_at) VALUES(1,'u','laptop','personal','1',1,'x','t')`);
   const task = (id, state, created, repositoryId = 1) => f.sql.prepare(`INSERT INTO agent_tasks(id,repository_id,artifact_name,host_id,tool,requested_by,target_kind,target_number,target_title,base_ref,base_commit,branch,prompt,state,deadline,idempotency_key,created_at,updated_at)
     VALUES(?,?,?,1,'claude',1,'issue',12,'Fix the parser','refs/heads/main','${base}',?,'p',?,0,?,?,?)`).run(id, repositoryId, repositoryId === 1 ? artifact : 'repo-' + 'e'.repeat(32), 'golf-agent/' + id.slice(0, 8), state, id, created, created);

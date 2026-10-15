@@ -129,6 +129,16 @@ const native = {
   'installation/read': () => adminDenial('the installation settings'),
   'ai-models': body => ({ action: body.repository ? 'repository_ai_model.update' : 'ai_model.update', scope: body.repository ? 'repository' : 'installation', batch: true, subject: () => clip(body.use, 40) && 'ai.model.' + clip(body.use, 40) }),
   'audit/read': body => body.scope === 'installation' && adminDenial('the installation audit log'),
+  // Credential vault and engines (docs/CREDENTIAL_VAULT.md, docs/ENGINES.md): each change writes its own row in the same batch (vault.mjs,
+  // engines.mjs), so these record refusals only; a use refused by a grant is written by vault.mjs as credential.use_denied. Never a value.
+  credentials: body => ['create', 'rotate', 'revoke', 'grant', 'ungrant'].includes(body.action) && { action: 'credential.' + body.action, batch: true,
+    scope: async c => { c.vault = token(body.id) ? await one(c.db, 'SELECT scope,owner_id,label FROM vault_credentials WHERE id=?', body.id) : null; return (c.vault?.scope || body.scope) === 'organization' ? 'organization' : 'installation'; },
+    scopeId: async c => c.vault ? c.vault.owner_id : (await one(c.db, "SELECT id FROM native_owners WHERE slug=? AND kind='ORGANIZATION'", clip(body.organization, 40) || ''))?.id,
+    subject: c => c.vault?.label || clip(body.label, 64) || token(body.id) },
+  engines: body => ['create', 'update', 'delete', 'select'].includes(body.action) && { action: body.action === 'select' ? 'engine_selection.update' : 'engine.' + body.action, batch: true,
+    scope: async c => { c.engine = token(body.id) ? await one(c.db, 'SELECT scope,owner_id,name FROM engines WHERE id=?', body.id) : null; const scope = c.engine?.scope || body.scope; return scope === 'organization' ? 'organization' : scope === 'repository' ? 'repository' : 'installation'; },
+    scopeId: async c => c.engine ? c.engine.owner_id : (await one(c.db, "SELECT id FROM native_owners WHERE slug=? AND kind='ORGANIZATION'", clip(body.organization, 40) || ''))?.id,
+    subject: c => body.action === 'select' ? 'engine:' + (clip(body.use, 40) || '') : c.engine?.name || clip(body.name, 80) || token(body.id) },
 };
 
 const agentHostActions = { createToken: 'agent_host.token_create', revokeToken: 'agent_host.token_revoke', update: 'agent_host.update', delete: 'agent_host.delete' };
@@ -320,7 +330,7 @@ export async function audited(request, env, run, identify) {
 
 /* Reading. Categories are the action prefix; the first installation policy rows used the bare action 'update'. */
 const categories = [['installation_policy', 'Installation policy', ['update', 'installation_policy.']], ['feature_policy', 'Feature policy'], ['ai_model', 'AI models', ['ai_model.', 'repository_ai_model.']],
-  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.']], ['api_token', 'API tokens'], ['agentic_mode', 'Agentic mode'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
+  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.']], ['api_token', 'API tokens'], ['credential', 'Credentials'], ['engine', 'Engines', ['engine.', 'engine_selection.']], ['agentic_mode', 'Agentic mode'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
   ['repository_invitation', 'Invitations'], ['protected_branch', 'Rules', ['protected_branch.', 'protected_tag.']], ['hook', 'Webhooks'], ['repository_secret', 'Secrets and variables', ['repository_secret.', 'repository_variable.']],
   ['environment', 'Environments'], ['git_credential', 'Git credentials'], ['git_write', 'Git writes'], ['preview', 'Previews'], ['release', 'Releases', ['release.', 'release_asset.']], ['pull_request', 'Pull requests', ['pull_request.', 'pull_request_review.']],
   ['label', 'Labels and milestones', ['label.', 'milestone.']], ['ai', 'AI runs', ['ai.']], ['actions', 'Actions runs']].map(([id, label, prefixes]) => ({ id, label, prefixes: prefixes || [id + '.'] }));
@@ -380,6 +390,11 @@ const phrases = {
   'agentic_mode.revert': ['reverted', 'revert', e => `pull request ${e.subject} after its required checks failed`],
   'api_token.create': ['created', 'create', e => `${e.after?.permission ? e.after.permission + ' ' : ''}API token ${e.subject}`], 'api_token.revoke': ['revoked', 'revoke', e => named('API token', e.subject)],
   'api_token.use_denied': ['was refused with', 'use', e => `${e.after?.agentTaskId ? 'an agent task token' : 'an API token'} (${e.after?.reason === 'branch' ? 'branch outside its pattern' : e.after?.reason === 'permission' ? 'read-only token' : 'repository outside its scope'})`],
+  'credential.create': ['added', 'add', e => named('credential', e.subject)], 'credential.rotate': ['rotated', 'rotate', e => named('credential', e.subject)], 'credential.revoke': ['revoked', 'revoke', e => named('credential', e.subject)],
+  'credential.grant': ['shared', 'share', e => `credential ${e.subject}${e.after?.grantee ? ' with ' + e.after.grantee : ''}`], 'credential.ungrant': ['stopped sharing', 'stop sharing', e => `credential ${e.subject}${e.after?.grantee ? ' with ' + e.after.grantee : ''}`],
+  'credential.use_denied': ['was refused', 'use', e => `credential ${e.subject} (${{ revoked: 'revoked', subscription: 'subscription sign-ins wait for cloud sandboxes', place: 'not allowed in that place', not_granted: 'not shared with this person or repository' }[e.after?.reason] || 'refused'})`],
+  'engine.create': ['added', 'add', e => named('engine', e.subject)], 'engine.update': ['updated', 'update', e => named('engine', e.subject)], 'engine.delete': ['deleted', 'delete', e => named('engine', e.subject)],
+  'engine_selection.update': ['changed', 'change', e => `the engine for ${e.subject.replace(/^engine:/, '').replaceAll('-', ' ')}`],
   'environment.save': ['saved', 'save', e => named('environment', e.subject)], 'environment.save_value': ['saved', 'save', e => `${e.after?.kind || 'a value'} ${e.subject} of an environment`],
   'ai.run_request': ['requested', 'request', e => `an AI ${e.subject.replaceAll('-', ' ')} run`], 'actions.run_request': ['requested', 'request', e => `a run for pull request ${e.subject}`], 'actions.run_cancel': ['cancelled', 'cancel', () => 'a run'],
 };

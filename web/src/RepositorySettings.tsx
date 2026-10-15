@@ -16,6 +16,7 @@ import { Loading, PanelError, privateQuery } from './RepositoryUI';
 import { SettingsInventory } from './AccountSettings';
 import { RepositoryFeaturesPanel } from './RepositoryFeatures';
 import { RepositoryAiModels } from './RepositoryAiModels';
+import { EngineSettings } from './EngineSettings';
 import { sourceRepositoryID } from './sourceReads';
 
 const bytes = (value: string) => new TextEncoder().encode(value).byteLength;
@@ -122,6 +123,7 @@ export function RepositorySettings({ userId, owner, name, signingOut }: { userId
     {(settings || editing?.kind === 'topics' && !query.error && !signingOut) && !uncertain ? <section className="browser-panel credential-list-panel" aria-labelledby="repository-topics-title"><div className="browser-panel-heading"><h2 id="repository-topics-title">Topics</h2>{settings?.canEdit ? <button className="button secondary" disabled={Boolean(editing) || mutation.isPending} onClick={() => begin('topics')}>Edit topics</button> : null}</div>{editing?.kind === 'topics' && !query.error && !signingOut ? <div hidden={!settings} inert={!settings}>{settings && settings.revision !== editing.settings.revision ? <p className="field-help">Current values changed. Your unsaved draft is retained; inspect the new values before a separate edit.</p> : null}<TopicsEditor settings={editing.settings} pending={mutation.isPending || !settings?.canEdit} onSave={(topics) => save({ kind: 'topics', topics })} onCancel={cancel} />{validation ? <p role="alert" className="error">{validation}</p> : null}</div> : settings ? <div className="credential-form-content"><p>{settings.topics.length ? settings.topics.join(', ') : 'No topics configured.'}</p></div> : null}</section> : null}
     {native ? <RepositoryFeaturesPanel userId={userId} owner={owner} name={name} signingOut={signingOut} /> : null}
     {native && settings ? <RuntimeFeature id="settings.ai-models"><RepositoryAiModels userId={userId} owner={owner} name={name} repositoryId={settings.repositoryId} signingOut={signingOut} /></RuntimeFeature> : null}
+    {native && settings ? <RuntimeFeature id="settings.engines"><EngineSettings key={`${userId}/${settings.repositoryId}`} target={{ scope: 'repository', repository: { owner, name }, repositoryId: settings.repositoryId }} userId={userId} /></RuntimeFeature> : null}
     {native && settings?.canEdit ? <RuntimeFeature id="repository.public-source"><NativeRepositoryVisibility userId={userId} repository={{owner,name}} repositoryId={settings.repositoryId} blocked={signingOut||query.isFetching||!!query.error}/></RuntimeFeature> : null}
     {native && settings ? <RuntimeFeature id="repository.packages"><NativePackages userId={userId} repository={{owner,name}} repositoryId={settings.repositoryId} settings blocked={signingOut||query.isFetching||!!query.error}/></RuntimeFeature> : null}
     {!native && (settings?.canEdit||settings?.mirror)?<RepositoryMirrors userId={userId} owner={owner} name={name} repositoryId={settings.repositoryId} blocked={signingOut||query.isFetching||!!query.error}/>:null}

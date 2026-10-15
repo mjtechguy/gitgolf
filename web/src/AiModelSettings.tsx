@@ -119,6 +119,7 @@ export function AiModelSettings({ userId, signingOut }: { userId: string; signin
     <div className="settings-toolbar"><p className="field-help">{data.editing.reason}</p>
       <button type="button" className="button secondary" disabled={refresh.isPending || !data.catalog.refreshable || !data.editing.enabled} onClick={() => { setNotice(undefined); refresh.mutate(true); }}><RefreshCw size={15} className={refresh.isPending ? 'spin' : undefined} />{refresh.isPending ? 'Reading catalog…' : 'Refresh catalog'}</button>
       <Link className="button secondary" to="/admin/ai-usage"><BarChart3 size={15} />AI usage</Link></div>
+    <p className="field-help">These are the Cloudflare model defaults. Summaries, review drafts and release notes can instead run an engine chosen in <Link to="/admin/engines">Engines</Link> (a Workers AI model or a provider model with a vault key); where none is chosen, the model here applies. Agent proposals, triage, advice and search keep these settings.</p>
     <SummaryBand label="AI model summary" items={[
       ['Use cases', `${configurable.length} configurable`, `${data.uses.filter(use => use.fixed).length} fixed to Clef`],
       ['Set by an administrator', String(configurable.filter(use => use.source === 'installation').length), 'Others use the deploy default'],

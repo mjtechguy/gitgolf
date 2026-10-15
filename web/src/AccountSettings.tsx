@@ -9,7 +9,7 @@ import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
-import { Bot, Rocket, Server, MailPlus, Webhook, History, KeyRound, Plug, ScrollText, ShieldCheck, Tags, UserRound } from 'lucide-react';
+import { Bot, Cpu, Rocket, Server, MailPlus, Webhook, History, KeyRound, LockKeyhole, Plug, ScrollText, ShieldCheck, Tags, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { useQuery } from '@tanstack/react-query';
@@ -35,6 +35,7 @@ export function AccountLayout({ children }: { children: ReactNode }) {
     {localAuth && <Link to="/account/sessions" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sessions</Link>}
     {localAuth && <Link to="/account/ssh-keys" activeOptions={{ exact:true }}><KeyRound size={18} />SSH keys</Link>}
     {!portable && settingAvailable(runtime.isError ? undefined : runtime.data, 'agents.mcp') && <><span className="eyebrow">DEVELOPER</span><Link to="/account/api-tokens" activeOptions={{ exact:true }}><KeyRound size={18} />API tokens</Link></>}
+    {!portable && settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.credentials') && <Link to="/account/credentials" activeOptions={{ exact:true }}><LockKeyhole size={18} />Credentials and engines</Link>}
     {portable && <Link to="/account/api-credentials" activeOptions={{ exact:true }}><KeyRound size={18} />API credentials</Link>}
     {portable && <Link to="/audit" activeOptions={{ exact:true }}><History size={18} />Account activity</Link>}
   </nav><div className="account-content">{children}</div></div>;
@@ -44,12 +45,15 @@ export function OrganizationSettingsLayout({ children, organization }: { childre
   // The native runtime has no organization label or organization value service.
   const runtime = useRuntimeCapabilities(), portable = runtime.data?.runtimeProfile !== 'cloudflare-native';
   const audit = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.installation-audit'), agentHosts = settingAvailable(runtime.isError ? undefined : runtime.data, 'agents.hosts');
+  const credentials = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.credentials'), engines = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.engines');
   return <div className="account-layout"><nav className="account-navigation" aria-label="Organization settings"><span className="eyebrow">ORGANIZATION SETTINGS</span>
     <Link to="/organizations/$organization/settings" params={{ organization }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
     {portable && <Link to="/organizations/$organization/settings/labels" params={{organization}} activeOptions={{exact:true}}><Tags size={18}/>Labels</Link>}
     {portable && <Link to="/organizations/$organization/settings/secrets" params={{ organization }} activeOptions={{ exact: true }}><KeyRound size={18} />Secrets and variables</Link>}
     {audit && <Link to="/organizations/$organization/settings/audit" params={{ organization }} activeOptions={{ exact: true }}><ScrollText size={18} />Audit log</Link>}
     {agentHosts && <Link to="/organizations/$organization/settings/agents" params={{ organization }} activeOptions={{ exact: true }}><Bot size={18} />Agent hosts</Link>}
+    {credentials && <Link to="/organizations/$organization/settings/credentials" params={{ organization }} activeOptions={{ exact: true }}><LockKeyhole size={18} />Credentials</Link>}
+    {engines && <Link to="/organizations/$organization/settings/engines" params={{ organization }} activeOptions={{ exact: true }}><Cpu size={18} />Engines</Link>}
     <Link to="/organizations/$organization" params={{ organization }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Members and teams</Link>
   </nav><div className="account-content">{children}</div></div>;
 }

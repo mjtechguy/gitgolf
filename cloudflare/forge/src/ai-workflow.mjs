@@ -5,10 +5,11 @@ import { reviewDraft } from './ai-review.mjs';
 import { triage } from './ai-triage.mjs';
 import { releaseNotes } from './ai-release-notes.mjs';
 import { intentSummary } from './ai-intent.mjs';
-import { aiModel, aiModelStillAllowed } from './ai-models.mjs';
+import { aiModelStillAllowed } from './ai-models.mjs';
+import { resolveEngine, recordRunEngine, runEngine, engineCall } from './engines.mjs';
 
 // One entry per kind; each AI track adds one line here. A kind is
-// { feature (a feature-policy id, such as 'advice'), use (an AI use case in ai-models.mjs, whose effective model the run records) or a fixed model, roles, target(value, row) → bounded JSON target or invalid(),
+// { feature (a feature-policy id, such as 'advice'), use (an AI use case in engines.mjs and ai-models.mjs, whose effective engine and model the run records) or a fixed model, roles, target(value, row) → bounded JSON target or invalid(),
 //   prepare({ db, env, person, row, artifact, target }) → JSON input (in the workspace write queue: authority and exact bounded input only),
 //   infer({ env, input, model, run }) → JSON output (in the Workflow; `run(input, options)` makes the one gateway call),
 //   stale?({ db, env, person, row, artifact, target, input }) → boolean on status reads,
@@ -27,8 +28,14 @@ const refusals = { unclaimed: 'Inference never started; nothing was billed.', ac
   expired: 'The run expired before inference; nothing was billed.', input: 'The input for this run exceeds its limit; nothing was billed.',
   start: 'The AI workflow could not be started; nothing was billed.', kind: 'This kind of AI run is no longer offered; nothing was billed.',
   model: 'The model this run was admitted with is no longer allowed on this installation; nothing was billed.' };
-// A kind with a use case runs the model chosen for it (installation default or this repository's allowed choice), checked again before inference.
-const modelAllowed = (db, env, kind, model) => kind.use ? aiModelStillAllowed(db, env, kind.use, model) : true;
+// A kind with a use case runs the engine chosen for it (engines.mjs: installation, organization or repository; by default the Workers AI
+// model chosen in AI models), checked again before inference. { handle } runs a stored engine, { handle: null } the recorded Workers AI
+// model, { refusal } refuses the run unbilled. dryRun false (inference) audits a refused credential.
+async function modelAllowed(db, env, kind, run, dryRun = true) {
+  const engine = await runEngine(db, env, run, { dryRun });
+  if (engine) return engine;
+  return kind.use && !await aiModelStillAllowed(db, env, kind.use, run.model) ? { refusal: refusals.model } : { handle: null };
+}
 
 // AI gating hook, asked at admission, at prepare and again at infer; '' allows, anything else is the reason it is refused.
 // Each caller passes the env with the installation policy in force at that moment: the editable `advice` key overlays EVIDENCE_ALLOW_AI,
@@ -74,10 +81,12 @@ export async function createAiRun(db, env, person, row, body) {
   if (day.total >= aiDailyLimit(env)) throw new Fault('resource_exhausted', 429, "The installation's daily AI allocation is used.");
   const hour = await db.prepare('SELECT count(*) AS total FROM ai_runs WHERE user_id=? AND created_at>=?').bind(person.id, new Date(Date.now() - 3600_000).toISOString()).first();
   if (hour.total >= aiLimits.hourlyPerUser) throw new Fault('resource_exhausted', 429, `You can start ${aiLimits.hourlyPerUser} AI runs an hour.`);
-  const model = kind.use ? (await aiModel(db, env, kind.use, row.id)).model : kind.model;
+  const engine = kind.use ? await resolveEngine(db, env, { person, repository: row, useCase: kind.use }) : null;
+  const model = engine ? engine.model : kind.model;
   run = await db.prepare(`INSERT INTO ai_runs(id,kind,repository_id,user_id,operation_key,input_hash,target,model,state,created_at,updated_at,expires_at)
     VALUES(?,?,?,?,?,?,?,?,'REQUESTED',?,?,?) RETURNING *`).bind(crypto.randomUUID(), body.kind, row.id, person.id, body.idempotencyKey, hash, target, model,
     time(), time(), new Date(Date.now() + aiLimits.runMinutes * 60_000).toISOString()).first();
+  await recordRunEngine(db, run, engine);
   try { await env.AiWorkflow.create({ id: run.id, params: { runId: run.id } }); }
   catch {
     // A lost create response is reconciled by exact instance ID, never restarted. Prepare refuses any run that is no longer REQUESTED.
@@ -122,7 +131,8 @@ export async function aiStep(db, env, run, context, phase, result) {
     if (!context || !kind.roles.includes(context.row.role)) return refuse(refusals.access);
     const gate = await aiGate(db, env, kind, run.repository_id);
     if (gate) return refuse(unbilled(gate));
-    if (!await modelAllowed(db, env, kind, run.model)) return refuse(refusals.model);
+    const allowed = await modelAllowed(db, env, kind, run);
+    if (allowed.refusal) return refuse(allowed.refusal);
     let input;
     try { input = JSON.stringify(await kind.prepare({ db, env, ...context, target: JSON.parse(run.target) })); }
     catch (error) { if (error instanceof Fault) return refuse(error.message.slice(0, 300)); throw error; }
@@ -158,14 +168,15 @@ export async function aiInfer(env, id) {
   const gate = await aiGate(db, env, kind, run.repository_id);
   if (gate) return { state: 'REFUSED', refusal: unbilled(gate) };
   if (run.expires_at <= time()) return { state: 'REFUSED', refusal: refusals.expired };
-  if (!await modelAllowed(db, env, kind, run.model)) return { state: 'REFUSED', refusal: refusals.model };
+  const allowed = await modelAllowed(db, env, kind, run, false);
+  if (allowed.refusal) return { state: 'REFUSED', refusal: allowed.refusal };
   const claimed = await db.prepare('UPDATE ai_runs SET infer_started_at=? WHERE id=? AND state=? AND infer_started_at IS NULL').bind(time(), id, 'RESERVED').run();
   // A retried or replayed step never bills a second call.
   if (claimed.meta.changes !== 1) return { state: 'UNKNOWN' };
   let calls = 0, usage = {};
   try {
     const output = JSON.stringify(await kind.infer({ env, input: JSON.parse(run.input_snapshot), model: run.model,
-      run: async (input, options) => { if (calls++) throw Error('One model call per run'); const answer = await aiRun(env, run.model, input, options); usage = aiUsage(answer); return answer; } }));
+      run: async (input, options) => { if (calls++) throw Error('One model call per run'); const answer = allowed.handle ? await engineCall(env, allowed.handle, input, options) : await aiRun(env, run.model, input, options); usage = aiUsage(answer); return answer; } }));
     if (typeof output !== 'string' || bytes(output) > aiLimits.outputBytes) throw Error('AI output exceeds its limit');
     const stored = await db.prepare("UPDATE ai_runs SET output=?,usage=?,updated_at=? WHERE id=? AND state='RESERVED'").bind(output, JSON.stringify(usage), time(), id).run();
     return { state: stored.meta.changes === 1 ? 'INFERRED' : 'UNKNOWN' };
