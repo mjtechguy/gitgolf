@@ -146,7 +146,7 @@ export async function processPipelineIntake(env, id, withArtifact) {
       // A push to the head branch of open same-repository pull requests is their `synchronize`.
       if (payload.ref.startsWith('refs/heads/')) {
         const branch = payload.ref.slice(11);
-        const { results } = await db.prepare("SELECT d.number FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE d.repository_id=? AND d.state='OPEN' AND p.head_branch=? ORDER BY d.number LIMIT 10").bind(row.id, branch).all();
+        const { results } = await db.prepare("SELECT d.number FROM pull_requests p CROSS JOIN discussions d ON d.id=p.discussion_id WHERE d.repository_id=? AND d.state='OPEN' AND p.head_branch=? ORDER BY d.number LIMIT 10").bind(row.id, branch).all();
         for (const pull of results) await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'pull_request', { number: pull.number, action: 'synchronize', headCommitId: payload.after, actorId: actor.id }), withArtifact);
       }
       return result;
