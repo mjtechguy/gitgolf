@@ -245,7 +245,7 @@ writer in a new `git-objects.mjs`.
 
 ### AM-3 Agent access: API tokens and remote MCP
 
-**Status (2026-10-14): done, hosted-verified.** #83, #86 (schema 39). Exit met: Claude Code via hosted `/mcp` with an `agent/*` token opened PR #4 in `mj/actions-demo`; a commit to `main` was refused. Item 4 (2026-10-15, local evidence): agent hosts connect each CLI to `/mcp` with the task token and tell it so in the prompt (see `docs/AGENT_HOSTS.md`); not yet run on hosted.
+**Status (2026-10-14): done, hosted-verified.** #83, #86 (schema 39). Exit met: Claude Code via hosted `/mcp` with an `agent/*` token opened PR #4 in `mj/actions-demo`; a commit to `main` was refused. Item 4 (2026-10-15): agent hosts connect each CLI to `/mcp` with the task token and tell it so in the prompt (see `docs/AGENT_HOSTS.md`); hosted-verified with #113 (Claude Code opened PR #6 through MCP).
 
 1. **API tokens** (migration `0037` or `0038`, table `api_tokens`):
    - Prefix `golf_pat_`; only the SHA-256 is stored.
@@ -383,10 +383,14 @@ writer in a new `git-objects.mjs`.
   - Defaults are in installation policy. Over budget: Git's own report for pushes, 429 elsewhere, a tool error in MCP.
 - **Line-level merge (#109):** matches `git merge-file`, with a per-merge budget of files, bytes and lines.
 - **Blame and literal grep (#110):** match `git blame --first-parent` and `git grep`. Regular-expression grep is refused until the scan runs outside the Workspace.
+- **Re-measured at about 100 agents (2026-10-15):** see `docs/benchmarks/2026-10-15-100-agents/`.
+  - Landing on the passing check and waiting behind a merge are deployed.
+  - The remaining ceiling is the Workspace admission queue's exclusive convoy, not CPU or storage.
+  - Classing the D1-guarded writes as overlapping is the next step, ahead of any `RepositoryWrites` split.
 - **Still open:**
+  - removing the exclusive convoy (proposal in the benchmark README);
   - streaming pushes above 8 MiB;
-  - the conditional `RepositoryWrites` split;
-  - re-measuring S6 shared-branch commits with line-level merges.
+  - the conditional `RepositoryWrites` split.
 
 - **Rate budgets** for each API token and agent task: requests and pushes per
   minute.

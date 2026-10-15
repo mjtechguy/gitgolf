@@ -1,5 +1,40 @@
 # Golf implementation status
 
+## 2026-10-15 — 100 agents in one repository: measured on hosted, two fixes, and the remaining ceiling
+
+Full method, data and charts plan: [benchmarks/2026-10-15-100-agents](benchmarks/2026-10-15-100-agents/README.md).
+
+**Setup:** about 110 paced agents on `mj/agent-bench-3` for 30 minutes per run (`scripts/agent_speed_bench.mjs --think 60`).
+- Git pushes and Source API commits, a branch each and on a shared branch.
+- Clones.
+- The whole agent loop (S7): commit, `open_pull_request` over MCP, check, landing without a person.
+
+**Baseline:**
+- Only 14 of 69 agent pull requests landed within 15 minutes. Policy landing ran only in the 5-minute maintenance sweep, at most 20 a sweep.
+- 14–27 % of Source API commits were refused with 412, because a merge held the whole repository.
+- p50 latencies were 14–43 s.
+
+**Fixes (deployed):**
+- `landSoon` lands a pull request when its check is reported or it opens, instead of at the sweep. A single pull request lands
+  5.4 s after opening, against 193 s or more after its check before.
+- Writes wait for a merge holding the repository: Source API commits within their 30 s budget, Git pushes up to 20 s.
+
+**After (run `fixed3`):**
+- 77 of 105 agent pull requests landed within 15 minutes; land p50 was 64 s.
+- Commit failures from the merge fence fell to about 2 % (run `fixed2`).
+
+**Remaining ceiling, diagnosed with Server-Timing:**
+- A commit spends 14–47 s waiting in the Workspace admission queue for about 1 s of work.
+- Every request of the installation goes through one Workspace Durable Object. An `exclusive` request at the head of the queue
+  waits for all running transfers and blocks everything behind it.
+- Agents that land faster send more exclusive requests (opening pull requests, reporting checks). In `fixed3`, deployment writes
+  fell to 0.54/s while S7 succeeded.
+- The proposal to class the D1-guarded operations as overlapping is in the benchmark README. It has not been built yet.
+
+**Cleanup:** the five benchmark tokens are revoked (401), the temporary administrator credential is deleted, and the probe
+branches are removed. Pull requests opened by the baseline whose branches the bench deleted remain open, with no branch; they
+cannot land.
+
 ## 2026-10-15 — Review tasks: PR review by Claude Code under its OAuth sign-in (schema 48), hosted-verified
 
 **Built:** agent tasks gain a read-only **review** mode ([AGENT_HOSTS.md](AGENT_HOSTS.md#review-tasks-schema-48)).
