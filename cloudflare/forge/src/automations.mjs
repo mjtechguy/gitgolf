@@ -417,7 +417,7 @@ export async function emitAutomationEvent(env, event) {
     const branch = String(event.ref || '').startsWith('refs/heads/') ? event.ref.slice(11) : null;
     subjects.push({ type: 'push', kind: 'commit', ref: event.ref, before: event.before, after: event.after, branch, actorId: event.actorId });
     if (branch && candidates.some(a => stored(a).trigger.events.includes('pull_request.updated'))) {
-      const { results: pulls } = await db.prepare("SELECT d.number,p.base_branch FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE d.repository_id=? AND d.state='OPEN' AND p.head_branch=? ORDER BY d.number LIMIT 10").bind(repo.id, branch).all();
+      const { results: pulls } = await db.prepare("SELECT d.number,p.base_branch FROM pull_requests p CROSS JOIN discussions d ON d.id=p.discussion_id WHERE d.repository_id=? AND d.state='OPEN' AND p.head_branch=? ORDER BY d.number LIMIT 10").bind(repo.id, branch).all();
       for (const pull of pulls) subjects.push({ type: 'pull_request.updated', kind: 'pull_request', number: pull.number, headCommit: event.after, branch: pull.base_branch, baseBranch: pull.base_branch, actorId: event.actorId });
     }
   } else if (event.type === 'pipeline.failed') {
@@ -598,7 +598,7 @@ function runContext(db, env, deps, a, run, person, row) {
     },
     // The newest open pull request whose head is this branch of the repository, or null.
     async openPullForBranch(branch) {
-      return (await db.prepare("SELECT d.number FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE d.repository_id=? AND d.state='OPEN' AND p.head_branch=? ORDER BY d.number DESC LIMIT 1").bind(row.id, branch).first())?.number ?? null;
+      return (await db.prepare("SELECT d.number FROM pull_requests p CROSS JOIN discussions d ON d.id=p.discussion_id WHERE d.repository_id=? AND d.state='OPEN' AND p.head_branch=? ORDER BY d.number DESC LIMIT 1").bind(row.id, branch).first())?.number ?? null;
     },
     async unlabelledIssues(limit) {
       return (await db.prepare("SELECT d.number FROM discussions d WHERE d.repository_id=? AND d.kind='issue' AND d.state='OPEN' AND NOT EXISTS(SELECT 1 FROM discussion_labels l WHERE l.discussion_id=d.id) ORDER BY d.number DESC LIMIT ?").bind(row.id, limit).all()).results;
