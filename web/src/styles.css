@@ -2330,6 +2330,9 @@ pre.automation-output-text { padding:8px 10px; max-height:20rem; overflow:auto; 
 .costs-unit-input input { margin-top:4px; font-family:var(--mono); font-variant-numeric:tabular-nums; }
 .costs-result { border-top:1px solid var(--line); }
 @media(max-width:640px) { .costs-units li { grid-template-columns:minmax(0,1fr); } }
+/* Runner capacity (/admin/capacity): a name with its detail line in inventory and request cells. Existing tokens only. */
+.capacity-name { display:grid; min-width:0; gap:2px; }
+.capacity-name small { color:var(--muted); font-size:.75rem; overflow-wrap:anywhere; }
 /* Audit log (installation, organization and repository scope): a server-side filter form, then GitHub-style event rows. Existing tokens only. */
 .audit-filter-form { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px 12px; padding:12px var(--panel-padding); }
 .audit-filter-form label { display:grid; gap:4px; margin:0; min-width:0; color:var(--muted); font-size:.8125rem; }

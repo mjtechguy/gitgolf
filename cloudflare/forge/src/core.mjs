@@ -56,6 +56,7 @@ import { credentialsAPI, vaultCapability } from './vault.mjs';
 import { enginesAPI, engineCapability } from './engines.mjs';
 import { aiUsageAPI } from './ai-usage.mjs';
 import { costsAPI } from './costs.mjs';
+import { capacityAPI, capacityMetrics } from './capacity.mjs';
 import { searchAPI, searchCapability, searchFeature } from './search.mjs';
 import { searchMaintenance } from './search-index.mjs';
 import { agentPolicy } from './agent-policy.mjs';
@@ -125,7 +126,7 @@ export async function admitMCP(request) {
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
-  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/costs/read', '/native/search/read', '/native/agentic-mode/read', '/native/land/read', '/native/agent-inbox/read', '/native/automations/read'].includes(new URL(request.url).pathname)) return true;
+  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/costs/read', '/native/capacity/read', '/native/search/read', '/native/agentic-mode/read', '/native/land/read', '/native/agent-inbox/read', '/native/automations/read'].includes(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
   if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
   if (/^\/rpc\/golf\.v1\.(?:FeaturePolicyService\/GetFeaturePolicy|RepositoryFeatureService\/GetRepositoryFeatures)$/.test(new URL(request.url).pathname)) return true;
@@ -486,6 +487,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       async id => (await advanceEvidence(env,id,'authorize-test')).state === 'AUTHORIZED',
       (id,source) => testGit(env,id,source,undefined,providerFetch));
     }
+    // Queue depth for autoscalers (docs/RUNNER_CAPACITY.md): a capacity metrics token only, which no other route accepts.
+    if (url.pathname === '/native/capacity/metrics') return await capacityMetrics(db, request, url);
     // Agent hosts: host credential and task token routes, outside Access (docs/AGENT_HOSTS.md).
     if (url.pathname.startsWith('/native/agent-host/')) return await agentHostMachine(db, env, request, url, withArtifact, providerFetch);
     // Remote MCP (docs/AGENT_ACCESS.md): each tool calls the UI's own route as an internal request under the caller's credential.
@@ -626,6 +629,12 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (url.pathname === '/native/ai-models' || url.pathname === '/native/ai-models/read') return await aiModelsAPI(db, env, person, request, body, url.pathname.endsWith('/read'), () => authorizedRepository(db, person, body.repository, env, body.repositoryId));
     if (url.pathname === '/native/ai-usage/read') return await aiUsageAPI(db, env, person, request, body, providerFetch);
     if (url.pathname === '/native/costs/read') return await costsAPI(db, env, person, request, body, providerFetch);
+    if (url.pathname === '/native/capacity' || url.pathname === '/native/capacity/read') {
+      const response = await capacityAPI(db, env, person, request, body, url.pathname.endsWith('/read'), providerFetch);
+      // An approved request may change agent rate budgets: like an installation update, it applies to this workspace's next request.
+      if (!url.pathname.endsWith('/read') && response.ok) env.agentBudgets?.invalidate();
+      return response;
+    }
     if (url.pathname === '/native/runner-placement') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'actions');
       if (body.repositoryId !== String(row.id)) deny();
@@ -797,6 +806,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       { id: 'settings.ai-models', label: 'AI models', state: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'Operations administrators choose the Workers AI model for each AI use case within the deploy list, from the account catalog; repositories choose only where allowed. Clef stays fixed for advice and triage.' : 'Workers AI is not allocated on this installation (enable-ai).' },
       { id: 'operations.ai-usage', label: 'AI usage', state: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.AI && env.EVIDENCE_ALLOW_AI === 'true' ? 'Golf’s own run ledger by feature, model and day against the daily AI limit; AI Gateway analytics when an Account Analytics Read token is bound. Cloudflare billing is authoritative.' : 'Workers AI is not allocated on this installation (enable-ai).' },
       { id: 'operations.costs', label: 'Estimated costs', state: 'CAPABILITY_STATE_READY', reason: 'Estimates from Workers Paid list prices, not a bill: month-to-date and projected usage per Cloudflare service, and a scale-up what-if from unit costs measured here. ' + (env.OPERATIONS_ANALYTICS_TOKEN ? 'Usage is read with the Account Analytics Read token.' : 'No Account Analytics Read token is bound (enable-analytics), so usage is not read; rates and the what-if still work.') },
+      { id: 'operations.capacity', label: 'Runner capacity', state: 'CAPABILITY_STATE_READY', reason: 'Runner capacity per source (self-hosted runner pools, native pools, Cloudflare containers, agent and SSH hosts) with queued and running work; queue depth per pool for autoscalers with a read-only metrics token; capacity requests a second operations administrator approves, with the estimated cost change where Golf can price it. Golf never starts machines. Requests and metrics tokens need the schema 49 migration.' },
       { id: 'settings.installation-audit', label: 'Installation audit log', state: env.installationSchema ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED', reason: env.installationSchema ? 'Append-only record of privileged and state-changing actions at installation, organization and repository scope. Operations administrators read all of it through Access; organization owners and repository administrators read their own scope.' : 'Apply the schema 30 migration to keep an installation audit log.' },
       // The portable administration pages these name have no native service; the specific reason replaces a generic blocked page.
       { id: 'settings.execution', label: 'Installation execution policy', state: 'CAPABILITY_STATE_DISABLED', reason: 'Cloudflare native has no installation-wide execution policy service. Repository administrators switch pull-request runs per repository; the approved workflow is fixed at deploy.' },

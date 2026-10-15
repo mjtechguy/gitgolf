@@ -15,7 +15,7 @@ import { defaultAppearance } from './public.mjs';
 import { agentBudgetsPolicy, budgetOverlayValue } from './agent-budgets.mjs';
 
 // Newest first: the first table present names the applied schema.
-const schemaTables = [[47, 'ssh_hosts'], [46, 'automation_runs'], [45, 'vault_credentials'], [43, 'pull_intent_summaries'], [42, 'land_operations'], [41, 'repository_agentic_settings'], [40, 'git_ref_unknown'], [39, 'api_tokens'], [38, 'source_commits'], [37, 'git_ref_writes'], [36, 'agent_tasks'], [35, 'pipeline_intake'], [34, 'search_state'], [33, 'repository_ai_models'], [32, 'ai_runs'], [31, 'policy_revisions'], [30, 'installation_audit'], [29, 'discussion_attachment_operations'], [28, 'repository_release_operations'], [27, 'email_deliveries'], [26, 'execution_value_brokers'],
+const schemaTables = [[49, 'capacity_requests'], [47, 'ssh_hosts'], [46, 'automation_runs'], [45, 'vault_credentials'], [43, 'pull_intent_summaries'], [42, 'land_operations'], [41, 'repository_agentic_settings'], [40, 'git_ref_unknown'], [39, 'api_tokens'], [38, 'source_commits'], [37, 'git_ref_writes'], [36, 'agent_tasks'], [35, 'pipeline_intake'], [34, 'search_state'], [33, 'repository_ai_models'], [32, 'ai_runs'], [31, 'policy_revisions'], [30, 'installation_audit'], [29, 'discussion_attachment_operations'], [28, 'repository_release_operations'], [27, 'email_deliveries'], [26, 'execution_value_brokers'],
   [25, 'repository_execution_policy'], [24, 'pull_merge_operations'], [23, 'repository_environment_operations'], [22, 'repository_visibility'], [21, 'native_owners'],
   [20, 'gitlab_runner_jobs'], [19, 'native_runner_pools'], [18, 'pull_review_operations'], [17, 'git_credentials'], [16, 'repository_rule_operations'],
   [15, 'webhook_subscriptions'], [14, 'discussion_events'], [13, 'discussion_resources'], [12, 'repository_invitations'], [11, 'repository_access_operations'],
@@ -187,6 +187,8 @@ function current(env, key, row) {
   if (!deploy || !row || locked(env)) return { deploy, value: deploy, unreadable: false };
   try { return { deploy, value: policy.effective(env, JSON.parse(row.value), deploy), unreadable: false }; } catch { return { deploy, value: deploy, unreadable: true }; }
 }
+// The deploy ceiling and the value that applies now for one policy (capacity.mjs reads it for requests).
+export const installationPolicyState = (env, key, row) => current(env, key, row);
 export function installationOverlay(env, rows) {
   const overlay = { installationOff: [], installationSchema: Boolean(rows) };
   if (!rows || locked(env)) return overlay;
@@ -254,6 +256,14 @@ export async function installationAPI(db, env, person, request, body, read) {
     return reply({ entries: results.slice(0, paging.limit).map(auditRow), page: { nextPage: results.length > paging.limit ? paging.number + 1 : 0 } });
   }
   if (read || body.action !== 'update') invalid('Use the read or audit action on the read route and the update action on the write route.');
+  return reply(await applyInstallationChange(db, env, person, request, body));
+}
+
+/* The one way an installation policy value changes: /native/installation update, and an approved capacity request (capacity.mjs), so both
+ * get the same validation, revision fence, typed confirmation and recent Access sign-in for widening, idempotent receipt and audit row.
+ * change: { key, value, expectedVersion, operationId, confirmation? }. guard: { sql, values } ANDed into the settings write, so the change is
+ * written only while it holds; then: statements appended to the same D1 batch. Returns the receipt. */
+export async function applyInstallationChange(db, env, person, request, body, { guard = null, then = [] } = {}) {
   if (locked(env)) throw new Fault('failed_precondition', 412, editing(env).reason);
   const policy = Object.hasOwn(installationPolicies, body.key) ? installationPolicies[body.key] : null;
   if (!policy) invalid('Choose an installation setting.');
@@ -266,7 +276,7 @@ export async function installationAPI(db, env, person, request, body, read) {
   const previous = await db.prepare('SELECT * FROM installation_operations WHERE operation_id=?').bind(body.operationId).first();
   if (previous) {
     if (previous.actor_id !== person.id || previous.input_hash !== inputHash) throw new Fault('already_exists', 409, 'This operation ID belongs to another change.');
-    return reply(JSON.parse(previous.receipt));
+    return JSON.parse(previous.receipt);
   }
   const version = Number(body.expectedVersion);
   if ((rows.get(body.key)?.version || 0) !== version) stale();
@@ -280,12 +290,17 @@ export async function installationAPI(db, env, person, request, body, read) {
   const admin = 'EXISTS(SELECT 1 FROM operations_admins a JOIN users u ON u.id=a.user_id WHERE a.user_id=? AND a.active=1 AND u.active=1 AND u.email=?)';
   const receipt = { key: body.key, version: String(version + 1), value: after, widening, operationId: body.operationId, at: time };
   // One batch: the revision-fenced write, its audit row and the receipt. A stale version or a revoked administrator writes none of them.
+  const guarded = guard ? ` AND ${guard.sql}` : '', guardValues = guard ? guard.values : [];
   await db.batch([
-    version ? db.prepare(`UPDATE installation_settings SET value=?,version=version+1,updated_by=?,updated_at=? WHERE key=? AND version=? AND ${admin}`).bind(text, person.id, time, body.key, version, person.id, email)
-      : db.prepare(`INSERT INTO installation_settings(key,value,version,updated_by,updated_at) SELECT ?,?,1,?,? WHERE ${admin} ON CONFLICT(key) DO NOTHING`).bind(body.key, text, person.id, time, person.id, email),
+    version ? db.prepare(`UPDATE installation_settings SET value=?,version=version+1,updated_by=?,updated_at=? WHERE key=? AND version=? AND ${admin}${guarded}`).bind(text, person.id, time, body.key, version, person.id, email, ...guardValues)
+      : db.prepare(`INSERT INTO installation_settings(key,value,version,updated_by,updated_at) SELECT ?,?,1,?,? WHERE ${admin}${guarded} ON CONFLICT(key) DO NOTHING`).bind(body.key, text, person.id, time, person.id, email, ...guardValues),
     auditStatement(db, { actor: person, actorEmail: email, scope: 'installation', scopeId: env.WORKSPACE_SLUG, subject: body.key, action: 'update', before, after, widening, operationId: body.operationId, client: clientHeaders(request) }),
     db.prepare('INSERT INTO installation_operations(operation_id,actor_id,input_hash,receipt,created_at) SELECT ?,?,?,?,? WHERE changes()=1').bind(body.operationId, person.id, inputHash, JSON.stringify(receipt), time),
+    ...then,
   ]);
-  if (!await db.prepare('SELECT 1 AS saved FROM installation_operations WHERE operation_id=?').bind(body.operationId).first()) { await requireAdmin(); stale(); }
-  return reply(receipt);
+  if (!await db.prepare('SELECT 1 AS saved FROM installation_operations WHERE operation_id=?').bind(body.operationId).first()) {
+    if (!await operationsAdmin(db, person, request)) throw new Fault('permission_denied', 403, 'Current workspace operations administrator sign-in required.');
+    stale();
+  }
+  return receipt;
 }

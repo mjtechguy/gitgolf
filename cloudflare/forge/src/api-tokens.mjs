@@ -28,8 +28,11 @@ export function apiTokenSecret(authorization) {
     return match && btoa(decoded) === authorization.slice(6) ? { secret: match[1], basic: true } : null;
   } catch { return null; }
 }
+// A capacity metrics token (capacity.mjs, docs/RUNNER_CAPACITY.md): read-only queue depth for autoscalers, on that one route only.
+export const capacityTokenPattern = /^golf_capacity_[A-Za-z0-9_-]{43}$/;
 // Routes a token reaches from outside: the public Worker skips Access for exactly these when one is presented.
 export function machineTokenRoute(path, authorization) {
+  if (path === '/native/capacity/metrics') return (authorization || '').startsWith('Bearer ') && capacityTokenPattern.test(authorization.slice(7));
   const token = apiTokenSecret(authorization || '');
   return Boolean(token) && (!token.task && gitRoute.test(path) || !token.basic && (path === '/mcp' || path.startsWith('/native/source/')));
 }

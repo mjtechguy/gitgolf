@@ -214,3 +214,11 @@ test('stateless routes: Git, the Source API and estimated costs; everything else
   for (const path of ['/native/costs/read', '/native/source/tree']) assert.equal(route(path, 'GET'), null);
   for (const path of ['/native/costs', '/native/ai-usage/read', '/rpc/golf.v1.RepositoryService/GetRepository', '/mcp']) assert.equal(route(path), null, path);
 });
+
+test('runner capacity: the inventory read and the autoscaler metric are stateless reads; requests and decisions stay in the Workspace', () => {
+  const route = (path, method = 'POST') => statelessRoute(new Request('https://golf.example.com' + path, { method }));
+  assert.equal(route('/native/capacity/read'), 'read');
+  assert.equal(route('/native/capacity/metrics?engine=forgejo-actions&labels=docker', 'GET'), 'read');
+  assert.equal(route('/native/capacity/read', 'GET'), null); assert.equal(route('/native/capacity/metrics'), null);
+  assert.equal(route('/native/capacity'), null);
+});

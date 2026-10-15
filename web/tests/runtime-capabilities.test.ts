@@ -64,6 +64,11 @@ test('estimated costs mount only where the installation reports them',()=>{
  assert.equal(settingForRoute('instance-settings','costs',false),'operations.costs');
 });
 
+test('runner capacity mounts only where the installation reports it',()=>{
+ assert.equal(settingForRoute('instance-settings','capacity',true),'operations.capacity');
+ assert.equal(settingForRoute('instance-settings','capacity',false),'operations.capacity');
+});
+
 test('feature policies narrow what the installation reports; unallocated features and missing reads fall back',()=>{
  const native={runtimeProfile:'cloudflare-native',capabilities:[{id:'repository.releases',state:3,reason:''}]};
  assert.equal(settingForRoute('instance-settings','features',true),'settings.feature-policy');

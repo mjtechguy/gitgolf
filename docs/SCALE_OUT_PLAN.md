@@ -1,6 +1,6 @@
 # Scale-out plan: moving long I/O-bound work out of the Workspace Durable Object
 
-Status: S1–S3 built; S1, S2 and the MCP part of S3 measured on the hosted demo, 2026-10-15. S6 built, its analytics reads checked against the live API. S4 not needed yet; S5 proposed. Follows AGENTIC_MODE_PLAN AM-1 item 5 and AM-6, and replaces the "RepositoryWrites split only if CPU
+Status: S1–S3 built; S1, S2 and the MCP part of S3 measured on the hosted demo, 2026-10-15. S6 built, its analytics reads checked against the live API. S4 not needed yet; S5 slice 1 built (inventory, autoscaler metric, approved capacity requests), not yet on hosted. Follows AGENTIC_MODE_PLAN AM-1 item 5 and AM-6, and replaces the "RepositoryWrites split only if CPU
 is the limit" condition with measured evidence. Benchmark: [benchmarks/2026-10-15-100-agents](benchmarks/2026-10-15-100-agents/README.md).
 
 ## Evidence
@@ -144,6 +144,35 @@ The base scaling above stops the forge from being the bottleneck; this phase mak
   - an operator approves or declines in the admin UI;
   - the request, the approval and the applied value are audited.
 - **Evidence:** a bench run at the new limit, with queue wait and cost per run recorded.
+- **Status (2026-10-15): slice 1 built and tested locally; not yet deployed.** See [RUNNER_CAPACITY.md](RUNNER_CAPACITY.md).
+  - **Inventory:** `cloudflare/forge/src/capacity.mjs`, `POST /native/capacity/read`, operations administrators only, in the
+    stateless Worker. Page `/admin/capacity`, next to Estimated costs. It covers:
+    - self-hosted Forgejo and GitLab runners, pooled by engine and label names with the claim's own matching rule: registered,
+      active and online runners, running, queued and the oldest wait, plus jobs no active runner can take;
+    - native pools, Cloudflare containers and agent and SSH hosts.
+    - Container `max_instances` is not bound into the Worker, so the allocation is shown as not known. Golf's own admission limit
+      (2 PR test and agent proposal containers) is shown as such.
+  - **Metric:** `GET /native/capacity/metrics?engine=…&labels=…` for KEDA `metrics-api` or an HPA. It is read with a read-only
+    `golf_capacity_` token that an administrator creates and revokes on the page; the token is shown once, stored as SHA-256,
+    expires, and is accepted on no other route. The public Worker passes it through Access as a machine route. Golf never starts
+    machines.
+  - **Requests:** schema 49 `capacity_requests`. A request raises one field of `evidence`, `previews` or `agent-budgets`.
+    - It is validated by the policy's own bounds; above the ceiling, up to what a deploy can allocate, it is marked needs-deploy.
+    - The estimated monthly cost change uses S6's measured cost per CI run for daily admissions; other settings have no cost model
+      and say so.
+    - A different administrator approves or declines; the requester can withdraw.
+    - Approval applies through `installation.mjs` `applyInstallationChange`, the `/native/installation` path, with the same typed
+      confirmation, 10-minute Access sign-in for widening, revision fence and audit row.
+    - A needs-deploy request records APPROVED with the `golf_cloudflare.py update` step, and is applied after the deploy raises the
+      ceiling.
+    - Every action is audited.
+  - **Remaining for S5:**
+    - organization and repository shares within the installation value;
+    - a self-hosted pool's concurrency cap (and a native pool's `max_parallel`) as an installation policy that requests can raise;
+    - container `max_instances` bound into the Worker;
+    - container time in the request cost;
+    - requests from organization owners;
+    - a bench run at a newly approved limit, with queue wait and cost per run recorded.
 
 ### S6: estimated costs in the admin UI (now and when scaling up)
 
@@ -181,7 +210,8 @@ An **Estimated costs** page under Admin → Operations.
     count and instance size; self-hosted runners from an entered hourly rate. Every assumption is editable.
   - Deploy: `prepare.mjs` now binds `OPERATIONS_DATABASE_ID` and `OPERATIONS_BUCKETS`. Without them, D1 rows are read for the
     whole account and D1 size is not read.
-  - **Open:** the S5 tie-in (capacity requests show the cost change); a hosted read to confirm each dataset and field.
+  - **Open:** a hosted read to confirm each dataset and field. The S5 tie-in is built for daily admissions (S5 slice 1); other
+    capacity settings have no cost model yet.
 - **Usage Golf already records exactly** stays as recorded: AI runs (Workers AI usage, provider tokens and costs as reported) and
   agent tasks (usage as the tool reports it).
 

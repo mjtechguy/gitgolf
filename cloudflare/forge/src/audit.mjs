@@ -151,6 +151,12 @@ const native = {
     after: () => clean({ kind: 'intent-summary', number: whole(body.number) }) },
   installation: body => ({ action: 'installation_policy.update', scope: 'installation', batch: true, subject: () => clip(body.key, 40) }),
   'installation/read': () => adminDenial('the installation settings'),
+  // Runner capacity (docs/RUNNER_CAPACITY.md): requests, decisions and metrics tokens write their own rows in the same batch (capacity.mjs);
+  // an applied request also writes the installation policy row. These record denials and refused (FAILED) approvals. Never a token secret.
+  capacity: body => capacityActions[body.action] && { action: capacityActions[body.action], scope: 'installation', batch: true,
+    subject: async c => ['createMetricsToken', 'revokeMetricsToken'].includes(body.action) ? clip(body.label, 64) || (whole(body.id) && (await one(c.db, 'SELECT label FROM capacity_metrics_tokens WHERE id=?', whole(body.id)))?.label) || token(body.id)
+      : body.action === 'request' ? clip(`${body.key}.${body.field}`, 80) : (whole(body.id) && await one(c.db, "SELECT policy_key||'.'||field AS name FROM capacity_requests WHERE id=?", whole(body.id)))?.name || token(body.id) },
+  'capacity/read': () => adminDenial('runner capacity'),
   'ai-models': body => ({ action: body.repository ? 'repository_ai_model.update' : 'ai_model.update', scope: body.repository ? 'repository' : 'installation', batch: true, subject: () => clip(body.use, 40) && 'ai.model.' + clip(body.use, 40) }),
   'audit/read': body => body.scope === 'installation' && adminDenial('the installation audit log'),
   // Credential vault and engines (docs/CREDENTIAL_VAULT.md, docs/ENGINES.md): each change writes its own row in the same batch (vault.mjs,
@@ -165,6 +171,8 @@ const native = {
     subject: c => body.action === 'select' ? 'engine:' + (clip(body.use, 40) || '') : c.engine?.name || clip(body.name, 80) || token(body.id) },
 };
 
+const capacityActions = { request: 'capacity_request.create', withdraw: 'capacity_request.withdraw', approve: 'capacity_request.approve', decline: 'capacity_request.decline',
+  createMetricsToken: 'capacity_metrics_token.create', revokeMetricsToken: 'capacity_metrics_token.revoke' };
 const automationActions = body => ({ create: 'automation.create', update: 'automation.update', delete: 'automation.delete', run: 'automation.run',
   setEnabled: body.enabled === true ? 'automation.enable' : body.enabled === false ? 'automation.disable' : undefined, killSwitch: body.engaged === true ? 'automation.kill_switch' : body.engaged === false ? 'automation.release_kill_switch' : undefined })[body.action];
 const automationSummary = a => { const parse = text => { try { return JSON.parse(text); } catch { return {}; } };
@@ -360,7 +368,7 @@ export async function audited(request, env, run, identify) {
 
 /* Reading. Categories are the action prefix; the first installation policy rows used the bare action 'update'. */
 const categories = [['installation_policy', 'Installation policy', ['update', 'installation_policy.']], ['feature_policy', 'Feature policy'], ['ai_model', 'AI models', ['ai_model.', 'repository_ai_model.']],
-  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.', 'ssh_host.']], ['api_token', 'API tokens'], ['credential', 'Credentials'], ['engine', 'Engines', ['engine.', 'engine_selection.']], ['agentic_mode', 'Agentic mode'], ['automation', 'Automations'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
+  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['capacity', 'Runner capacity', ['capacity_request.', 'capacity_metrics_token.']], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.', 'ssh_host.']], ['api_token', 'API tokens'], ['credential', 'Credentials'], ['engine', 'Engines', ['engine.', 'engine_selection.']], ['agentic_mode', 'Agentic mode'], ['automation', 'Automations'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
   ['repository_invitation', 'Invitations'], ['protected_branch', 'Rules', ['protected_branch.', 'protected_tag.']], ['hook', 'Webhooks'], ['repository_secret', 'Secrets and variables', ['repository_secret.', 'repository_variable.']],
   ['environment', 'Environments'], ['git_credential', 'Git credentials'], ['git_write', 'Git writes'], ['preview', 'Previews'], ['release', 'Releases', ['release.', 'release_asset.']], ['pull_request', 'Pull requests', ['pull_request.', 'pull_request_review.']],
   ['label', 'Labels and milestones', ['label.', 'milestone.']], ['ai', 'AI runs', ['ai.']], ['actions', 'Actions runs']].map(([id, label, prefixes]) => ({ id, label, prefixes: prefixes || [id + '.'] }));
@@ -427,6 +435,11 @@ const phrases = {
   'automation.disable': ['turned off', 'turn off', e => named('automation', e.subject)], 'automation.kill_switch': ['engaged the kill switch of', 'engage the kill switch of', e => named('automation', e.subject)],
   'automation.release_kill_switch': ['released the kill switch of', 'release the kill switch of', e => named('automation', e.subject)],
   'automation.run': ['ran', 'run', e => `${named('automation', e.subject)}${e.after?.number ? ' on #' + e.after.number : e.after?.runId ? ' on run ' + e.after.runId : ''}`],
+  'capacity_request.create': ['requested', 'request', e => `more capacity for ${e.subject}${e.after?.value !== undefined ? ' (' + e.after.value + (e.after.needsDeploy ? ', needs a deploy' : '') + ')' : ''}`],
+  'capacity_request.approve': ['approved', 'approve', e => `the capacity request for ${e.subject}${e.after?.state === 'APPLIED' ? ', applied' : e.after?.needsDeploy ? ', waiting for a deploy' : ''}`],
+  'capacity_request.apply': ['applied', 'apply', e => `the approved capacity request for ${e.subject}`],
+  'capacity_request.decline': ['declined', 'decline', e => `the capacity request for ${e.subject}`], 'capacity_request.withdraw': ['withdrew', 'withdraw', e => `the capacity request for ${e.subject}`],
+  'capacity_metrics_token.create': ['created', 'create', e => named('capacity metrics token', e.subject)], 'capacity_metrics_token.revoke': ['revoked', 'revoke', e => named('capacity metrics token', e.subject)],
   'api_token.create': ['created', 'create', e => `${e.after?.permission ? e.after.permission + ' ' : ''}API token ${e.subject}`], 'api_token.revoke': ['revoked', 'revoke', e => named('API token', e.subject)],
   'api_token.use_denied': ['was refused with', 'use', e => `${e.after?.agentTaskId ? 'an agent task token' : 'an API token'} (${e.after?.reason === 'branch' ? 'branch outside its pattern' : e.after?.reason === 'permission' ? 'read-only token' : 'repository outside its scope'})`],
   'credential.create': ['added', 'add', e => named('credential', e.subject)], 'credential.rotate': ['rotated', 'rotate', e => named('credential', e.subject)], 'credential.revoke': ['revoked', 'revoke', e => named('credential', e.subject)],
