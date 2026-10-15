@@ -24,6 +24,7 @@ import { pipelinePolicy, pipelineCapabilities } from './pipeline-policy.mjs';
 import { pipelineAPI, pipelineRunnerAPI } from './pipeline-api.mjs';
 import { agentHostsAPI, agentTasksAPI, agentHostCapability } from './agent-hosts.mjs';
 import { agentHostMachine } from './agent-host-protocol.mjs';
+import { sshHostsAPI, sshCapability } from './ssh-hosts.mjs';
 import { apiTokenSecret, apiTokenActor, apiTokenCapability, apiTokensAPI, scopeRepository, scopePush, budgetSubject } from './api-tokens.mjs';
 import { mcpEndpoint, mcpClass, mcpBodyLimit, mcpActivity } from './mcp.mjs';
 import { chargeBudget, budgetJSON, budgetText } from './agent-budgets.mjs';
@@ -542,6 +543,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       return row;
     }));
     if (url.pathname === '/native/agent-hosts') return reply(await agentHostsAPI(db, env, person, request, body));
+    if (url.pathname === '/native/ssh-hosts') return reply(await sshHostsAPI(db, env, person, request, body));
     const source = sourceRoute.exec(url.pathname);
     if (source) {
       // An API token's or agent task's call is charged to its rate budget first; an MCP tool's internal call was charged as the tool call.
@@ -742,6 +744,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       await searchCapability(db, env),
       await agentHostCapability(db),
       await automationCapability(db),
+      await sshCapability(db, env),
       await sourceCapability(db),
       await apiTokenCapability(db),
       await vaultCapability(db, env),

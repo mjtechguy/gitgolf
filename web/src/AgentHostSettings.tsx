@@ -6,6 +6,7 @@ import { nativeAPI as api } from './nativeAPI';
 import { CopyButton, DateLabel, Loading, privateQuery } from './RepositoryUI';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { scopeLabels, signedInLabel, toolLabel, tools, type AgentHost, type HostInventory, type HostScope } from './agentHosts';
+import { SSHHostSettings } from './SSHHostSettings';
 
 const message = (error: unknown) => error instanceof Error ? error.message : 'The agent host operation could not be confirmed.';
 // Connection only; the State column says whether the host takes tasks.
@@ -75,6 +76,7 @@ export function AgentHostSettings({ target, userId }: { target: HostScope; userI
         { id: 'expires', header: 'Expires', accessorFn: t => t.expiresAt, cell: ({ row }) => <DateLabel value={row.original.expiresAt} relative /> },
         ...(manage ? [{ id: 'revoke', header: 'Actions', enableSorting: false, cell: ({ row }) => <button className="button secondary" disabled={busy} aria-label={`Revoke token ${row.original.id}`} onClick={() => void act({ action: 'revokeToken', id: row.original.id }, 'The registration token was revoked.')}>Revoke</button> } as DataTableColumn<{ id: string; expiresAt: string; usesLeft: number }>] : []),
       ]} /></section> : null}
+    <SSHHostSettings target={target} userId={userId} EditHost={EditHost} />
   </div>;
 }
 
@@ -94,8 +96,8 @@ function NewHost({ target, close, done }: { target: HostScope; close: () => void
   </form>;
 }
 
-type HostChanges = { name: string; state: AgentHost['state']; shareSignins: boolean; allowedUsers: string[]; allowedRepositories: string[]; enabledTools: string[]; maxConcurrent: number };
-function EditHost({ host, busy, close, save }: { host: AgentHost; busy: boolean; close: () => void; save: (value: HostChanges) => Promise<void> }) {
+export type HostChanges = { name: string; state: AgentHost['state']; shareSignins: boolean; allowedUsers: string[]; allowedRepositories: string[]; enabledTools: string[]; maxConcurrent: number };
+export function EditHost({ host, busy, close, save }: { host: AgentHost; busy: boolean; close: () => void; save: (value: HostChanges) => Promise<void> }) {
   const personal = host.scope === 'personal';
   const form = useForm({ defaultValues: { name: host.name, state: host.state, shareSignins: host.shareSignins, allowedUsers: host.allowedUsers.join(', '), allowedRepositories: host.allowedRepositories.join(', '), enabledTools: host.enabledTools, maxConcurrent: host.maxConcurrent },
     onSubmit: async ({ value }) => save({ ...value, name: value.name.trim(), allowedUsers: listText(value.allowedUsers), allowedRepositories: listText(value.allowedRepositories) }) });

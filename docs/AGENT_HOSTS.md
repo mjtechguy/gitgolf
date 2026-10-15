@@ -5,7 +5,7 @@ connects runs the coding CLIs that are already installed and signed in there (Co
 Claude Code, OpenCode, Grok), and Golf assigns it work from an issue or a pull
 request. The result is a proposal branch in the repository with a live log; a person
 opens the pull request, or the agent opens it through Golf's MCP tools with its task
-token ([Golf MCP for the task](#golf-mcp-for-the-task)). SSH hosts reached from Golf (phase 1b) and everything in later
+token ([Golf MCP for the task](#golf-mcp-for-the-task)). SSH hosts reached from Golf (phase 1b) are specified in [SSH_HOSTS.md](SSH_HOSTS.md); they reuse this model, its admission rules, task states and task protocol. Everything in later
 phases are out of scope here.
 
 Three parts are built against this contract in parallel: the Worker (schema, host

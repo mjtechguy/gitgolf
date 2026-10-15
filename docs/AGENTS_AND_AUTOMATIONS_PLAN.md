@@ -139,6 +139,15 @@ and limits, or create a custom automation from scratch.
    - adapters for Codex, Claude Code and OpenCode;
    - "Assign to agent" on issues and pull requests;
    - proposal branches with a live log.
+
+   **Status (2026-10-15): phase 1a hosted. Phase 1b (SSH hosts) built and verified locally, not yet hosted.**
+   Phase 1b is described in [SSH_HOSTS.md](SSH_HOSTS.md), schema 47:
+   - SSH hosts are agent hosts that Golf reaches itself, with the same sharing, admission, task states and protocol;
+   - Golf generates a sealed Ed25519 key per host;
+   - the host key is pinned only after a person confirms the fingerprint a connection test reported;
+   - Golf dispatches each task to an `SSHAgentTask` container running `golf-agent-host ssh-run`.
+
+   It needs the deploy changes listed in that document.
 2. **Engines, credential vault and the automation framework:**
    - engines, the credential vault (user subscriptions and keys, organization and
      installation keys) and engine selection, which replaces per-use-case model
@@ -176,6 +185,15 @@ and limits, or create a custom automation from scratch.
      ACLs;
    - Cloudflare Tunnel / Workers VPC / Mesh for SSH hosts on private networks.
 
+   **Status (2026-10-15): reach for SSH hosts built and verified locally with stand-ins, not yet hosted.**
+   See [SSH_HOSTS.md](SSH_HOSTS.md#reach):
+   - **Tailscale:** an ephemeral node per task, in userspace networking, with a sealed auth key and tags;
+   - **Cloudflare Tunnel:** `cloudflared access ssh`, with an optional Access service token;
+   - **Workers VPC:** a Durable Object bridge to a `vpc_networks` binding. It reports itself unavailable until the binding
+     exists, and has not been tried against a real VPC network.
+
+   Tailscale for cloud sandboxes waits for phase 3.
+
 ## Open items to verify while building
 
 - Whether each provider's terms allow a personal subscription to run in a hosted
@@ -184,6 +202,13 @@ and limits, or create a custom automation from scratch.
   were checked only against third-party write-ups so far.
 - Whether a Cloudflare Container can reach SSH hosts through Workers VPC TCP, or
   whether Tunnel or Tailscale inside the container is needed.
+  - Answered from the docs on 2026-10-15 (see [SSH_HOSTS.md](SSH_HOSTS.md#decision-ssh-runs-inside-a-container-not-in-the-worker)).
+    A Container has no Workers VPC binding and no outbound TCP interception. A Worker
+    or Durable Object has `vpc_networks` `connect()` for plaintext TCP.
+  - Golf therefore bridges `getTcpPort().connect()` to the VPC socket in the Durable
+    Object.
+  - Tunnel and Tailscale inside the container are the documented paths.
+  - Still to verify on a hosted installation.
 - Cron Triggers do not fire on this account, so schedules use Durable Object alarms,
   as maintenance already does.
 

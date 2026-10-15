@@ -296,7 +296,7 @@ func cmdRun(ctx context.Context, args []string, stdout io.Writer) error {
 }
 
 func main() {
-	usage := "usage:\n  GOLF_AGENT_REGISTRATION_TOKEN=… golf-agent-host register --origin URL --name NAME --state DIR\n  golf-agent-host run --state DIR [--config FILE] [--keep-work]"
+	usage := "usage:\n  GOLF_AGENT_REGISTRATION_TOKEN=… golf-agent-host register --origin URL --name NAME --state DIR\n  golf-agent-host run --state DIR [--config FILE] [--keep-work]\n  golf-agent-host ssh-run|ssh-probe < JOB (inside Golf's SSH host container)"
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
@@ -308,6 +308,14 @@ func main() {
 	case "run":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		err = cmdRun(ctx, os.Args[2:], os.Stdout)
+		stop()
+	case "ssh-run", "ssh-probe": // SSH hosts (ssh_run.go): one task or connection test; the job arrives on standard input
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		if os.Args[1] == "ssh-run" {
+			err = cmdSSHRun(ctx, os.Stdin, os.Stderr)
+		} else {
+			err = cmdSSHProbe(ctx, os.Stdin, os.Stdout)
+		}
 		stop()
 	default:
 		fmt.Fprintln(os.Stderr, usage)

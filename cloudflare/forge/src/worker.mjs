@@ -28,6 +28,9 @@ import { settleRefWrites } from './ref-writes.mjs';
 import { afterPipelineRun, sweepLanding } from './land-queue.mjs';
 import { AgentBudgets } from './agent-budgets.mjs';
 import { sweepAutomations, inferAutomationRuns } from './automations.mjs';
+import { sweepSSHHosts } from './ssh-hosts.mjs';
+// SSH host tasks and connection tests (docs/SSH_HOSTS.md): a container Durable Object, used only where deploy allocates it.
+export { SSHAgentTask } from './ssh-task.mjs';
 
 
 const heartbeat = 5 * 60_000;
@@ -39,6 +42,7 @@ export class Workspace extends DurableObject {
     const workflows = env.EvidenceWorkflow || ctx.exports.EvidenceWorkflow;
     this.activity = new RepositoryActivity(ctx.storage, (request, input) => this.authority({ activity: true, request, input }));
     const configured = this.configured = { ...env, previewChanged: id => this.activity.publish(String(id), ['actions', 'pulls']), performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask, pipelineCoordinator: ctx.exports.PipelineRun, notifyPipeline: id => this.activity.publish(String(id), ['actions']),
+      sshTasks: env.SSH_HOSTS_EXECUTION === 'true' ? ctx.exports.SSHAgentTask : undefined,
       AiWorkflow: env.AiWorkflow || (env.AI_WORKFLOW_NAME ? ctx.exports.AiWorkflow : undefined),
       // Rate budgets for API tokens and agent tasks (agent-budgets.mjs): in this object's memory, restarted with it.
       agentBudgets: new AgentBudgets(),
@@ -343,7 +347,8 @@ async function maintain(env, exports, owner) {
       ['indexes', async () => { const pipelines = pipelinePolicy(env) ? { ...env, pipelineCoordinator: exports.PipelineRun } : null;
         const settled = await Promise.allSettled([reconcileIndexes(env), env.SEARCH_INDEX ? advanceSearch(env) : { processed: 0 },
           pipelines ? sweepPipelines(pipelines, (await import('./core.mjs')).withArtifact, id => advancePipelineRun(pipelines, id)).then(r => ({ processed: r.intakes + r.runs })) : { processed: 0 },
-          sweepAgentTasks(env.DB.withSession('first-primary')), settleRefWrites(pipelines || env, (await import('./core.mjs')).withArtifact),
+          sweepAgentTasks(env.DB.withSession('first-primary')).then(async swept => ({ processed: swept.processed + (await sweepSSHHosts({ ...env, sshTasks: env.SSH_HOSTS_EXECUTION === 'true' ? exports.SSHAgentTask : undefined })).processed })),
+          settleRefWrites(pipelines || env, (await import('./core.mjs')).withArtifact),
           sweepLanding({ ...(pipelines || env), notifyLanding: id => owner.activityChanged(String(id), ['source', 'pulls', 'issues']).catch(() => {}) }, (await import('./core.mjs')).withArtifact),
           // Automations: due schedules and stale runs (Cron Triggers do not fire on this account; the alarm runs this stage), then a pass.
           sweepAutomations(env).then(async result => { if (result.pending) await owner.automations(); return result; })]);

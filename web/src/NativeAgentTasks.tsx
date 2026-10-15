@@ -95,7 +95,7 @@ function AssignToAgent({ context, userId, target, close, created }: { context: C
       : !hosts.length ? <p className="field-help">No agent host you may use covers this repository. Connect a machine in <Link to="/account/agents">Settings → Agent hosts</Link>, or ask an organization owner to share one.</p>
       : <form className="credential-form-content agent-assign" aria-label="Assign to agent" onSubmit={event => { event.preventDefault(); void form.handleSubmit(); }}>
         <form.Field name="choice">{field => <>{hosts.map(host => <fieldset key={host.id} className="policy-choices">
-          <legend><strong>{host.name}</strong> · {scopeLabels[host.scope] || host.scope} · {host.online ? 'online' : 'offline, the task waits until it calls in'}</legend>
+          <legend><strong>{host.name}</strong> · {scopeLabels[host.scope] || host.scope} · {host.kind === 'ssh' ? 'SSH host, Golf connects when the task starts' : host.online ? 'online' : 'offline, the task waits until it calls in'}</legend>
           {host.tools.length ? host.tools.map(tool => { const value = `${host.id}:${tool.tool}`; return <label key={tool.tool} className="policy-choice">
             <input type="radio" name="agent-choice" value={value} disabled={!tool.usable} checked={field.state.value === value} onChange={() => field.handleChange(value)} />
             <span><strong>{toolLabel(tool.tool)}</strong><small>{[tool.version, signedInLabel(tool.signedIn)].filter(Boolean).join(' · ')}</small>{!tool.usable && tool.reason ? <small className="agent-choice-reason">{tool.reason}</small> : null}</span></label>; })
@@ -141,7 +141,7 @@ function AgentTaskDetail({ context, userId, initial, writer, admin, close, listK
     </dl>
     {error ? <p className="error" role="alert">{message(error)}</p> : null}
     {active && (task.cancelRequested || requested) ? <p className="field-help" role="status">Cancellation requested. The host stops the tool at its next call to Golf.</p> : null}
-    {task.state === 'QUEUED' ? <p className="field-help" role="status">Waiting for {task.host.name} to pick the task up.</p> : null}
+    {task.state === 'QUEUED' ? <p className="field-help" role="status">{task.host.kind === 'ssh' ? `Waiting for a free slot on SSH host ${task.host.name}; Golf starts it as soon as one frees up.` : `Waiting for ${task.host.name} to pick the task up.`}</p> : null}
     {failure ? <p className="error" role="alert">{failure}</p> : null}
     {task.state === 'CANCELLED' ? <p className="field-help" role="status">The task was cancelled. {task.failureReason ? `${failureText(task)} ` : ''}Nothing was proposed.</p> : null}
     {task.state === 'NO_CHANGES' ? <p className="field-help" role="status">The tool finished without changing any file, so there is nothing to propose.</p> : null}

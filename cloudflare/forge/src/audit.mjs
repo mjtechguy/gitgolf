@@ -101,6 +101,19 @@ const native = {
     before: async c => { const h = ['update', 'delete'].includes(body.action) && whole(body.id) && await one(c.db, 'SELECT * FROM agent_hosts WHERE id=?', whole(body.id)); return h ? agentHostSummary(h) : undefined; },
     after: () => body.action === 'delete' ? null : body.action === 'revokeToken' ? clean({ id: token(body.id) }) : body.action === 'createToken' ? clean({ scope: clip(body.scope, 20), organization: clip(body.organization, 40), ttlHours: whole(body.ttlHours), uses: whole(body.uses) })
       : clean({ name: clip(body.name, 128), state: clip(body.state, 12), shareSignins: flag(body.shareSignins), allowedUsers: names(body.allowedUsers, 50), allowedRepositories: names(body.allowedRepositories, 100), enabledTools: names(body.enabledTools, 4), maxConcurrent: whole(body.maxConcurrent) }) }),
+  // SSH hosts (docs/SSH_HOSTS.md), scoped like agent hosts. Never the private key, the Tailscale auth key or the Access service token
+  // secret: only whether one was sent. A pinned host key is recorded by its public fingerprint.
+  'ssh-hosts': body => sshHostActions[body.action] && ({ action: sshHostActions[body.action],
+    scope: async c => { c.agentScope = await agentHostScope(c.db, body.action === 'create' ? { ...body, action: 'createToken' } : body); return c.agentScope?.scope === 'organization' ? 'organization' : 'installation'; },
+    scopeId: c => c.agentScope?.scopeId,
+    subject: c => body.action === 'create' ? clip(body.name, 128) : c.agentScope?.name || token(body.id),
+    before: async c => { const s = body.action !== 'create' && whole(body.id) && await one(c.db, 'SELECT s.address,s.port,s.login,s.reach,s.host_key_fingerprint,s.key_fingerprint FROM ssh_hosts s WHERE s.host_id=?', whole(body.id)); return s ? sshHostSummary(s) : undefined; },
+    after: async c => body.action === 'delete' ? null : body.action === 'trustHostKey' ? clean({ hostKeyFingerprint: clip(body.fingerprint, 100) })
+      : body.action === 'rotateKey' ? clean({ keyFingerprint: (await one(c.db, 'SELECT key_fingerprint FROM ssh_hosts WHERE host_id=?', whole(body.id) ?? 0))?.key_fingerprint })
+      : body.action === 'test' ? clean({ test: 'started' })
+      : clean({ name: clip(body.name, 128), address: clip(body.address, 253), port: whole(body.port), user: clip(body.user, 32), reach: clip(body.reach, 20), workDirectory: clip(body.workDirectory, 200),
+        tailscaleTags: names(body.tailscale?.tags, 8), tailscaleAuthKey: typeof body.tailscale?.authKey === 'string' ? 'set' : undefined,
+        accessClientId: clip(body.tunnel?.clientId, 128), accessClientSecret: typeof body.tunnel?.clientSecret === 'string' ? (body.tunnel.clientSecret ? 'set' : 'cleared') : undefined, enabledTools: names(body.enabledTools, 4) }) }),
   // Assign to agent and cancel. The instructions and the prompt are never read.
   'agent-tasks': body => body.action === 'create' ? { action: 'agent_task.create', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => whole(body.target?.number) && `#${whole(body.target.number)}`,
     after: () => clean({ kind: clip(body.target?.kind, 20), number: whole(body.target?.number), hostId: whole(body.hostId), tool: clip(body.tool, 20), model: clip(body.model, 100) }) }
@@ -162,6 +175,8 @@ async function agentHostScope(db, body) {
   const row = body.action === 'revokeToken' ? token(body.id) && await one(db, 'SELECT scope,scope_id FROM agent_host_registrations WHERE id=?', body.id) : whole(body.id) && await one(db, 'SELECT name,scope,scope_id FROM agent_hosts WHERE id=?', whole(body.id));
   return row ? { scope: row.scope, scopeId: row.scope_id, name: row.name } : null;
 }
+const sshHostActions = { create: 'ssh_host.create', update: 'ssh_host.update', delete: 'ssh_host.delete', test: 'ssh_host.test', trustHostKey: 'ssh_host.trust_host_key', rotateKey: 'ssh_host.rotate_key' };
+const sshHostSummary = s => clean({ address: clip(s.address, 253), port: s.port, user: clip(s.login, 32), reach: s.reach, hostKeyFingerprint: s.host_key_fingerprint || undefined, keyFingerprint: s.key_fingerprint });
 const agentHostSummary = h => clean({ name: clip(h.name, 128), state: h.state, shareSignins: Boolean(h.share_signins), allowedUsers: JSON.parse(h.allowed_users || '[]').length, allowedRepositories: JSON.parse(h.allowed_repositories || '[]').length,
   enabledTools: names(JSON.parse(h.enabled_tools || '[]'), 4), maxConcurrent: h.max_concurrent });
 const agenticSummary = value => clean({ enabled: flag(value.enabled), landWithoutPerson: flag(value.landWithoutPerson), revertOnFailure: flag(value.revertOnFailure),
@@ -345,7 +360,7 @@ export async function audited(request, env, run, identify) {
 
 /* Reading. Categories are the action prefix; the first installation policy rows used the bare action 'update'. */
 const categories = [['installation_policy', 'Installation policy', ['update', 'installation_policy.']], ['feature_policy', 'Feature policy'], ['ai_model', 'AI models', ['ai_model.', 'repository_ai_model.']],
-  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.']], ['api_token', 'API tokens'], ['credential', 'Credentials'], ['engine', 'Engines', ['engine.', 'engine_selection.']], ['agentic_mode', 'Agentic mode'], ['automation', 'Automations'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
+  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.', 'ssh_host.']], ['api_token', 'API tokens'], ['credential', 'Credentials'], ['engine', 'Engines', ['engine.', 'engine_selection.']], ['agentic_mode', 'Agentic mode'], ['automation', 'Automations'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
   ['repository_invitation', 'Invitations'], ['protected_branch', 'Rules', ['protected_branch.', 'protected_tag.']], ['hook', 'Webhooks'], ['repository_secret', 'Secrets and variables', ['repository_secret.', 'repository_variable.']],
   ['environment', 'Environments'], ['git_credential', 'Git credentials'], ['git_write', 'Git writes'], ['preview', 'Previews'], ['release', 'Releases', ['release.', 'release_asset.']], ['pull_request', 'Pull requests', ['pull_request.', 'pull_request_review.']],
   ['label', 'Labels and milestones', ['label.', 'milestone.']], ['ai', 'AI runs', ['ai.']], ['actions', 'Actions runs']].map(([id, label, prefixes]) => ({ id, label, prefixes: prefixes || [id + '.'] }));
@@ -400,6 +415,10 @@ const phrases = {
   'agent_host.token_revoke': ['revoked', 'revoke', () => 'an agent host registration token'], 'agent_host.update': ['updated', 'update', e => named('agent host', e.subject)], 'agent_host.delete': ['deleted', 'delete', e => named('agent host', e.subject)],
   'agent_task.create': ['assigned', 'assign', e => `${e.after?.kind === 'pull_request' ? 'pull request' : e.after?.kind === 'issue' ? 'issue' : ''} ${e.subject} to a coding agent${e.after?.tool ? ' (' + e.after.tool + ')' : ''}`.replace(/^ /, '')],
   'agent_task.cancel': ['cancelled', 'cancel', () => 'a coding agent task'],
+  'ssh_host.create': ['added', 'add', e => named('SSH host', e.subject)], 'ssh_host.update': ['changed', 'change', e => `the connection of ${named('SSH host', e.subject)}`],
+  'ssh_host.delete': ['deleted', 'delete', e => named('SSH host', e.subject)], 'ssh_host.test': ['tested', 'test', e => `the connection to ${named('SSH host', e.subject)}`],
+  'ssh_host.trust_host_key': ['trusted', 'trust', e => `the host key of ${named('SSH host', e.subject)}${e.after?.hostKeyFingerprint ? ' (' + e.after.hostKeyFingerprint + ')' : ''}`],
+  'ssh_host.rotate_key': ['replaced', 'replace', e => `Golf’s key for ${named('SSH host', e.subject)}`],
   'agentic_mode.update': ['changed', 'change', e => `agentic mode${e.after?.enabled === true ? ' (on' + (e.after.landWithoutPerson ? ', landing low-risk changes without a person' : '') + ')' : e.after?.enabled === false ? ' (off)' : ''}`],
   'agentic_mode.land': ['landed', 'land', e => named('pull request', e.subject)], 'agentic_mode.auto_land': ['landed', 'land', e => `pull request ${e.subject} without a person`],
   'agentic_mode.revert': ['reverted', 'revert', e => `pull request ${e.subject} after its required checks failed`],

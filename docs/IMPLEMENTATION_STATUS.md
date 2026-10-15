@@ -1,5 +1,104 @@
 # Golf implementation status
 
+## 2026-10-15 — SSH hosts and private-network reach, agents plan phases 1b and 5 (local evidence)
+
+**Built** ([SSH_HOSTS.md](SSH_HOSTS.md)), with schema 47 (`0047_ssh_hosts.sql`: `ssh_hosts`):
+
+- **SSH hosts are agent hosts Golf reaches itself.** Each is an `agent_hosts` row (`credential_digest` `ssh:<uuid>`) plus
+  an `ssh_hosts` row. Sharing, the admission rules, task states, deadlines, cancel, the LOST sweep and the task protocol are
+  unchanged.
+- **Rule 3 refuses an SSH host** whose host key is not confirmed or whose reach is unavailable.
+- **Keys.**
+  - Golf generates an Ed25519 key per host in the Worker.
+  - The private key and reach secrets are sealed with the credential vault's `sealSecret` (context
+    `ssh-host:<uuid>:key` or `:reach`).
+  - The public key is shown with an `authorized_keys` line (`restrict …`). Rotate key replaces the pair.
+- **Explicit trust on first use.**
+  - A connection test reads the offered host key without authenticating, and Golf computes the fingerprint.
+  - `trustHostKey` pins only the fingerprint the latest test was offered.
+  - A different key fails every connection before authentication.
+- **Execution.**
+  - On create, Golf claims the task itself, with no polling, and hands it to the new `SSHAgentTask` container Durable
+    Object.
+  - The container runs `golf-agent-host ssh-run` with the job on standard input. It clones with the task token, then
+    sends the SSH host a working copy (no token, no remote) and the prompt.
+  - It runs the CLI there with the outbound host's flags, streams the log, polls cancel, brings back the tree, then
+    commits with the agent identity and `Golf-Agent-Task` trailer, pushes `golf-agent/<id8>` and finishes. The finish is
+    verified as for outbound hosts.
+  - New Go code is in `ssh_conn.go`, `ssh_run.go` and `ssh_tar.go`; `main.go` only gains the `ssh-run` and `ssh-probe`
+    subcommands.
+- **Reach.**
+  - Direct TCP.
+  - Tailscale: an ephemeral userspace node, a sealed auth key and tags, `tailscale nc`, and logout at the end.
+  - Cloudflare Tunnel: `cloudflared access ssh`, with an optional Access service token.
+  - Workers VPC: a Durable Object bridge from `getTcpPort().connect()` to the `SSH_VPC_NETWORK` binding. It reports itself
+    unavailable until that binding exists.
+- **API and capability.**
+  - `POST /native/ssh-hosts` (`list`, `create`, `update`, `test`, `trustHostKey`, `rotateKey`, `delete`), audited as
+    `ssh_host.*`.
+  - Capability `agents.ssh-hosts`: UNCONFIGURED, with what is missing, until the container binding and
+    `SSH_HOSTS_EXECUTION` exist.
+  - `/native/agent-hosts list` no longer lists SSH hosts, and `delete` refuses them.
+- **UI.**
+  - Settings → Agent hosts gains SSH hosts: the inventory in the shared DataTable, Add SSH host (TanStack Form,
+    reach-specific fields), Install Golf's key, Test connection, Review host key, then Trust, Connection, Key and Delete.
+  - Edit reuses the agent host sharing form.
+  - The assign dialog labels SSH hosts.
+- **Image:** `cloudflare/ssh-hosts/Dockerfile`, with golf-agent-host, Git, Tailscale 1.104.1 and cloudflared 2026.10.0,
+  both SHA-256 pinned.
+
+**Evidence (local, not hosted):**
+
+- `cloudflare/forge/ssh-hosts.test.mjs`, 7 tests:
+  - capability and reach states;
+  - vault sealing contexts;
+  - create: a sealed key that opens to the shown public key, and no secret in rows, views or audit;
+  - validation and management by scope;
+  - pinning only from a confirmed test: a forged fingerprint is ignored, a mismatch keeps the pin and the tools;
+  - assignment: refused before the pin, claimed with a minted token, the protocol with that token, empty-chunk cancel
+    polling, concurrency, sweep dispatch, `ssh_dispatch_failed`, LOST and delete;
+  - the Durable Object with a mocked container: job only on stdin, token dropped after launch, cancel grace, loss, a
+    stale token, probe recording.
+- Full suite `node --test cloudflare/forge/*.test.mjs`: 693 tests, 692 pass, 1 skipped (main at 536f934: 686, 685, 1).
+- `agent-hosts-runtime-check.mjs` passes in real workerd, D1 and Durable Objects at schema 47.
+- A Miniflare check generates Golf's Ed25519 key in real workerd (48-byte PKCS#8, fingerprint equal to `parseHostKey`).
+- `go test ./cmd/golf-agent-host/` passes, including `-race` for the SSH tests. `ssh_test.go` runs a real OpenSSH
+  server (`/usr/sbin/sshd`, a temporary configuration, this user, a free port) and checks:
+  - the probe without a pin, with a pin, against another key and with Golf's key not installed;
+  - `ssh-run` succeeded (the branch, the trailer, the token absent from the remote tool's environment and argv, remote
+    work removed), no_changes, failed and folded commits;
+  - cancel from a log answer and from the silent-tool poll, and the deadline;
+  - a mismatched key refused before anything reached the host;
+  - the Tailscale, cloudflared and Workers VPC paths through stand-in helpers: the auth key only through
+    `--auth-key=file:`, `--state=mem:`, tags, logout, and the Access token in the environment;
+  - tar escapes refused;
+  - job validation.
+- `docker build --platform linux/amd64 -f cloudflare/ssh-hosts/Dockerfile .` succeeds (not pushed). `ssh-probe` from that
+  image, run with host networking against a local sshd and a key from Golf's own JavaScript generator, reports the host
+  key (fingerprint equal to `ssh-keygen -lf`), signs in, and reports `linux/amd64` and a stand-in Claude Code signed in.
+- `web/tests/native-ssh-hosts.spec.ts`: 3 tests pass against a mocked backend:
+  - the inventory, Add, install key, test, review and trust, then ready;
+  - Tailscale fields sent once and never shown;
+  - the unavailable state.
+
+  `native-agent-hosts.spec.ts` still passes (14 passed, 4 screenshot tests skipped). `tsc -b` is clean.
+
+**Deploy changes needed:** in [SSH_HOSTS.md](SSH_HOSTS.md#deploy-changes-needed):
+- a container application with image key `ssh`;
+- the `SSHAgentTask` SQLite Durable Object with that container, and its migration;
+- `SSH_HOSTS_EXECUTION=true`;
+- the existing `EXECUTION_VALUE_KEY`;
+- optionally, a `vpc_networks` binding named `SSH_VPC_NETWORK`.
+
+`deploy/alchemy` was not edited.
+
+**Not done:**
+- a hosted run: Containers egress to SSH, and Tailscale and cloudflared inside Cloudflare Containers;
+- Workers VPC against a real network;
+- Golf MCP for SSH host tasks, deliberately not offered so the token never reaches the host;
+- tested non-POSIX login shells;
+- a per-host Codex sandbox switch.
+
 ## 2026-10-15 — Automations: framework and first built-in tools (agents plan phase 2b, schema 46; local evidence)
 
 **Built:** `docs/AUTOMATIONS.md`, migration `0046_automations.sql`, `src/automations.mjs`, `src/automation-engines.mjs`, `src/automation-tools/*`.

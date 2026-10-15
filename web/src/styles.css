@@ -2171,6 +2171,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .agent-host-tools li { white-space:nowrap; }
 .agent-host-signin-no { color:var(--error); }
 .agent-host-name { min-width:9rem; }
+/* SSH hosts (docs/SSH_HOSTS.md): host key and key fingerprints wrap instead of widening the inventory. */
+.ssh-fingerprint { font-family:var(--mono); font-size:.8125rem; overflow-wrap:anywhere; word-break:break-all; }
 .agent-tasks .browser-panel-heading h3 { display:inline-flex; align-items:center; gap:8px; }
 .agent-task-row { display:flex; align-items:flex-start; gap:8px; min-width:11rem; }
 .agent-task-row .text-button { padding:0; font-size:.875rem; font-weight:600; text-align:left; }
