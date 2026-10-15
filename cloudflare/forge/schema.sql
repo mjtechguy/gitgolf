@@ -1720,3 +1720,8 @@ CREATE TABLE IF NOT EXISTS capacity_metrics_tokens (
 CREATE INDEX IF NOT EXISTS git_operations_ci_pending ON git_operations(created_at,id) WHERE state='APPLIED' AND ci_state='PENDING';
 CREATE INDEX IF NOT EXISTS pull_requests_branches ON pull_requests(head_branch,base_branch);
 CREATE INDEX IF NOT EXISTS land_operations_pull_head ON land_operations(pull_request_id,head_commit_id);
+
+-- settleRefWrites (ref-writes.mjs), every maintenance pass: it read every git_operations row and, for each dispatched one, every merge
+-- operation (77,944 rows a call on the hosted demo with 151 dispatched operations and 509 merges). Both lookups now use an index.
+CREATE INDEX IF NOT EXISTS git_operations_dispatched ON git_operations(created_at,id) WHERE state='DISPATCHED';
+CREATE INDEX IF NOT EXISTS pull_merge_operations_git ON pull_merge_operations(git_operation_id);
