@@ -78,9 +78,24 @@ function wire(saved) {
 }
 
 // An unknown outcome is settled only by reading the ref and the commit back. The pack is never sent again.
+// Two minutes after it was sent, a merge whose branch does not hold its commit was not applied (the rule settleRefWrites uses for a
+// push): it is refused and the repository released. Before that, a branch that has not moved yet stays unknown.
+export const mergeSettleAfterMs = 120_000;
 async function settle(db, env, person, row, saved, repo, providerFetch) {
   const git = await db.prepare('SELECT * FROM git_operations WHERE id=? AND repository_id=?').bind(saved.git_operation_id, row.id).first();
-  if (!git || (await inventory(env, row, repo, providerFetch)).get(git.ref) !== git.new_sha) return;
+  if (!git) return;
+  const observed = (await inventory(env, row, repo, providerFetch)).get(git.ref) || null;
+  if (observed !== git.new_sha) {
+    if (git.state !== 'DISPATCHED' || Date.now() - Date.parse(git.created_at) < (env.mergeSettleAfterMs ?? mergeSettleAfterMs)) return;
+    const at = new Date().toISOString();
+    await db.batch([
+      db.prepare("UPDATE pull_merge_operations SET phase='REJECTED',detail=?,updated_at=? WHERE actor_id=? AND operation_id=? AND phase='DISPATCH_UNKNOWN'")
+        .bind(observed === git.old_sha ? 'provider_refused' : 'pull_request_changed', at, saved.actor_id, saved.operation_id),
+      db.prepare("INSERT OR IGNORE INTO git_ref_writes(operation_id,repository_id,ref,outcome,settled_at) SELECT ?,?,?,'NOT_APPLIED',? WHERE changes()=1").bind(git.id, row.id, git.ref, at),
+      db.prepare('UPDATE repositories SET write_pending=NULL WHERE id=? AND write_pending=?').bind(row.id, git.id),
+    ]);
+    return;
+  }
   const commit = await repo.readCommit(git.new_sha), original = JSON.parse(saved.original), head = original.headCommitId;
   // A squash has the base as its only parent; a merge has base then head. Operations journaled with an expected tree
   // (every squash, and every merge since tree merges) must read back with exactly that tree.
