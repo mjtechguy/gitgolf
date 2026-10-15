@@ -1,5 +1,69 @@
 # Golf implementation status
 
+## 2026-10-15 — Credential vault and engines, agents plan phase 2a (local evidence)
+
+**Built** ([CREDENTIAL_VAULT.md](CREDENTIAL_VAULT.md), [ENGINES.md](ENGINES.md)), with schema 45 (`0045_credential_vault.sql`: `vault_credentials`,
+`vault_credential_grants`, `engines`, `engine_selections`, `ai_run_engines`):
+- **Credential vault** (`vault.mjs`):
+  - API keys at user, organization and installation scope, and personal subscription sign-ins (token files);
+  - envelope encryption: a data key per value, wrapped by the existing `EXECUTION_VALUE_KEY` Secrets Store key, bound to credential id and version;
+  - lists hold metadata only (last 4 characters of API keys); rotate and revoke;
+  - explicit grants to a person, an organization, a repository or everyone, limited by engine and place;
+  - `credentialFor()` returns an unforgeable handle or a refusal, audited as `credential.use_denied`;
+  - subscription use is refused: "cloud sandboxes are phase 3";
+  - `sealSecret` / `openSecret` exported for other stores (SSH host keys).
+- **Engines** (`engines.mjs`):
+  - built-in Workers AI engines, plus stored Cloudflare-model, provider-model (OpenAI, Anthropic, xAI, Google) and coding-CLI engines;
+  - selection per use case at installation, then organization, then repository, each only where the level above allows it;
+  - AI runs (review drafts, intent summaries, release notes, triage) now resolve through engines: with no selection they run the AI models
+    choice unchanged; a stored engine is recorded per run and re-checked before inference;
+  - provider calls go through `env.AI.gateway(id).run`, with the key only in the outbound headers;
+  - stable `listEngines` / `resolveEngine` / `runChat` interface for the automation framework.
+- **API:** `POST /native/credentials` and `/native/engines`; capabilities `settings.credentials` and `settings.engines`; audit categories
+  Credentials and Engines.
+- **UI** (inventory first, TanStack Form, shared DataTable):
+  - Settings → Credentials and engines;
+  - Organization settings → Credentials and Engines;
+  - Admin → Credentials and Engines;
+  - an Engines panel in repository settings;
+  - AI models points to Engines.
+
+**Evidence (local, not hosted):**
+- `cloudflare/forge/vault.test.mjs`, 8 tests:
+  - sealing round-trip, context, key and tamper checks;
+  - no plaintext in any answer, D1 table or audit row;
+  - rotation, revocation, grants by person, organization, repository, engine and place;
+  - scope hierarchy, subscriptions, capability and audit category.
+- `cloudflare/forge/engines.test.mjs`, 7 tests:
+  - the default resolution equals `aiModel` for every use, and a default run still calls Workers AI with the same model;
+  - precedence and override withdrawal; fallback with a note for a disabled engine;
+  - Anthropic and OpenAI request shapes through a mocked gateway, with the key only in the outbound headers;
+  - usage recorded on the run; refusal at admission and before inference;
+  - `listEngines`, `resolveEngine` and `runChat`; xAI and Google shapes;
+  - a provider error never carrying the key.
+- Full suite `node --test cloudflare/forge/*.test.mjs`: 681 tests, 680 pass, 1 skipped (main: 666, 665, 1).
+- `ai-runtime-check.mjs`, `ai-review-runtime-check.mjs` and `ai-kinds-runtime-check.mjs` pass in real workerd.
+- `web/tests/credential-vault.spec.ts`: 4 tests pass against a mocked backend:
+  - the personal inventory, Add API key, Share, Rotate and Revoke;
+  - the subscription warning and terms gate;
+  - admin engine selection and New engine;
+  - an organization member's read-only view.
+
+  The related specs (ai-models-native, api-tokens, native-agent-hosts, organization-admin, organization-settings-navigation,
+  native-installation-settings, settings) pass. `instance-admin.spec.ts` fails 2 tests identically with main's UI files.
+
+**Deploy changes needed:** none. The vault uses the existing `EXECUTION_VALUE_KEY`; provider engines use the existing `AI` binding,
+`EVIDENCE_ALLOW_AI` and `EVIDENCE_GATEWAY`.
+
+**Not done:**
+- hosted run against real providers;
+- per-credential spend caps;
+- re-wrapping envelopes after an installation key rotation;
+- OAuth or device-code sign-in for subscriptions;
+- running coding-CLI engines;
+- teams as grantees;
+- the automation framework itself (phase 2b).
+
 ## 2026-10-15 — AM-6 verified on the hosted demo; shared-branch commits fixed
 
 On `https://demo.gitgolf.mjtechguy.com` (`mj/agent-bench-*`), after #108 to #112. Evidence is in `docs/compatibility/evidence/agent-speed-20261015-hosted-am6-*.json`.

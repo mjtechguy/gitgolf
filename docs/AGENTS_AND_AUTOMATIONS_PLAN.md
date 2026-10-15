@@ -145,6 +145,15 @@ and limits, or create a custom automation from scratch.
      selection;
    - automation definitions, triggers, targets, outputs and limits;
    - the first built-in tools: PR reviewer, issue triage, Issue → PR, CI fixer.
+
+   **Status (2026-10-15): phase 2a (engines and the credential vault) built and verified locally, not yet hosted.**
+   [CREDENTIAL_VAULT.md](CREDENTIAL_VAULT.md) and [ENGINES.md](ENGINES.md), schema 45:
+   - user, organization and installation API keys, and stored subscription sign-ins, under envelope encryption with explicit grants;
+   - engine selection at installation, organization and repository level, replacing per-use-case model selection;
+   - provider models (OpenAI, Anthropic, xAI, Google) through the AI Gateway binding;
+   - the `listEngines` / `resolveEngine` / `runChat` interface for the automation framework.
+
+   Using a subscription sign-in waits for cloud sandboxes (phase 3). The automation framework and built-in tools are separate work.
 3. **Cloud sandboxes:**
    - a Sandbox image with every CLI installed;
    - an egress proxy that adds the API key and routes through AI Gateway;

@@ -50,6 +50,8 @@ import { evidenceAPI, evidenceStep, evidencePolicy } from './evidence.mjs';
 import { aiAPI, aiStep, aiKinds } from './ai-workflow.mjs';
 import { aiAllocation } from './ai.mjs';
 import { aiModelsAPI, withAgentModel } from './ai-models.mjs';
+import { credentialsAPI, vaultCapability } from './vault.mjs';
+import { enginesAPI, engineCapability } from './engines.mjs';
 import { aiUsageAPI } from './ai-usage.mjs';
 import { searchAPI, searchCapability, searchFeature } from './search.mjs';
 import { searchMaintenance } from './search-index.mjs';
@@ -129,7 +131,7 @@ export function concurrentRead(request) {
   if (/^\/rpc\/golf\.v1\.(?:DiscussionAttachmentService\/(?:ListDiscussionAttachments|DownloadDiscussionAttachment)|DiscussionAttachmentUploadService\/GetDiscussionAttachmentUploadState)$/.test(new URL(request.url).pathname)) return true;
   return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
 }
-const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume|ai|ai-models|ai-usage|search|agent-inbox)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
+const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume|ai|ai-models|ai-usage|search|agent-inbox|engines)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');
 async function input(request) {
   if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') invalid('Use JSON.');
@@ -553,6 +555,13 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       return result instanceof Response ? result : reply(result);
     }
     if (url.pathname === '/native/api-tokens') return reply(await apiTokensAPI(db, env, person, request, body));
+    // Credential vault and engines (docs/CREDENTIAL_VAULT.md, docs/ENGINES.md): values are never returned; repository engine choices need the repository.
+    if (url.pathname === '/native/credentials') return reply(await credentialsAPI(db, env, person, request, body));
+    if (url.pathname === '/native/engines') return reply(await enginesAPI(db, env, person, request, body, async () => {
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (body.repositoryId !== String(row.id)) deny();
+      return row;
+    }));
     if (url.pathname === '/native/agentic-mode' || url.pathname === '/native/agentic-mode/read') {
       // Agentic mode (docs/AGENTIC_MODE.md): the setting changes on the exclusive route; reading it and evaluating a pull request overlap.
       if (url.pathname.endsWith('/read') !== ['get', 'evaluate'].includes(body.action)) invalid(url.pathname.endsWith('/read') ? 'This route only reads agentic mode.' : 'This route only changes agentic mode.');
@@ -726,6 +735,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       await agentHostCapability(db),
       await sourceCapability(db),
       await apiTokenCapability(db),
+      await vaultCapability(db, env),
+      await engineCapability(db, env),
       await agenticCapability(db),
       await landingCapability(db),
       await inboxCapability(db, env),

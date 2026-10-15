@@ -7,6 +7,8 @@ import { policyIdentity } from '../../agents/src/policy.mjs';
 // Which Workers AI model each AI use case runs. The deploy-time list AI_MODELS is the ceiling; an operations administrator picks the
 // default and the allowed models inside it from the account's catalog; repositories choose from the allowed list only where the
 // administrator allows overrides. Clef answers constrained-choice questions with calibrated probabilities, so advice and triage keep it.
+// Engines (engines.mjs, docs/ENGINES.md) sit above this: AI runs resolve their engine there, and with no engine chosen it returns
+// exactly the model aiModel() picks here, so these settings are the Cloudflare model default for every use case.
 const clef = '@cf/cloudflare/clef';
 export const aiUses = {
   agents: { label: 'Agent proposals', task: 'Text Generation', needs: 'function_calling', needsLabel: 'function calling', feature: 'agents',

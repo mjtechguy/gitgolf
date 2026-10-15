@@ -21,6 +21,9 @@ export function settingForRoute(kind: string, view?: string, native = false) {
   // Agent hosts (docs/AGENT_HOSTS.md) exist only where the native Worker reports them; the portable runtime keeps its own coding agent pages.
   // API tokens and remote MCP (docs/AGENT_ACCESS.md) are a native Worker service.
   if (kind === 'account-api-tokens') return 'agents.mcp';
+  // The credential vault and engines (docs/CREDENTIAL_VAULT.md, docs/ENGINES.md) are native Worker services.
+  if (kind === 'account-credentials' || kind === 'organization-credentials' || kind === 'instance-settings' && view === 'credentials') return 'settings.credentials';
+  if (kind === 'organization-engines' || kind === 'instance-settings' && view === 'engines') return 'settings.engines';
   if (kind === 'organization-agents' || native && (kind === 'account-agents' || kind === 'instance-settings' && view === 'agents')) return 'agents.hosts';
   if (native) {
     const repositoryRoutes: Record<string, string> = { 'repository-settings': 'general', 'repository-access-settings': 'access', 'repository-git': 'git', 'repository-rules': 'rules', 'repository-secrets': 'secrets', 'repository-environments': 'environments', 'repository-webhooks': 'webhooks', 'repository-workflows': 'workflows', 'repository-deletion': 'lifecycle' };

@@ -49,7 +49,7 @@ test('the overview reports held values and today’s use, never secret reference
   f.sql.prepare('INSERT INTO webhook_daily(day,attempts) VALUES(?,17)').run(today);
   const response = await f.call(); assert.equal(response.status, 200); assert.equal(response.headers.get('Cache-Control'), 'no-store');
   const data = await response.json(), text = JSON.stringify(data), find = id => data.groups.flatMap(group => group.items).find(item => item.id === id);
-  assert.equal(data.workspace, 'workspace'); assert.equal(data.publicOrigin, origin); assert.equal(data.schema, 43); assert.equal(data.release, 'development');
+  assert.equal(data.workspace, 'workspace'); assert.equal(data.publicOrigin, origin); assert.equal(data.schema, 45); assert.equal(data.release, 'development');
   assert.deepEqual(data.groups.map(group => group.id), ['installation', 'automation', 'integrations', 'operations']);
   const hooks = find('webhooks'); assert.equal(hooks.state, 'configured'); assert.equal(hooks.capability, 'settings.repository-webhooks');
   assert.deepEqual(hooks.values[0], { label: 'Approved origins', value: 'https://hooks.example.net\nhttps://ci.example.org' });
@@ -62,7 +62,7 @@ test('the overview reports held values and today’s use, never secret reference
 
 test('diagnostics and the operations dashboard read the same schema and name the Secrets Store and Email Service bindings', async t => {
   const f = await fixture(t);
-  assert.equal((await (await f.call('owner@example.invalid', {}, {}, '/native/diagnostics')).json()).schema, 43);
+  assert.equal((await (await f.call('owner@example.invalid', {}, {}, '/native/diagnostics')).json()).schema, 45);
   delete f.env.WEBHOOK_KEY; delete f.env.APP_POLICY;
   const data = await (await f.call('owner@example.invalid', {}, {}, '/rpc/golf.v1.OperationsService/GetOperationsDashboard')).json();
   assert.equal(data.services.find(row => row.id === 'secrets').state, 'configured');
