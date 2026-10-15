@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { handle, serialize, admission, withArtifact } from './src/core.mjs';
 import { packetLine } from './src/git.mjs';
-import { afterPipelineRun, autoLand, checkLanded, sweepLanding, backoff, landLimits } from './src/land-queue.mjs';
+import { afterPipelineRun, autoLand, checkLanded, landSoon, sweepLanding, backoff, landLimits } from './src/land-queue.mjs';
 import { onlyApprovalNeeded } from './src/land-policy.mjs';
 import { gitAvailable, gitFixture } from './git-cli-fixture.mjs';
 
@@ -417,4 +417,22 @@ test('maintenance settles a land interrupted after its merge was sent', { skip }
     .run(crypto.randomUUID(), b.number, b.number, b.head);
   await sweepLanding(f.env, withArtifact);
   assert.equal(f.ops().find(o => o.number === b.number).state, 'FAILED');
+});
+
+test('landSoon lands the pull request whose head just passed its checks, after the response; only where landing without a person is on', { skip }, async t => {
+  const f = await fixture(t);
+  const docs = f.pull('docs-soon', { 'docs/soon.md': 'soon\n' });
+  f.run(docs.head, 'SUCCESS', 'CI', 'pull_request');
+  const pending = [], env = { ...f.env, waitUntil: promise => pending.push(promise) };
+  f.settings({ landWithoutPerson: 0 });
+  landSoon(env, 1, docs.head, withArtifact); await Promise.all(pending.splice(0));
+  assert.equal(f.ops().length, 0);
+  f.settings({ landWithoutPerson: 1 });
+  landSoon(env, 1, 'not-a-commit', withArtifact);
+  assert.equal(pending.length, 0);
+  landSoon({ ...f.env }, 1, docs.head, withArtifact);
+  assert.equal(f.ops().length, 0);
+  landSoon(env, 1, docs.head, withArtifact); await Promise.all(pending.splice(0));
+  const [op] = f.ops();
+  assert.deepEqual([op.state, op.trigger, op.number], ['LANDED', 'policy', docs.number]);
 });

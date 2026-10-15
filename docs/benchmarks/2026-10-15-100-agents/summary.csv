@@ -1,0 +1,50 @@
+run,scenario,agents,operation,attempts,successes,failure_pct,p50_s,p95_s,max_s,queue_p50_s,queue_p95_s,worker_p50_s,worker_p95_s,outcomes
+baseline,S1,5,fetch,65,65,0.0,36.2,93.4,108.3,,,,,
+baseline,S1,5,push,65,23,64.6,26.7,60.8,74.8,,,,,nonff_rejected=23 remote_rejected=19
+baseline,S2,25,push,462,430,6.9,29.8,69.7,82.3,,,,,503=1 remote_rejected=31
+baseline,S2,25,fetch,32,32,0.0,25.4,39.6,40.3,,,,,
+baseline,S4,10,clone,122,122,0.0,42.7,99.0,108.9,,,,,
+baseline,S4,10,ls_remote,113,113,0.0,30.7,60.3,70.8,,,,,
+baseline,S6/branch-per-writer,30,source_commit,382,329,13.9,13.8,36.6,45.2,,,,,412=53
+baseline,S6/shared-branch,30,source_commit,371,270,27.2,24.6,40.4,48.5,,,,,503=3 412=98
+baseline,S7,30,source_commit,71,70,1.4,21.6,37.2,41.5,,,,,412=1
+baseline,S7,30,open_pr,70,69,1.4,28.4,44.8,46.9,,,,,tool_error=1
+baseline,S7,30,poll_pr,3376,3371,0.1,0.0,0.0,0.0,,,,,0=1 tool_error=4
+baseline,S7,30,land,69,14,79.7,904.9,931.5,935.0,,,,,land_timeout=55
+fixed,S1,5,fetch,52,40,23.1,84.2,134.8,154.4,,,,,timeout=12
+fixed,S1,5,push,40,14,65.0,42.5,89.0,104.4,,,,,nonff_rejected=17 412=1 remote_rejected=8
+fixed,S2,25,push,370,367,0.8,69.2,98.2,154.9,,,,,503=1 timeout=1 remote_rejected=1
+fixed,S2,25,fetch,3,3,0.0,44.3,50.3,50.3,,,,,
+fixed,S4,10,clone,92,69,25.0,83.7,145.2,154.0,,,,,503=1 timeout=22
+fixed,S4,10,ls_remote,85,85,0.0,60.5,103.7,110.8,,,,,
+fixed,S6/branch-per-writer,30,source_commit,324,300,7.4,23.4,58.1,60.0,,,,,503=2 contention_409=9 network=13
+fixed,S6/shared-branch,30,source_commit,294,290,1.4,40.9,56.8,60.0,,,,,contention_409=2 network=2
+fixed,S7,30,source_commit,77,76,1.3,35.7,55.6,60.0,,,,,network=1
+fixed,S7,30,open_pr,76,68,10.5,39.5,59.8,60.0,,,,,0=4 tool_error=4
+fixed,S7,30,poll_pr,1627,1567,3.7,0.0,0.0,0.0,,,,,0=55 tool_error=5
+fixed,S7,30,land,68,17,75.0,906.6,923.2,933.1,,,,,land_timeout=51
+fixed2,S1,5,fetch,59,56,5.1,58.9,149.7,154.2,,,,,timeout=3
+fixed2,S1,5,push,56,16,71.4,32.9,62.3,71.5,,,,,nonff_rejected=20 412=3 remote_rejected=17
+fixed2,S2,25,push,429,429,0.0,40.3,107.4,119.0,,,,,
+fixed2,S4,10,clone,112,102,8.9,60.9,130.5,154.3,,,,,timeout=10
+fixed2,S4,10,ls_remote,104,104,0.0,40.9,81.8,116.5,,,,,
+fixed2,S6/branch-per-writer,30,source_commit,358,353,1.4,17.7,53.7,60.0,0.0,0.0,17.5,52.5,contention_409=1 network=4
+fixed2,S6/shared-branch,30,source_commit,314,307,2.2,30.4,56.2,60.0,0.0,0.1,30.2,55.5,503=1 contention_409=2 network=4
+fixed2,S7,30,source_commit,67,65,3.0,23.9,55.9,60.0,0.0,0.9,23.7,52.5,network=2
+fixed2,S7,30,open_pr,65,60,7.7,41.4,60.0,60.0,0.4,2.6,36.4,58.2,0=5
+fixed2,S7,30,ci_report,60,0,100.0,51.9,59.5,60.0,0.2,2.8,51.8,59.2,0=3 404=57
+fixed2,S7,30,poll_pr,2546,2533,0.5,0.0,0.0,0.0,0.0,6.6,15.2,40.1,0=5 tool_error=8
+fixed2,S7,30,land,60,0,100.0,904.3,925.3,932.8,,,,,land_timeout=60
+fixed3,S1,5,fetch,44,14,68.2,130.4,161.8,166.4,,,,,timeout=30
+fixed3,S1,5,push,14,6,57.1,103.7,125.1,125.1,,,,,nonff_rejected=2 remote_rejected=5 timeout=1
+fixed3,S2,25,push,279,249,10.8,100.9,124.7,134.2,,,,,412=3 timeout=27
+fixed3,S2,25,fetch,27,22,18.5,107.8,121.8,125.9,,,,,timeout=4 git_exit_128=1
+fixed3,S4,10,clone,68,6,91.2,154.2,180.3,180.3,,,,,timeout=62
+fixed3,S4,10,ls_remote,60,51,15.0,99.1,129.0,131.8,,,,,timeout=9
+fixed3,S6/branch-per-writer,30,source_commit,281,236,16.0,46.9,60.0,60.0,0.0,0.4,44.4,57.8,contention_409=7 network=38
+fixed3,S6/shared-branch,30,source_commit,257,106,58.8,59.5,60.0,60.0,0.0,0.3,49.2,59.4,contention_409=29 network=122
+fixed3,S7,30,source_commit,203,167,17.7,47.6,60.0,60.0,0.0,0.7,44.0,57.7,network=36
+fixed3,S7,30,open_pr,167,105,37.1,53.0,60.0,60.0,0.6,2.9,47.5,58.7,0=57 tool_error=5
+fixed3,S7,30,ci_report,105,73,30.5,53.4,60.0,60.0,0.3,1.8,49.6,59.0,0=32
+fixed3,S7,30,poll_pr,831,713,14.2,0.0,0.0,0.0,0.0,0.1,17.3,58.3,0=118
+fixed3,S7,30,land,105,77,26.7,63.9,937.6,955.4,,,,,land_timeout=28

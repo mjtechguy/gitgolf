@@ -32,7 +32,7 @@ import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.m
 import { reserveRefWrite, finishRefWrite, sendRefUpdate, refWriteBlocker } from './ref-writes.mjs';
 import { sourceAPI, sourceCapability } from './source-api.mjs';
 import { agenticModeAPI, agenticCapability, landingCapability } from './agentic-mode.mjs';
-import { landAPI } from './land-queue.mjs';
+import { landAPI, landSoon } from './land-queue.mjs';
 import { agentInboxAPI, inboxCapability } from './agent-inbox.mjs';
 import { automationsAPI, automationEvent, automationCapability, processAutomations } from './automations.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
@@ -320,22 +320,25 @@ async function git(db, env, person, request, url, providerFetch) {
   }
   // A push Golf cannot take now is refused in Git's own report ("! [remote rejected] <ref> (<reason>)"), which agents and people can act on.
   const refuse = reason => new Response(refusalReport(command, reason), { headers: { ...jsonHeaders, 'Content-Type': 'application/x-git-receive-pack-result' } });
-  if (command && row.repository_write_pending) return refuse('the repository is finishing a merge; retry shortly');
   return withArtifact(env, row, async repo => {
     let operation, result, applied = !command, refused = false;
     if (command) {
-      operation = crypto.randomUUID();
-      if (!await reserveRefWrite(db, { id: operation, repositoryId: row.id, userId: person.id, command, guard: { sql: `EXISTS(SELECT 1 FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id
+      const guard = { sql: `EXISTS(SELECT 1 FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id
             LEFT JOIN repository_access_versions a ON a.repository_id=r.id LEFT JOIN native_identity_versions v ON v.user_id=u.id
             WHERE r.id=? AND r.artifact_name=? AND r.state='ACTIVE' AND g.user_id=? AND g.role IN ('write','admin') AND u.active=1
             AND COALESCE(a.version,0)=? AND COALESCE(v.version,0)=? AND COALESCE((SELECT version FROM repository_rules WHERE repository_id=r.id),0)=?
             AND (?='' OR EXISTS(SELECT 1 FROM credentials WHERE digest=? AND user_id=u.id AND revoked=0 AND expires_at>CAST(strftime('%s','now') AS INTEGER)))
             AND (?='' OR EXISTS(${gitCredentialSQL} AND c.repository_id=? AND c.mode=2)))${person.token_guard ? ' AND ' + person.token_guard.sql : ''}`,
-          values: [row.id,row.artifact_name,person.id,row.access_version||0,person.identity_version||0,rulesVersion,person.credential_digest||'',person.credential_digest||'',person.git_credential_digest||'',person.git_credential_digest||'',row.id,...(person.token_guard?.values || [])] } })) {
+          values: [row.id,row.artifact_name,person.id,row.access_version||0,person.identity_version||0,rulesVersion,person.credential_digest||'',person.credential_digest||'',person.git_credential_digest||'',person.git_credential_digest||'',row.id,...(person.token_guard?.values || [])] };
+      // A push waits its turn behind another write to its branch or a merge holding the repository (a landing takes a few seconds),
+      // up to pushWaitMs, before Git's own refusal report; a guard that no longer holds is a changed access, refused at once.
+      for (const started = Date.now(); ; ) {
+        operation = crypto.randomUUID();
+        if (await reserveRefWrite(db, { id: operation, repositoryId: row.id, userId: person.id, command, guard })) break;
         const blocker = await refWriteBlocker(db, row.id, command.ref);
-        if (blocker === 'branch') return refuse('another push to this branch is in progress; fetch and retry');
-        if (blocker === 'repository') return refuse('the repository is finishing a merge; retry shortly');
-        conflict();
+        if (!blocker) conflict();
+        if (Date.now() - started >= (env.pushWaitMs ?? pushWaitMs)) return refuse(blocker === 'branch' ? 'another push to this branch is in progress; fetch and retry' : 'the repository is finishing a merge; retry shortly');
+        await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 350));
       }
     }
     const send = () => gitRequest(env, repo, row.artifact_name, advertisement ? 'info/refs?service=' + service : service, service, body, providerFetch, protocol);
@@ -434,6 +437,8 @@ async function sourceEntry(repo, entry, path) {
   return result;
 }
 
+// How long a push waits for its branch or a merge holding the repository before it is refused (env.pushWaitMs shortens it in tests).
+const pushWaitMs = 20_000;
 export async function handle(request, env, providerFetch = fetch, imageFetch = fetch) {
   const start = performance.now(), clock = timings();
   const configured = { ...env, timings: clock, DB: timedDatabase(env.DB, clock) };
@@ -662,7 +667,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     }
     if (url.pathname === '/native/repository-check') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'pull-requests');
-      return reply(await collaboration(db, env, person, 'ReportCheck', body, row, action => withArtifact(env, row, action)));
+      const value = await collaboration(db, env, person, 'ReportCheck', body, row, action => withArtifact(env, row, action));
+      // A check that completes a landing decision lands the pull request now rather than at the next sweep (agentic mode).
+      landSoon(env, row.id, body.commitId, withArtifact);
+      return reply(value);
     }
     if (url.pathname === '/native/repository-grant') return reply(await grants(db, env, person, request, body));
     const environment = /^\/rpc\/golf\.v1\.RepositoryEnvironmentService\/([A-Za-z]+)$/.exec(url.pathname);
@@ -856,6 +864,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       // Automations: a new issue or pull request (a replayed request finds its runs already queued by their dedupe key).
       if ((method === 'CreateIssue' || method === 'CreatePullRequest') && value?.mutation?.number)
         await automationEvent(env, { type: method === 'CreateIssue' ? 'issue.opened' : 'pull_request.opened', repositoryId: row.id, number: value.mutation.number, headCommit: value.pullRequest?.head?.commitId || '', actorId: person.id });
+      // A pull request whose head already passed its checks may land at once (agentic mode).
+      if (method === 'CreatePullRequest' && value?.mutation?.number) landSoon(env, row.id, value.pullRequest?.head?.commitId, withArtifact);
       return reply(value);
     }
     if (method === 'GetRepository') return reply(await withArtifact(env, row, async (_repo, _info, commits) => {
