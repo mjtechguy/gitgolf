@@ -7,7 +7,7 @@ here = pathlib.Path(__file__).parent
 rows = []
 for path in sorted((here / 'data').glob('*.json')):
     run, _, _ = path.stem.partition('-')
-    if run not in ('baseline', 'fixed', 'fixed2'):
+    if run not in ('baseline', 'fixed', 'fixed2', 'fixed3'):
         continue
     for r in json.loads(path.read_text())['results']:
         scenario = r['scenario'] + ('/' + r['variant'] if r.get('variant') else '')

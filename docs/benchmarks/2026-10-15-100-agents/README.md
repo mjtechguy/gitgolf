@@ -157,16 +157,74 @@ The paragraph that follows was written before the correction:
 That was caught after the run. The fixed bench landed a single pull request 5.4 s after opening it (commit 1.9 s, PR 2.0 s,
 check 0.45 s). Run `fixed3` repeats the whole mix with it.
 
+## Run `fixed3`: the whole mix, with the bench CI stand-in working
+
+S7 agents report `bench/ci` themselves right after opening each pull request. A single pull request landed 5.4 s after opening.
+
+**The agent pull request loop now works:**
+
+| S7 | Baseline | fixed3 |
+| --- | --- | --- |
+| Pull requests opened in 30 min | 69 | 105 |
+| Landed within 15 min | 14 (20 %) | **77 (73 %)** |
+| Land latency p50 (open → merged) | over 15 min | **64 s** |
+
+**It also pushed everything else past the edge:**
+- Landings came fast, so agents cycled faster: 105 pull requests and 203 commits, against 69 and 71.
+- Every cycle adds two exclusive requests: opening the pull request (MCP `open_pull_request`) and reporting the check.
+
+| Operation | Failed: baseline → fixed3 | p50: baseline → fixed3 |
+| --- | --- | --- |
+| S2 Git push | 6.9 % → 10.8 % (27 client timeouts) | 29.8 s → 100.9 s |
+| S6 commit, a branch each | 13.9 % → 16.0 % (60 s client timeouts) | 13.8 s → 46.9 s |
+| S6 commit, shared branch | 27.2 % → 58.8 % (mostly 60 s client timeouts) | 24.6 s → 59.5 s |
+| S4 clone | 0 % → 91.2 % (timeouts) | 42.7 s → 154.2 s |
+| S7 open PR (MCP) | 1.4 % → 37.1 % | 28.4 s → 53.0 s |
+
+**Throughput (successful writes/s), across the four runs:**
+
+| Run | Writes/s |
+| --- | --- |
+| baseline | 0.75 |
+| fixed | 0.70 |
+| fixed2 | 0.78 |
+| fixed3 | 0.54 |
+
+That fits the corrected diagnosis: the exclusive-request convoy in the Workspace admission queue is the ceiling, and the more
+pull requests agents successfully land, the more exclusive requests they send. (The server-queue columns in `summary.csv` for
+`fixed3` still use the old parser; the three full-header samples above are the reliable queue measurement.)
+
+## Next: remove the convoy (proposal)
+
+From a read-only audit of what the mix sends as `exclusive` (2026-10-15):
+1. **Agent-host machine routes** (heartbeat, claim, start, log, finish): every write is already conditional, so they can be `transfer`
+   now. Hosts heartbeat every 15 s, and finish does Artifacts I/O while exclusive.
+2. **Reads that fall through to exclusive:** labels, milestones, assignees, timeline, engagement, mutation and operation getters,
+   code owners, review-state reads, and `/native/agent-tasks` list, get and log (with a `/read` split). They become `read`.
+   `GetStandardPullMergeOperation` stays exclusive: it can write.
+3. **`ReportCheck`, `CreateIssue` and `CreateIssueComment`:**
+   - `nextId` takes `max(id)+1` on installation-wide tables, so concurrent creates collide. The batch rolls back and the caller gets
+     a 503. It needs AUTOINCREMENT, or a retry on the unique-constraint failure.
+   - Concurrent comments on one discussion also need a retry instead of a 412.
+4. **`CreatePullRequest` and MCP `open_pull_request`:** the `nextId` fix, plus moving the duplicate open-pull-request check into the
+   guarded INSERT. MCP mints a fresh idempotency key per call, so retries could otherwise open duplicates.
+
+Landing (`/native/land`, `landSoon`) already runs outside the exclusive class and relies on D1 fences, which shows the pattern works.
+
 ## Chart plan (for the blog post)
 
 All numbers come from `summary.csv`. If images are generated with an image model (Codex, gpt-image-2), give it the exact
 values and check every label and bar against the CSV before publishing. For exactness, a chart rendered from the CSV with the
 generated image as the frame or illustration is safer.
 
-1. **"Did the agent's pull request land?"** S7: landed within 15 minutes versus timed out, baseline against fixed. Two stacked bars.
-2. **Time to land.** One pull request on an idle system (193 s → 11.7 s), and the S7 land latency distribution under load,
-   baseline against fixed.
+1. **"Did the agent's pull request land?"** S7: landed within 15 minutes versus timed out, baseline (14 of 69) against `fixed3`
+   (77 of 105). Two stacked bars.
+2. **Time to land.** One pull request on an idle system (193 s → 5.4 s), and the S7 land latency p50 under load (over 15 min →
+   64 s).
 3. **Write failures under load.** Failure percentage per operation: S6 branch, S6 shared, S2 push, S7 commit. Grouped bars,
    baseline against fixed.
 4. **Latency.** p50/p95 per operation, baseline against fixed, with the 30 s line (the `RepositoryWrites` revisit trigger).
 5. **The setup.** A diagram of 110 agents → one repository: Git, Source API, MCP, land queue, CI check.
+6. **Where the time goes.** One commit: 47.4 s waiting in the admission queue against 0.95 s of work (D1 0.30 s, Artifacts 0.30 s).
+   A stacked bar, the clearest picture of the convoy.
+7. **Success creates load.** Writes/s across the four runs (0.75, 0.70, 0.78, 0.54) against S7 landings (14, 17, 0, 77).
