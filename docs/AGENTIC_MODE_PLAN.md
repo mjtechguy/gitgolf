@@ -245,7 +245,7 @@ writer in a new `git-objects.mjs`.
 
 ### AM-3 Agent access: API tokens and remote MCP
 
-**Status (2026-10-14): done, hosted-verified.** #83, #86 (schema 39). Exit met: Claude Code via hosted `/mcp` with an `agent/*` token opened PR #4 in `mj/actions-demo`; a commit to `main` was refused. The agent host prompt does not mention MCP yet.
+**Status (2026-10-14): done, hosted-verified.** #83, #86 (schema 39). Exit met: Claude Code via hosted `/mcp` with an `agent/*` token opened PR #4 in `mj/actions-demo`; a commit to `main` was refused. Item 4 (2026-10-15, local evidence): agent hosts connect each CLI to `/mcp` with the task token and tell it so in the prompt (see `docs/AGENT_HOSTS.md`); not yet run on hosted.
 
 1. **API tokens** (migration `0037` or `0038`, table `api_tokens`):
    - Prefix `golf_pat_`; only the SHA-256 is stored.

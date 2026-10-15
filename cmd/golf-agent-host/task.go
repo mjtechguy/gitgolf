@@ -357,16 +357,34 @@ func (r *taskRun) execute(parent context.Context) (result finishRequest) {
 		r.hostLine("%s", result.Failure)
 		return
 	}
+	// Golf's MCP endpoint for this run only, with the task token in the tool's environment
+	// (never in argv, a file or a log); the prompt then says how to use it.
+	prompt, mcp, mcpOn := t.Prompt, mcpSetup{}, false
+	if t.MCP != nil {
+		var err error
+		if mcp, mcpOn, err = configureMCP(t.Tool, t.MCP.URL, t.Token, dir); err != nil {
+			result.State, result.Failure = "failed", "mcp config: "+err.Error()
+			return
+		}
+		defer mcp.cleanup()
+		if mcpOn {
+			prompt += mcpPrompt(t)
+			r.hostLine("Golf MCP tools connected for %s (%s)", t.Tool, t.MCP.URL)
+		} else {
+			r.hostLine("%s reads MCP servers only from its own configuration; running without Golf MCP tools", t.Tool)
+		}
+	}
 	promptFile := filepath.Join(dir, "prompt.txt")
-	if err := os.WriteFile(promptFile, []byte(t.Prompt), 0600); err != nil {
+	if err := os.WriteFile(promptFile, []byte(prompt), 0600); err != nil {
 		result.State, result.Failure = "failed", "prompt file: "+err.Error()
 		return
 	}
-	args := spec.args(tc, h.cfg.codexSandbox(), t.Model, repo, promptFile)
+	args := mcp.withArgs(spec.args(tc, h.cfg.codexSandbox(), t.Model, repo, promptFile))
 	// Some CLIs (OpenCode) take the project directory from $PWD, so it must name repo/.
-	env := h.scrubbedEnv([]string{t.Token}, append([]string{"PWD=" + repo}, spec.env...)...)
+	env := h.scrubbedEnv([]string{t.Token}, append(append([]string{"PWD=" + repo}, spec.env...), mcp.env...)...)
 	r.hostLine("running %s on branch %s", t.Tool, t.Branch)
 	outcome, err := runTool(dctx, path, args, env, repo, promptFile, spec.format, h.t.killGrace, r.log.add)
+	mcp.cleanup()
 	result.ExitCode = outcome.exitCode
 	result.Usage = outcome.parsed.usage
 	result.Summary = outcome.parsed.final
@@ -386,6 +404,19 @@ func (r *taskRun) execute(parent context.Context) (result finishRequest) {
 	r.hostLine("%s exited with code %d", t.Tool, outcome.exitCode)
 	toolFailed := outcome.exitCode != 0 || outcome.parsed.isError
 
+	// With MCP the tool may have published the branch itself (commit_changes); then that
+	// branch is the proposal and the host pushes nothing.
+	published := ""
+	if mcpOn {
+		if published, err = g.remoteHead(dctx); err != nil {
+			if interrupted("branch check") {
+				return
+			}
+			result.State, result.Failure = "failed", "branch_check_failed: "+err.Error()
+			r.hostLine("%s", result.Failure)
+			return
+		}
+	}
 	commit, files, err := g.commit(dctx, repo)
 	switch {
 	case err != nil:
@@ -393,6 +424,17 @@ func (r *taskRun) execute(parent context.Context) (result finishRequest) {
 			return
 		}
 		result.State, result.Failure = "failed", "commit_failed: "+err.Error()
+	case published != "":
+		files, err := g.adopt(dctx, published, commit)
+		if err != nil {
+			if interrupted("branch check") {
+				return
+			}
+			result.State, result.Failure = "failed", "branch_published: "+err.Error()
+			break
+		}
+		result.State, result.CommitID, result.ChangedFiles = "succeeded", published, files
+		r.hostLine("%s published %s at %s through Golf MCP; nothing pushed from the working copy", t.Tool, t.Branch, published[:12])
 	case commit == "" && toolFailed:
 		result.State, result.Failure = "failed", fmt.Sprintf("%s failed (exit %d) without changing files", t.Tool, outcome.exitCode)
 	case commit == "":
@@ -684,9 +726,18 @@ func (g *gitRunner) commit(ctx context.Context, repo string) (string, []string, 
 	if err != nil || parents != commit+" "+base {
 		return "", nil, errors.New("proposal commit is not a single commit on baseCommit")
 	}
-	out, err := g.git(ctx, g.origin, g.plain, "", "diff-tree", "-r", "--no-commit-id", "--name-only", "-z", base, commit)
+	files, err := g.changedFiles(ctx, commit)
 	if err != nil {
 		return "", nil, err
+	}
+	return commit, files, nil
+}
+
+// changedFiles lists the paths commit changes from baseCommit, in origin.git.
+func (g *gitRunner) changedFiles(ctx context.Context, commit string) ([]string, error) {
+	out, err := g.git(ctx, g.origin, g.plain, "", "diff-tree", "-r", "--no-commit-id", "--name-only", "-z", g.t.BaseCommit, commit)
+	if err != nil {
+		return nil, err
 	}
 	files := []string{}
 	for _, f := range strings.Split(out, "\x00") {
@@ -694,7 +745,43 @@ func (g *gitRunner) commit(ctx context.Context, repo string) (string, []string, 
 			files = append(files, clip(f, 1024))
 		}
 	}
-	return commit, files, nil
+	return files, nil
+}
+
+// remoteHead is the commit refs/heads/<branch> points at in Golf, or "" when the branch
+// does not exist.
+func (g *gitRunner) remoteHead(ctx context.Context) (string, error) {
+	out, err := g.git(ctx, g.origin, g.authEnv, "", "ls-remote", "--", g.t.CloneURL, "refs/heads/"+g.t.Branch)
+	if err != nil || out == "" {
+		return "", err
+	}
+	head, ref, _ := strings.Cut(out, "\t")
+	if ref != "refs/heads/"+g.t.Branch || !shaPattern.MatchString(head) {
+		return "", errors.New("unexpected ls-remote answer")
+	}
+	return head, nil
+}
+
+// adopt takes the branch the tool published through Golf MCP as the proposal: it is
+// fetched into origin.git, and any change the tool also left in the working copy
+// (commit, or "" for none) must already be on it. It returns the changed files.
+func (g *gitRunner) adopt(ctx context.Context, published, commit string) ([]string, error) {
+	if _, err := g.git(ctx, g.origin, g.authEnv, "", "fetch", "--quiet", "--no-tags", "--", g.t.CloneURL, "+refs/heads/"+g.t.Branch+":refs/golf-agent/published"); err != nil {
+		return nil, err
+	}
+	if got, err := g.git(ctx, g.origin, g.plain, "", "rev-parse", "refs/golf-agent/published"); err != nil || got != published {
+		return nil, errors.New(g.t.Branch + " moved while the host read it")
+	}
+	if commit != "" {
+		trees, err := g.git(ctx, g.origin, g.plain, "", "rev-parse", published+"^{tree}", commit+"^{tree}")
+		if err != nil {
+			return nil, err
+		}
+		if one, other, _ := strings.Cut(trees, "\n"); one != other {
+			return nil, errors.New("the tool published " + g.t.Branch + " through Golf MCP and also left different changes in the working copy; the branch keeps only what was published")
+		}
+	}
+	return g.changedFiles(ctx, published)
 }
 
 // push creates refs/heads/<branch> at commit in Golf, from the host-owned bare clone.

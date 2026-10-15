@@ -88,12 +88,46 @@ the token (`person.token_guard`): not revoked, not expired, still a write token,
 account active and its identity version unchanged. A token revoked in the middle of a
 request writes nothing.
 
+## Agent task tokens
+
+A coding agent that an [agent host](AGENT_HOSTS.md) runs for a task uses the task's
+own token, `golf_agent_task_<task id>_<64 hex>`, on the same endpoints. The claim
+response names the endpoint (`mcp: { url: "<origin>/mcp" }`), and the host connects
+the CLI to it for that task only.
+
+- **Accepted** as `Authorization: Bearer` on `/mcp` and `/native/source/*`, and on
+  the MCP tools' internal requests (`taskTokenActor` in `api-tokens.mjs`). Never on
+  `/git/` (the task has its own Git route), never as Basic, and nowhere else: every
+  other route answers 401.
+- **Who:** the person who assigned the task (`agent_tasks.requested_by`), capped by
+  their current grant, as for an API token.
+- **Scope:** the task's repository only, `write`, and exactly the task's branch
+  `golf-agent/<8 hex>` (no prefix). `commit_changes` and `create_branch` work only on
+  that branch.
+- **Pull requests:** `open_pull_request` only with head = the task's branch. The pull
+  request's origin is recorded as `agent-task` with the task id
+  (`pull_request_origins`), not as a person or an API token.
+- **Comments:** `comment` only on the task's own issue or pull request
+  (`agent_tasks.target_number`), and on pull requests whose head is the task's branch.
+- **While:** the task is `RUNNING`, not cancel-requested, before its deadline, and the
+  requester still has write access. Otherwise 401 (403 when only the write access is
+  gone). A Source API write re-checks all of that in the D1 statement that reserves the
+  ref (`person.token_guard`), so a task cancelled or finished mid-request writes
+  nothing.
+- **Feature policy:** `agent-access` governs task tokens as it governs API tokens.
+  While it is off for the repository, claim answers `mcp: null`.
+- **Budget:** MCP and Source API calls count against the task's own budget (kind
+  `task`), the same window as its host protocol and Git calls.
+- **Audit:** a scope refusal is recorded as `api_token.use_denied` with
+  `agentTaskId` and `via: agent_task`; write tools are audited like the UI's.
+
 ## Machine routes outside Access
 
 When Cloudflare Access protects the installation, the public Worker (`public.mjs`)
 treats these as machine routes:
-- `/mcp` and `/native/source/*` with `Authorization: Bearer golf_pat_…`;
-- `/git/*` with a `golf_pat_` Bearer or Basic password.
+- `/mcp` and `/native/source/*` with `Authorization: Bearer golf_pat_…` or
+  `Bearer golf_agent_task_…`;
+- `/git/*` with a `golf_pat_` Bearer or Basic password (never a task token).
 
 Like runner and agent host routes, it skips the Access check for them and leaves the
 credential check to the Workspace. On these requests:
@@ -114,7 +148,8 @@ request without a token.
 JSON (`Content-Type: application/json`); there is no SSE stream, and `GET` returns
 405. JSON-RPC batches are not supported.
 
-- **Auth:** `Authorization: Bearer golf_pat_…`. A Golf native credential
+- **Auth:** `Authorization: Bearer golf_pat_…`, or a running agent task's
+  `golf_agent_task_…` ([Agent task tokens](#agent-task-tokens)). A Golf native credential
   (`golf_native_…`) also works, with that account's full authority. Without a bearer
   the response is 401 with `WWW-Authenticate: Bearer realm="Golf MCP"`. A browser
   session alone is refused.
@@ -238,8 +273,10 @@ writes. The defaults are:
   `/native/source/commit` and `/native/source/branch`, and the MCP write tools
   (`commit_changes`, `create_branch`, `open_pull_request`, `comment`). A write is also
   one request. Tokens cannot reach `/native/land`, so landing is not counted.
-- **Agent task requests:** `start`, `log` and `finish`, and each request on the
-  task's Git route. **Writes:** pushes on the task's Git route.
+- **Agent task requests:** `start`, `log` and `finish`, each request on the
+  task's Git route, and each `/mcp` message with an id or `/native/source/*` call made
+  with the task token. **Writes:** pushes on the task's Git route, Source API commits
+  and branch changes, and the MCP write tools.
 - An MCP tool's internal requests are not counted again; the tool call was.
   Notifications, batches and malformed MCP messages run nothing and are not counted.
 - **Never counted:** people. Browser sessions (Access), `golf_native_` credentials
@@ -293,7 +330,12 @@ Workspace), `budget` is `null` and the page says use is not counted.
 ## Security notes
 
 - Secrets are never stored, logged or audited. Agent host logs redact `golf_pat_`
-  values as they do other Golf credentials.
+  values as they do other Golf credentials, and the host redacts the task token from
+  every line it sends.
+- With MCP, the coding CLI holds its task token (in its environment, see
+  `cmd/golf-agent-host/README.md`), so the agent can use it directly. That is bounded
+  by the token: one repository, one branch, its own issue or pull request, and only
+  while the task runs.
 - A token can only narrow what its owner can do: scope × current grant × feature
   policy × the repository's branch rules.
 - A token is a bearer credential. Anyone who holds it acts as you within its scope
@@ -311,7 +353,12 @@ Workspace), `budget` is `null` and the page says use is not counted.
 - The AM-3 exit run is outstanding: Claude Code connected to the hosted `/mcp` with a
   branch-restricted token, reading files, committing to `agent/demo` and opening a
   pull request. So is the Access bypass policy on the hosted demo.
-- The agent host task prompt does not mention the MCP endpoint yet (AM-3 item 4).
+- Agent task tokens on `/mcp` (AM-3 item 4) are verified locally only: node tests
+  (`agent-task-mcp.test.mjs`), the agent hosts runtime check on real workerd/D1
+  (read, a refused off-branch commit, a pull request with origin `agent-task`, `/git/`
+  refused, refused after finish), and real Claude Code, Codex and OpenCode runs through
+  `golf-agent-host` calling a stub `/mcp` (`TestRealTools` with
+  `GOLF_AGENT_HOST_REAL_MCP=1`). A hosted task using the hosted `/mcp` is outstanding.
 - Codex and OpenCode configuration snippets follow those tools' documented remote MCP
   settings, but they have not been run against Golf.
 - Rate budgets (AM-6) are covered by local tests only (`agent-budgets.test.mjs` and

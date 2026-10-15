@@ -139,6 +139,10 @@ type taskTarget struct {
 	URL    string `json:"url"`
 }
 
+type taskMCP struct {
+	URL string `json:"url"`
+}
+
 type claimedTask struct {
 	ID         string     `json:"id"`
 	Repository string     `json:"repository"`
@@ -152,6 +156,8 @@ type claimedTask struct {
 	Deadline   int64      `json:"deadline"`
 	Token      string     `json:"token"`
 	Target     taskTarget `json:"target"`
+	// MCP names Golf's remote MCP endpoint for this task's token, or is nil.
+	MCP *taskMCP `json:"mcp"`
 }
 
 type usageReport struct {
@@ -203,6 +209,9 @@ func validateTask(t claimedTask, origin string, now time.Time) error {
 		return errors.New("deadline outside the allowed window")
 	case t.Target.Kind != "issue" && t.Target.Kind != "pull_request" || t.Target.Number < 1:
 		return errors.New("target malformed")
+	case t.MCP != nil && t.MCP.URL != origin+"/mcp":
+		// The task token goes only to the registered origin.
+		return errors.New("mcp.url is not the registered origin's /mcp endpoint")
 	}
 	return nil
 }

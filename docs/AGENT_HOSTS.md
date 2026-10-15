@@ -4,7 +4,8 @@ Contract for phase 1a of `docs/AGENTS_AND_AUTOMATIONS_PLAN.md`: a machine the us
 connects runs the coding CLIs that are already installed and signed in there (Codex,
 Claude Code, OpenCode, Grok), and Golf assigns it work from an issue or a pull
 request. The result is a proposal branch in the repository with a live log; a person
-opens the pull request. SSH hosts reached from Golf (phase 1b) and everything in later
+opens the pull request, or the agent opens it through Golf's MCP tools with its task
+token ([Golf MCP for the task](#golf-mcp-for-the-task)). SSH hosts reached from Golf (phase 1b) and everything in later
 phases are out of scope here.
 
 Three parts are built against this contract in parallel: the Worker (schema, host
@@ -108,8 +109,10 @@ a push is refused in Git's own report. See the rate budgets section of
 - Host credential: `golf_agent_host_<uuid>_<64 hex>`, stored as SHA-256, returned once
   at registration, rotated by re-registering. Never sent to a tool.
 - Task token: `golf_agent_task_<uuid>_<64 hex>` (uuid = task id), stored as SHA-256,
-  valid until the task is terminal or its deadline passes. It authorizes only that
-  task's log, finish and Git routes.
+  valid until the task is terminal or its deadline passes. It authorizes that task's
+  start, log, finish and Git routes and, while the task is `RUNNING`, `/mcp` and
+  `/native/source/*` limited to the task's repository and branch
+  ([Golf MCP for the task](#golf-mcp-for-the-task)). Nothing else, and never `/git/`.
 
 ## Host protocol
 
@@ -134,8 +137,12 @@ Claimed task:
 { "id": "uuid", "repository": "owner/name", "cloneUrl": "https://ORIGIN/native/agent-host/tasks/<id>/git",
   "branch": "golf-agent/1a2b3c4d", "baseRef": "refs/heads/main", "baseCommit": "<40 hex>",
   "tool": "codex", "model": "", "prompt": "…", "deadline": 1792000000000, "token": "golf_agent_task_…",
+  "mcp": { "url": "https://ORIGIN/mcp" },
   "target": { "kind": "issue", "number": 12, "title": "…", "url": "https://ORIGIN/owner/name/issues/12" } }
 ```
+
+`mcp` is `null` while the `agent-access` feature policy is off for the repository.
+A host refuses a task whose `mcp.url` is not `<registered origin>/mcp`.
 
 A retried claim (same `claimId`, task still `CLAIMED`) returns the same task with a
 fresh token, and the earlier token stops working; the host always uses the token
@@ -196,12 +203,15 @@ without them gets 401 with `WWW-Authenticate: Basic`. Ancestry is checked at
   1. creates `DIR/work/<task id>` (0700), clones `cloneUrl` with the task token at
      `baseCommit`, checks out a new branch `branch`;
   2. runs the tool headless in that directory with a scrubbed environment (no Golf
-     credential, no task token; the user's own tool sign-in is whatever the host user
-     already has), streaming stdout and stderr lines to `log` every second;
-  3. on exit, if the tree changed, commits as `Golf agent (<tool>) <agent@golf.invalid>`
-     with a message that names the issue or pull request and ends with
-     `Golf-Agent-Task: <id>`, pushes the branch with the task token and finishes
-     `succeeded`; no change → `no_changes`; non-zero exit with no change → `failed`;
+     credential and no task token, except `GOLF_MCP_TOKEN` when the task has `mcp`;
+     the user's own tool sign-in is whatever the host user already has), streaming
+     stdout and stderr lines to `log` every second;
+  3. on exit, if the tool published `branch` itself through MCP, takes that branch as
+     the proposal (below); otherwise, if the tree changed, commits as
+     `Golf agent (<tool>) <agent@golf.invalid>` with a message that names the issue or
+     pull request and ends with `Golf-Agent-Task: <id>`, pushes the branch with the
+     task token and finishes `succeeded`; no change → `no_changes`; non-zero exit with
+     no change → `failed`;
   4. removes the working copy (keep with `--keep-work` for debugging).
 - Tool commands are built from a fixed table (never a shell string): Codex
   `codex exec`, Claude Code `claude -p`, OpenCode `opencode run`, Grok `grok -p`, each
@@ -271,7 +281,41 @@ finishedAt, deadline, logLines, logTruncated }`. `usage` is the host's report wi
 
 "Open pull request" in the UI uses the existing `CreatePullRequest` RPC from
 `branch` into the issue's default branch, or into the pull request's head branch.
-The agent never opens or merges anything.
+The agent may open that pull request itself through MCP (below); it never merges.
+
+## Golf MCP for the task
+
+The claim's `mcp.url` is Golf's remote MCP endpoint (`docs/AGENT_ACCESS.md`), and the
+credential is the task token the host already holds. Server side (`api-tokens.mjs`
+`taskTokenActor`), the token acts as the requester, scoped to the task's repository,
+`write`, and exactly `branch`; only while the task is `RUNNING`, not cancel-requested,
+before its deadline, and while the requester can still write. Source API writes re-check
+that in the D1 statement that reserves the ref. `open_pull_request` accepts only
+`head = branch` and records the pull request's origin as `agent-task` with the task id;
+`comment` accepts only the task's own issue or pull request and pull requests whose head
+is `branch`. Calls count against the task's rate budget. Not on `/git/`.
+
+Host side (`cmd/golf-agent-host`), per task and per tool, never changing the user's own
+tool configuration, and never putting the token in argv, a file or a log:
+
+| Tool | How it reaches `/mcp` |
+| --- | --- |
+| Claude Code | `--mcp-config <task dir>/golf-mcp.json --allowedTools mcp__golf`; the file (0600, created exclusively in the task's private directory, removed after the run) holds `{"mcpServers":{"golf":{"type":"http","url":…,"headers":{"Authorization":"Bearer ${GOLF_MCP_TOKEN}"}}}}` |
+| Codex | `-c mcp_servers.golf.url="…" -c mcp_servers.golf.bearer_token_env_var="GOLF_MCP_TOKEN" -c mcp_servers.golf.default_tools_approval_mode="approve" -c shell_environment_policy.ignore_default_excludes=false` |
+| OpenCode | `OPENCODE_CONFIG_CONTENT={"mcp":{"golf":{"type":"remote","url":…,"headers":{"Authorization":"Bearer {env:GOLF_MCP_TOKEN}"},"enabled":true}}}` |
+| Grok | not configured: Grok reads MCP servers only from its `config.toml` (user or project scope), which the host does not change. The task runs without Golf MCP tools. |
+
+The token is in the tool's environment as `GOLF_MCP_TOKEN`. The host appends a "Golf
+MCP tools" section to the prompt: read with the tools; or publish the change yourself
+with `commit_changes` to `branch` (from `baseCommit`) and `open_pull_request` from it;
+comment only on the task's issue or pull request. That section overrides the server
+preamble's "do not commit or open pull requests" for the MCP tools only.
+
+If `refs/heads/<branch>` exists in Golf when the tool exits (the tool published it), the
+host fetches it and finishes `succeeded` with that commit and its changed files, pushing
+nothing; if the working copy also holds changes the branch does not, it finishes
+`failed` with `branch_published: …` and the branch keeps what was published.
+`finish` verifies the branch as for a pushed proposal.
 
 ## Policy, capability and audit
 

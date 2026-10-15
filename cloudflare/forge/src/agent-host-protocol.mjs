@@ -2,13 +2,15 @@
 // credential and /native/agent-host/tasks/<id>/{start,log,finish} plus Smart HTTP Git with the task token. Machine
 // routes outside Access; every call checks its credential against D1, and claim and Git re-check the admission rules.
 // The task route pushes through the same fenced single-ref write as /git/: one branch, create or this task's own
-// fast-forward, at most 8 MiB.
+// fast-forward, at most 8 MiB. The same task token also reaches /mcp and /native/source/* while the task runs (api-tokens.mjs
+// taskTokenActor); claim names the MCP endpoint.
 import { digest, Fault, invalid, reply, uuidOK, conflict } from './common.mjs';
 import { advertisedRefs, bounded, defaultBranchAdvertisement, defaultBranchRefsV2, gitRequest, gitV2Command, receiveCommand, refusedRef, refusalReport, acceptedReport, sha } from './git.mjs';
 import { chargeBudget, budgetJSON, budgetText } from './agent-budgets.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
 import { reserveRefWrite, finishRefWrite, sendRefUpdate } from './ref-writes.mjs';
 import { ownerSlug } from './owners.mjs';
+import { featureOff } from './feature-policy.mjs';
 import { admissionRefusal, agentSchema, agentTools, byteLength, maxDuration, now, parse, random, refuse, repositoryRow, scrub, targetURL, terminalStates } from './agent-hosts.mjs';
 
 const zero = '0'.repeat(40);
@@ -63,8 +65,10 @@ async function authority(db, env, task, withTools) {
   return { repository, host, refusal: await admissionRefusal(db, env, { repository, requesterId: task.requested_by, host, tools, tool: task.tool, targetKind: task.target_kind, skipTool: !withTools }) };
 }
 async function claimedTask(db, env, task, repository, token) {
+  // Golf's remote MCP endpoint for the same task token (api-tokens.mjs taskTokenActor) while agent access is on for the repository.
+  const mcp = await featureOff(db, env, repository, 'agent-access') ? null : { url: env.PUBLIC_ORIGIN + '/mcp' };
   return { task: { id: task.id, repository: `${ownerSlug(repository, env)}/${repository.name}`, cloneUrl: `${env.PUBLIC_ORIGIN}/native/agent-host/tasks/${task.id}/git`, branch: task.branch,
-    baseRef: task.base_ref, baseCommit: task.base_commit, tool: task.tool, model: task.model, prompt: task.prompt, deadline: task.deadline, token,
+    baseRef: task.base_ref, baseCommit: task.base_commit, tool: task.tool, model: task.model, prompt: task.prompt, deadline: task.deadline, token, mcp,
     target: { kind: task.target_kind, number: task.target_number, title: task.target_title, url: targetURL(env, repository, task.target_kind, task.target_number) } } };
 }
 

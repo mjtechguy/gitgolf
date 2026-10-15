@@ -53,6 +53,7 @@ type fakeGolf struct {
 	heartbeats [][]toolReport
 	gitBadAuth int
 	gitOK      int
+	mcpCalls   []string // tools/call names the stub /mcp answered
 }
 
 type fakeTask struct {
@@ -124,6 +125,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func (f *fakeGolf) serve(w http.ResponseWriter, r *http.Request, backend http.Handler) {
+	if r.URL.Path == "/mcp" {
+		f.serveMCP(w, r)
+		return
+	}
 	const prefix = "/native/agent-host/"
 	path := strings.TrimPrefix(r.URL.Path, prefix)
 	if rest, ok := strings.CutPrefix(path, "tasks/"); ok {
@@ -281,7 +286,33 @@ env > "$FAKE_DUMP.env"
 pwd > "$FAKE_DUMP.pwd"
 tr "\\0" "\\n" < /proc/$$/environ > "$FAKE_DUMP.initenv"
 printf '%s\n' "$@" > "$FAKE_DUMP.args"
+printf '%s' "$prompt" > "$FAKE_DUMP.prompt"
+mcp=""
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--mcp-config" ]; then mcp="$2"; fi
+  shift
+done
+if [ -n "$mcp" ]; then
+  cp -p "$mcp" "$FAKE_DUMP.mcp"
+  echo "$mcp" > "$FAKE_DUMP.mcppath"
+fi
+publish() {
+  echo published > PUB.md
+  git add PUB.md && git -c user.name=Tool -c user.email=tool@example.invalid commit -qm "published through MCP"
+  git push -q "$FAKE_BARE" "HEAD:refs/heads/$(git rev-parse --abbrev-ref HEAD)"
+}
 case "$prompt" in
+*MODE=publishonly*)
+  publish
+  git reset -q --hard HEAD~1
+  ;;
+*MODE=publishsame*)
+  publish
+  ;;
+*MODE=publishdiverge*)
+  publish
+  echo extra > EXTRA.md
+  ;;
 *MODE=success*)
   echo '{"type":"system","subtype":"init","model":"fake-1"}'
   echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Writing HELLO.md"},{"type":"tool_use","name":"Write","input":{"file_path":"'"$PWD"'/HELLO.md"}}]}}'
@@ -321,6 +352,7 @@ type harness struct {
 	state string
 	dump  string
 	out   *syncBuffer
+	keep  bool // run with keepWork
 }
 
 type syncBuffer struct {
@@ -350,6 +382,7 @@ func newHarness(t *testing.T) *harness {
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
 	h := &harness{f: f, state: filepath.Join(t.TempDir(), "state"), dump: filepath.Join(t.TempDir(), "dump"), out: &syncBuffer{}}
 	t.Setenv("FAKE_DUMP", h.dump)
+	t.Setenv("FAKE_BARE", f.bare)
 	t.Setenv("GOLF_SOMETHING", "must-not-reach-the-tool")
 	t.Setenv("GOLF_AGENT_REGISTRATION_TOKEN", f.regToken)
 	var out bytes.Buffer
@@ -369,7 +402,7 @@ func (h *harness) run(t *testing.T, tasks ...*fakeTask) {
 		t.Fatal(err)
 	}
 	off := false
-	cfg := config{MaxConcurrent: 2, Tools: map[string]toolConfig{"codex": {Enabled: &off}, "opencode": {Enabled: &off}, "grok": {Enabled: &off}}}
+	cfg := config{MaxConcurrent: 2, KeepWork: h.keep, Tools: map[string]toolConfig{"codex": {Enabled: &off}, "opencode": {Enabled: &off}, "grok": {Enabled: &off}}}
 	hst, err := newHost(file, cfg, h.state, h.out)
 	if err != nil {
 		t.Fatal(err)
