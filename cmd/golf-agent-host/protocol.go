@@ -158,7 +158,12 @@ type claimedTask struct {
 	Target     taskTarget `json:"target"`
 	// MCP names Golf's remote MCP endpoint for this task's token, or is nil.
 	MCP *taskMCP `json:"mcp"`
+	// Mode is "" or "change" (edit, commit and push) or "review" (read-only; the final
+	// text is the review and nothing is committed).
+	Mode string `json:"mode,omitempty"`
 }
+
+func (t claimedTask) review() bool { return t.Mode == "review" }
 
 type usageReport struct {
 	InputTokens  int64    `json:"inputTokens"`
@@ -209,6 +214,10 @@ func validateTask(t claimedTask, origin string, now time.Time) error {
 		return errors.New("deadline outside the allowed window")
 	case t.Target.Kind != "issue" && t.Target.Kind != "pull_request" || t.Target.Number < 1:
 		return errors.New("target malformed")
+	case t.Mode != "" && t.Mode != "change" && t.Mode != "review":
+		return errors.New("mode is not change or review")
+	case t.review() && t.Target.Kind != "pull_request":
+		return errors.New("review mode needs a pull request target")
 	case t.MCP != nil && t.MCP.URL != origin+"/mcp":
 		// The task token goes only to the registered origin.
 		return errors.New("mcp.url is not the registered origin's /mcp endpoint")

@@ -10,6 +10,8 @@ package main
 //     file; stream its output to the task log; poll Golf for a cancel while it is silent;
 //  4. bring the working tree back (never .git), commit it here as the agent with the Golf-Agent-Task trailer, push
 //     golf-agent/<id8>, finish; remove the host's working directory whatever happened.
+//
+// A review task runs the tool read-only and skips step 4: its final text is the summary and nothing is brought back or pushed.
 
 import (
 	"bytes"
@@ -227,6 +229,10 @@ func (r *taskRun) executeSSH(parent context.Context, target sshTarget) (result f
 	h, t := r.h, r.t
 	result = finishRequest{ExitCode: -1}
 	spec := toolSpecs[t.Tool]
+	if t.review() && spec.noReview {
+		result.State, result.Failure = "failed", "review_unsupported_tool: "+t.Tool+" has no read-only mode for reviews"
+		return
+	}
 	ctx, cancelTask := context.WithCancelCause(parent)
 	defer cancelTask(nil)
 	var start struct {
@@ -343,7 +349,7 @@ func (r *taskRun) executeSSH(parent context.Context, target sshTarget) (result f
 
 	// 3. The tool, on the host.
 	remoteRepo, promptFile := remote+"/repo", remote+"/prompt.txt"
-	args := spec.args(toolConfig{}, "workspace-write", t.Model, remoteRepo, promptFile)
+	args := spec.args(toolConfig{}, "workspace-write", t.Model, remoteRepo, promptFile, t.review())
 	words := []string{"exec", "env", "TERM=dumb", "NO_COLOR=1", "GIT_TERMINAL_PROMPT=0", shQuote("PWD=" + remoteRepo)}
 	for _, kv := range spec.env {
 		words = append(words, shQuote(kv))
@@ -383,6 +389,10 @@ func (r *taskRun) executeSSH(parent context.Context, target sshTarget) (result f
 	}
 	r.hostLine("%s exited with code %d", t.Tool, outcome.exitCode)
 	toolFailed := outcome.exitCode != 0 || outcome.parsed.isError
+	if t.review() {
+		r.reviewResult(&result, toolFailed)
+		return
+	}
 
 	// 4. The working tree back, then the outbound host's commit and push.
 	back := filepath.Join(local, "result")

@@ -234,7 +234,7 @@ func (h *host) heartbeat(ctx context.Context) (heartbeatResponse, error) {
 	}
 	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	err := h.api.post(cctx, "/native/agent-host/heartbeat", "", map[string]any{"tools": tools}, &resp)
+	err := h.api.post(cctx, "/native/agent-host/heartbeat", "", map[string]any{"tools": tools, "hostVersion": hostVersion}, &resp)
 	return resp, err
 }
 
