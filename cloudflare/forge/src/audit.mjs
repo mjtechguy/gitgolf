@@ -239,7 +239,7 @@ async function repositoryById(db, env, id) {
 // Who and from where. Every value is bounded and validated; none of them is a credential.
 function caller(request, person) {
   const header = name => request.headers.get(name) || '', authorization = header('Authorization');
-  const via = header('CF-Access-Client-Id') ? 'service' : authorization.startsWith('Bearer golf_native_') ? 'token' : authorization.startsWith('Bearer golf_pat_') ? 'api_token' : authorization.startsWith('Basic ') || authorization.startsWith('Bearer golf_git_') ? 'git'
+  const via = header('CF-Access-Client-Id') ? 'service' : authorization.startsWith('Bearer golf_native_') ? 'token' : authorization.startsWith('Bearer golf_pat_') ? 'api_token' : authorization.startsWith('Bearer golf_agent_task_') ? 'agent_task' : authorization.startsWith('Basic ') || authorization.startsWith('Bearer golf_git_') ? 'git'
     : header('X-Golf-Native-Access-Email') ? 'person' : 'anonymous';
   const country = [header('X-Golf-Native-Access-Country'), header('CF-IPCountry')].find(value => /^[A-Z]{2}$/.test(value));
   const ray = /^[0-9a-f]{16}(?:-[A-Z]{3})?$/.test(header('CF-Ray')) ? header('CF-Ray') : '';
@@ -379,7 +379,7 @@ const phrases = {
   'agentic_mode.land': ['landed', 'land', e => named('pull request', e.subject)], 'agentic_mode.auto_land': ['landed', 'land', e => `pull request ${e.subject} without a person`],
   'agentic_mode.revert': ['reverted', 'revert', e => `pull request ${e.subject} after its required checks failed`],
   'api_token.create': ['created', 'create', e => `${e.after?.permission ? e.after.permission + ' ' : ''}API token ${e.subject}`], 'api_token.revoke': ['revoked', 'revoke', e => named('API token', e.subject)],
-  'api_token.use_denied': ['was refused with', 'use', e => `an API token (${e.after?.reason === 'branch' ? 'branch outside its pattern' : e.after?.reason === 'permission' ? 'read-only token' : 'repository outside its scope'})`],
+  'api_token.use_denied': ['was refused with', 'use', e => `${e.after?.agentTaskId ? 'an agent task token' : 'an API token'} (${e.after?.reason === 'branch' ? 'branch outside its pattern' : e.after?.reason === 'permission' ? 'read-only token' : 'repository outside its scope'})`],
   'environment.save': ['saved', 'save', e => named('environment', e.subject)], 'environment.save_value': ['saved', 'save', e => `${e.after?.kind || 'a value'} ${e.subject} of an environment`],
   'ai.run_request': ['requested', 'request', e => `an AI ${e.subject.replaceAll('-', ' ')} run`], 'actions.run_request': ['requested', 'request', e => `a run for pull request ${e.subject}`], 'actions.run_cancel': ['cancelled', 'cancel', () => 'a run'],
 };

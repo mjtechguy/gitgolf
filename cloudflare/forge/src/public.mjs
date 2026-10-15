@@ -53,7 +53,8 @@ async function dispatch(request, env, ctx, clock) {
       if (actionsGitRoute(url.pathname) && (request.method === 'POST' || url.search === '?service=git-upload-pack')) return actionsGit(request, pipelineEnv(), (await import('./core.mjs')).withArtifact);
     }
     // Configured Access is the outer gate for people; machine routes (runners, agent hosts) check their own credentials against D1.
-    // An API token (golf_pat_) on /mcp, /native/source/* or /git/* is one too; the same paths without one still need Access.
+    // An API token (golf_pat_) on /mcp, /native/source/* or /git/* is one too, and so is an agent task token (golf_agent_task_) on /mcp
+    // and /native/source/*; the same paths without one still need Access.
     const apiToken = machineTokenRoute(url.pathname, request.headers.get('Authorization'));
     const machineRoute = url.pathname.startsWith('/native/runner-machine/') || url.pathname.startsWith('/native/agent-host/') || url.pathname.startsWith('/api/v4/') || apiToken;
     const access = env.ACCESS_AUD && !machineRoute ? await clock.measure('access_auth', () => accessContext(request, env, ctx)) : null;

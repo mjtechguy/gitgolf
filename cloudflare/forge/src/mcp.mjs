@@ -118,6 +118,8 @@ const catalogue = [
   ['create_branch', true, 'Create a branch from a branch, tag or commit.', input({ branch: str('New branch name.'), from: str('Branch, tag or full commit SHA to start from.') }, ['branch', 'from']), async (c, a) =>
     c.call('/native/source/branch', { repository: c.key, branch: text(a, 'branch', { max: 300 }), action: 'create', from: text(a, 'from', { max: 300 }) })],
   ['open_pull_request', true, 'Open a pull request from head into base at their current commits.', input({ head: str('Branch with the changes.'), base: str('Branch to merge into.'), title: str('Title.'), body: str('Description (Markdown).'), draft: { type: 'boolean' } }, ['head', 'base', 'title']), async (c, a) => {
+    // An agent task opens pull requests only from its own branch; Golf records the task as the pull request's origin.
+    if (c.task && a.head !== c.task.branch) fail(`This agent task may open a pull request only from its branch ${c.task.branch}.`);
     const base = await c.branch(text(a, 'base', { max: 300 })), head = await c.branch(text(a, 'head', { max: 300 }));
     if (a.draft !== undefined && typeof a.draft !== 'boolean') fail('draft must be true or false.');
     const { pullRequest } = await c.call(rpc('CreatePullRequest'), { repository: c.key, repositoryId: base.repositoryId, sourceRepository: c.key, sourceRepositoryId: base.repositoryId,
@@ -135,6 +137,9 @@ const catalogue = [
       try { discussion = (await c.call(rpc('GetPullRequestDiscussion'), { repository: c.key, number: num })).issue; pullRequest = true; }
       catch (second) { if (second instanceof ToolError && second.message === missing) fail(`No issue or pull request #${num} in ${c.key.owner}/${c.key.name}, or the repository is unavailable.`); throw second; }
     }
+    // An agent task comments only on the issue or pull request it was assigned, and on pull requests from its own branch.
+    if (c.task && num !== c.task.target.number && !(pullRequest && (await c.call(rpc('GetPullRequest'), { repository: c.key, number: num })).pullRequest?.head?.ref === c.task.branch))
+      fail(`This agent task may comment only on #${c.task.target.number} and on pull requests from its branch ${c.task.branch}.`);
     const { repository } = await c.repository();
     const value = await c.call(rpc('CreateIssueComment'), { repository: c.key, repositoryId: repository.id, number: num, issueId: discussion.id, body, pullRequest, idempotencyKey: crypto.randomUUID() });
     return { number: num, kind: pullRequest ? 'pull_request' : 'issue', comment: value.comment ? { id: value.comment.id, createdAt: value.comment.createdAt } : null };
@@ -171,10 +176,11 @@ const toolError = message => ({ isError: true, content: [{ type: 'text', text: m
 const respond = (id, result) => Response.json({ jsonrpc: '2.0', id, result }, { headers: jsonHeaders });
 const rpcError = (id, code, message, status = 200) => Response.json({ jsonrpc: '2.0', id, error: { code, message } }, { status, headers: jsonHeaders });
 
-// identify() resolves the caller (an API token or a native credential; a browser session is refused); invoke() runs an internal request.
+// identify() resolves the caller (an API token, an agent task token or a native credential; a browser session is refused); invoke() runs
+// an internal request.
 export async function mcpEndpoint(request, env, identify, invoke) {
   if (request.method !== 'POST') return new Response(null, { status: 405, headers: { Allow: 'POST', 'Cache-Control': 'no-store' } });
-  if (!/^Bearer golf_(?:pat|native)_[A-Za-z0-9_-]{43}$/.test(request.headers.get('Authorization') || '')) throw new Fault('unauthenticated', 401, 'Use an API token: Authorization: Bearer golf_pat_….');
+  if (!/^Bearer (?:golf_(?:pat|native)_[A-Za-z0-9_-]{43}|golf_agent_task_[0-9a-f-]{36}_[0-9a-f]{64})$/.test(request.headers.get('Authorization') || '')) throw new Fault('unauthenticated', 401, 'Use an API token: Authorization: Bearer golf_pat_….');
   const person = await identify();
   if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') return rpcError(null, -32700, 'Send JSON-RPC as application/json.', 415);
   let message;
@@ -186,11 +192,12 @@ export async function mcpEndpoint(request, env, identify, invoke) {
   // Notifications and responses carry no id; nothing is returned for them.
   if (id === undefined || id === null) return new Response(null, { status: 202, headers: { 'Cache-Control': 'no-store' } });
   if (typeof id !== 'string' && !Number.isInteger(id)) return rpcError(null, -32600, 'Invalid request id.', 400);
-  const params = message.params ?? {}, writer = !person.token_scope || person.token_scope.permission === 'write';
+  const params = message.params ?? {}, writer = !person.token_scope || person.token_scope.permission === 'write', task = person.agent_task || null;
   if (message.method === 'initialize') return respond(id, { protocolVersion: versions.includes(params.protocolVersion) ? params.protocolVersion : '2025-06-18',
     capabilities: { tools: {} }, serverInfo: { name: 'golf', version: release },
-    instructions: `Golf forge at ${env.PUBLIC_ORIGIN}. Repositories are named by owner and name. Read with repo_overview, list_tree, read_files, grep (exact text), search_code (semantic), blame and list_commits;` +
-      (writer ? 'write with create_branch and commit_changes (pass the head you read as expectedHead), then open_pull_request.' : 'this token is read-only.') });
+    instructions: `Golf forge at ${env.PUBLIC_ORIGIN}. Repositories are named by owner and name. Read with repo_overview, list_tree, read_files, grep (exact text), search_code (semantic), blame and list_commits; ` +
+      (task ? `this agent task token reads only its task's repository and writes only the branch ${task.branch}: commit_changes to it (pass the head you read as expectedHead, or an empty expectedHead with base to create it), then open_pull_request from it; comment only on #${task.target.number} or on that pull request.`
+        : writer ? 'write with create_branch and commit_changes (pass the head you read as expectedHead), then open_pull_request.' : 'this token is read-only.') });
   if (message.method === 'ping') return respond(id, {});
   if (message.method === 'tools/list') return respond(id, { tools: [...tools.values()].filter(tool => writer || !tool.write).map(tool => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema,
     annotations: { readOnlyHint: !tool.write, destructiveHint: false, openWorldHint: false } })) });
@@ -217,7 +224,7 @@ export async function mcpEndpoint(request, env, identify, invoke) {
     return value;
   };
   let repository;
-  const context = { key, call,
+  const context = { key, call, task,
     repository: () => repository ||= call(rpc('GetRepository'), { repository: key }),
     ref: async a => a.ref !== undefined ? text(a, 'ref', { max: 300 }) : (await context.repository()).repository.defaultBranch,
     branch: async name => { try { return await call(rpc('ResolveRepositorySource'), { repository: key, selector: { kind: 'REPOSITORY_SOURCE_REF_KIND_BRANCH', name } }); }

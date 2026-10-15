@@ -1,5 +1,26 @@
 # Golf implementation status
 
+## 2026-10-15 — AM-3 item 4: coding agents on hosts use Golf MCP with their task token (local evidence)
+
+**Built:** a running agent task's own token (`golf_agent_task_…`) works on `/mcp` and `/native/source/*` ([AGENT_ACCESS.md](AGENT_ACCESS.md#agent-task-tokens), [AGENT_HOSTS.md](AGENT_HOSTS.md#golf-mcp-for-the-task)).
+- **Server:** `api-tokens.mjs` `taskTokenActor` acts as the requester, scoped to the task's repository, `write`, exactly `golf-agent/<8 hex>`.
+  - Only while the task is `RUNNING`, not cancel-requested, before its deadline and while the requester writes; Source API writes re-check that in the ref reservation (`token_guard`).
+  - Not on `/git/` or any other route; the public Worker skips Access for it only on `/mcp` and `/native/source/*`.
+  - `open_pull_request` only from the task branch, recorded as origin `agent-task`; `comment` only on the task's issue or pull request, or a pull request from its branch.
+  - Calls count against the task's rate budget; scope refusals are audited with `agentTaskId`.
+  - Claim adds `mcp: { url }` (`null` while `agent-access` is off for the repository).
+- **Host:** `golf-agent-host` connects each CLI for that task only, with the token as `GOLF_MCP_TOKEN` in its environment (never argv, a file or a log): Claude Code `--mcp-config` (0600 file in the task directory, removed after the run) and `--allowedTools mcp__golf`; Codex `-c mcp_servers.golf.*` with `bearer_token_env_var`, approved tools and the default env excludes on; OpenCode `OPENCODE_CONFIG_CONTENT` with `{env:…}`. Grok is not connected (MCP only from its `config.toml`).
+  - The host appends a "Golf MCP tools" section to the prompt. A branch the tool published through MCP is adopted as the proposal; local changes it lacks fail the task (`branch_published`).
+
+**Evidence (local, not hosted):**
+- `cloudflare/forge/agent-task-mcp.test.mjs` (5 tests): reads; scope and audit; budget kind `task`; refused on `/git/` (Bearer and Basic), RPC and account routes, and when finished, claimed, cancel-requested, expired or the requester lost write; Access bypass; claim `mcp`; over a real bare repository, branch-only `commit_changes`/`create_branch`, `open_pull_request` with origin `agent-task`, comment limits, and a cancel between admission and reservation writes nothing.
+- `node cloudflare/forge/agent-hosts-runtime-check.mjs "$(command -v cf)"` passes on real workerd/D1/DO with the task token on `/mcp` (issue read, off-branch commit refused, pull request with origin `agent-task`, `/git/` refused, 401 after finish).
+- `go vet ./cmd/golf-agent-host/` and `go test ./cmd/golf-agent-host/` pass (per-task configs, no token in argv or files, 0600 and removal, origin check, published-branch adoption).
+- Real CLIs through the host against a stub `/mcp` (`GOLF_AGENT_HOST_REAL_MCP=1 … -run TestRealTools`): Claude Code 2.1.300, codex-cli 0.162.1 (`danger-full-access`, as bubblewrap is unavailable here) and opencode 1.18.35 each called the stub tool and committed its answer.
+- Full suite `node --test cloudflare/forge/*.test.mjs`: 671 tests, 670 pass, 1 skipped (main: 666, 665, 1).
+
+**Not done:** a hosted task using the hosted `/mcp`; Grok; the stored task prompt (server preamble) still says not to open pull requests, and the host's appended section overrides it for MCP tools.
+
 ## 2026-10-15 — AM-6 blame and exact text search as Source API reads (local evidence)
 
 **Built:** `POST /native/source/blame` and `POST /native/source/grep` ([SOURCE_API.md](SOURCE_API.md)), with MCP read tools `blame` and `grep` ([AGENT_ACCESS.md](AGENT_ACCESS.md)).

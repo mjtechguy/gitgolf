@@ -427,11 +427,16 @@ func (p *codexParser) render(line []byte) []string {
 			Command  string `json:"command"`
 			ExitCode *int   `json:"exit_code"`
 			Status   string `json:"status"`
+			Server   string `json:"server"`
+			Tool     string `json:"tool"`
 			Message  string `json:"message"`
 			Changes  []struct {
 				Path string `json:"path"`
 				Kind string `json:"kind"`
 			} `json:"changes"`
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error"` // an MCP tool call's failure
 		} `json:"item"`
 		Usage *struct {
 			Input  int64 `json:"input_tokens"`
@@ -451,6 +456,9 @@ func (p *codexParser) render(line []byte) []string {
 		if ev.Item != nil && ev.Item.Type == "command_execution" {
 			lines = append(lines, "$ "+clip(strings.ReplaceAll(ev.Item.Command, "\n", " "), 300))
 		}
+		if ev.Item != nil && ev.Item.Type == "mcp_tool_call" {
+			lines = append(lines, "→ "+clip(ev.Item.Server+"."+ev.Item.Tool, 200))
+		}
 	case "item.completed":
 		if ev.Item == nil {
 			break
@@ -468,6 +476,10 @@ func (p *codexParser) render(line []byte) []string {
 		case "file_change":
 			for _, c := range ev.Item.Changes {
 				lines = append(lines, "changed "+relPath(p.dir, c.Path)+" ("+c.Kind+", "+ev.Item.Status+")")
+			}
+		case "mcp_tool_call":
+			if ev.Item.Error != nil {
+				lines = append(lines, "← tool error: "+clip(ev.Item.Error.Message, 300))
 			}
 		case "error":
 			lines = append(lines, "error: "+clip(ev.Item.Message, 300))

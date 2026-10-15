@@ -41,6 +41,11 @@ export async function agenticCapability(db) {
 // An agentTaskId must name a finished (SUCCEEDED) agent task of this repository whose proposal branch is the head branch.
 export async function pullOrigin(db, person, row, body) {
   if (!await agenticSchema(db)) return null;
+  // A running agent task's own token (MCP open_pull_request): the task is the origin, and only its branch may be the head.
+  if (person.agent_task_id) {
+    if (body.headBranch !== person.agent_task?.branch) refuse('An agent task opens pull requests only from its own branch.');
+    return { kind: 'agent-task', apiTokenId: null, agentTaskId: person.agent_task_id };
+  }
   let agentTaskId = null;
   if (body.agentTaskId !== undefined && body.agentTaskId !== '') {
     if (!uuidOK(body.agentTaskId)) invalid('Name the agent task by its ID.');

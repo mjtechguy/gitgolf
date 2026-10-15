@@ -1,6 +1,7 @@
 // Real workerd, D1 and Durable Objects drive the agent host protocol (docs/AGENT_HOSTS.md) end to end with a small fake host
 // in this script: register, heartbeat, assign an issue through /native/agent-tasks, claim, log, a real `git clone` and
-// `git push` through the task's Git route, finish, then cancel and the LOST sweep from the scheduled handler. Only the
+// `git push` through the task's Git route, the task token on /mcp (read, branch-only write, its pull request), finish, then
+// cancel and the LOST sweep from the scheduled handler. Only the
 // Cloudflare Artifacts binding is a fixture (as in actions-runtime-check.mjs): its Git HTTP is `git http-backend` and its
 // object reads are `git cat-file` over a local bare repository. No coding CLI runs here; the fake host commits a file.
 //
@@ -146,6 +147,19 @@ try {
   const pushed = await gitAsync(work, [...auth(claimed.token), 'push', claimed.cloneUrl, `HEAD:refs/heads/${claimed.branch}`]);
   assert.equal(pushed.status, 0, pushed.stderr);
   assert.equal(git(bare, ['rev-parse', 'refs/heads/' + claimed.branch]), commit);
+  // ---------- the same task token on /mcp while the task runs: its issue, its branch only, its pull request; never /git/ ----------
+  assert.deepEqual(claimed.mcp, { url: origin + '/mcp' });
+  const mcp = async (name, args) => {
+    const response = await fetch(claimed.mcp.url, { method: 'POST', headers: { Authorization: 'Bearer ' + claimed.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { owner: 'alice', name: 'agent-demo', ...args } } }) });
+    assert.equal(response.status, 200, name); return (await response.json()).result;
+  };
+  assert.equal(JSON.parse((await mcp('get_issue', { number: 1 })).content[0].text).title, 'Empty input crashes parse');
+  const offBranch = await mcp('commit_changes', { branch: 'main', expectedHead: base, message: 'No', changes: [{ path: 'x', content: 'x' }] });
+  assert.deepEqual([offBranch.isError, offBranch.content[0].text], [true, `This agent task token may write only to branches matching ${claimed.branch}.`]);
+  const opened = JSON.parse((await mcp('open_pull_request', { head: claimed.branch, base: 'main', title: 'Handle empty input' })).content[0].text);
+  assert.equal((await db.prepare('SELECT o.kind,o.agent_task_id FROM pull_request_origins o JOIN pull_requests p ON p.id=o.pull_request_id JOIN discussions d ON d.id=p.discussion_id WHERE d.number=?').bind(opened.number).first()).agent_task_id, task.id);
+  assert.equal((await fetch(origin + '/git/alice/agent-demo.git/info/refs?service=git-upload-pack', { headers: { Authorization: 'Bearer ' + claimed.token } })).status, 401);
   await host(`tasks/${task.id}/log`, { offset: 2, lines: ['Committed and pushed ' + commit.slice(0, 12)] }, claimed.token);
   assert.deepEqual(await host(`tasks/${task.id}/finish`, { state: 'succeeded', exitCode: 0, commitId: commit, summary: 'parse("") returns null.', changedFiles: ['parse.js'], usage: { inputTokens: 900, outputTokens: 120 } }, claimed.token), { ok: true, state: 'SUCCEEDED' });
   const done = (await tasks({ action: 'get', id: task.id })).task;
@@ -155,7 +169,8 @@ try {
   assert.deepEqual({ ...operation }, { ref: 'refs/heads/' + claimed.branch, new_sha: commit, state: 'APPLIED' });
   const after = await gitAsync(work, [...auth(claimed.token), 'ls-remote', claimed.cloneUrl]);
   assert.notEqual(after.status, 0, 'a finished task’s token reads nothing');
-  receipt.proposal = { task: task.id, branch: claimed.branch, commit, base, otherRefRefused: other.stderr.trim().split('\n').slice(-2) };
+  assert.equal((await fetch(claimed.mcp.url, { method: 'POST', headers: { Authorization: 'Bearer ' + claimed.token, 'Content-Type': 'application/json' }, body: '{"jsonrpc":"2.0","id":1,"method":"ping"}' })).status, 401);
+  receipt.proposal = { task: task.id, branch: claimed.branch, commit, base, otherRefRefused: other.stderr.trim().split('\n').slice(-2), mcpPullRequest: opened.number };
 
   // ---------- cancel: the person cancels a running task; heartbeat says so, Git refuses, the host finishes cancelled ----------
   const second = (await tasks({ action: 'create', target: { kind: 'issue', number: 2 }, hostId: registered.hostId, tool: 'codex', idempotencyKey: crypto.randomUUID() })).task;
@@ -179,5 +194,5 @@ try {
   receipt.finishedAt = new Date().toISOString();
   writeFileSync(join(root, 'receipt.json'), JSON.stringify(receipt, null, 2));
   console.log(JSON.stringify(receipt, null, 2));
-  console.log('Agent hosts on real workerd/D1/DO: registration, heartbeat, assignment, claim, live log, real git clone and push through the task route, verified finish, other-ref refusal, cancel and the LOST sweep passed');
+  console.log('Agent hosts on real workerd/D1/DO: registration, heartbeat, assignment, claim, live log, real git clone and push through the task route, the task token on /mcp, verified finish, other-ref refusal, cancel and the LOST sweep passed');
 } finally { await runtime.dispose(); }

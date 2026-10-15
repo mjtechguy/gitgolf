@@ -24,7 +24,7 @@ import { pipelinePolicy, pipelineCapabilities } from './pipeline-policy.mjs';
 import { pipelineAPI, pipelineRunnerAPI } from './pipeline-api.mjs';
 import { agentHostsAPI, agentTasksAPI, agentHostCapability } from './agent-hosts.mjs';
 import { agentHostMachine } from './agent-host-protocol.mjs';
-import { apiTokenSecret, apiTokenActor, apiTokenCapability, apiTokensAPI, scopeRepository, scopePush } from './api-tokens.mjs';
+import { apiTokenSecret, apiTokenActor, apiTokenCapability, apiTokensAPI, scopeRepository, scopePush, budgetSubject } from './api-tokens.mjs';
 import { mcpEndpoint, mcpClass, mcpBodyLimit, mcpActivity } from './mcp.mjs';
 import { chargeBudget, budgetJSON, budgetText } from './agent-budgets.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
@@ -146,7 +146,8 @@ async function input(request) {
 
 async function actor(db, request, anonymous = false, env = {}) {
   const authorization = request.headers.get('Authorization') || '';
-  // API tokens (golf_pat_): /mcp, /native/source/*, /git/* and the MCP tools' internal requests only; refused everywhere else.
+  // API tokens (golf_pat_): /mcp, /native/source/*, /git/* and the MCP tools' internal requests only; refused everywhere else. Agent task
+  // tokens (golf_agent_task_) the same, except /git/ (api-tokens.mjs taskTokenActor).
   const token = apiTokenSecret(authorization);
   if (token) return apiTokenActor(db, request, token, env);
   if (authorization.startsWith('Basic ') || authorization.startsWith('Bearer golf_git_')) return gitCredentialActor(db,request);
@@ -364,19 +365,20 @@ async function git(db, env, person, request, url, providerFetch) {
   });
 }
 
-// An API token's MCP message with an id is one request; a write tool is also a write. Over budget, the agent sees a tool error
-// (JSON-RPC result, isError) naming the budget. Notifications, batches and malformed messages run nothing and are not counted.
+// An API token's or agent task's MCP message with an id is one request; a write tool is also a write. Over budget, the agent sees a
+// tool error (JSON-RPC result, isError) naming the budget. Notifications, batches and malformed messages run nothing and are not counted.
 async function mcpBudget(request, env, db, identify) {
-  if (!env.agentBudgets || request.method !== 'POST' || !/^Bearer golf_pat_/.test(request.headers.get('Authorization') || '')) return null;
+  if (!env.agentBudgets || request.method !== 'POST' || !/^Bearer golf_(?:pat|agent_task)_/.test(request.headers.get('Authorization') || '')) return null;
   const person = await identify();
-  if (!person.api_token_id) return null;
+  const subject = budgetSubject(person);
+  if (!subject) return null;
   let message;
   try { message = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await bounded(request.clone().body, mcpBodyLimit))); } catch { return null; }
   const id = message?.id;
   if (typeof id !== 'string' && !Number.isInteger(id)) return null;
   // mcpActivity names a repository only for a known write tool, so this asks whether the named tool writes.
   const write = message.method === 'tools/call' && Boolean(mcpActivity(JSON.stringify({ method: 'tools/call', params: { name: message.params?.name, arguments: { name: 'x' } } })));
-  const refused = await chargeBudget(env, db, 'token', person.api_token_id, write);
+  const refused = await chargeBudget(env, db, subject[0], subject[1], write);
   return refused && Response.json({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: refused.message }] } },
     { headers: { ...jsonHeaders, 'Retry-After': String(refused.retryAfter) } });
 }
@@ -537,9 +539,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (url.pathname === '/native/agent-hosts') return reply(await agentHostsAPI(db, env, person, request, body));
     const source = sourceRoute.exec(url.pathname);
     if (source) {
-      // An API token's call is charged to its rate budget first; an MCP tool's internal call was charged as the tool call.
-      if (person.api_token_id && !env.mcpInternal) {
-        const refused = await chargeBudget(env, db, 'token', person.api_token_id, ['commit', 'branch'].includes(source[1]));
+      // An API token's or agent task's call is charged to its rate budget first; an MCP tool's internal call was charged as the tool call.
+      const subject = budgetSubject(person);
+      if (subject && !env.mcpInternal) {
+        const refused = await chargeBudget(env, db, subject[0], subject[1], ['commit', 'branch'].includes(source[1]));
         if (refused) return budgetJSON(refused);
       }
       // Source API (docs/SOURCE_API.md): grant, token scope, rules and the branch fence are checked inside; public visitors have none.

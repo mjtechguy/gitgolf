@@ -1,12 +1,14 @@
 // API tokens for agents (docs/AGENT_ACCESS.md, AM-3): golf_pat_ bearer secrets accepted on /mcp, /native/source/* and /git/* only,
 // stored as SHA-256. A token carries a scope (repositories, read or write, a write branch pattern) and never more than its owner's
 // current grant: authorizedRepository caps the role and the push reservation re-checks the token row in the same statement.
+// An agent-host task token (golf_agent_task_, docs/AGENT_HOSTS.md) is accepted the same way on /mcp and /native/source/* only, as the
+// task's requester scoped to the task's repository and exactly its branch, while the task runs.
 import { digest, Fault, invalid } from './common.mjs';
 import { ownerColumns, ownerJoin, ownerSlug } from './owners.mjs';
 import { budgetPolicy } from './agent-budgets.mjs';
 
 export const tokenPrefix = 'golf_pat_';
-const secretPattern = /^golf_pat_[A-Za-z0-9_-]{43}$/;
+const secretPattern = /^golf_pat_[A-Za-z0-9_-]{43}$/, taskPattern = /^golf_agent_task_([0-9a-f-]{36})_[0-9a-f]{64}$/;
 const nowSQL = "CAST(strftime('%s','now') AS INTEGER)";
 export const gitRoute = /^\/git\/[^/]+\/[^/]+\.git\/(?:info\/refs|git-upload-pack|git-receive-pack)$/;
 const unauthenticated = message => { throw new Fault('unauthenticated', 401, message); };
@@ -15,8 +17,11 @@ const iso = value => value ? new Date(value * 1000).toISOString() : '';
 const seconds = () => Math.floor(Date.now() / 1000);
 
 // The secret in a request: Bearer anywhere, or Basic (any user name, token as password) because Git clients send Basic.
+// A task token counts only as a Bearer ({ task: id }); its own Git route (agent-host-protocol.mjs) reads it there, never through here.
 export function apiTokenSecret(authorization) {
   if (secretPattern.test(authorization.slice(7)) && authorization.startsWith('Bearer ')) return { secret: authorization.slice(7), basic: false };
+  const task = authorization.startsWith('Bearer ') && taskPattern.exec(authorization.slice(7));
+  if (task) return { secret: authorization.slice(7), basic: false, task: task[1] };
   if (!authorization.startsWith('Basic ') || authorization.length > 512) return null;
   try {
     const decoded = atob(authorization.slice(6)), match = /^[^:\x00-\x1f]{0,128}:(golf_pat_[A-Za-z0-9_-]{43})$/.exec(decoded);
@@ -26,8 +31,10 @@ export function apiTokenSecret(authorization) {
 // Routes a token reaches from outside: the public Worker skips Access for exactly these when one is presented.
 export function machineTokenRoute(path, authorization) {
   const token = apiTokenSecret(authorization || '');
-  return Boolean(token) && (gitRoute.test(path) || !token.basic && (path === '/mcp' || path.startsWith('/native/source/')));
+  return Boolean(token) && (!token.task && gitRoute.test(path) || !token.basic && (path === '/mcp' || path.startsWith('/native/source/')));
 }
+// The rate budget a token caller is counted under (agent-budgets.mjs): [kind, id], or null for people and other credentials.
+export const budgetSubject = person => person.api_token_id ? ['token', person.api_token_id] : person.agent_task_id ? ['task', person.agent_task_id] : null;
 // Repository routes the MCP tools call as internal requests (env.mcpInternal, set only by mcp.mjs), with the class each needs.
 export const mcpRoutes = new Map([
   ...['GetRepository', 'GetRepositoryOverview', 'ResolveRepositorySource', 'ListCommits', 'GetRepositoryComparison', 'GetIssue', 'ListIssues', 'ListIssueComments',
@@ -50,6 +57,7 @@ export async function apiTokenCapability(db) {
 }
 
 export async function apiTokenActor(db, request, token, env) {
+  if (token.task) return taskTokenActor(db, request, token, env);
   const path = new URL(request.url).pathname, internal = env.mcpInternal === true;
   if (token.basic ? !gitRoute.test(path) : !(path === '/mcp' || path.startsWith('/native/source/') || gitRoute.test(path) || internal && mcpRoutes.has(path)))
     unauthenticated('API tokens are accepted only on /mcp, /native/source/ and /git/.');
@@ -67,6 +75,33 @@ export async function apiTokenActor(db, request, token, env) {
     token_scope: { repositories: row.repositories === null ? null : JSON.parse(row.repositories), permission: row.permission, branchPattern: row.branch_pattern } };
 }
 
+// An agent task token: the requester, scoped to the task's repository and exactly its branch, while the task is RUNNING, not
+// cancel-requested and before its deadline, and while the requester still writes there. token_guard re-checks all of that inside
+// every write reservation. Never on /git/ (the task has its own Git route) and nowhere else.
+async function taskTokenActor(db, request, token, env) {
+  const path = new URL(request.url).pathname, internal = env.mcpInternal === true;
+  if (!(path === '/mcp' || path.startsWith('/native/source/') || internal && mcpRoutes.has(path)))
+    unauthenticated('Agent task tokens are accepted only on /mcp, /native/source/ and the task’s own agent host routes.');
+  const row = await db.prepare(`SELECT t.id AS agent_task_id,t.token_digest,t.repository_id,t.branch,t.target_kind,t.target_number,t.state,t.cancel_requested,t.deadline,
+    u.id,u.login,u.email,u.active,u.can_create,COALESCE(v.version,0) AS identity_version,COALESCE(p.full_name,u.full_name) AS full_name,
+    EXISTS(SELECT 1 FROM grants g WHERE g.repository_id=t.repository_id AND g.user_id=t.requested_by AND g.role IN ('write','admin')) AS writer
+    FROM agent_tasks t JOIN users u ON u.id=t.requested_by JOIN repositories r ON r.id=t.repository_id AND r.artifact_name=t.artifact_name AND r.state='ACTIVE'
+    LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN native_identity_versions v ON v.user_id=u.id
+    WHERE t.token_digest=? AND t.id=? AND u.active=1`).bind(await digest(token.secret), token.task).first();
+  if (!row) unauthenticated('Task token unknown.');
+  if (row.state !== 'RUNNING' || row.cancel_requested || row.deadline <= Date.now()) unauthenticated('A task token works on /mcp and /native/source/ only while its task is running.');
+  if (!row.writer) forbidden('The task’s requester no longer has write access to its repository.');
+  return { id: row.id, login: row.login, email: row.email, active: row.active, can_create: row.can_create, identity_version: row.identity_version, full_name: row.full_name,
+    agent_task_id: row.agent_task_id, agent_task: { branch: row.branch, target: { kind: row.target_kind, number: row.target_number } },
+    api_token_route: path, token_guard: taskGuard(row.agent_task_id, row.token_digest, row.id),
+    token_scope: { repositories: [String(row.repository_id)], permission: 'write', branchPattern: row.branch, label: 'agent task token' } };
+}
+// person.token_guard for a task token (self-contained like tokenGuard): the task still running with this token, before its deadline,
+// and its requester still an active writer of its repository.
+const taskGuard = (taskId, digestValue, userId) => ({ sql: `EXISTS(SELECT 1 FROM agent_tasks tt JOIN grants tg ON tg.repository_id=tt.repository_id AND tg.user_id=tt.requested_by
+  JOIN users tu ON tu.id=tt.requested_by WHERE tt.id=? AND tt.token_digest=? AND tt.requested_by=? AND tt.state='RUNNING' AND tt.cancel_requested=0
+  AND tt.deadline>${nowSQL}*1000 AND tg.role IN ('write','admin') AND tu.active=1)`, values: [taskId, digestValue, userId] });
+
 // A pattern is an exact branch name or a prefix ending in '*'. Tags and other refs never match a pattern.
 export function branchAllowed(pattern, ref) {
   if (!pattern) return true;
@@ -80,8 +115,8 @@ async function refused(db, env, person, row, reason, message) {
   try {
     const fullName = `${ownerSlug(row, env)}/${row.name}`;
     await db.prepare(`INSERT INTO installation_audit(at,actor_id,actor_email,scope,scope_id,subject,action,before,after,widening,operation_id,client) VALUES(?,?,'','repository',?,?,'api_token.use_denied',NULL,?,0,NULL,?)`)
-      .bind(new Date().toISOString(), person.id, String(row.id), fullName, JSON.stringify({ tokenId: String(person.api_token_id), reason }),
-        JSON.stringify({ via: 'api_token', login: person.login, outcome: 'denied', code: 'permission_denied', repository: fullName, route: String(person.api_token_route || '').slice(0, 120) })).run();
+      .bind(new Date().toISOString(), person.id, String(row.id), fullName, JSON.stringify(person.agent_task_id ? { agentTaskId: person.agent_task_id, reason } : { tokenId: String(person.api_token_id), reason }),
+        JSON.stringify({ via: person.agent_task_id ? 'agent_task' : 'api_token', login: person.login, outcome: 'denied', code: 'permission_denied', repository: fullName, route: String(person.api_token_route || '').slice(0, 120) })).run();
   } catch { console.log(JSON.stringify({ event: 'golf.audit_write_failed', action: 'api_token.use_denied' })); }
   forbidden(message);
 }
@@ -90,7 +125,7 @@ async function refused(db, env, person, row, reason, message) {
 // MCP write tools), and a token never reaches an administration route at all.
 export async function scopeRepository(db, env, person, row) {
   const scope = person.token_scope;
-  if (scope.repositories && !scope.repositories.includes(String(row.id))) await refused(db, env, person, row, 'repository', 'This API token does not cover this repository.');
+  if (scope.repositories && !scope.repositories.includes(String(row.id))) await refused(db, env, person, row, 'repository', `This ${scope.label || 'API token'} does not cover this repository.`);
 }
 // A push: the token must be a write token and the ref must match its branch pattern.
 export async function scopePush(db, env, person, row, ref) {

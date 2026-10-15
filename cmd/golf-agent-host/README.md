@@ -5,7 +5,8 @@ It runs on a machine you connect, reports the coding CLIs installed and signed i
 there (Codex, Claude Code, OpenCode, Grok), claims tasks Golf assigns from an issue or
 pull request, runs one CLI headless per task in a private working copy and pushes the
 result as one commit on a new branch `golf-agent/<8 hex>`. A person opens the pull
-request; the host never opens or merges anything. Linux and macOS.
+request, or the agent does through Golf's MCP tools when Golf offers them for the task
+(see Golf MCP below); the host itself never opens or merges anything. Linux and macOS.
 
 ## Register and run
 
@@ -89,12 +90,51 @@ Optional configuration (JSON, not group or world writable; all fields optional):
 7. The working copy is removed unless `keepWork`. Leftover task directories are removed
    when `run` starts.
 
+### Golf MCP
+
+When the claim names `mcp.url` (it must be `<registered origin>/mcp`), the tool is
+connected to Golf's remote MCP endpoint for that task only, with the task token as the
+bearer (what the token may do: `docs/AGENT_HOSTS.md`, "Golf MCP for the task"). The
+user's own tool configuration is not changed. The token is passed as `GOLF_MCP_TOKEN`
+in the tool's environment and is never in argv, a file or a log line:
+
+- **Claude Code:** `--mcp-config WORK/<task id>/golf-mcp.json --allowedTools mcp__golf`.
+  The file (0600, created exclusively, outside `repo/`, removed when the tool exits
+  even with `keepWork`) names the header as `Bearer ${GOLF_MCP_TOKEN}`, which Claude
+  Code expands. `--allowedTools` lets the `golf` tools run under
+  `--permission-prompts none`; the user's other MCP servers load as before.
+- **Codex:** `-c mcp_servers.golf.url=…`, `-c mcp_servers.golf.bearer_token_env_var="GOLF_MCP_TOKEN"`,
+  `-c mcp_servers.golf.default_tools_approval_mode="approve"` (`exec` never asks, so
+  unapproved MCP calls fail with "requires approval") and
+  `-c shell_environment_policy.ignore_default_excludes=false`, so the commands Codex
+  runs do not inherit variables whose names contain `KEY`, `SECRET` or `TOKEN` (in
+  codex-cli 0.162.1 they do by default). That also hides the user's own API key
+  variables from those commands.
+- **OpenCode:** `OPENCODE_CONFIG_CONTENT` with a `remote` `golf` server whose header is
+  `Bearer {env:GOLF_MCP_TOKEN}`, merged as one more config for this process (a value the
+  user set in their environment is replaced for the task). Its shell stays denied by
+  `OPENCODE_PERMISSION`.
+- **Grok:** not connected. Grok 1.0.46 reads MCP servers only from `~/.grok/config.toml`
+  or the project's `.grok/config.toml`; the host changes neither, so Grok tasks run
+  without Golf MCP tools.
+
+The host appends a "Golf MCP tools" section to the prompt (how to read; how to publish
+with `commit_changes` to the task branch and `open_pull_request`; where to comment).
+If the tool published the task branch itself, the host does not commit or push: it
+fetches the branch and finishes `succeeded` with its commit, or `failed` with
+`branch_published: …` when the working copy also holds changes the branch lacks.
+
+With MCP the tool holds the task token, so it can use it directly: on `/mcp` and the
+Source API within the task's repository and branch while the task runs, and on the
+task's own Git route.
+
 ### Credentials
 
 - The task token reaches Git only as `http.extraHeader: Authorization: Basic
   base64(golf:<token>)` in the **environment** (`GIT_CONFIG_*`) of the clone, fetch and
   push commands that run in `origin.git`. It is never on a command line, in any
-  `.git/config`, in the tool's environment, or in a log.
+  `.git/config`, or in a log, and it is in the tool's environment only as
+  `GOLF_MCP_TOKEN` when the task has Golf MCP.
 - Host Git runs with `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`,
   `core.hooksPath=/dev/null`, `core.fsmonitor=false`, no credential helper, no
   redirects, and only `https`, `http` and local transports. The tool may have rewritten
@@ -172,11 +212,22 @@ finish) and serving a bare repository over Smart HTTP through `git http-backend`
 (`net/http/cgi`), so clone and push are real. A fake `claude` script first in `PATH`
 covers success, tool-made commits, no changes, failure, cancel from a log response,
 cancel from the heartbeat while silent, cancel at start, deadline, Golf no longer
-accepting the task, refused tasks, the scrubbed environment and process-group kill.
+accepting the task, refused tasks, the scrubbed environment and process-group kill,
+and Golf MCP: the per-task Claude Code config (no token in argv or the file, 0600,
+removed after the run), each tool's MCP arguments and environment, the `mcp.url`
+origin check, and a branch the tool published itself (adopted, or refused when the
+working copy diverges).
 
 Real CLIs (uses your own subscriptions; one tiny prompt each, through the whole flow
 against the fake server and a throwaway repository):
 
 ```sh
 GOLF_AGENT_HOST_REAL_TOOLS=codex,claude,opencode,grok go test ./cmd/golf-agent-host/ -run TestRealTools -v -count=1
+# With Golf MCP: the fake server also serves a stub /mcp, and each tool must call its tool.
+# GOLF_AGENT_HOST_REAL_CODEX_SANDBOX=danger-full-access where Codex's sandbox cannot run.
+GOLF_AGENT_HOST_REAL_MCP=1 GOLF_AGENT_HOST_REAL_TOOLS=codex,claude,opencode go test ./cmd/golf-agent-host/ -run TestRealTools -v -count=1
 ```
+
+Last run with MCP (2026-10-15, Claude Code 2.1.300, codex-cli 0.162.1 with
+`danger-full-access`, opencode 1.18.35): each called the stub's tool through the host's
+per-task configuration and committed the word it returned.
