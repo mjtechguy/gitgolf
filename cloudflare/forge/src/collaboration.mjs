@@ -307,7 +307,10 @@ export async function collaboration(db, env, person, method, body, row, artifact
         .bind(discussionId, row.id, row.id, isPull ? 'pull' : 'issue', person.id, title, description, op.time, op.time, op.id)];
     if (isPull) {
       if (!writable(row)) deny();
-      if (row.write_pending) conflict();
+      // Opening writes no ref: it binds the two heads the provider reports below. A merge holding the repository moves only its own base,
+      // and agents land into the base all the time, so only an unresolved write to one of this pull request's own branches refuses it.
+      if (row.write_pending && await db.prepare('SELECT 1 AS held FROM git_ref_writes WHERE repository_id=? AND outcome IS NULL AND ref IN (?,?)')
+        .bind(row.id, 'refs/heads/' + body.baseBranch, 'refs/heads/' + body.headBranch).first()) conflict();
       if (body.sourceRepositoryId !== String(row.id) || body.sourceRepository?.owner !== ownerSlug(row,env) || body.sourceRepository?.name !== row.name) unsupported();
       if (!validRef('refs/heads/' + body.baseBranch) || !validRef('refs/heads/' + body.headBranch) || body.baseBranch === body.headBranch ||
           !sha(body.baseCommitId) || !sha(body.headCommitId) || body.baseCommitId === body.headCommitId || body.draft !== undefined && typeof body.draft !== 'boolean') invalid('Use two different named branches and exact displayed commits.');

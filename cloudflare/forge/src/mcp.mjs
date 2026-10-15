@@ -120,12 +120,17 @@ const catalogue = [
   ['open_pull_request', true, 'Open a pull request from head into base at their current commits.', input({ head: str('Branch with the changes.'), base: str('Branch to merge into.'), title: str('Title.'), body: str('Description (Markdown).'), draft: { type: 'boolean' } }, ['head', 'base', 'title']), async (c, a) => {
     // An agent task opens pull requests only from its own branch; Golf records the task as the pull request's origin.
     if (c.task && a.head !== c.task.branch) fail(`This agent task may open a pull request only from its branch ${c.task.branch}.`);
-    const base = await c.branch(text(a, 'base', { max: 300 })), head = await c.branch(text(a, 'head', { max: 300 }));
     if (a.draft !== undefined && typeof a.draft !== 'boolean') fail('draft must be true or false.');
-    const { pullRequest } = await c.call(rpc('CreatePullRequest'), { repository: c.key, repositoryId: base.repositoryId, sourceRepository: c.key, sourceRepositoryId: base.repositoryId,
-      baseBranch: a.base, headBranch: a.head, baseCommitId: base.selection.commitId, headCommitId: head.selection.commitId, title: text(a, 'title', { max: 200 }), body: text(a, 'body', { optional: true, max: 12000 }) || '',
-      ...(a.draft !== undefined ? { draft: a.draft } : {}), idempotencyKey: crypto.randomUUID() });
-    return { number: pullRequest.number, url: pullRequest.htmlUrl, state: pullRequest.state, base: pullRequest.base, head: pullRequest.head };
+    // The tool opens at the branches' current commits; when a landing moves the base between the read and the open, it reads them again.
+    for (let attempt = 1; ; attempt++) {
+      const base = await c.branch(text(a, 'base', { max: 300 })), head = await c.branch(text(a, 'head', { max: 300 }));
+      try {
+        const { pullRequest } = await c.call(rpc('CreatePullRequest'), { repository: c.key, repositoryId: base.repositoryId, sourceRepository: c.key, sourceRepositoryId: base.repositoryId,
+          baseBranch: a.base, headBranch: a.head, baseCommitId: base.selection.commitId, headCommitId: head.selection.commitId, title: text(a, 'title', { max: 200 }), body: text(a, 'body', { optional: true, max: 12000 }) || '',
+          ...(a.draft !== undefined ? { draft: a.draft } : {}), idempotencyKey: crypto.randomUUID() });
+        return { number: pullRequest.number, url: pullRequest.htmlUrl, state: pullRequest.state, base: pullRequest.base, head: pullRequest.head };
+      } catch (error) { if (attempt >= 3 || !(error instanceof ToolError) || !error.message.startsWith('The selected discussion or commits changed.')) throw error; }
+    }
   }],
   ['comment', true, 'Comment on an issue or a pull request.', input({ number, body: str('Comment text (Markdown).') }, ['number', 'body']), async (c, a) => {
     const body = text(a, 'body', { max: 12000 }), num = count(a, 'number');

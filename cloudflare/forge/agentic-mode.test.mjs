@@ -3,7 +3,7 @@
 // repository is the two-commit fixture shared with the API token tests (main and feature differ in hello.txt).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { accessFixture, origin, repository, base, feature } from './agent-access-fixture.mjs';
+import { accessFixture, origin, repository, base, feature, commits } from './agent-access-fixture.mjs';
 import { effectiveFeatures } from './src/feature-policy.mjs';
 
 const zero = '0'.repeat(40);
@@ -172,4 +172,35 @@ test('pull request origins: a person, an API token through MCP, and a finished a
   assert.equal((await f.evaluate(16)).origin, 'api-token');
   assert.equal((await f.evaluate(17)).origin, 'agent-task');
   assert.equal((await f.evaluate(14)).origin, 'person');
+});
+
+test('a pull request opens while a merge holds the repository; an unresolved write to one of its own branches still refuses it', async t => {
+  const f = await fixture(t);
+  const refs = f.refs.get('repo-' + 'b'.repeat(32));
+  refs.set('refs/heads/topic', feature); refs.set('refs/heads/other', feature);
+  const open = head => f.call('/rpc/golf.v1.RepositoryService/CreatePullRequest', { repository, repositoryId: '1', sourceRepository: repository, sourceRepositoryId: '1',
+    baseBranch: 'main', headBranch: head, baseCommitId: base, headCommitId: feature, title: 'Change ' + head, body: '', idempotencyKey: crypto.randomUUID() });
+  // A landing's merge holds the repository (it moves main): opening against the provider's current heads goes ahead.
+  f.sql.exec("UPDATE repositories SET write_pending='merge-op'");
+  assert.equal((await open('topic')).status, 200);
+  // An unresolved push to the head branch: its commit is not known, so this pull request waits.
+  f.sql.exec("INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) VALUES('push-op',1,1,'refs/heads/other','" + base + "','" + feature + "','DISPATCHED','t')");
+  f.sql.exec("INSERT INTO git_ref_writes(operation_id,repository_id,ref) VALUES('push-op',1,'refs/heads/other')");
+  const refused = await open('other');
+  assert.equal(refused.status, 412); assert.equal(refused.message, 'An unresolved operation fences further changes.');
+});
+
+test('open_pull_request reads the branches again when a landing moves the base between its read and the open', async t => {
+  const f = await fixture(t);
+  const refs = f.refs.get('repo-' + 'b'.repeat(32)), moved = 'c'.repeat(40);
+  commits.set(moved, { ...commits.get(base), hash: moved, parents: [base], message: 'Landed meanwhile', authoredAt: 1700000100 });
+  refs.set('refs/heads/agent/topic', feature);
+  // The tool reads base and head (two advertisements), then CreatePullRequest reads them again: main moves before that third read.
+  let reads = 0;
+  const iterate = refs[Symbol.iterator].bind(refs);
+  refs[Symbol.iterator] = () => { if (++reads === 3) Map.prototype.set.call(refs, 'refs/heads/main', moved); return iterate(); };
+  const { secret } = await f.create({ repositories: ['1'] }, 'bob');
+  const result = await f.tool(secret, 'open_pull_request', { head: 'agent/topic', base: 'main', title: 'Agent change', body: '' });
+  assert.equal(result.isError, undefined, JSON.stringify(result));
+  assert.equal(JSON.parse(result.content[0].text).base.commitId, moved); assert.ok(reads >= 6);
 });

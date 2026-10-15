@@ -8,7 +8,8 @@ export { origin, repository };
 export const base = 'a'.repeat(40), feature = 'b'.repeat(40), zero = '0'.repeat(40);
 const trees = new Map([['1'.repeat(40), [{ name: 'hello.txt', hash: '3'.repeat(40), type: 'blob', mode: '100644' }]], ['2'.repeat(40), [{ name: 'hello.txt', hash: '4'.repeat(40), type: 'blob', mode: '100644' }]]]);
 const blobs = new Map([['3'.repeat(40), 'hello\n'], ['4'.repeat(40), 'hello agent\n']]);
-const commits = new Map([[base, { hash: base, treeHash: '1'.repeat(40), parents: [], message: 'Initial commit', author: { name: 'Alice' }, authoredAt: 1700000000 }],
+// Exported for tests that move a branch to a commit of their own.
+export const commits = new Map([[base, { hash: base, treeHash: '1'.repeat(40), parents: [], message: 'Initial commit', author: { name: 'Alice' }, authoredAt: 1700000000 }],
   [feature, { hash: feature, treeHash: '2'.repeat(40), parents: [base], message: 'Greet the agent\n\nBody.', author: { name: 'Bob' }, authoredAt: 1700000100 }]]);
 
 export async function accessFixture(t) {
