@@ -45,6 +45,8 @@ const catalogue = [
   { id: 'agent-access', label: 'API tokens and MCP', plural: true, group: 'Integrations', requires: [], choice: true, allocated: () => true },
   // Agentic mode (docs/AGENTIC_MODE.md): each repository turns it on in its own setting, off by default; policy may only forbid it.
   { id: 'agentic-mode', label: 'Agentic mode', group: 'Automation', requires: ['pull-requests'], choice: false, allocated: () => true },
+  // Automations (docs/AUTOMATIONS.md): no operator binding, so always allocated; every automation is created off. Off here stops every run in scope.
+  { id: 'automations', label: 'Automations', plural: true, group: 'Automation', requires: [], choice: true, allocated: () => true },
 ];
 // Features a policy can turn off but never require: each repository keeps its own setting (visibility, the agentic mode switch).
 const neverRequired = { 'public-repositories': 'Public repositories can never be required: each repository keeps its own visibility.',

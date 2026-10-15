@@ -1,5 +1,31 @@
 # Golf implementation status
 
+## 2026-10-15 — Automations: framework and first built-in tools (agents plan phase 2b, schema 46; local evidence)
+
+**Built:** `docs/AUTOMATIONS.md`, migration `0046_automations.sql`, `src/automations.mjs`, `src/automation-engines.mjs`, `src/automation-tools/*`.
+- **Definitions:** at repository, organization and installation scope, under the new `automations` feature policy.
+  - Each one has triggers (events and schedules on Durable Object alarms), targets, an engine and a place, versioned instructions, outputs, limits (per day, concurrency, maximum open PRs, de-duplication), a kill switch and audit.
+- **Built-in tools:**
+  - **PR reviewer:** an AI review draft that a person publishes.
+  - **Issue triage:** labels, duplicates from semantic search, and a needs-information comment.
+  - **Issue → PR** and **CI fixer:** agent tasks on agent hosts, opening draft PRs.
+  - **Custom.**
+- **Engines:** model automations resolve through the engines registry (#115), with the installation's Workers AI selection as the default.
+- **Output:** output is neutralized and marked automated and unverified. Nothing is merged.
+- **UI:** Settings → Automations at repository, organization and admin scope.
+
+**Verified locally:**
+- the forge suite: 709 tests, 708 pass, 1 skipped, including `automations.test.mjs` and `automation-tools.test.mjs`;
+- `automations-runtime-check.mjs` and `ai-runtime-check.mjs` in real workerd;
+- `tsc`;
+- `automations.spec.ts` with `credential-vault.spec.ts`: 15 passed.
+
+**Not verified:**
+- hosted;
+- SSH-host and cloud-sandbox places;
+- learning from dismissed comments;
+- the rest of the built-in library (phase 4).
+
 ## 2026-10-15 — Credential vault and engines, agents plan phase 2a (local evidence)
 
 **Built** ([CREDENTIAL_VAULT.md](CREDENTIAL_VAULT.md), [ENGINES.md](ENGINES.md)), with schema 45 (`0045_credential_vault.sql`: `vault_credentials`,

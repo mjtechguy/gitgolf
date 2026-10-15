@@ -9,7 +9,7 @@ import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
-import { Bot, Cpu, Rocket, Server, MailPlus, Webhook, History, KeyRound, LockKeyhole, Plug, ScrollText, ShieldCheck, Tags, UserRound } from 'lucide-react';
+import { Bot, Cpu, Rocket, Workflow, Server, MailPlus, Webhook, History, KeyRound, LockKeyhole, Plug, ScrollText, ShieldCheck, Tags, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { useQuery } from '@tanstack/react-query';
@@ -45,6 +45,7 @@ export function OrganizationSettingsLayout({ children, organization }: { childre
   // The native runtime has no organization label or organization value service.
   const runtime = useRuntimeCapabilities(), portable = runtime.data?.runtimeProfile !== 'cloudflare-native';
   const audit = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.installation-audit'), agentHosts = settingAvailable(runtime.isError ? undefined : runtime.data, 'agents.hosts');
+  const automations = settingAvailable(runtime.isError ? undefined : runtime.data, 'automations');
   const credentials = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.credentials'), engines = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.engines');
   return <div className="account-layout"><nav className="account-navigation" aria-label="Organization settings"><span className="eyebrow">ORGANIZATION SETTINGS</span>
     <Link to="/organizations/$organization/settings" params={{ organization }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
@@ -52,6 +53,7 @@ export function OrganizationSettingsLayout({ children, organization }: { childre
     {portable && <Link to="/organizations/$organization/settings/secrets" params={{ organization }} activeOptions={{ exact: true }}><KeyRound size={18} />Secrets and variables</Link>}
     {audit && <Link to="/organizations/$organization/settings/audit" params={{ organization }} activeOptions={{ exact: true }}><ScrollText size={18} />Audit log</Link>}
     {agentHosts && <Link to="/organizations/$organization/settings/agents" params={{ organization }} activeOptions={{ exact: true }}><Bot size={18} />Agent hosts</Link>}
+    {automations && <Link to="/organizations/$organization/settings/automations" params={{ organization }} activeOptions={{ exact: true }}><Workflow size={18} />Automations</Link>}
     {credentials && <Link to="/organizations/$organization/settings/credentials" params={{ organization }} activeOptions={{ exact: true }}><LockKeyhole size={18} />Credentials</Link>}
     {engines && <Link to="/organizations/$organization/settings/engines" params={{ organization }} activeOptions={{ exact: true }}><Cpu size={18} />Engines</Link>}
     <Link to="/organizations/$organization" params={{ organization }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Members and teams</Link>
@@ -64,7 +66,7 @@ export function RepositorySettingsLayout({ children, owner, name, userId = '' }:
   // Own repository email shares the Webhooks page; on the native runtime it can be allocated without webhooks.
   const emailOnly = manifest?.runtimeProfile === 'cloudflare-native' && !settingAvailable(manifest, 'settings.repository-webhooks') && emailNotificationsMounted(manifest);
   const pathname = useLocation({select: location => location.pathname});
-  const audit = settingAvailable(manifest, 'settings.installation-audit'), agentic = settingAvailable(manifest, 'repository.agentic-mode');
+  const audit = settingAvailable(manifest, 'settings.installation-audit'), agentic = settingAvailable(manifest, 'repository.agentic-mode'), automations = settingAvailable(manifest, 'automations');
   const entries = ([
     { label: 'General', group: '', suffix: '', icon: UserRound, enabled: runtimeFeature(manifest, 'settings.repository-general'), to: '/$owner/$name/settings' },
     { label: 'Access', group: 'Access and security', suffix: '/access', icon: ShieldCheck, enabled: runtimeFeature(manifest, 'settings.repository-access'), to: '/$owner/$name/settings/access' },
@@ -74,6 +76,8 @@ export function RepositorySettingsLayout({ children, owner, name, userId = '' }:
     ...(audit || manifest?.runtimeProfile === 'cloudflare-native' || !runtime.isSuccess ? [{ label: 'Audit log', group: 'Access and security', suffix: '/audit', icon: ScrollText, enabled: audit, to: '/$owner/$name/settings/audit' } as const] : []),
     // Agentic mode is a native Worker service; a runtime that does not report it does not list it.
     { label: 'Agentic mode', group: 'Automation', suffix: '/agentic-mode', icon: Bot, enabled: agentic, to: '/$owner/$name/settings/agentic-mode', feature: 'agentic-mode', listed: agentic || manifest?.runtimeProfile === 'cloudflare-native' || !runtime.isSuccess },
+    // Automations are a native Worker service too; the page itself explains a policy that turned them off.
+    { label: 'Automations', group: 'Automation', suffix: '/automations', icon: Workflow, enabled: automations, to: '/$owner/$name/settings/automations', feature: 'automations', listed: automations || manifest?.runtimeProfile === 'cloudflare-native' || !runtime.isSuccess },
     { label: 'Workflows', group: 'Automation', suffix: '/workflows', icon: History, enabled: runtimeFeature(manifest, 'settings.repository-workflows'), to: '/$owner/$name/settings/workflows' },
     { label: 'Runners', group: 'Automation', suffix: '/runners', icon: Server, enabled: settingAvailable(runtime.isError ? undefined : runtime.data, runtime.data?.runtimeProfile === 'cloudflare-native' ? 'settings.native-runners' : 'settings.runners'), to: '/$owner/$name/settings/runners', feature: 'actions' },
     { label: 'Secrets and variables', group: 'Automation', suffix: '/secrets', icon: KeyRound, enabled: runtimeFeature(manifest, 'settings.repository-secrets'), to: '/$owner/$name/settings/secrets', feature: 'secrets' },

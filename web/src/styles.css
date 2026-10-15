@@ -2200,6 +2200,24 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .agent-choice-reason { color:var(--warning); }
 .agent-assign .policy-choice input[type=radio] { width:auto; flex:0 0 auto; }
 @media(max-width:480px) { .agent-task-heading { align-items:flex-start; } }
+/* Automations (docs/AUTOMATIONS.md): the inventory, its forms and run output. Output is untrusted plain text, kept as written. */
+.automation-form fieldset { margin-top:16px; }
+.automation-choices .policy-choice input[type=radio] { width:auto; flex:0 0 auto; }
+.automation-name,.automation-cell { display:flex; flex-direction:column; min-width:0; }
+.automation-name { min-width:9rem; }
+.automation-row-actions { flex-wrap:wrap; gap:6px; min-width:16rem; }
+.automation-row-actions .checkbox-field { margin:0; font-size:.8125rem; }
+.automation-limits { grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr)); }
+.automation-limits label { margin:0; }
+.automation-reason { display:block; min-width:12rem; overflow-wrap:anywhere; }
+.automation-run-refs { gap:2px; font-size:.8125rem; min-width:10rem; }
+.automation-unverified { margin-left:6px; padding:0 6px; border:1px solid var(--warning); border-radius:var(--radius); color:var(--warning); font-size:.75rem; }
+.automation-output { display:flex; flex-direction:column; gap:8px; min-width:14rem; max-width:32rem; }
+.automation-output-text { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font-size:.8125rem; }
+pre.automation-output-text { padding:8px 10px; max-height:20rem; overflow:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--raised); font-family:var(--mono); }
+.automation-findings { margin:0; padding-left:18px; display:grid; gap:6px; }
+.automation-history-version { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+.automation-history-version .credential-actions { align-items:center; }
 /* Workers AI advisory card: the result, then where it came from. Probability rows use one hue: accent for the chosen option, neutral ink for the rest. */
 .ai-advisory .browser-panel-heading h3 svg { color:var(--accent); }
 .ai-advisory-flags { display:inline-flex; flex-wrap:wrap; gap:6px; }

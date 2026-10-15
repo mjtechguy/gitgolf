@@ -120,6 +120,17 @@ const native = {
   // Landing a pull request (docs/AGENTIC_MODE.md). Lands and reverts by the policy itself are written by land-queue.mjs (actor 0).
   land: body => body.action === 'land' && { action: 'agentic_mode.land', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => whole(body.number) && `#${whole(body.number)}`,
     after: () => clean({ number: whole(body.number), method: clip(body.method, 10) || 'merge' }) },
+  // Automations (docs/AUTOMATIONS.md) at the scope the request names; the stored automation must match it. Never the instructions text.
+  automations: body => automationActions(body) && ({ action: automationActions(body), scope: ['repository', 'organization'].includes(body.scope) ? body.scope : 'installation',
+    scopeId: async c => (await one(c.db, "SELECT id FROM native_owners WHERE slug=? AND kind='ORGANIZATION'", clip(body.organization, 40) || ''))?.id,
+    key: () => body.action === 'update' || body.action === 'setEnabled' ? token(body.id) && whole(body.expectedVersion) !== undefined && `${body.id}:${whole(body.expectedVersion)}` : undefined,
+    subject: async c => body.action === 'create' ? clip(body.name, 100) || clip(body.tool, 20) : (token(body.id) && (await one(c.db, 'SELECT name FROM automations WHERE id=?', body.id))?.name) || token(body.id),
+    before: async c => { const a = ['update', 'setEnabled', 'killSwitch', 'delete'].includes(body.action) && token(body.id) && await one(c.db, 'SELECT * FROM automations WHERE id=?', body.id); return a ? automationSummary(a) : undefined; },
+    after: () => body.action === 'delete' ? null : body.action === 'run' ? clean({ kind: clip(body.target?.kind, 20), number: whole(body.target?.number), runId: whole(body.target?.runId), repository: body.target?.repository ? clip(`${body.target.repository.owner}/${body.target.repository.name}`, 200) : undefined })
+      : body.action === 'setEnabled' ? clean({ enabled: flag(body.enabled) }) : body.action === 'killSwitch' ? clean({ killSwitch: flag(body.engaged) })
+      : clean({ tool: clip(body.tool, 20), name: clip(body.name, 100), events: names(body.trigger?.events, 10), everyMinutes: whole(body.trigger?.schedule?.everyMinutes), engine: clip(body.engine, 100), place: clip(body.place, 20),
+        hostId: whole(body.hostId), outputs: names(body.output, 6), repositories: Array.isArray(body.target?.repositories) ? body.target.repositories.length : undefined, instructionsChanged: typeof body.instructions === 'string' ? true : undefined,
+        perDay: whole(body.limits?.perDay), concurrency: whole(body.limits?.concurrency), maxOpenPRs: whole(body.limits?.maxOpenPRs), allowLanding: flag(body.approvals?.allowLanding) }) }),
   ai: body => body.action === 'create' && { action: 'ai.run_request', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => clip(body.kind, 40),
     after: () => clean({ kind: clip(body.kind, 40), number: whole(body.target?.number), tag: clip(body.target?.tagName, 100) }) },
   // The agentic inbox asks for an intent summary through the same AI runs (docs/AGENTIC_MODE.md); inbox reads are not recorded.
@@ -141,6 +152,10 @@ const native = {
     subject: c => body.action === 'select' ? 'engine:' + (clip(body.use, 40) || '') : c.engine?.name || clip(body.name, 80) || token(body.id) },
 };
 
+const automationActions = body => ({ create: 'automation.create', update: 'automation.update', delete: 'automation.delete', run: 'automation.run',
+  setEnabled: body.enabled === true ? 'automation.enable' : body.enabled === false ? 'automation.disable' : undefined, killSwitch: body.engaged === true ? 'automation.kill_switch' : body.engaged === false ? 'automation.release_kill_switch' : undefined })[body.action];
+const automationSummary = a => { const parse = text => { try { return JSON.parse(text); } catch { return {}; } };
+  return clean({ tool: a.tool, name: clip(a.name, 100), enabled: Boolean(a.enabled), killSwitch: Boolean(a.kill_switch), engine: clip(a.engine, 100), place: a.place, events: names(parse(a.trigger).events, 10), outputs: names(parse(a.output).kinds, 6), instructionsVersion: a.instructions_version }); };
 const agentHostActions = { createToken: 'agent_host.token_create', revokeToken: 'agent_host.token_revoke', update: 'agent_host.update', delete: 'agent_host.delete' };
 async function agentHostScope(db, body) {
   if (body.action === 'createToken') return { scope: clip(body.scope, 20), scopeId: body.scope === 'organization' ? (await one(db, "SELECT id FROM native_owners WHERE slug=? AND kind='ORGANIZATION'", clip(body.organization, 40) || ''))?.id : undefined };
@@ -330,7 +345,7 @@ export async function audited(request, env, run, identify) {
 
 /* Reading. Categories are the action prefix; the first installation policy rows used the bare action 'update'. */
 const categories = [['installation_policy', 'Installation policy', ['update', 'installation_policy.']], ['feature_policy', 'Feature policy'], ['ai_model', 'AI models', ['ai_model.', 'repository_ai_model.']],
-  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.']], ['api_token', 'API tokens'], ['credential', 'Credentials'], ['engine', 'Engines', ['engine.', 'engine_selection.']], ['agentic_mode', 'Agentic mode'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
+  ['installation', 'Admin access'], ['runner_pool', 'Runner pools'], ['runner', 'Runners'], ['pipeline_runner', 'Pipeline runners'], ['agent_host', 'Coding agents', ['agent_host.', 'agent_task.']], ['api_token', 'API tokens'], ['credential', 'Credentials'], ['engine', 'Engines', ['engine.', 'engine_selection.']], ['agentic_mode', 'Agentic mode'], ['automation', 'Automations'], ['org', 'Organizations'], ['user', 'Accounts'], ['repo', 'Repositories', ['repo.', 'repository_feature.']],
   ['repository_invitation', 'Invitations'], ['protected_branch', 'Rules', ['protected_branch.', 'protected_tag.']], ['hook', 'Webhooks'], ['repository_secret', 'Secrets and variables', ['repository_secret.', 'repository_variable.']],
   ['environment', 'Environments'], ['git_credential', 'Git credentials'], ['git_write', 'Git writes'], ['preview', 'Previews'], ['release', 'Releases', ['release.', 'release_asset.']], ['pull_request', 'Pull requests', ['pull_request.', 'pull_request_review.']],
   ['label', 'Labels and milestones', ['label.', 'milestone.']], ['ai', 'AI runs', ['ai.']], ['actions', 'Actions runs']].map(([id, label, prefixes]) => ({ id, label, prefixes: prefixes || [id + '.'] }));
@@ -388,6 +403,11 @@ const phrases = {
   'agentic_mode.update': ['changed', 'change', e => `agentic mode${e.after?.enabled === true ? ' (on' + (e.after.landWithoutPerson ? ', landing low-risk changes without a person' : '') + ')' : e.after?.enabled === false ? ' (off)' : ''}`],
   'agentic_mode.land': ['landed', 'land', e => named('pull request', e.subject)], 'agentic_mode.auto_land': ['landed', 'land', e => `pull request ${e.subject} without a person`],
   'agentic_mode.revert': ['reverted', 'revert', e => `pull request ${e.subject} after its required checks failed`],
+  'automation.create': ['created', 'create', e => named('automation', e.subject)], 'automation.update': ['updated', 'update', e => named('automation', e.subject)],
+  'automation.delete': ['deleted', 'delete', e => named('automation', e.subject)], 'automation.enable': ['turned on', 'turn on', e => named('automation', e.subject)],
+  'automation.disable': ['turned off', 'turn off', e => named('automation', e.subject)], 'automation.kill_switch': ['engaged the kill switch of', 'engage the kill switch of', e => named('automation', e.subject)],
+  'automation.release_kill_switch': ['released the kill switch of', 'release the kill switch of', e => named('automation', e.subject)],
+  'automation.run': ['ran', 'run', e => `${named('automation', e.subject)}${e.after?.number ? ' on #' + e.after.number : e.after?.runId ? ' on run ' + e.after.runId : ''}`],
   'api_token.create': ['created', 'create', e => `${e.after?.permission ? e.after.permission + ' ' : ''}API token ${e.subject}`], 'api_token.revoke': ['revoked', 'revoke', e => named('API token', e.subject)],
   'api_token.use_denied': ['was refused with', 'use', e => `${e.after?.agentTaskId ? 'an agent task token' : 'an API token'} (${e.after?.reason === 'branch' ? 'branch outside its pattern' : e.after?.reason === 'permission' ? 'read-only token' : 'repository outside its scope'})`],
   'credential.create': ['added', 'add', e => named('credential', e.subject)], 'credential.rotate': ['rotated', 'rotate', e => named('credential', e.subject)], 'credential.revoke': ['revoked', 'revoke', e => named('credential', e.subject)],

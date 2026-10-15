@@ -153,7 +153,16 @@ and limits, or create a custom automation from scratch.
    - provider models (OpenAI, Anthropic, xAI, Google) through the AI Gateway binding;
    - the `listEngines` / `resolveEngine` / `runChat` interface for the automation framework.
 
-   Using a subscription sign-in waits for cloud sandboxes (phase 3). The automation framework and built-in tools are separate work.
+   Using a subscription sign-in waits for cloud sandboxes (phase 3).
+
+   **Status (2026-10-15): phase 2b (the automation framework) built and verified locally, not yet hosted.**
+   [AUTOMATIONS.md](AUTOMATIONS.md), schema 46:
+   - definitions at repository, organization and installation scope, with triggers (events and Durable Object alarm schedules),
+     targets, engines, places, versioned instructions, outputs, limits, a kill switch and audit;
+   - the built-in PR reviewer, issue triage, Issue → PR and CI fixer, plus custom automations;
+   - model automations run through the engines registry or the installation's Workers AI selection; coding-CLI automations run as
+     agent tasks on agent hosts;
+   - output is always neutralized and a draft for a person, and nothing is merged.
 3. **Cloud sandboxes:**
    - a Sandbox image with every CLI installed;
    - an egress proxy that adds the API key and routes through AI Gateway;
