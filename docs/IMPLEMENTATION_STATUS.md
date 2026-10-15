@@ -1,5 +1,36 @@
 # Golf implementation status
 
+## 2026-10-15 — Hosted checks: agent tasks on MCP, automations, vault, engines; SSH hosts waiting for deploy config
+
+On `https://demo.gitgolf.mjtechguy.com`, schema 47, after #113, #115, #116 and #117.
+
+**Agent task on Golf MCP (#113):**
+1. Issue #5 in `mj/actions-demo` ("Add a modulo function with tests") was assigned to Claude Code on the agent host `beastnode1`.
+2. The host passed the task token to Claude Code as an environment value, with a per-task MCP config.
+3. The task SUCCEEDED in about 50 s on `golf-agent/52e85837`.
+4. Claude Code opened PR #6 itself through the Golf MCP tools.
+5. `pull_request_origins` records PR #6 as `agent-task`, linked to the task.
+
+Claude Code did not post the requested issue comment, and no refusal was logged, so it simply didn't try.
+
+**Automations (#116):**
+1. An issue-triage automation was created and enabled on `mj/agent-bench-3`, with the built-in defaults: engine `default`, trigger `issue.opened`, output `comment`.
+2. **First issue (#19):** queued a run within seconds. It was REFUSED: "This repository has no labels for Clef to suggest".
+3. **After adding three labels:** issue #20 ran through Workers AI (435 input tokens). The suggestions were documentation (0.76) and bug (0.23), and Golf posted the triage comment. No label was applied, because the default output is a comment only.
+4. The automation stays enabled on `agent-bench-3` only.
+
+**Capabilities:** READY for `settings.credentials`, `settings.engines`, `automations`, `agents.mcp`, `repository.agentic-mode`, `repository.agentic-landing` and `repository.agent-inbox`.
+
+`agents.ssh-hosts` reports UNCONFIGURED and names what's missing. It needs these deploy changes from `docs/SSH_HOSTS.md`, which are not made yet:
+- the `SSHAgentTask` container Durable Object with the image from `cloudflare/ssh-hosts/Dockerfile`;
+- `SSH_HOSTS_EXECUTION=true`;
+- optionally `SSH_VPC_NETWORK`.
+
+**Not verified on hosted:**
+- a provider-model engine with a real API key;
+- PR reviewer, Issue → PR and CI fixer automations;
+- SSH hosts, Tailscale and Cloudflare Tunnel reach, all of which wait for the container binding.
+
 ## 2026-10-15 — SSH hosts and private-network reach, agents plan phases 1b and 5 (local evidence)
 
 **Built** ([SSH_HOSTS.md](SSH_HOSTS.md)), with schema 47 (`0047_ssh_hosts.sql`: `ssh_hosts`):
