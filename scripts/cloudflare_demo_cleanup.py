@@ -121,7 +121,9 @@ def post_demo_cleanup(url, payload, headers):
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *args):
             return None
-    request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method='POST')
+    # Golf accepts only Connect JSON POSTs; zones with Browser Integrity Check refuse Python's default User-Agent (error 1010).
+    request = urllib.request.Request(url, data=json.dumps(payload).encode(), method='POST',
+        headers={'User-Agent': 'GolfNativeForgeQualification/1', 'Connect-Protocol-Version': '1', **headers})
     try:
         with urllib.request.build_opener(NoRedirect).open(request, timeout=60) as response:
             data = response.read(262145)
