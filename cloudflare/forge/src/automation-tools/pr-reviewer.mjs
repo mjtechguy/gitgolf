@@ -23,7 +23,7 @@ export const prReviewer = {
     // A registry engine: the same bounded diff, read now in the workspace, then one chat outside it.
     return { infer: await preparePullDiff(reviewLimits.diffBytes)({ db: ctx.db, env: ctx.env, person: ctx.person, row: ctx.row, artifact: ctx.artifact, target }) };
   },
-  engineRequest: input => ({ messages: reviewMessages(input), options: { responseFormat: { type: 'json_schema', json_schema: { name: 'review_draft', strict: true, schema: reviewSchema } }, maxTokens: 3000 } }),
+  engineRequest: input => ({ messages: reviewMessages(input), options: { responseFormat: { type: 'json_schema', json_schema: { name: 'review_draft', strict: true, schema: reviewSchema } }, maxTokens: 3000, reasoningEffort: 'low' } }),
   engineParse: (text, input) => reviewOutput({ response: text }, input),
 
   // output: the review-draft output (summary, findings, markdown), already neutralized by reviewOutput.
