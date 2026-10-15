@@ -655,12 +655,17 @@ migration.
 A same-repository pull request merges with a merge commit (parents
 `[base tip, head tip]`) or a squash commit (one parent, the base tip). The tree is:
 - the head's tree when the head already contains the base tip;
-- otherwise a path-level three-way merge (`tree-merge.mjs`) of the base and head
-  trees against their merge base. The merge base comes from the same bounded
-  ancestry read as pull request comparisons (at most 500 commits per side). When
-  only one side changed a path, that side is taken; identical changes are taken
-  once; different changes to the same path (content, mode, delete, file versus
-  directory) are a conflict. Lines inside a file are never merged.
+- otherwise a three-way merge (`tree-merge.mjs`) of the base and head trees against
+  their merge base.
+  - The merge base comes from the same bounded ancestry read as pull request
+    comparisons (at most 500 commits per side).
+  - When only one side changed a path, that side is taken. Identical changes are
+    taken once.
+  - A text file both sides changed (same mode) is merged line by line like
+    `git merge-file` (`text-merge.mjs`, 2026-10-15). It conflicts where the edits
+    overlap or touch.
+  - Other different changes to the same path are a conflict: mode, delete, file
+    versus directory, binary, too large or past the merge budget.
 
 The Worker builds the commit and only the new tree objects a merge creates, sends
 them as one pack through the same single-ref reservation, Git rules and

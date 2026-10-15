@@ -1,5 +1,52 @@
 # Golf implementation status
 
+## 2026-10-15 — AM-6 line-level three-way merge (diff3), verified locally
+
+**What changed:** Golf merged a file both sides changed only by path. Edits to different lines of one file now merge, in every merge:
+- pull request merges and squashes;
+- lands and automatic reverts;
+- Source API commits with `onStale: "merge"`.
+
+**`text-merge.mjs`** (new): `mergeText(base, ours, theirs)` has the outcome of `git merge-file` (default Myers diff, default conflict style).
+- It follows git's xdiff Myers pipeline: trimming, discarding lines without a counterpart, O(ND) with cost cut-offs, and group sliding.
+- A clean merge gives identical bytes, line endings included. Overlapping or touching edits conflict, as in git, and the hunks are reported. No markers are written.
+- Not merged:
+  - `binary`: a NUL in the first 8000 bytes, or invalid UTF-8;
+  - `too_large_to_merge`: over 1 MiB or 50,000 lines.
+
+**`tree-merge.mjs`:**
+- **When:** a regular file both sides changed, with the same mode on every side. Add/add merges against an empty base, like git.
+- **Output:** a clean result is a new blob in `objects`, so callers pack it with the trees.
+- **Budget:** files are merged one at a time, at most 200 files and 16 MiB read per merge (`merge_budget`).
+- **Without `readBlob`:** a repository that cannot read blobs keeps path-level conflicts.
+
+**Other code changes:**
+- `source-api.mjs`: a minimal change. The request overlay now also serves the blobs of the commit being merged (`readBlob`).
+- `pull-merge.mjs`: comments only.
+
+**Differences from git:**
+- `git merge` / `merge-tree` use histogram diff. Where Myers and histogram align repeated lines differently, a merge can differ or conflict.
+- Golf is stricter for non-UTF-8 text, files over the bounds, and a mode change on one side combined with a content change on the other.
+
+**Evidence (local):**
+- `text-merge.test.mjs` compares 684 cases with `git merge-file -p`:
+  - hand-written cases, both ways round;
+  - edits at every distance;
+  - CRLF and no final newline;
+  - 400 fixed-seed random cases;
+  - churn that hits the diff cost heuristics;
+  - files at 50,000 lines and 1 MiB.
+- `tree-merge.test.mjs` merged trees equal `git merge-tree --write-tree`, and the packed blobs pass `fsck --strict` in a fresh repository. Conflict, binary, too-large and budget cases are also covered.
+- `source-api.test.mjs` covers `onStale: merge` on one file.
+- `merge-runtime-check.mjs` has a new case: two pull requests edit different lines of `notes.txt`. Both merge in workerd, and each tree equals `git merge-tree`.
+- The `merge`, `source-api` and `land` runtime checks pass.
+- `node --test cloudflare/forge/*.test.mjs`: 648 tests, 647 pass, 1 skipped, against 638 tests, 637 pass, 1 skipped before. One core test fixture now serves its placeholder blobs as one-line text.
+
+**Not verified:**
+- No hosted run yet.
+- S6 shared-branch commit success has not been re-measured.
+- Worst case: adversarial 50,000-line files take about 1 s of CPU per file in Node.
+
 ## 2026-10-15 — AM-6 rate budgets for each API token and agent task (local evidence only)
 
 **What exists**

@@ -62,10 +62,17 @@ Errors are `{code, message}` with an HTTP status; some add fields:
   `<login>@users.noreply.<host>`), now, `+0000`. Trailing whitespace of the message
   is trimmed and one newline added.
 - `onStale: "fail"` (default): a moved branch returns 409 with `currentHead`.
-  `"merge"`: a three-way merge by path (base: the `expectedHead` tree; ours: the
-  current head; theirs: the edited tree), committed with the current head as parent.
-  Paths changed on both sides differently return 409 with `conflicts`. No line-level
-  merging.
+  `"merge"`: a three-way merge (base: the `expectedHead` tree; ours: the current
+  head; theirs: the edited tree), committed with the current head as parent.
+  - The merge goes by path. A text file both sides changed is merged line by line, like
+    `git merge-file` (`tree-merge.mjs`, `text-merge.mjs`; see "Line-level merges" in
+    `docs/AGENTIC_MODE.md`).
+  - Edits to different lines of one file merge.
+  - Otherwise, lines or paths both sides changed differently return 409 with
+    `conflicts`. A conflict's `reason` is one of: `both_modified`, `both_added`,
+    `binary`, `too_large_to_merge`, `merge_budget`, `deleted_by_us`,
+    `deleted_by_them` or `file_directory`.
+  - No conflict markers are ever committed.
 - If the head moves again or the provider refuses the update, the read, merge and push
   are retried, at most 3 attempts in all.
 - `idempotencyKey`: a replay with the same inputs returns the original response
@@ -157,5 +164,5 @@ returns the original response.
   place; `actor()` attaching `person.token_scope` (and an optional
   `person.token_guard` `{sql, values}` that joins the reservation) comes with AM-3.
 - Agent task tokens as callers, and the `Golf-Agent-Task:` trailer.
-- Line-level (diff3) merging; Source API writes are not in the audit log (as for
-  pushes); hosted throughput (S6) is not measured.
+- Source API writes are not in the audit log (as for pushes). Hosted throughput (S6)
+  with line-level merging is not measured.

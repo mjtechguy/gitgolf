@@ -260,10 +260,11 @@ const parseTree = body => {
   }
   return entries;
 };
-// Trees written by this request are read from memory; every other object comes from the repository.
+// Trees and blobs written by this request are read from memory; every other object comes from the repository.
 function overlay(repo, objects) {
-  const local = new Map(objects.filter(object => object.type === 'tree').map(object => [object.id, object]));
-  return { readTree: hash => local.has(hash) ? Promise.resolve(parseTree(local.get(hash).body)) : repo.readTree(hash) };
+  const local = new Map(objects.map(object => [object.id, object])), own = (hash, type) => local.get(hash)?.type === type;
+  return { readTree: hash => own(hash, 'tree') ? Promise.resolve(parseTree(local.get(hash).body)) : repo.readTree(hash),
+    readBlob: hash => own(hash, 'blob') ? Promise.resolve(local.get(hash).body) : repo.readBlob(hash) };
 }
 // Only new objects the final tree reaches go into the pack; anything else it names is already in the repository.
 function reachable(objects, root) {
