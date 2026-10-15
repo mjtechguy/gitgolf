@@ -26,7 +26,7 @@ function context(over = {}) {
     openProposal: async (task, value) => { calls.push(['openProposal', task.id, value]); return 50; },
     taskSummary: task => JSON.parse(task.result || '{}').summary || '',
     similarIssues: async () => [{ number: 9, title: 'Same crash', score: 0.9 }],
-    pipelineFailure: async () => null, openPulls: async () => [], unlabelledIssues: async () => [], openWork: async () => ({ issues: [{ number: 1, title: 'One' }], pulls: [] }),
+    pipelineFailure: async () => null, openPullForBranch: async () => null, openPulls: async () => [], unlabelledIssues: async () => [], openWork: async () => ({ issues: [{ number: 1, title: 'One' }], pulls: [] }),
     enqueue: async value => { calls.push(['enqueue', value]); return true; }, ...over };
   return ctx;
 }
@@ -122,6 +122,7 @@ test('CI fixer: what it fixes, the excerpt it sends, and the loops it refuses', 
   assert.match(fixTarget({ ...run, ref: 'refs/heads/golf-agent/abcd1234' }, 'main').skip, /proposal branch/);
   assert.match(fixTarget({ ...run, ref: 'refs/tags/v1' }, 'main').skip, /did not run on a branch/);
   assert.match(fixTarget({ ...run, ref: 'refs/heads/other' }, 'main').skip, /neither the default branch/);
+  assert.equal(fixTarget({ ...run, ref: 'refs/heads/other' }, 'main').branch, 'other');
   const excerpt = failureExcerpt(run, [{ name: 'test', reason: 'exit 1', log: 'x'.repeat(5000) }]);
   assert.ok(byteLength(excerpt) <= 3000); assert.match(excerpt, /Job "test" failed \(exit 1\)/);
   assert.match(failureExcerpt(run, []), /no failed job log was available/);
@@ -140,6 +141,12 @@ test('CI fixer: what it fixes, the excerpt it sends, and the loops it refuses', 
   await tool.start(ctx);
   assert.deepEqual(ctx.calls.map(call => call[0]), ['comment', 'assignAgent']); assert.deepEqual([ctx.calls[1][1].kind, ctx.calls[1][1].number], ['pull_request', 14]);
   assert.match((await tool.start(context({ outputs: ['draft-pr'], event: { runId: 7 }, pipelineFailure: async () => ({ ...onPull, run: { ...onPull.run, commit_id: 'c'.repeat(40) } }) }))).skip, /moved past the failed commit/);
+  // A push or manual run on an open pull request's head branch is fixed against that pull request; any other branch is skipped.
+  const onBranch = { run: { ...run, ref: 'refs/heads/feature', commit_id: head }, jobs: [] };
+  ctx = context({ outputs: ['draft-pr'], event: { runId: 7 }, pipelineFailure: async () => onBranch, openPullForBranch: async branch => branch === 'feature' ? 14 : null });
+  await tool.start(ctx);
+  assert.deepEqual([ctx.calls[0][0], ctx.calls[0][1].kind, ctx.calls[0][1].number], ['assignAgent', 'pull_request', 14]);
+  assert.match((await tool.start(context({ outputs: ['draft-pr'], event: { runId: 7 }, pipelineFailure: async () => ({ ...onBranch, run: { ...onBranch.run, ref: 'refs/heads/other' } }) }))).skip, /neither the default branch/);
   assert.match((await tool.start(context({ event: { runId: 7 }, pipelineFailure: async () => ({ run: { ...run, state: 'SUCCESS' }, jobs: [] }) }))).skip, /not failed/);
   assert.match((await tool.start(context({ event: { runId: 7 } }))).skip, /no longer exists/);
 });

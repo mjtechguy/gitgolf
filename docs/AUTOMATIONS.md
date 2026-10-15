@@ -1,7 +1,13 @@
 # Automations (Cloudflare native)
 
 Status: phase 2b of [AGENTS_AND_AUTOMATIONS_PLAN.md](AGENTS_AND_AUTOMATIONS_PLAN.md), verified locally (node tests and a real
-workerd/D1/Durable Object/Workflows check). Not yet hosted-verified. Schema 46 (`migrations/0046_automations.sql`). Code:
+workerd/D1/Durable Object/Workflows check). On hosted (2026-10-15), all four built-in tools ran on real events:
+- issue triage on Clef;
+- the PR reviewer on GLM 5.3, both `default` and named;
+- Issue → PR with Claude Code on an agent host;
+- the CI fixer with Claude Code on an agent host.
+
+Custom automations and provider-model engines are not yet hosted-verified. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Schema 46 (`migrations/0046_automations.sql`). Code:
 `cloudflare/forge/src/automations.mjs`, `src/automation-engines.mjs`, `src/automation-tools/`.
 
 An automation is a built-in tool or a custom one, pointed at a scope, run by events, a schedule or a person, on an engine, with an
@@ -105,7 +111,7 @@ the request that caused it; in the Workspace it runs after the response (`waitUn
 | PR reviewer | `pull_request.opened`, `.updated`, `.review_requested`, schedule | model | `review`: the AI review-draft contract (ai-review.mjs). On `default` it is the acting person's AI review draft on the pull request, which they edit and publish as their own pending review; the run keeps the summary and findings. `comment`: the neutralized review text. One run per head; a head that moved on is skipped. |
 | Issue triage | `issue.opened`, schedule | model (Clef on `default`) | `labels`: only the single label Clef chose with a probability of at least 0.5 (or a registry engine's first label). `comment`: suggestions, possible duplicates from semantic search when the repository has a served index (score ≥ 0.82, at most 3; otherwise it says the check is unavailable) and a request for details when the description has fewer than 30 characters (a rule, not a model judgement). Needs an admin as acting person, as AI triage does. |
 | Issue → PR | `issue.opened` | coding CLI on an agent host | `draft-pr` from the task's proposal branch into the default branch (origin `agent-task`), `comment` on the issue. No changes or a failed task opens nothing. |
-| CI fixer | `pipeline.failed` | coding CLI on an agent host | The tail of each failed job's log (stored with secrets masked; Golf credentials masked again) goes into the task instructions. A failure on an open pull request's head is fixed against that branch (`comment` posts the excerpt); one on the default branch first opens an `issue` with the excerpt (the agent task needs an issue). Other branches are skipped. Then `draft-pr`. |
+| CI fixer | `pipeline.failed` | coding CLI on an agent host | The tail of each failed job's log (stored with secrets masked; Golf credentials masked again) goes into the task instructions. A failure on an open pull request's head (a run the pull request started, or a push or manual run on its head branch) is fixed against that branch (`comment` posts the excerpt); one on the default branch first opens an `issue` with the excerpt (the agent task needs an issue). Other branches are skipped. Then `draft-pr`. |
 | Custom | any | any | Model: `report`, `comment` or `issue` from the instructions and the event's issue or pull request (or the repository's open work), through the AI kind `automation` on `default`. CLI: `draft-pr` from an agent task on the event's issue or pull request. |
 
 All model input from repositories is wrapped in untrusted markers; all output is neutralized (no links, images, HTML or mentions)
@@ -125,7 +131,7 @@ workflow, agent hosts and pipeline bucket; no new bindings.
 
 ## Not done
 
-- Hosted evidence.
+- Hosted evidence for custom automations and for provider-model engines (OpenAI, Anthropic, xAI, Google).
 - Coding CLIs in cloud sandboxes (phase 3) and on SSH hosts (refused until SSH hosts take automation tasks).
 - Stored `coding-cli` engines from the engines registry are not offered; CLI automations name the tool and the agent host.
 - Inline review comments: the native forge has no inline review comments, so findings are `path:line` bullets, as in AI review drafts.

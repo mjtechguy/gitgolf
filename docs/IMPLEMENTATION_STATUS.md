@@ -1,5 +1,49 @@
 # Golf implementation status
 
+## 2026-10-15 — Automations verified on hosted: PR reviewer, Issue → PR, CI fixer, Clef
+
+All runs were on `mj/actions-demo` at `https://demo.gitgolf.mjtechguy.com`. Each automation acts as `mj`.
+
+**PR reviewer (model, Workers AI):**
+- **Event-triggered:** `pull_request.opened` (PR #8) and `pull_request.updated` (a push to PR #4's head) each queued a run.
+  - Both succeeded on the installation default, GLM 5.3, and posted a comment plus a private review draft.
+  - PR #8: 1,088 tokens in, 173 out, no findings.
+  - PR #4: one finding.
+- **Engine named explicitly** (`workers-ai:@cf/zai-org/glm-5.3`):
+  - Before #121, it failed with "The model's answer failed validation: not JSON". The likely cause is that the named-engine path sent no reasoning effort, so GLM spent its 3,000-token budget reasoning and answered nothing.
+  - After #121 it succeeded on PR #10 (1,219 in, 252 out).
+
+**Clef:** "Suggest labels" on `mj/agent-bench-3` issue #19 chose documentation (73%) and question (20%) from the repository's three labels. In `mj/actions-demo`, which has no labels, Clef says so and does not run.
+
+**Issue → PR (Claude Code on the outbound agent host `beastnode1`):**
+- Opening issue #9 queued a run.
+- The agent task finished in 25 s and opened draft PR #10, plus a comment on the issue.
+- Usage, as reported: 136,504 tokens in, 1,692 out, $0.17.
+- Automation output did not trigger the PR reviewer, as designed.
+
+**CI fixer (Claude Code on `beastnode1`):**
+1. A deliberate bug (`subtract` returning `b - a`) was committed to `agent/mcp-subtract`, the head of open PR #4, through the Source API.
+2. Demo CI was dispatched on that branch. The workflow runs on pushes to `main` and on dispatch only. The run failed in both Node jobs on the restored Forgejo runner.
+3. The first failure (run #3) was skipped: the CI fixer only matched runs a pull request started. It now also matches a push or manual run on an open pull request's head branch (this change).
+4. Run #4 then produced:
+   - a comment on PR #4 with the masked log excerpt;
+   - an agent task (25 s);
+   - draft PR #11, which restores `a - b` and leaves the tests unchanged.
+5. Usage: 105,592 tokens in, 1,215 out, $0.17.
+
+**Runners:** the kind `golf-ci` Forgejo and GitLab runners had been crash-looping for 18 hours. Their registration was stored in an `emptyDir`, and the pods re-registered with an already-used one-time token.
+- Both were re-registered with new tokens.
+- Their state now sits on PersistentVolumeClaims.
+- The stale registrations were deleted.
+- Both show Idle.
+
+**Seen once:** right after a deploy, `GetRepository` on `mj/actions-demo` answered 503 "Repository access could not be confirmed" for about two minutes. Other repositories were unaffected, and it cleared without action. The cause is not known.
+
+**Not verified on hosted:**
+- provider-model engines (no API key in the vault yet);
+- custom automations;
+- coding CLIs on SSH hosts for automations (refused by design until wired).
+
 ## 2026-10-15 — SSH hosts deployed on the hosted demo; a task over Tailscale verified
 
 **Deploy config:** the Alchemy stack builds the SSH image and binds `SSHAgentTask` on `enable-ssh-hosts`

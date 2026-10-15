@@ -21,7 +21,8 @@ export function fixTarget(run, defaultBranch) {
   if (branch.startsWith('golf-agent/')) return { skip: `Run #${run.number} ran on a coding agent's proposal branch; the CI fixer does not fix its own proposals.` };
   if (run.pull_number) return { kind: 'pull_request', number: run.pull_number };
   if (branch === defaultBranch) return { kind: 'issue' };
-  return { skip: `Run #${run.number} failed on ${branch}, which is neither the default branch nor the head of an open pull request.` };
+  // A push or manual run on some other branch: start() looks for an open pull request with that head branch.
+  return { skip: `Run #${run.number} failed on ${branch}, which is neither the default branch nor the head of an open pull request.`, branch };
 }
 
 export const ciFixer = {
@@ -38,7 +39,11 @@ export const ciFixer = {
     if (!failure) return { skip: 'The pipeline run no longer exists.' };
     const { run, jobs } = failure;
     if (run.state !== 'FAILURE') return { skip: `Run #${run.number} is ${run.state.toLowerCase()}, not failed.` };
-    const target = fixTarget(run, ctx.row.default_branch);
+    let target = fixTarget(run, ctx.row.default_branch);
+    if (target.branch) {
+      const number = await ctx.openPullForBranch(target.branch);
+      if (number) target = { kind: 'pull_request', number };
+    }
     if (target.skip) return { skip: target.skip };
     const excerpt = failureExcerpt(run, jobs), outputs = {};
     let number = target.number;
