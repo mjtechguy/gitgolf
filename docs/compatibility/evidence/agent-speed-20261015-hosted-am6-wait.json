@@ -1,0 +1,279 @@
+{
+  "tool": "agent_speed_bench",
+  "schemaVersion": 1,
+  "runId": "20261015-9207e4",
+  "label": "hosted-am6-wait",
+  "date": "2026-10-15T11:18:54.430Z",
+  "originHost": "demo.gitgolf.mjtechguy.com",
+  "gitVersion": "git version 2.43.0",
+  "nodeVersion": "v24.15.0",
+  "durationSec": 20,
+  "concurrency": [
+    4,
+    16
+  ],
+  "scenarios": [
+    "S6"
+  ],
+  "repositories": [
+    "mj/agent-bench-1",
+    "mj/agent-bench-2",
+    "mj/agent-bench-3",
+    "mj/agent-bench-4",
+    "mj/agent-bench-5",
+    "mj/agent-bench-6",
+    "mj/agent-bench-7",
+    "mj/agent-bench-8"
+  ],
+  "branchPrefix": "bench/20261015-9207e4/",
+  "auth": {
+    "access": false,
+    "git": "api-token",
+    "api": true
+  },
+  "latencyNote": "latencyMs covers every attempt of the primary operation (network only); localGitMs is local commit plumbing",
+  "results": [
+    {
+      "scenario": "S6",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "variant": "branch-per-writer",
+      "durationSec": 24.13,
+      "attempts": 33,
+      "successes": 33,
+      "successesPerSec": 1.37,
+      "latencyMs": {
+        "p50": 2413.1,
+        "p95": 4421.6,
+        "p99": 5078.1,
+        "max": 5078.1
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 33,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 33,
+          "successes": 33,
+          "successesPerSec": 1.37,
+          "latencyMs": {
+            "p50": 2413.1,
+            "p95": 4421.6,
+            "p99": 5078.1,
+            "max": 5078.1
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 33,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "66c88a62ac576dd1b6e1d4c7928cd0eacf76ca48ccef47799db6620da7f83525"
+        ],
+        "workerRelease": [
+          "66c88a62ac576dd1b6e1d4c7928cd0eacf76ca48ccef47799db6620da7f83525"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "variant": "shared-branch",
+      "durationSec": 23.34,
+      "attempts": 22,
+      "successes": 22,
+      "successesPerSec": 0.94,
+      "latencyMs": {
+        "p50": 4125.2,
+        "p95": 6007.8,
+        "p99": 6524.2,
+        "max": 6524.2
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 22,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 22,
+          "successes": 22,
+          "successesPerSec": 0.94,
+          "latencyMs": {
+            "p50": 4125.2,
+            "p95": 6007.8,
+            "p99": 6524.2,
+            "max": 6524.2
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 22,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "66c88a62ac576dd1b6e1d4c7928cd0eacf76ca48ccef47799db6620da7f83525"
+        ],
+        "workerRelease": [
+          "66c88a62ac576dd1b6e1d4c7928cd0eacf76ca48ccef47799db6620da7f83525"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [],
+      "variant": "branch-per-writer",
+      "durationSec": 26.29,
+      "attempts": 64,
+      "successes": 64,
+      "successesPerSec": 2.43,
+      "latencyMs": {
+        "p50": 6297.2,
+        "p95": 8782.5,
+        "p99": 9053.5,
+        "max": 9053.5
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 64,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 64,
+          "successes": 64,
+          "successesPerSec": 2.43,
+          "latencyMs": {
+            "p50": 6297.2,
+            "p95": 8782.5,
+            "p99": 9053.5,
+            "max": 9053.5
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 64,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "66c88a62ac576dd1b6e1d4c7928cd0eacf76ca48ccef47799db6620da7f83525"
+        ],
+        "workerRelease": [
+          "66c88a62ac576dd1b6e1d4c7928cd0eacf76ca48ccef47799db6620da7f83525"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [],
+      "variant": "shared-branch",
+      "durationSec": 35.55,
+      "attempts": 36,
+      "successes": 36,
+      "successesPerSec": 1.01,
+      "latencyMs": {
+        "p50": 11837.5,
+        "p95": 23874.6,
+        "p99": 24846.4,
+        "max": 24846.4
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 36,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 36,
+          "successes": 36,
+          "successesPerSec": 1.01,
+          "latencyMs": {
+            "p50": 11837.5,
+            "p95": 23874.6,
+            "p99": 24846.4,
+            "max": 24846.4
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 36,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "66c88a62ac576dd1b6e1d4c7928cd0eacf76ca48ccef47799db6620da7f83525"
+        ],
+        "workerRelease": [
+          "66c88a62ac576dd1b6e1d4c7928cd0eacf76ca48ccef47799db6620da7f83525"
+        ]
+      },
+      "errorSamples": []
+    }
+  ],
+  "cleanup": {
+    "attempted": 22,
+    "deleted": 22,
+    "absent": 0,
+    "failed": []
+  }
+}

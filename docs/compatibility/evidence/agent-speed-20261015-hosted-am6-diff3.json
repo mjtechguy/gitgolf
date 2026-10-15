@@ -1,0 +1,338 @@
+{
+  "tool": "agent_speed_bench",
+  "schemaVersion": 1,
+  "runId": "20261015-74824a",
+  "label": "hosted-am6-diff3",
+  "date": "2026-10-15T11:06:57.174Z",
+  "originHost": "demo.gitgolf.mjtechguy.com",
+  "gitVersion": "git version 2.43.0",
+  "nodeVersion": "v24.15.0",
+  "durationSec": 20,
+  "concurrency": [
+    4,
+    16
+  ],
+  "scenarios": [
+    "S6"
+  ],
+  "repositories": [
+    "mj/agent-bench-1",
+    "mj/agent-bench-2",
+    "mj/agent-bench-3",
+    "mj/agent-bench-4",
+    "mj/agent-bench-5",
+    "mj/agent-bench-6",
+    "mj/agent-bench-7",
+    "mj/agent-bench-8"
+  ],
+  "branchPrefix": "bench/20261015-74824a/",
+  "auth": {
+    "access": false,
+    "git": "api-token",
+    "api": true
+  },
+  "latencyNote": "latencyMs covers every attempt of the primary operation (network only); localGitMs is local commit plumbing",
+  "results": [
+    {
+      "scenario": "S6",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "variant": "branch-per-writer",
+      "durationSec": 20.57,
+      "attempts": 30,
+      "successes": 30,
+      "successesPerSec": 1.46,
+      "latencyMs": {
+        "p50": 2696.3,
+        "p95": 3904.6,
+        "p99": 4236.6,
+        "max": 4236.6
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 30,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 30,
+          "successes": 30,
+          "successesPerSec": 1.46,
+          "latencyMs": {
+            "p50": 2696.3,
+            "p95": 3904.6,
+            "p99": 4236.6,
+            "max": 4236.6
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 30,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "be0a9709fe608488cb8e04b068f4696ed4a5ed44ea75029514d8916d0464412c"
+        ],
+        "workerRelease": [
+          "be0a9709fe608488cb8e04b068f4696ed4a5ed44ea75029514d8916d0464412c"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 4,
+      "status": "ok",
+      "notes": [],
+      "variant": "shared-branch",
+      "durationSec": 24.27,
+      "attempts": 24,
+      "successes": 19,
+      "successesPerSec": 0.78,
+      "latencyMs": {
+        "p50": 3629.5,
+        "p95": 6744.5,
+        "p99": 6856.1,
+        "max": 6856.1
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 19,
+        "contention_409": 4,
+        "nonff_rejected": 0,
+        "other": {
+          "412": 1
+        }
+      },
+      "contention": 4,
+      "ops": {
+        "source_commit": {
+          "attempts": 24,
+          "successes": 19,
+          "successesPerSec": 0.78,
+          "latencyMs": {
+            "p50": 3629.5,
+            "p95": 6744.5,
+            "p99": 6856.1,
+            "max": 6856.1
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 19,
+            "contention_409": 4,
+            "nonff_rejected": 0,
+            "other": {
+              "412": 1
+            }
+          }
+        },
+        "ls_remote": {
+          "attempts": 1,
+          "successes": 1,
+          "successesPerSec": 0.04,
+          "latencyMs": {
+            "p50": 2297,
+            "p95": 2297,
+            "p99": 2297,
+            "max": 2297
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 1,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "be0a9709fe608488cb8e04b068f4696ed4a5ed44ea75029514d8916d0464412c"
+        ],
+        "workerRelease": [
+          "be0a9709fe608488cb8e04b068f4696ed4a5ed44ea75029514d8916d0464412c"
+        ]
+      },
+      "errorSamples": [
+        "source_commit contention_409: HTTP 409 {\"code\":\"aborted\",\"message\":\"Another write to bench/20261015-74824a/s6-c4-shared stayed in flight; nothing was committed after 3 attempts.\",\"currentHead\":\"2783e3c4115694b71defaa3d9399b063234f01da\"}",
+        "source_commit contention_409: HTTP 409 {\"code\":\"aborted\",\"message\":\"Another write to bench/20261015-74824a/s6-c4-shared stayed in flight; nothing was committed after 3 attempts.\",\"currentHead\":\"23bae1fbb2c616bcbae40fb4ae3daf42635901f5\"}",
+        "source_commit other:412: HTTP 412 {\"code\":\"failed_precondition\",\"message\":\"Your access to this repository or its branch rules changed during the request; nothing was sent.\"}",
+        "source_commit contention_409: HTTP 409 {\"code\":\"aborted\",\"message\":\"Another write to bench/20261015-74824a/s6-c4-shared stayed in flight; nothing was committed after 3 attempts.\",\"currentHead\":\"5ab5ca58cfad706944e0378e2d56d06e3c751028\"}"
+      ]
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [],
+      "variant": "branch-per-writer",
+      "durationSec": 25.42,
+      "attempts": 49,
+      "successes": 49,
+      "successesPerSec": 1.93,
+      "latencyMs": {
+        "p50": 7061.7,
+        "p95": 8443.3,
+        "p99": 8716.7,
+        "max": 8716.7
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 49,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 49,
+          "successes": 49,
+          "successesPerSec": 1.93,
+          "latencyMs": {
+            "p50": 7061.7,
+            "p95": 8443.3,
+            "p99": 8716.7,
+            "max": 8716.7
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 49,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "be0a9709fe608488cb8e04b068f4696ed4a5ed44ea75029514d8916d0464412c"
+        ],
+        "workerRelease": [
+          "be0a9709fe608488cb8e04b068f4696ed4a5ed44ea75029514d8916d0464412c"
+        ]
+      },
+      "errorSamples": []
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [],
+      "variant": "shared-branch",
+      "durationSec": 24.61,
+      "attempts": 69,
+      "successes": 15,
+      "successesPerSec": 0.61,
+      "latencyMs": {
+        "p50": 4095.8,
+        "p95": 6365.2,
+        "p99": 6984.2,
+        "max": 6984.2
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 0,
+        "503": 0,
+        "ok": 15,
+        "contention_409": 45,
+        "nonff_rejected": 0,
+        "other": {
+          "412": 9
+        }
+      },
+      "contention": 45,
+      "ops": {
+        "source_commit": {
+          "attempts": 69,
+          "successes": 15,
+          "successesPerSec": 0.61,
+          "latencyMs": {
+            "p50": 4095.8,
+            "p95": 6365.2,
+            "p99": 6984.2,
+            "max": 6984.2
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 15,
+            "contention_409": 45,
+            "nonff_rejected": 0,
+            "other": {
+              "412": 9
+            }
+          }
+        },
+        "ls_remote": {
+          "attempts": 9,
+          "successes": 9,
+          "successesPerSec": 0.37,
+          "latencyMs": {
+            "p50": 6530.3,
+            "p95": 9102,
+            "p99": 9102,
+            "max": 9102
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 9,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "be0a9709fe608488cb8e04b068f4696ed4a5ed44ea75029514d8916d0464412c"
+        ],
+        "workerRelease": [
+          "be0a9709fe608488cb8e04b068f4696ed4a5ed44ea75029514d8916d0464412c"
+        ]
+      },
+      "errorSamples": [
+        "source_commit other:412: HTTP 412 {\"code\":\"failed_precondition\",\"message\":\"Your access to this repository or its branch rules changed during the request; nothing was sent.\"}",
+        "source_commit contention_409: HTTP 409 {\"code\":\"aborted\",\"message\":\"Another write to bench/20261015-74824a/s6-c16-shared stayed in flight; nothing was committed after 3 attempts.\",\"currentHead\":\"290a7b1790106db1cc04f46e61db888661edb92f\"}",
+        "source_commit contention_409: HTTP 409 {\"code\":\"aborted\",\"message\":\"Another write to bench/20261015-74824a/s6-c16-shared stayed in flight; nothing was committed after 3 attempts.\",\"currentHead\":\"e30818f4b9a8111c6afafbb839281bb721d9029b\"}",
+        "source_commit contention_409: HTTP 409 {\"code\":\"aborted\",\"message\":\"Another write to bench/20261015-74824a/s6-c16-shared stayed in flight; nothing was committed after 3 attempts.\",\"currentHead\":\"deca5c7e8324673b52253fc90da8ef6b003e6e3f\"}",
+        "source_commit contention_409: HTTP 409 {\"code\":\"aborted\",\"message\":\"Another write to bench/20261015-74824a/s6-c16-shared stayed in flight; nothing was committed after 3 attempts.\",\"currentHead\":\"8b2fc2601f2683f6b5118bcd4d8684bf0d5b4b1a\"}"
+      ]
+    }
+  ],
+  "cleanup": {
+    "attempted": 22,
+    "deleted": 22,
+    "absent": 0,
+    "failed": []
+  }
+}

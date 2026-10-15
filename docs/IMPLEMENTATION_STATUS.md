@@ -1,5 +1,40 @@
 # Golf implementation status
 
+## 2026-10-15 — AM-6 verified on the hosted demo; shared-branch commits fixed
+
+On `https://demo.gitgolf.mjtechguy.com` (`mj/agent-bench-*`), after #108 to #112. Evidence is in `docs/compatibility/evidence/agent-speed-20261015-hosted-am6-*.json`.
+
+**Blame and grep (#110), browser session on `agent-bench-3`:**
+- Grep for `Note 1` returned 7 matches with path, line and column.
+- `regex: true` was refused with 400 `regex_unavailable`.
+- Blame of a file edited by two agents attributed line 2 and line 18 to their own commits, and the rest to the commit that added the file.
+
+**Line-level merge (#109):** two commits from the same stale head, editing lines 2 and 18 of `docs/shared.txt` with `onStale: merge`. The second came back `merged: true`, and the file holds both edits. A third edit to line 2 was refused with 409, `both_modified` on that path.
+
+**Rate budgets (#108):** S6 at 16 writers with one API token. After about 60 writes, including branch creations, further commits got 429 "API token budget: 60 writes per minute reached; retry in 36 s.". The branch-creating push was refused in Git's own report.
+
+**Shared-branch commits (#112):** the budget was raised temporarily (a widening change, confirmed and audited) and restored to 60 afterwards.
+
+| 16 writers on one shared branch (`onStale: merge`) | Successes |
+| --- | --- |
+| Before #109 (path-level merge) | 13/63 |
+| After #109 (line-level merge) | 15/69 |
+| After #112 | **36/36**, p50 11.8 s |
+
+- **After #109:** the failures were not conflicts. They were "another write … stayed in flight; nothing was committed after 3 attempts" and a false 412 "access changed".
+- **#112:** a commit waits for the branch's turn and re-merges for up to 30 s. A failed reservation whose authority guard still holds is now a lost race.
+- **Throughput:** a branch per writer reached 64/64 at 2.43 writes/s.
+
+**Decision on the per-repository `RepositoryWrites` split (AM-1 item 5): deferred.**
+- **Current capacity:** the deployment sustains about 2.4 Source API writes per second (about 145 a minute) with every commit succeeding. That covers the target of 100 agents in one repository each writing about once a minute.
+- **When to revisit:**
+  - sustained 429 "Workspace is busy" responses;
+  - p95 write latency above 30 s at the expected concurrency;
+  - a need for more than about 2 writes per second across the deployment.
+- **Scope when needed:** move transfers into a per-repository Durable Object. The D1 fences stay authoritative.
+
+**Cleanup:** the benchmark API token is revoked, and agent rate budgets are back to the defaults.
+
 ## 2026-10-15 — AM-3 item 4: coding agents on hosts use Golf MCP with their task token (local evidence)
 
 **Built:** a running agent task's own token (`golf_agent_task_…`) works on `/mcp` and `/native/source/*` ([AGENT_ACCESS.md](AGENT_ACCESS.md#agent-task-tokens), [AGENT_HOSTS.md](AGENT_HOSTS.md#golf-mcp-for-the-task)).

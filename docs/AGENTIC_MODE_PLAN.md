@@ -377,7 +377,7 @@ writer in a new `git-objects.mjs`.
 
 ### AM-6 Budgets and later work
 
-**Status (2026-10-15): budgets, line-level merge, blame and literal grep merged and deployed; hosted check pending.**
+**Status (2026-10-15): budgets, line-level merge, blame and literal grep merged, deployed and hosted-verified; shared-branch commits 36/36 at 16 writers after #112; `RepositoryWrites` split deferred (see `docs/IMPLEMENTATION_STATUS.md`).**
 - **Rate budgets (#108):** per API token and agent task, requests and writes per minute.
   - Counted inside the Workspace rather than with a Rate Limiting binding, because bindings belong to the deploy scripts.
   - Defaults are in installation policy. Over budget: Git's own report for pushes, 429 elsewhere, a tool error in MCP.

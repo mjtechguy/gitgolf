@@ -1,0 +1,218 @@
+{
+  "tool": "agent_speed_bench",
+  "schemaVersion": 1,
+  "runId": "20261015-68699b",
+  "label": "hosted-am6-budget",
+  "date": "2026-10-15T11:05:40.172Z",
+  "originHost": "demo.gitgolf.mjtechguy.com",
+  "gitVersion": "git version 2.43.0",
+  "nodeVersion": "v24.15.0",
+  "durationSec": 20,
+  "concurrency": [
+    16
+  ],
+  "scenarios": [
+    "S6"
+  ],
+  "repositories": [
+    "mj/agent-bench-1",
+    "mj/agent-bench-2",
+    "mj/agent-bench-3",
+    "mj/agent-bench-4",
+    "mj/agent-bench-5",
+    "mj/agent-bench-6",
+    "mj/agent-bench-7",
+    "mj/agent-bench-8"
+  ],
+  "branchPrefix": "bench/20261015-68699b/",
+  "auth": {
+    "access": false,
+    "git": "api-token",
+    "api": true
+  },
+  "latencyNote": "latencyMs covers every attempt of the primary operation (network only); localGitMs is local commit plumbing",
+  "results": [
+    {
+      "scenario": "S6",
+      "concurrency": 16,
+      "status": "ok",
+      "notes": [],
+      "variant": "branch-per-writer",
+      "durationSec": 24.77,
+      "attempts": 59,
+      "successes": 43,
+      "successesPerSec": 1.74,
+      "latencyMs": {
+        "p50": 5343.6,
+        "p95": 7027.5,
+        "p99": 7142.9,
+        "max": 7142.9
+      },
+      "outcomes": {
+        "413": 0,
+        "429": 16,
+        "503": 0,
+        "ok": 43,
+        "contention_409": 0,
+        "nonff_rejected": 0,
+        "other": {}
+      },
+      "contention": 0,
+      "ops": {
+        "source_commit": {
+          "attempts": 59,
+          "successes": 43,
+          "successesPerSec": 1.74,
+          "latencyMs": {
+            "p50": 5343.6,
+            "p95": 7027.5,
+            "p99": 7142.9,
+            "max": 7142.9
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 16,
+            "503": 0,
+            "ok": 43,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        },
+        "ls_remote": {
+          "attempts": 16,
+          "successes": 16,
+          "successesPerSec": 0.65,
+          "latencyMs": {
+            "p50": 3665,
+            "p95": 8678.3,
+            "p99": 8678.3,
+            "max": 8678.3
+          },
+          "outcomes": {
+            "413": 0,
+            "429": 0,
+            "503": 0,
+            "ok": 16,
+            "contention_409": 0,
+            "nonff_rejected": 0,
+            "other": {}
+          }
+        }
+      },
+      "localGitMs": null,
+      "releases": {
+        "release": [
+          "be0a9709fe608488cb8e04b068f4696ed4a5ed44ea75029514d8916d0464412c"
+        ],
+        "workerRelease": [
+          "be0a9709fe608488cb8e04b068f4696ed4a5ed44ea75029514d8916d0464412c"
+        ]
+      },
+      "errorSamples": [
+        "source_commit 429: HTTP 429 {\"code\":\"resource_exhausted\",\"message\":\"API token budget: 60 writes per minute reached; retry in 36 s.\",\"retryAfter\":36}",
+        "source_commit 429: HTTP 429 {\"code\":\"resource_exhausted\",\"message\":\"API token budget: 60 writes per minute reached; retry in 30 s.\",\"retryAfter\":30}"
+      ]
+    },
+    {
+      "scenario": "S6",
+      "concurrency": 16,
+      "status": "failed",
+      "notes": [],
+      "variant": "shared-branch",
+      "reason": "could not create branches: other:remote_rejected"
+    }
+  ],
+  "cleanup": {
+    "attempted": 17,
+    "deleted": 0,
+    "absent": 0,
+    "failed": [
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w0",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w1",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w2",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w3",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w4",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w5",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w6",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w7",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w8",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w9",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w10",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w11",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w12",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w13",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w14",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-w15",
+        "outcome": "other:remote_rejected"
+      },
+      {
+        "repository": "mj/agent-bench-1",
+        "branch": "bench/20261015-68699b/s6-c16-shared",
+        "outcome": "other:400"
+      }
+    ]
+  }
+}
