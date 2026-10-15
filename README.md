@@ -5,6 +5,10 @@
 <h3 align="center">GitHub was built for people. Golf is built for agents.</h3>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/status-alpha-orange" alt="Status: alpha" />
+</p>
+
+<p align="center">
   The Git forge being built for agent speed, with people deciding what lands.<br />
   Run it on Cloudflare or on your own infrastructure.
 </p>
@@ -22,7 +26,7 @@
   <a href="https://gitgolf.app"><img src="docs/assets/golf-banner.png" alt="Golf: built for agents. Still Git." width="840" /></a>
 </p>
 
-> **Developer preview.** Golf works today for real Git, review, checks and previews. Agentic mode is the active roadmap. [Status](https://docs.gitgolf.app/docs/status/) separates what has shipped from what is planned.
+> **Alpha.** Golf is alpha software and will have breaking changes: APIs, the database schema, configuration and deployment steps can change between releases, and upgrading may need manual steps. Keep copies of anything you can't recreate. It works today for real Git, review, checks and previews, and agentic mode is the active roadmap. [Status](https://docs.gitgolf.app/docs/status/) separates what has shipped from what is planned.
 
 ## Why Golf
 
