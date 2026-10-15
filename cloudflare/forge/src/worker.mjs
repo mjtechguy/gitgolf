@@ -67,17 +67,7 @@ export class Workspace extends DurableObject {
         if (selection ? result?.ok || !(event instanceof Request) : result?.ok && event instanceof Request && /\/golf\.v1\.EmailNotificationService\/RedeliverOwnEmail$|^\/native\/runner-machine\/[a-f0-9-]{36}\/finish$|^\/api\/v4\/jobs\/[1-9][0-9]{0,15}$/.test(new URL(event.url).pathname))
           this.ctx.waitUntil(this.deliverEmail().catch(() => console.log(JSON.stringify({ event:'golf.email_delivery_failed' }))));
         // Definite refusals have no activity; ambiguous provider failures can have effects.
-        if (selection && (!(event instanceof Request) || !result || result.ok || result.status >= 500)) {
-          try {
-            const db = env.DB.withSession('first-primary');
-            let rows;
-            if (selection.job) rows = (await db.prepare('SELECT repository_id AS id FROM evidence_jobs WHERE id=?').bind(selection.job).all()).results;
-            else if (selection.invitation) rows = (await db.prepare('SELECT repository_id AS id FROM repository_invitations WHERE id=?').bind(selection.invitation).all()).results;
-            else if (selection.name || selection.id) rows = (await db.prepare("SELECT id FROM repositories WHERE state='ACTIVE' AND (name=? OR id=?)").bind(selection.name || '', selection.id || '').all()).results;
-            else rows = (await db.prepare("SELECT id FROM repositories WHERE state='ACTIVE'").all()).results;
-            for (const row of rows) this.activity.publish(String(row.id), selection.topics);
-          } catch { console.log(JSON.stringify({ event: 'golf.activity_publication_failed' })); }
-        }
+        if (selection && (!(event instanceof Request) || !result || result.ok || result.status >= 500)) await this.publishActivity(selection);
       }
     }, admission);
     // Client mutations fence authority reads; background jobs cannot change membership.
@@ -85,6 +75,27 @@ export class Workspace extends DurableObject {
     this.authority = serialize(event => event.activity ? activityAuthority(event.request, configured, event.input)
       : new URL(event.url).pathname === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' ? handle(event, configured) : this.dispatch(event),
     event => event?.activity ? 'read' : admission(event));
+  }
+  async publishActivity(selection) {
+    try {
+      const db = this.env.DB.withSession('first-primary');
+      let rows;
+      if (selection.job) rows = (await db.prepare('SELECT repository_id AS id FROM evidence_jobs WHERE id=?').bind(selection.job).all()).results;
+      else if (selection.invitation) rows = (await db.prepare('SELECT repository_id AS id FROM repository_invitations WHERE id=?').bind(selection.invitation).all()).results;
+      else if (selection.name || selection.id) rows = (await db.prepare("SELECT id FROM repositories WHERE state='ACTIVE' AND (name=? OR id=?)").bind(selection.name || '', selection.id || '').all()).results;
+      else rows = (await db.prepare("SELECT id FROM repositories WHERE state='ACTIVE'").all()).results;
+      for (const row of rows) this.activity.publish(String(row.id), selection.topics);
+    } catch { console.log(JSON.stringify({ event: 'golf.activity_publication_failed' })); }
+  }
+  // A push or Source API write served by the stateless Worker (scale-out S2, docs/SCALE_OUT_PLAN.md): what the admission queue does
+  // after a write it served (webhook and email drains, live activity, the CI pass), reached by RPC and not itself queued.
+  async writeSettled(selection, ok, status) {
+    if (selection && ok) {
+      this.ctx.waitUntil(this.deliverWebhooks().catch(() => console.log(JSON.stringify({ event:'golf.webhook_delivery_failed' }))));
+      this.ctx.waitUntil(this.deliverEmail().catch(() => console.log(JSON.stringify({ event:'golf.email_delivery_failed' }))));
+    }
+    if (selection && (ok || status >= 500)) await this.publishActivity(selection);
+    if (this.env.CI_AUTO === 'true') this.ctx.waitUntil(this.runCI().catch(() => {}));
   }
   // Drains read the installation policy in force at their start: removed origins, limits and email turned off.
   async deliverWebhooks() { return drainWebhooks(await withInstallationPolicy(this.configured)); }

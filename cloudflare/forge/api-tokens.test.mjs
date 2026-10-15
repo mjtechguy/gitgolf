@@ -169,15 +169,15 @@ test('the public Worker lets a golf_pat_ through Access only on /mcp, /native/so
   } }) } } };
   const send = (path, authorization, method = 'POST') => publicFetch(new Request(origin + path, { method, headers: { ...(authorization ? { Authorization: authorization } : {}),
     Cookie: 'CF_Authorization=forged; other=1', 'X-Golf-Native-Access-Email': 'forged@example.com' }, ...(method === 'POST' ? { body: '{}' } : {}) }), env, ctx);
-  for (const [path, authorization, method] of [['/mcp', bearer(secret)], ['/native/source/commit', bearer(secret)], ['/git/alice/project.git/info/refs?service=git-receive-pack', basic(secret), 'GET'],
-    ['/git/alice/project.git/git-receive-pack', bearer(secret)]]) assert.equal(await (await send(path, authorization, method)).text(), 'workspace', path);
-  assert.deepEqual(forwarded.map(row => row[0]), ['/mcp', '/native/source/commit', '/git/alice/project.git/info/refs', '/git/alice/project.git/git-receive-pack']);
-  // A clone passes Access the same way and is served by the Worker itself (scale-out S1); this stub has no database, so it is 503.
-  assert.equal((await send('/git/alice/project.git/info/refs?service=git-upload-pack', basic(secret), 'GET')).status, 503);
+  for (const [path, authorization] of [['/mcp', bearer(secret)], ['/native/source/files', bearer(secret)]]) assert.equal(await (await send(path, authorization)).text(), 'workspace', path);
+  assert.deepEqual(forwarded.map(row => row[0]), ['/mcp', '/native/source/files']);
+  // Git and Source API writes pass Access the same way and are served by the Worker itself (scale-out S1, S2); this stub has no database.
+  for (const [path, authorization, method] of [['/git/alice/project.git/info/refs?service=git-upload-pack', basic(secret), 'GET'], ['/git/alice/project.git/info/refs?service=git-receive-pack', basic(secret), 'GET'],
+    ['/git/alice/project.git/git-receive-pack', bearer(secret)], ['/native/source/commit', bearer(secret)]]) assert.equal((await send(path, authorization, method)).status, 503, path);
   assert.ok(forwarded.every(row => row[2] === null && row[3] === null));
   // Everything else still needs Access: no token, another credential, Basic outside Git, or a token on another route.
   for (const [path, authorization] of [['/mcp', ''], ['/mcp', bearer('golf_native_' + 'a'.repeat(43))], ['/mcp', basic(secret)], ['/native/source/commit', basic(secret)], ['/native/api-tokens', bearer(secret)],
     ['/rpc/golf.v1.RepositoryService/GetRepository', bearer(secret)], ['/', bearer(secret)], ['/mcp', 'Bearer golf_pat_short']]) assert.equal((await send(path, authorization)).status, 401, path + ' ' + authorization);
-  assert.equal(forwarded.length, 4);
+  assert.equal(forwarded.length, 2);
   assert.equal(machineTokenRoute('/git/alice/project.git/other', bearer(secret)), false);
 });

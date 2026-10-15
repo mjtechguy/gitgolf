@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
-import { publicFetch, statelessGitRead } from './src/public.mjs';
+import { publicFetch, statelessRoute } from './src/public.mjs';
 import { handle } from './src/core.mjs';
 import { anonymousLimit, clientKey, rateLimitBindings, rateLimitPolicy, rateLimitService } from './src/rate-limit.mjs';
 
@@ -58,13 +58,15 @@ test('credentialed, signed-in and runner requests are never counted', async () =
     ['/api/v4/jobs/request', {}], ['/api/v4/jobs/1/git/info/refs?service=git-upload-pack', { method: 'GET' }], ['/native/runner-machine/claim', { headers: { Authorization: 'Bearer golf_runner_x' } }], ['/native/runner-machine/claim', {}],
   ]) {
     // Clones are served by the Worker itself (scale-out S1); without a database in this stub they answer 503, never 429.
-    for (let i = 0; i < 3; i++) assert.equal((await f.send(path, options)).status, statelessGitRead(new Request(origin + path, { method: options.method || 'POST' })) ? 503 : 200, path);
+    for (let i = 0; i < 3; i++) assert.equal((await f.send(path, options)).status, statelessRoute(new Request(origin + path, { method: options.method || 'POST' })) === 'read' ? 503 : 200, path);
     if (!path.startsWith('/git/')) admitted.push(path.split('?')[0]);
   }
   assert.equal(f.keys.length, before); assert.deepEqual(f.forwarded.slice(10), admitted.flatMap(path => [path, path, path]));
   // Requests outside the anonymous read contract reach the workspace as before; it refuses them itself.
-  for (const [path, method] of [['/rpc/golf.v1.SessionService/GetSession', 'POST'], ['/rpc/golf.v1.RepositoryService/CreateRepository', 'POST'], ['/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates', 'POST'],
-    ['/git/alice/project.git/git-receive-pack', 'POST'], ['/git/alice/project.git/info/refs?service=git-receive-pack', 'GET']]) assert.equal((await f.send(path, { method })).status, 200, path);
+  for (const [path, method] of [['/rpc/golf.v1.SessionService/GetSession', 'POST'], ['/rpc/golf.v1.RepositoryService/CreateRepository', 'POST'], ['/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates', 'POST']])
+    assert.equal((await f.send(path, { method })).status, 200, path);
+  // Pushes are served by the Worker itself (scale-out S2) and refuse an anonymous caller there; no database in this stub.
+  for (const [path, method] of [['/git/alice/project.git/git-receive-pack', 'POST'], ['/git/alice/project.git/info/refs?service=git-receive-pack', 'GET']]) assert.equal((await f.send(path, { method })).status, 503, path);
   assert.equal(f.keys.length, before);
 });
 
