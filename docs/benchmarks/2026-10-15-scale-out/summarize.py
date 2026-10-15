@@ -4,7 +4,7 @@ Usage: python3 summarize.py   (reads data/, writes summary.csv)"""
 import csv, json, pathlib
 
 here = pathlib.Path(__file__).parent
-runs = ('s1a', 's2a', 's2b', 's2c', 's2d', 's2e')
+runs = ('s1a', 's2a', 's2b', 's2c', 's2d', 's2e', 's2f', 's2g', 's2h')
 rows = []
 for path in sorted((here / 'data').glob('*.json'), key=lambda p: (runs.index(p.stem.split('-')[0]), p.stem)):
     run = path.stem.split('-')[0]
