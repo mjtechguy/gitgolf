@@ -106,6 +106,35 @@ maintenance sweep.
 - When restarted, the loop reported one check about every 30 s (each report is a write in the same queue). Pull requests had waited 6–20 minutes for their check.
 - Run `fixed2` repeats the mix with the CI stand-in inside the bench: each S7 agent reports `bench/ci` right after opening its pull request, using a short-lived administrator credential.
 
+## Run `fixed2`: the same mix, with Server-Timing
+
+The S7 CI stand-in moved into the bench, so each agent reports `bench/ci` itself. Every HTTP operation now records its
+Server-Timing: `queue` is the time waiting for admission in the Workspace, and `worker` is the whole request inside the Worker.
+
+| Scenario / operation | Failed: baseline → fixed2 | p50: baseline → fixed2 | p95: baseline → fixed2 | Server queue p50 / p95 | Server worker p50 / p95 |
+| --- | --- | --- | --- | --- | --- |
+| S2 Git push, a branch each | 6.9 % → **0 %** | 29.8 s → 40.3 s | 69.7 s → 107.4 s | (Git client) | (Git client) |
+| S6 commit, a branch each | 13.9 % → **1.4 %** | 13.8 s → 17.7 s | 36.6 s → 53.7 s | 0.0 s / 0.0 s | 17.5 s / 52.5 s |
+| S6 commit, shared branch | 27.2 % → **2.2 %** | 24.6 s → 30.4 s | 40.4 s → 56.2 s | 0.0 s / 0.1 s | 30.2 s / 55.5 s |
+| S7 commit | 1.4 % → 3.0 % | 21.6 s → 23.9 s | 37.2 s → 55.9 s | 0.0 s / 0.9 s | 23.7 s / 52.5 s |
+| S7 open PR (MCP) | 1.4 % → 7.7 % | 28.4 s → 41.4 s | 44.8 s → 60.0 s | 0.4 s / 2.6 s | 36.4 s / 58.2 s |
+| S4 clone | 0 % → 8.9 % (client timeouts) | 42.7 s → 60.9 s | 99.0 s → 130.5 s | (Git client) | (Git client) |
+
+**Throughput:** successful writes 0.75/s (baseline), 0.70/s (`fixed`), 0.78/s (`fixed2`). Successful reads were 0.18/s, 0.11/s and
+0.15/s.
+
+**The key finding:** for every HTTP write, the server's admission queue is about zero.
+- The Worker-side time is almost exactly what the client sees: S6 17.5 s server against 17.7 s client.
+- Requests get in at once (commits and Git transfers are the overlapping `transfer` class), and are slow while they run.
+- The limit is execution inside the one Workspace Durable Object, which holds every repository of the installation. Admission
+  rules are not the limit.
+- Two candidates, both ending in the same place: the object's single thread shares CPU across 20+ concurrent requests (packs, tree
+  merges, upload-pack), or the storage calls it makes slow down under load.
+
+**S7 in `fixed2` is not valid.** The bench's check report omitted `repositoryId`, so all 60 reports got 404 and nothing could land.
+That was caught after the run. The fixed bench landed a single pull request 5.4 s after opening it (commit 1.9 s, PR 2.0 s,
+check 0.45 s). Run `fixed3` repeats the whole mix with it.
+
 ## Chart plan (for the blog post)
 
 All numbers come from `summary.csv`. If images are generated with an image model (Codex, gpt-image-2), give it the exact

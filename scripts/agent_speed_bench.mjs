@@ -446,7 +446,7 @@ async function scenario(ctx, id, n) {
         const head = c.json?.commitId;
         if (ctx.cfg.ciToken && head) {
           const t1 = performance.now(), check = await post(ctx, `${ctx.cfg.origin}/native/repository-check`, { ...accessHeaders(ctx.cfg), Authorization: 'Bearer ' + ctx.cfg.ciToken, 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
-            { repository: { owner, name }, commitId: head, context: ctx.cfg.ciContext, state: 'REPORTED_CHECK_STATE_SUCCESS', description: 'bench CI stand-in', idempotencyKey: crypto.randomUUID() }, rec, null, 'ci_report');
+            { repository: { owner, name }, repositoryId: String(c.json?.repositoryId || ''), commitId: head, context: ctx.cfg.ciContext, state: 'REPORTED_CHECK_STATE_SUCCESS', description: 'bench CI stand-in', idempotencyKey: crypto.randomUUID() }, rec, null, 'ci_report');
           rec.add('ci_report', performance.now() - t1, httpOutcome(check.status), `HTTP ${check.status}`);
         }
         const number = pr.value.number, openedAt = performance.now();
