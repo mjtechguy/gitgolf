@@ -40,8 +40,9 @@ export function cachedRepository(repo, cache, scope, clock) {
             const saved = method === 'readBlob' ? value : JSON.stringify(value);
             const size = method === 'readBlob' ? value.size : saved.length * 2;
             const result = { value: saved, size };
+            // Bounds: 128 objects and 4 MiB by default (one Durable Object); a cache may set its own (the stateless Worker's isolate).
             if (Number.isSafeInteger(size) && size >= 0 && size <= 1024 * 1024) {
-              while (cache.objects.size && (cache.objects.size >= 128 || cache.bytes + size > 4 * 1024 * 1024)) {
+              while (cache.objects.size && (cache.objects.size >= (cache.maxEntries ?? 128) || cache.bytes + size > (cache.maxBytes ?? 4 * 1024 * 1024))) {
                 const first = cache.objects.keys().next().value; cache.bytes -= cache.objects.get(first).size; cache.objects.delete(first);
               }
               cache.objects.set(key, result); cache.bytes += size;
