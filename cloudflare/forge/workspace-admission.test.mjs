@@ -147,19 +147,22 @@ test('admission classifies Smart HTTP Git as a transfer and nothing else', () =>
   assert.equal(admission({ ci: true }), 'exclusive');
 });
 
-test('MCP read tools overlap reads; a write tool waits for them and fences later admissions', async () => {
+test('MCP read tools overlap reads and write tools; an unrecognised tool waits for them and fences later admissions', async () => {
   const f = fixture(), hold = deferred(), entered = [];
   f.workspace.configured.handle = async req => { const body = await req.json(); entered.push(body.params.name); if (body.params.name === 'read_files') await hold.promise; return new Response('ok'); };
   const mcp = name => new Request('https://golf.test/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {} } }) });
   const settle = async () => { for (let i = 0; i < 6; i++) await tick(); };
   const reads = [f.workspace.fetch(mcp('read_files')), f.workspace.fetch(mcp('read_files'))];
   await settle(); assert.deepEqual(entered, ['read_files', 'read_files']);
-  const write = f.workspace.fetch(mcp('comment'));
+  // A comment is a transfer: it overlaps the running reads.
+  const comment = f.workspace.fetch(mcp('comment'));
+  await settle(); assert.deepEqual(entered, ['read_files', 'read_files', 'comment']);
+  const write = f.workspace.fetch(mcp('not_a_tool'));
   await settle();
   const later = f.workspace.fetch(mcp('list_tree'));
-  await settle(); assert.deepEqual(entered, ['read_files', 'read_files']);
-  hold.resolve(); await Promise.all([...reads, write, later]);
-  assert.deepEqual(entered, ['read_files', 'read_files', 'comment', 'list_tree']);
+  await settle(); assert.deepEqual(entered, ['read_files', 'read_files', 'comment']);
+  hold.resolve(); await Promise.all([...reads, comment, write, later]);
+  assert.deepEqual(entered, ['read_files', 'read_files', 'comment', 'not_a_tool', 'list_tree']);
   // A request that did not pass admitMCP is never a read; a GET keeps its method and has no body to read.
   assert.equal(admission(mcp('read_files')), 'exclusive');
   assert.equal((await admitMCP(new Request('https://golf.test/mcp'))).method, 'GET');

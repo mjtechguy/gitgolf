@@ -57,7 +57,7 @@ async function operation(db, person, row, method, body) {
   }
   return { saved, hash, id: crypto.randomUUID(), time: timestamp() };
 }
-function admission(db, person, row, method, body, op, kind, resultId, discussion) {
+function admission(db, person, row, method, body, op, kind, resultId, discussion, guard) {
   // The receipt and all effects share a transaction; authority changes refuse the entire effect.
   const authority = resourceAuthority.replace("g.role='admin'", "g.role=?");
   const values = authorityValues(row, person); values.splice(3, 0, row.role);
@@ -65,9 +65,10 @@ function admission(db, person, row, method, body, op, kind, resultId, discussion
     SELECT ?,?,?,?,?,?,?,?,? WHERE ${authority}
     AND COALESCE((SELECT version FROM native_identity_versions WHERE user_id=?),0)=?
     ${person.credential_digest ? 'AND EXISTS(SELECT 1 FROM credentials WHERE digest=? AND user_id=? AND revoked=0 AND expires_at>unixepoch())' : ''}
-    ${discussion ? 'AND EXISTS(SELECT 1 FROM discussions WHERE id=? AND repository_id=? AND revision=?)' : ''}`)
+    ${discussion ? 'AND EXISTS(SELECT 1 FROM discussions WHERE id=? AND repository_id=? AND revision=?)' : ''}
+    ${guard ? 'AND ' + guard.sql : ''}`)
     .bind(op.id, person.id, row.id, body.idempotencyKey, method, op.hash, kind, resultId, op.time, ...values, person.id, person.identity_version,
-      ...(person.credential_digest ? [person.credential_digest, person.id] : []), ...(discussion ? [discussion.id, row.id, discussion.revision] : []));
+      ...(person.credential_digest ? [person.credential_digest, person.id] : []), ...(discussion ? [discussion.id, row.id, discussion.revision] : []), ...(guard ? guard.values : []));
 }
 const admitted = 'EXISTS(SELECT 1 FROM collaboration_operations WHERE id=?)';
 async function nextId(db, table) { return (await db.prepare(`SELECT max(COALESCE((SELECT max(id) FROM ${table}),0),COALESCE((SELECT seq FROM sqlite_sequence WHERE name=?),0))+1 AS id`).bind(table).first()).id; }
@@ -214,7 +215,31 @@ function edits(body, isPull) {
   return changes[0];
 }
 
-export async function collaboration(db, env, person, method, body, row, artifact) {
+// Creates and reported checks run overlapped with other requests (core.mjs admission: transfers); each is one D1 batch whose first
+// statement admits it. A batch that collides on a pre-allocated id, a comment whose discussion another comment just moved, or a pull
+// request or review submitted while a merge holds the repository is rolled back whole and retried with fresh reads, for up to 20 s.
+const retriedMethods = new Set(['CreateIssue', 'CreatePullRequest', 'CreateIssueComment', 'CreatePullRequestReview', 'ReportCheck']);
+const idCollision = error => /UNIQUE constraint failed: \w+\.id\b/.test(String(error?.message || ''));
+const fenceMessage = 'An unresolved operation fences further changes.', changedMessage = 'The selected discussion or commits changed. Refresh before retrying.';
+export async function collaboration(db, env, person, method, body, row, artifact, { budgetMs = 20_000 } = {}) {
+  if (!retriedMethods.has(method)) return collaborationOnce(db, env, person, method, body, row, artifact);
+  for (let attempt = 1, started = Date.now(); ; attempt++) {
+    try { return await collaborationOnce(db, env, person, method, body, attempt > 1 ? await freshRow(db, row) : row, artifact); }
+    catch (error) {
+      const fenced = error instanceof Fault && error.message === fenceMessage && (method === 'CreatePullRequest' || method === 'CreatePullRequestReview');
+      const raced = error instanceof Fault && error.message === changedMessage && method === 'CreateIssueComment';
+      if (!(idCollision(error) || fenced || raced) || attempt >= 12 || Date.now() - started >= budgetMs) throw error;
+      const cap = Math.min(1500, 100 * 2 ** Math.min(attempt, 4));
+      await new Promise(resolve => setTimeout(resolve, cap / 2 + Math.random() * cap / 2));
+    }
+  }
+}
+// The repository row a retry sees: write_pending as it is now (the rest of the row is the request's authority, unchanged).
+async function freshRow(db, row) {
+  const now = await db.prepare('SELECT write_pending FROM repositories WHERE id=?').bind(row.id).first();
+  return now ? { ...row, write_pending: now.write_pending } : row;
+}
+async function collaborationOnce(db, env, person, method, body, row, artifact) {
   if (method === 'GetIssueMutation' || method === 'GetPullRequestReviewMutation') {
     const op = await db.prepare('SELECT * FROM collaboration_operations WHERE user_id=? AND operation_key=? AND repository_id=?').bind(person.id, body.idempotencyKey, row.id).first();
     if (!op || (method === 'GetPullRequestReviewMutation') !== (op.result_kind === 'review') || op.result_kind === 'check') deny();
@@ -301,7 +326,10 @@ export async function collaboration(db, env, person, method, body, row, artifact
     const isPull = method === 'CreatePullRequest';
     const title = text(body.title, 200, true), description = text(body.body ?? '', 12000);
     const discussionId = await nextId(db, 'discussions'), resultId = isPull ? await nextId(db, 'pull_requests') : discussionId;
-    const statements = [admission(db, person, row, method, body, op, isPull ? 'pull' : 'issue', resultId),
+    // One open pull request per base and head: checked again inside the admitting INSERT, so two concurrent opens cannot both pass.
+    const openPull = `EXISTS(SELECT 1 FROM pull_requests p JOIN discussions d ON d.id=p.discussion_id WHERE d.repository_id=? AND d.state='OPEN' AND p.base_branch=? AND p.head_branch=?)`;
+    const duplicate = isPull ? { sql: 'NOT ' + openPull, values: [row.id, body.baseBranch, body.headBranch] } : null;
+    const statements = [admission(db, person, row, method, body, op, isPull ? 'pull' : 'issue', resultId, null, duplicate),
       db.prepare(`INSERT INTO discussions(id,repository_id,number,kind,author_id,title,body,state,created_at,updated_at)
         SELECT ?,?,(SELECT COALESCE(max(number),0)+1 FROM discussions WHERE repository_id=?),?,?,?,?,'OPEN',?,? WHERE ${admitted}`)
         .bind(discussionId, row.id, row.id, isPull ? 'pull' : 'issue', person.id, title, description, op.time, op.time, op.id)];
@@ -325,7 +353,12 @@ export async function collaboration(db, env, person, method, body, row, artifact
         .bind(resultId, origin.kind, origin.apiTokenId, origin.agentTaskId, op.time, op.id));
     }
     statements.push(...discussionEvent(db, person, discussionId, op.time, 'opened', {}, admitted, [op.id]));
-    await commitMutation(db, statements);
+    try { await commitMutation(db, statements); }
+    catch (error) {
+      if (isPull && error instanceof Fault && error.message === changedMessage && await db.prepare(`SELECT 1 AS ok WHERE ${openPull}`).bind(...duplicate.values).first())
+        throw new Fault('already_exists', 409, 'An open proposal already exists for these branches.');
+      throw error;
+    }
   } else if (method === 'CreateIssueComment') {
     const d = await discussion(db, row, body.number, body.pullRequest ? 'pull' : 'issue');
     if (!idOK(body.issueId) || body.issueId !== String(d.id)) deny();

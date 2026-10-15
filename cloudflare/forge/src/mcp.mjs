@@ -147,14 +147,15 @@ const catalogue = [
 ];
 const tools = new Map(catalogue.map(([name, write, description, inputSchema, run]) => [name, { name, write, description, inputSchema, run }]));
 
-// Admission class from the body alone: read tools and the protocol methods overlap reads; Source API writes are transfers like the routes
-// they call (the D1 ref fence orders them); other write tools, and anything unparsed, are exclusive.
+// Admission class from the body alone: read tools and the protocol methods overlap reads; Source API writes, opening a pull request and
+// commenting are transfers like the routes they call (D1 orders them); other write tools, and anything unparsed, are exclusive.
 export function mcpClass(text) {
   try {
     const message = JSON.parse(text);
     if (message?.method !== 'tools/call') return ['initialize', 'ping', 'tools/list', 'notifications/initialized'].includes(message?.method) ? 'read' : 'exclusive';
     const tool = tools.get(message.params?.name);
-    return tool?.write === false ? 'read' : ['commit_changes', 'create_branch'].includes(tool?.name) ? 'transfer' : 'exclusive';
+    // Opening a pull request and commenting run the overlapping RPCs (core.mjs admission) and are transfers too.
+    return tool?.write === false ? 'read' : ['commit_changes', 'create_branch', 'open_pull_request', 'comment'].includes(tool?.name) ? 'transfer' : 'exclusive';
   } catch { return 'exclusive'; }
 }
 // Live activity for the repository a write tool changed (worker.mjs publishes it after the response).

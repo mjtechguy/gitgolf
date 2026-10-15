@@ -106,10 +106,16 @@ export function admission(request) {
   if (source) return request.method !== 'POST' ? 'exclusive' : ['files', 'tree', 'blame', 'grep'].includes(source[1]) ? 'read' : 'transfer';
   // Landing (land-queue.mjs) is a transfer: different pull requests land side by side, ordered by the merge reservation in D1.
   if (path === '/native/land') return request.method === 'POST' ? 'transfer' : 'exclusive';
+  // An exclusive request waits for every running transfer and holds everything behind it, so writes that D1 already orders run as
+  // transfers (docs/benchmarks/2026-10-15-100-agents): an agent host's heartbeat (upserts), claim, start, log and finish (conditional
+  // updates on the task row); a reported check and a new issue, comment, pull request or review (one D1 batch admitted by a guarded
+  // INSERT; collaboration.mjs retries an id collision or a moved discussion). Host registration and every other mutation stay exclusive.
+  if (overlappingWrite.test(path)) return request.method === 'POST' ? 'transfer' : 'exclusive';
   // MCP: admitMCP read the JSON-RPC body first; a read tool overlaps reads, anything else waits like any mutation.
   if (new URL(request.url).pathname === '/mcp') return mcpClasses.get(request) || 'exclusive';
   return concurrentRead(request) ? 'read' : 'exclusive';
 }
+const overlappingWrite = /^\/(?:native\/agent-host\/(?:heartbeat|claim|tasks\/[0-9a-f-]{36}\/(?:start|log|finish))|native\/repository-check|rpc\/golf\.v1\.RepositoryService\/(?:CreateIssue|CreateIssueComment|CreatePullRequest|CreatePullRequestReview))$/;
 const mcpClasses = new WeakMap();
 // The Workspace calls this before admission. Tool calls then run inside that one admission: their internal requests call handle(), never a queue.
 export async function admitMCP(request) {
@@ -131,7 +137,7 @@ export function concurrentRead(request) {
   if (/^\/rpc\/golf\.v1\.EmailNotificationService\/(GetOwnEmailNotifications|GetRepositoryEmailSubscription|ListOwnEmailDeliveries)$/.test(new URL(request.url).pathname)) return true;
   if (/^\/(?:native\/release-asset\/read|rpc\/golf\.v1\.(?:RepositoryService\/(?:ListRepositoryReleases|GetRepositoryRelease)|RepositoryReleasePublicationService\/GetRepositoryReleasePublicationOperation))$/.test(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(?:DiscussionAttachmentService\/(?:ListDiscussionAttachments|DownloadDiscussionAttachment)|DiscussionAttachmentUploadService\/GetDiscussionAttachmentUploadState)$/.test(new URL(request.url).pathname)) return true;
-  return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks))$/.test(new URL(request.url).pathname);
+  return /^\/rpc\/golf\.v1\.(SessionService\/GetSession|OperationsService\/GetOperationsDashboard|CapabilityService\/ListCapabilities|ProfileService\/GetProfile|OrganizationService\/(ListOrganizations|GetOrganization)|RepositorySettingsService\/GetRepositorySettings|RepositoryAccessService\/(GetRepositoryAccess|ListRepositoryCollaborators|ResolveRepositoryCollaborator|GetRepositoryAccessOperation)|RepositoryService\/(GetRepository|GetRepositoryOverview|GetRepositoryStar|ListRepositories|ListBranches|ListTags|ResolveRepositorySource|GetRepositoryFileIndex|GetContents|GetRepositoryImage|ListCommits|GetCommitDiff|GetRepositoryComparison|GetIssue|ListIssues|ListIssueComments|GetPullRequest|ListPullRequests|GetPullRequestDiscussion|ListPullRequestCommits|GetPullRequestDiff|ListPullRequestReviews|ListPullRequestChecks|GetIssueMutation|GetPullRequestReviewMutation|ListRepositoryLabels|ListRepositoryMilestones|ListRepositoryAssignees|GetDiscussionResourceOperation)|PullReviewRequestService\/GetPullCodeOwners)$/.test(new URL(request.url).pathname);
 }
 const policyRoute = /^\/(?:native\/(?:config|pr-evidence|pr-preview|preview-resume|ai|ai-models|ai-usage|search|agent-inbox|engines)(?:\/read)?|rpc\/golf\.v1\.(?:CapabilityService\/ListCapabilities|OperationsService\/GetOperationsDashboard|RepositoryWebhookService\/[A-Za-z]+|EmailNotificationService\/[A-Za-z]+|RepositoryEnvironmentService\/[A-Za-z]+|FeaturePolicyService\/[A-Za-z]+|RepositoryFeatureService\/[A-Za-z]+))$/;
 const nameOK = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,99}$/.test(value) && !value.endsWith('.git');

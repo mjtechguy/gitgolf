@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
-import { digest, handle, serialize, concurrentRead, advanceEvidence, testGit, agentGit, servePreview, cleanupPreviews, runCI, withArtifact } from './src/core.mjs';
+import { admission, digest, handle, serialize, concurrentRead, advanceEvidence, testGit, agentGit, servePreview, cleanupPreviews, runCI, withArtifact } from './src/core.mjs';
 import { settleRefWrites } from './src/ref-writes.mjs';
 import { allocateApps } from './app-fixture.mjs';
 import { previewBundle } from './src/delivery.mjs';
@@ -4606,4 +4606,47 @@ test('a renamed workspace row keeps serving while the Worker still carries the e
   const f = await fixture(t); await f.create();
   f.sql.exec("UPDATE workspaces SET slug='renamed'");
   assert.equal((await f.call('GetRepository', { repository: { owner: 'alice', name: 'project' } })).status, 200);
+});
+
+test('creates overlap: concurrent issues, comments and pull requests all admit once; an id collision or a moved discussion is retried', async t => {
+  const f = await pullFixture(t);
+  // D1 is a network round-trip: let every batch yield, so concurrent requests interleave between reading the next id and committing.
+  const original = f.env.DB.batch.bind(f.env.DB);
+  f.env.DB.batch = async statements => { await new Promise(resolve => setTimeout(resolve, 10)); return original(statements); };
+  // The Workspace's own admission classes: creates are transfers, so they overlap here as they do in production.
+  const overlapping = serialize(request => handle(request, f.env, f.providerFetch), admission);
+  f.call = (method, body = {}, token = ownerToken) => overlapping(new Request(f.env.PUBLIC_ORIGIN + '/rpc/golf.v1.RepositoryService/' + method, {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, body: JSON.stringify(body) }));
+  const issue = title => f.call('CreateIssue', { repository: key, repositoryId: '1', title, body: '', idempotencyKey: nonce() });
+  // Five issues at once read the same next id; the batches that collide are rolled back and retried, so all five exist once.
+  const issues = await Promise.all([1, 2, 3, 4, 5].map(n => issue('Concurrent ' + n)));
+  assert.deepEqual(issues.map(r => r.status), [200, 200, 200, 200, 200]);
+  const created = await Promise.all(issues.map(r => value(r)));
+  assert.equal(new Set(created.map(r => r.issue.number)).size, 5);
+  assert.equal(f.sql.prepare("SELECT count(*) AS n FROM discussions WHERE kind='issue'").get().n, 5);
+  // Three comments on one issue at once: each moved discussion is re-read and the comment retried.
+  const target = created[0].issue;
+  const comments = await Promise.all(['a', 'b', 'c'].map(text => f.call('CreateIssueComment', { repository: key, repositoryId: '1', issueId: target.id, number: target.number, body: text, idempotencyKey: nonce() })));
+  assert.deepEqual(comments.map(r => r.status), [200, 200, 200]);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM discussion_comments WHERE discussion_id=?').get(Number(target.id)).n, 3);
+  // Two pull requests for the same branches at once: exactly one opens; the other is the duplicate refusal, never a second proposal.
+  f.setRefs([['refs/heads/main', commit], ['refs/heads/feature', 'b'.repeat(40)], ['refs/heads/other', 'c'.repeat(40)]]);
+  const open = () => f.call('CreatePullRequest', { ...f.input, headBranch: 'other', headCommitId: 'c'.repeat(40), title: 'Twin', idempotencyKey: nonce() });
+  const twins = await Promise.all([open(), open()]);
+  assert.deepEqual(twins.map(r => r.status).sort(), [200, 409]);
+  assert.equal(f.sql.prepare("SELECT count(*) AS n FROM pull_requests WHERE head_branch='other'").get().n, 1);
+});
+
+test('admission: D1-ordered writes are transfers, mis-classed reads are reads, other mutations stay exclusive', () => {
+  const at = (path, method = 'POST') => admission(new Request('https://golf.example.com' + path, { method, ...(method === 'POST' ? { body: '' } : {}) }));
+  for (const path of ['/native/agent-host/heartbeat', '/native/agent-host/claim', '/native/agent-host/tasks/0f1e2d3c-1111-4222-8333-944455556666/log',
+    '/native/agent-host/tasks/0f1e2d3c-1111-4222-8333-944455556666/finish', '/native/repository-check', '/rpc/golf.v1.RepositoryService/CreateIssue',
+    '/rpc/golf.v1.RepositoryService/CreateIssueComment', '/rpc/golf.v1.RepositoryService/CreatePullRequest', '/rpc/golf.v1.RepositoryService/CreatePullRequestReview'])
+    assert.equal(at(path), 'transfer', path);
+  for (const path of ['/rpc/golf.v1.RepositoryService/ListRepositoryLabels', '/rpc/golf.v1.RepositoryService/GetIssueMutation', '/rpc/golf.v1.PullReviewRequestService/GetPullCodeOwners'])
+    assert.equal(at(path), 'read', path);
+  for (const path of ['/native/agent-host/register', '/rpc/golf.v1.RepositoryService/UpdatePullRequest', '/rpc/golf.v1.RepositoryService/SubmitDiscussionResourceOperation',
+    '/native/repository-grant', '/rpc/golf.v1.RepositoryService/CreatePullRequestX'])
+    assert.equal(at(path), 'exclusive', path);
+  assert.equal(at('/native/repository-check', 'GET'), 'exclusive');
 });

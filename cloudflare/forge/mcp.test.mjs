@@ -204,10 +204,11 @@ test('an agent/* token reads, branches, commits and opens a pull request through
   assert.equal(head('agent/demo'), current);
 });
 
-test('admission and live activity read the tool from the body: reads overlap, writes are exclusive and publish their repository', () => {
+test('admission and live activity read the tool from the body: reads overlap, writes are transfers and publish their repository', () => {
   const body = (method, name, args = { owner: 'alice', name: 'project' }) => JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: { name, arguments: args } });
   for (const name of readTools) assert.equal(mcpClass(body('tools/call', name)), 'read', name);
-  for (const name of writeTools) assert.equal(mcpClass(body('tools/call', name)), ['commit_changes', 'create_branch'].includes(name) ? 'transfer' : 'exclusive', name);
+  // Every write tool calls a D1-ordered route (Source API, CreatePullRequest, CreateIssueComment): all are transfers.
+  for (const name of writeTools) assert.equal(mcpClass(body('tools/call', name)), ['commit_changes', 'create_branch', 'open_pull_request', 'comment'].includes(name) ? 'transfer' : 'exclusive', name);
   for (const method of ['initialize', 'ping', 'tools/list']) assert.equal(mcpClass(body(method)), 'read');
   assert.equal(mcpClass(body('tools/call', 'unknown')), 'exclusive'); assert.equal(mcpClass('{'), 'exclusive'); assert.equal(mcpClass(body('resources/read')), 'exclusive');
   assert.deepEqual(mcpActivity(body('tools/call', 'commit_changes')), { name: 'project', topics: ['source', 'pulls', 'actions'] });
