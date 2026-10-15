@@ -10,10 +10,10 @@ import { devNull, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const SCENARIOS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
+const SCENARIOS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7'];
 const RPC = 'golf.v1.RepositoryService';
 const PRIMARY = { S1: ['push'], S2: ['push'], S3: ['push'], S4: ['clone', 'ls_remote'],
-  S5: ['GetContents', 'ListCommits', 'GetRepositoryComparison'], S6: ['source_commit'] };
+  S5: ['GetContents', 'ListCommits', 'GetRepositoryComparison'], S6: ['source_commit'], S7: ['land'] };
 const DESCRIBE = {
   S1: 'fast-forward pushes from every worker to one shared branch (fetch tip, commit, push)',
   S2: 'pushes to a branch per worker in the first repository',
@@ -21,9 +21,12 @@ const DESCRIBE = {
   S4: 'shallow clones and ls-remote of the first repository during S2 load',
   S5: 'GetContents, ListCommits and GetRepositoryComparison RPC reads during S2 load',
   S6: 'Source API commits (POST /native/source/commit), branch per writer and one shared branch',
+  S7: 'the agent pull request loop: a Source API commit on a new agent/ branch, open_pull_request over MCP, then wait until it lands',
 };
 const USAGE =`Usage: node scripts/agent_speed_bench.mjs [--scenarios S1,S2,S3,S4,S5,S6]
-  [--concurrency 1,4,16] [--duration 30] [--label baseline] [--out path] [--dry-run]
+  [--concurrency 1,4,16] [--duration 30] [--think 0] [--land-timeout 900] [--label baseline] [--out path] [--dry-run]
+  --think N: each worker pauses N seconds (jittered 0.5x to 1.5x) between operations and starts at a random point within N,
+  like an agent that thinks between writes; 0 (default) is a closed loop.
 Environment: GOLF_BENCH_ORIGIN, GOLF_BENCH_REPOS=owner/name,...
   GOLF_BENCH_GIT_TOKEN | GOLF_BENCH_GIT_TOKENS=owner/name=token,... | GOLF_BENCH_API_TOKEN
   optional GOLF_BENCH_ACCESS_ID + GOLF_BENCH_ACCESS_SECRET (Cloudflare Access service token)`;
@@ -31,12 +34,14 @@ Environment: GOLF_BENCH_ORIGIN, GOLF_BENCH_REPOS=owner/name,...
 // ---------- arguments and environment ----------
 
 export function parseArgs(argv) {
-  const o = { scenarios: ['S1', 'S2', 'S3', 'S4', 'S5'], concurrency: [1, 4, 16], duration: 30, label: 'run', out: '', dryRun: false, help: false };
+  const o = { scenarios: ['S1', 'S2', 'S3', 'S4', 'S5'], concurrency: [1, 4, 16], duration: 30, think: 0, landTimeout: 900, label: 'run', out: '', dryRun: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], value = () => { if (i + 1 >= argv.length) throw Error(`${a} needs a value`); return argv[++i]; };
     if (a === '--scenarios') o.scenarios = value().split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     else if (a === '--concurrency') o.concurrency = value().split(',').map(Number);
     else if (a === '--duration') o.duration = Number(value());
+    else if (a === '--think') o.think = Number(value());
+    else if (a === '--land-timeout') o.landTimeout = Number(value());
     else if (a === '--label') o.label = value();
     else if (a === '--out') o.out = value();
     else if (a === '--dry-run') o.dryRun = true;
@@ -47,6 +52,8 @@ export function parseArgs(argv) {
   if (bad.length || !o.scenarios.length) throw Error(`Unknown scenarios: ${bad.join(',') || '(none)'}`);
   if (!o.concurrency.length || o.concurrency.some(n => !Number.isInteger(n) || n < 1 || n > 256)) throw Error('--concurrency takes integers 1..256');
   if (!(o.duration > 0)) throw Error('--duration must be a positive number of seconds');
+  if (!(o.think >= 0 && o.think <= 3600)) throw Error('--think must be 0 to 3600 seconds');
+  if (!(o.landTimeout > 0 && o.landTimeout <= 7200)) throw Error('--land-timeout must be 1 to 7200 seconds');
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(o.label)) throw Error('--label may use letters, digits, ".", "_" and "-"');
   return o;
 }
@@ -257,7 +264,10 @@ async function captureRelease(ctx, repo, rec) {
 // Fast-forward push loop. Shared mode re-fetches the tip before every commit.
 async function pushLoop(ctx, w, branch, shared, rec, deadline, path) {
   let parent = w.seed.base, sync = shared;
-  while (performance.now() < deadline && !ctx.stopped) {
+  await pace(ctx, deadline, true);
+  for (let k = 0; performance.now() < deadline && !ctx.stopped; k++) {
+    if (k) await pace(ctx, deadline);
+    if (performance.now() >= deadline || ctx.stopped) break;
     try {
       if (sync) {
         const tip = await fetchTip(ctx, w, branch, rec);
@@ -271,6 +281,12 @@ async function pushLoop(ctx, w, branch, shared, rec, deadline, path) {
 }
 
 const range = n => Array.from({ length: n }, (_, i) => i);
+// Agent pacing (--think): a jittered pause between operations, and a random start within one think time.
+export const thinkMs = (think, random = Math.random) => think > 0 ? think * 1000 * (0.5 + random()) : 0;
+const pace = async (ctx, deadline, first) => {
+  const ms = first ? (ctx.opts.think > 0 ? ctx.opts.think * 1000 * Math.random() : 0) : thinkMs(ctx.opts.think);
+  if (ms) await sleep(Math.max(0, Math.min(ms, deadline - performance.now())));
+};
 const workers = (ctx, n, repoFor, offset = 0) => Promise.all(range(n).map(i => worker(ctx, repoFor(i), offset + i)));
 
 // ---------- RPC and Source API ----------
@@ -280,7 +296,7 @@ async function post(ctx, url, headers, body, rec, op) {
   try {
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) });
     const text = await res.text(), ms = performance.now() - t0;
-    rec.headers(res.headers);
+    rec?.headers(res.headers);
     if (op) rec.add(op, ms, httpOutcome(res.status), `HTTP ${res.status} ${text}`);
     let json = null; try { json = JSON.parse(text); } catch { /* non-JSON body */ }
     return { status: res.status, json };
@@ -343,7 +359,9 @@ async function scenario(ctx, id, n) {
     const bg = await backgroundS2(ctx, n, repo, tag), deadline = deadlineFrom(), started = performance.now();
     bg.done = bg.start(deadline);
     await Promise.all(readers.map(async w => {
+      await pace(ctx, deadline, true);
       for (let k = 0; performance.now() < deadline && !ctx.stopped; k++) {
+        if (k) await pace(ctx, deadline);
         const into = join(ctx.tmp, `clone-${w.id}-${k}`);
         const r = await run('git', ['clone', '-q', '--depth', '1', '--no-checkout', w.url, into], { cwd: ctx.tmp, env: w.env });
         rec.add('clone', r.ms, classifyGit(r), r.err);
@@ -373,9 +391,57 @@ async function scenario(ctx, id, n) {
     const bg = await backgroundS2(ctx, n, repo, tag), deadline = deadlineFrom(), started = performance.now();
     bg.done = bg.start(deadline);
     await Promise.all(range(n).map(async i => {
-      for (let k = i; performance.now() < deadline && !ctx.stopped; k++) await rpc(ctx, ...calls[k % calls.length], rec);
+      await pace(ctx, deadline, true);
+      for (let k = i; performance.now() < deadline && !ctx.stopped; k++) { if (k > i) await pace(ctx, deadline); await rpc(ctx, ...calls[k % calls.length], rec); }
     }));
     return [await finish(rec, started, bg)];
+  }
+
+  // S7: the whole agent pull request loop on a repository with agentic mode (low-risk paths, landing without a person). Each worker
+  // commits one file under docs/ to a new agent/ branch through the Source API, opens a pull request over MCP, then polls the pull
+  // request until it lands (merged) or --land-timeout passes. land latency is open-to-merged. Its branches are deleted at the end.
+  if (id === 'S7') {
+    if (!ctx.cfg.apiToken) return skip('unavailable', 'GOLF_BENCH_API_TOKEN is not set');
+    const s = await seed(ctx, repo);
+    if (!s.base) return skip('skipped', 'empty repository');
+    const [owner, name] = repo.split('/'), commitUrl = `${ctx.cfg.origin}/native/source/commit`;
+    const mcp = async (tool, args, op) => {
+      const r = await post(ctx, `${ctx.cfg.origin}/mcp`, { ...apiHeaders(ctx.cfg), Accept: 'application/json, text/event-stream' },
+        { jsonrpc: '2.0', id: randomBytes(4).toString('hex'), method: 'tools/call', params: { name: tool, arguments: { owner, name, ...args } } }, null);
+      const result = r.json?.result, text = result?.content?.[0]?.text || r.json?.error?.message || '';
+      let value = null; try { value = JSON.parse(text); } catch { /* a tool error is text */ }
+      return { ok: r.status === 200 && result && !result.isError, status: r.status, value, text };
+    };
+    const deadline = deadlineFrom(), started = performance.now(), landTimeout = ctx.opts.landTimeout * 1000;
+    let landed = 0, opened = 0;
+    await Promise.all(range(n).map(async i => {
+      await pace(ctx, deadline, true);
+      for (let k = 0; performance.now() < deadline && !ctx.stopped; k++) {
+        if (k) await pace(ctx, deadline);
+        if (performance.now() >= deadline || ctx.stopped) break;
+        const branch = `agent/${ctx.prefix.replace(/\//g, '-')}${tag}-w${i}-${k}`;
+        const c = await post(ctx, commitUrl, apiHeaders(ctx.cfg), { repository: { owner, name }, branch, expectedHead: '', base: s.branch, message: `bench ${tag} w${i} #${k}`,
+          changes: [{ path: `docs/bench/${ctx.runId}/${tag}-w${i}-${k}.md`, content: `${ctx.runId} ${randomBytes(8).toString('hex')}\n` }] }, rec, 'source_commit');
+        if (c.status < 200 || c.status >= 300) { await sleep(1000); continue; }
+        track(ctx, repo, branch);
+        const t0 = performance.now(), pr = await mcp('open_pull_request', { head: branch, base: s.branch, title: `bench ${tag} w${i} #${k}` });
+        rec.add('open_pr', performance.now() - t0, pr.ok ? 'ok' : pr.status === 200 ? 'other:tool_error' : httpOutcome(pr.status), pr.text);
+        if (!pr.ok || !pr.value?.number) continue;
+        opened++;
+        const number = pr.value.number, openedAt = performance.now();
+        let done = false;
+        while (!done && performance.now() - openedAt < landTimeout && !ctx.stopped) {
+          await sleep(5000);
+          const g = await mcp('get_pull_request', { number });
+          rec.add('poll_pr', 0, g.ok ? 'ok' : g.status === 200 ? 'other:tool_error' : httpOutcome(g.status), g.text);
+          if (g.value?.merged) { rec.add('land', performance.now() - openedAt, 'ok'); landed++; done = true; }
+          else if (g.value?.state === 'ISSUE_STATE_CLOSED') { rec.add('land', performance.now() - openedAt, 'other:closed_unmerged'); done = true; }
+        }
+        if (!done) rec.add('land', performance.now() - openedAt, 'other:land_timeout');
+      }
+    }));
+    notes.push(`${opened} pull requests opened, ${landed} landed within ${ctx.opts.landTimeout}s; land latency is open-to-merged`);
+    return [await finish(rec, started)];
   }
 
   // S6: Source API commits (AM-2 contract), a branch per writer and all writers on one branch.
@@ -397,12 +463,15 @@ async function scenario(ctx, id, n) {
     await Promise.all(range(n).map(async i => {
       let headSha = s.base;
       const w = { ...setupWorker }, branch = branchOf(i);
-      while (performance.now() < deadline && !ctx.stopped) {
+      await pace(ctx, deadline, true);
+      for (let k = 0; performance.now() < deadline && !ctx.stopped; k++) {
+        if (k) await pace(ctx, deadline);
         const body = { repository: repoKey(repo), branch, expectedHead: headSha, message: `bench ${tag} w${i}`,
           changes: [{ path: `${ctx.dir}/${tag}-${variant}-w${i}.txt`, content: `${ctx.runId} ${randomBytes(8).toString('hex')}\n` }], onStale: shared ? 'merge' : 'fail' };
         const r = await post(ctx, url, apiHeaders(ctx.cfg), body, vrec, 'source_commit');
         const next = r.json?.commit?.id || r.json?.commitId || r.json?.head || r.json?.sha;
         if (r.status >= 200 && r.status < 300 && next) { headSha = next; continue; }
+        if (ctx.opts.think) { const fresh = r.json?.currentHead; if (fresh) headSha = fresh; continue; }
         const fresh = r.json?.currentHead || await lsRemote(ctx, w, branch, vrec);
         if (fresh) headSha = fresh;
         if (r.status !== 409) await sleep(250);
@@ -454,7 +523,7 @@ function table(results) {
 
 function plan(cfg, opts, runId) {
   return [`Golf agent speed bench (dry run: ${opts.dryRun})`, `origin host: ${cfg.host}`, `repositories: ${cfg.repos.join(', ')}`,
-    `scenarios: ${opts.scenarios.join(',')}  concurrency: ${opts.concurrency.join(',')}  duration: ${opts.duration}s  label: ${opts.label}`,
+    `scenarios: ${opts.scenarios.join(',')}  concurrency: ${opts.concurrency.join(',')}  duration: ${opts.duration}s  think: ${opts.think}s  label: ${opts.label}`,
     `auth: access=${cfg.access ? 'service token' : 'none'} git=${cfg.repos.map(r => cfg.gitTokens.has(r) ? 'repo-token' : cfg.gitToken ? 'git-token' : cfg.apiToken ? 'api-token' : 'none').join(',')} api=${cfg.apiToken ? 'api-token' : 'none'}`,
     `branches: bench/${runId}/... (deleted at the end)`,
     ...opts.scenarios.map(id => `  ${id}: ${DESCRIBE[id]}`),

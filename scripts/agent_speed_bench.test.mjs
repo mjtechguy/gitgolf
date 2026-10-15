@@ -178,3 +178,14 @@ test('S5 and S6 degrade honestly without a read identity or API token', async t 
   assert.deepEqual(results.map(x => [x.scenario, x.status, x.reason]), [
     ['S5', 'skipped', 'no read identity'], ['S6', 'unavailable', 'GOLF_BENCH_API_TOKEN is not set']]);
 });
+
+test('--think paces workers with a jittered pause and S7 is a scenario; bounds are checked', async () => {
+  const { parseArgs, thinkMs } = await import('./agent_speed_bench.mjs');
+  const o = parseArgs(['--scenarios', 's7,S6', '--think', '60', '--land-timeout', '600']);
+  assert.deepEqual([o.scenarios, o.think, o.landTimeout], [['S7', 'S6'], 60, 600]);
+  assert.equal(parseArgs([]).think, 0);
+  assert.throws(() => parseArgs(['--think', '-1']), /--think/);
+  assert.throws(() => parseArgs(['--land-timeout', '0']), /--land-timeout/);
+  assert.equal(thinkMs(0), 0);
+  assert.deepEqual([thinkMs(60, () => 0), thinkMs(60, () => 0.999)].map(Math.round), [30000, 89940]);
+});

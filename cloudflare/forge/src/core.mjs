@@ -32,7 +32,7 @@ import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.m
 import { reserveRefWrite, finishRefWrite, sendRefUpdate, refWriteBlocker } from './ref-writes.mjs';
 import { sourceAPI, sourceCapability } from './source-api.mjs';
 import { agenticModeAPI, agenticCapability, landingCapability } from './agentic-mode.mjs';
-import { landAPI } from './land-queue.mjs';
+import { landAPI, landSoon } from './land-queue.mjs';
 import { agentInboxAPI, inboxCapability } from './agent-inbox.mjs';
 import { automationsAPI, automationEvent, automationCapability, processAutomations } from './automations.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
@@ -662,7 +662,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     }
     if (url.pathname === '/native/repository-check') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId, 'pull-requests');
-      return reply(await collaboration(db, env, person, 'ReportCheck', body, row, action => withArtifact(env, row, action)));
+      const value = await collaboration(db, env, person, 'ReportCheck', body, row, action => withArtifact(env, row, action));
+      // A check that completes a landing decision lands the pull request now rather than at the next sweep (agentic mode).
+      landSoon(env, row.id, body.commitId, withArtifact);
+      return reply(value);
     }
     if (url.pathname === '/native/repository-grant') return reply(await grants(db, env, person, request, body));
     const environment = /^\/rpc\/golf\.v1\.RepositoryEnvironmentService\/([A-Za-z]+)$/.exec(url.pathname);
@@ -856,6 +859,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       // Automations: a new issue or pull request (a replayed request finds its runs already queued by their dedupe key).
       if ((method === 'CreateIssue' || method === 'CreatePullRequest') && value?.mutation?.number)
         await automationEvent(env, { type: method === 'CreateIssue' ? 'issue.opened' : 'pull_request.opened', repositoryId: row.id, number: value.mutation.number, headCommit: value.pullRequest?.head?.commitId || '', actorId: person.id });
+      // A pull request whose head already passed its checks may land at once (agentic mode).
+      if (method === 'CreatePullRequest' && value?.mutation?.number) landSoon(env, row.id, value.pullRequest?.head?.commitId, withArtifact);
       return reply(value);
     }
     if (method === 'GetRepository') return reply(await withArtifact(env, row, async (_repo, _info, commits) => {

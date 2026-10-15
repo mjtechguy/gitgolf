@@ -441,6 +441,19 @@ export async function afterPipelineRun(env, run, withArtifact) {
   if (stored.land_without_person) await autoLand(env, run.repository_id, { commitId: run.commit_id, withArtifact });
 }
 
+// A reported check or a newly opened pull request can complete a landing decision now: land the open pull requests whose head is this
+// commit after the response (env.waitUntil), instead of waiting for the maintenance sweep. Only where the repository lands without a
+// person; autoLand evaluates every rule again, and a pull request it cannot land waits for the sweep as before.
+export function landSoon(env, repositoryId, commitId, withArtifact) {
+  if (!sha(commitId) || typeof env.waitUntil !== 'function') return;
+  env.waitUntil((async () => {
+    const db = env.DB.withSession('first-primary');
+    if (!await landSchema(db) || !await agenticSchema(db)) return;
+    if (!await db.prepare('SELECT 1 AS ok FROM repository_agentic_settings WHERE repository_id=? AND enabled=1 AND land_without_person=1').bind(repositoryId).first()) return;
+    await autoLand(env, repositoryId, { commitId, limit: 5, withArtifact });
+  })().catch(error => console.log(JSON.stringify({ event: 'golf.land_soon_failed', message: String(error?.message || error).slice(0, 160) }))));
+}
+
 // Settles lands interrupted after their merge was submitted, from the merge journal (inspecting an unknown merge reads the branch back).
 async function settleLand(env, db, op, withArtifact) {
   const merge = parse(op.detail).merge, providerFetch = env.providerFetch || fetch;
