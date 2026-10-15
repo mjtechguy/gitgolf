@@ -20,7 +20,8 @@ import {remote} from './src/git.mjs';
 const read=async (kind,hash)=>{const response=await fetch('https://fixture.invalid/'+kind+'/'+hash);return response.ok?response.json():null;};
 export default {fetch(request,env) {
  const fixture={...env,ARTIFACTS:{async get(name){return {async info(){return {name,remote:remote(env,name)};},async createToken(){return {plaintext:'local-only-token'};},async revokeToken(){return true;},
-  async readCommit(hash){return read('commit',hash);},async readTree(hash){return read('tree',hash);},[Symbol.dispose](){}};}}};
+  async readCommit(hash){return read('commit',hash);},async readTree(hash){return read('tree',hash);},
+  async readBlob(hash){const response=await fetch('https://fixture.invalid/blob/'+hash);return response.ok?new Blob([await response.arrayBuffer()]):null;},[Symbol.dispose](){}};}}};
  return handle(request,fixture);
 }};`},bundle:true,write:false,format:'esm',platform:'neutral'});
 const root=mkdtempSync(join(tmpdir(),'golf-merge-runtime-')),directory=join(root,'project.git'),witness=join(root,'witness.git'),origin='https://golf.example.com';
@@ -31,10 +32,12 @@ let indexes=0;
 const tree=files=>{const index=join(root,'index-'+indexes++);
  execFileSync('git',['--git-dir',directory,'update-index','--add','--index-info'],{env:{...gitEnv,GIT_INDEX_FILE:index},input:Object.entries(files).map(([name,content])=>`100644 ${text(['hash-object','-w','--stdin'],content)}\t${name}\n`).join('')});
  return execFileSync('git',['--git-dir',directory,'write-tree'],{env:{...gitEnv,GIT_INDEX_FILE:index}}).toString().trim();};
-const start={'readme.txt':'base\n'},base=text(['commit-tree',tree(start),'-m','Base']),branch=(files,message)=>text(['commit-tree',tree({...start,...files}),'-p',base,'-m',message]);
+const notes=Array.from({length:12},(_,i)=>`note ${i+1}\n`).join('');
+const start={'readme.txt':'base\n','notes.txt':notes},base=text(['commit-tree',tree(start),'-m','Base']),branch=(files,message)=>text(['commit-tree',tree({...start,...files}),'-p',base,'-m',message]);
 // Proposals from the same base: the first contains the base tip; later ones diverge once main moves.
 const proposals=[['feature',{'feature.txt':'change\n'}],['other',{'other.txt':'other\n'}],['squashed',{'docs/guide/intro.md':'intro\n','readme.txt':'base\n'}],
- ['clash',{'feature.txt':'clash\n','docs/guide/intro.md':'clash\n'}],['late-merge',{'late/merge.txt':'merge\n'}],['late-squash',{'late/squash.txt':'squash\n'}]].map(([name,files])=>[name,branch(files,name)]);
+ ['clash',{'feature.txt':'clash\n','docs/guide/intro.md':'clash\n'}],['late-merge',{'late/merge.txt':'merge\n'}],['late-squash',{'late/squash.txt':'squash\n'}],
+ ['notes-top',{'notes.txt':notes.replace('note 2\n','NOTE TWO\n')}],['notes-bottom',{'notes.txt':notes.replace('note 11\n','NOTE ELEVEN\n')}]].map(([name,files])=>[name,branch(files,name)]);
 git(['update-ref','refs/heads/main',base]);for(const [name,commit] of proposals)git(['update-ref','refs/heads/'+name,commit]);
 // The tree real Git writes for a merge, computed in a repository the Worker never reads or writes.
 const witnessFetch=(...commits)=>{const fetched=spawnSync('git',['--git-dir',witness,'fetch','--quiet','--no-write-fetch-head',directory,...commits.map((commit,index)=>`+${commit}:refs/witness/${index}`)],{env:gitEnv});assert.equal(fetched.status,0,fetched.stderr.toString());};
@@ -53,6 +56,7 @@ const runtime=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundl
     if(listed.status)return new Response('missing',{status:404});
     return Response.json(listed.stdout.toString().split('\0').filter(Boolean).map(line=>{const [meta,name]=line.split('\t'),[mode,,id]=meta.split(' ');return {name,hash:id,type:types[mode],mode};}));
    }
+   if(kind==='blob') {const blob=spawnSync('git',['--git-dir',directory,'cat-file','blob',hash],{env:gitEnv});return blob.status?new Response('missing',{status:404}):new Response(blob.stdout);}
    const read=spawnSync('git',['--git-dir',directory,'cat-file','commit',hash],{env:gitEnv});
    if(read.status)return new Response('missing',{status:404});
    const body=read.stdout.toString(),split=body.indexOf('\n\n'),headers=body.slice(0,split).split('\n'),author=/^author (.*) <.*> (\d+) [+-]\d{4}$/.exec(headers.find(line=>line.startsWith('author ')));
@@ -171,11 +175,22 @@ try {
   await replayed(late,pr,settled);assert.equal(pushes,sent);
  }
  git(['fsck','--strict','--full','--no-dangling']);
- assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM git_operations WHERE state='APPLIED'").first()).n,5);
+
+ // 6. Two pull requests edit different lines of one file: both merge. The second merges notes.txt line by line in workerd
+ // into Git's merged tree; the new blob travels in the pack (the served repository never had it).
+ for(const number of [7,8]) {
+  const pr=await pull(number),tip=pr.base.commitId,expected=gitMerge(tip,proposals[number-1][1]);
+  assert.equal((await observe(pr)).mergeConflicts,undefined);
+  const done=await submit(intent(pr));
+  assert.equal(done.phase,'STANDARD_PULL_MERGE_PHASE_SUCCEEDED');assert.equal(text(['rev-parse','refs/heads/main^{tree}']),expected);
+ }
+ assert.equal(text(['show','refs/heads/main:notes.txt'])+'\n',notes.replace('note 2\n','NOTE TWO\n').replace('note 11\n','NOTE ELEVEN\n'));
+ git(['fsck','--strict','--full','--no-dangling']);
+ assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM git_operations WHERE state='APPLIED'").first()).n,7);
 
  // D1 itself enforces one unresolved operation per pull request and a single success.
  const add=phase=>db.prepare("INSERT INTO pull_merge_operations(actor_id,operation_id,repository_id,pull_request_id,input_hash,original,phase,created_at,updated_at) VALUES(1,?,1,4,'hash','{}',?,'t','t')").bind(crypto.randomUUID(),phase).run();
  await add('DISPATCH_UNKNOWN');await assert.rejects(add('RESERVED'));await assert.rejects(add('DISPATCH_UNKNOWN'));
  await assert.rejects(db.prepare("INSERT INTO pull_merge_operations(actor_id,operation_id,repository_id,pull_request_id,input_hash,original,phase,created_at,updated_at) VALUES(1,'again',1,1,'hash','{}','SUCCEEDED','t','t')").run());
- console.log('Real workerd/D1 native merge: head-contains-base, diverged three-way merge and squash packs built in workerd, received and verified by real Git against git merge-tree; conflicts listed and refused; unknown outcomes settled by readback; replay, refusal and uniqueness passed');
+ console.log('Real workerd/D1 native merge: head-contains-base, diverged three-way merge and squash packs built in workerd, received and verified by real Git against git merge-tree; conflicts listed and refused; unknown outcomes settled by readback; edits to different lines of one file merged line by line; replay, refusal and uniqueness passed');
 } finally {await runtime.dispose();rmSync(root,{recursive:true,force:true});}

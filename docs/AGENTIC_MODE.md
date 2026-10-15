@@ -267,7 +267,8 @@ reads and evaluations are not recorded.
 - **Other outcomes:**
   - The head moved after the land was requested: `BLOCKED`. The new head needs a new
     land.
-  - The merge would conflict (paths both sides changed differently): `NEEDS_REBASE`.
+  - The merge would conflict (lines or paths both sides changed differently; see
+    "Line-level merges" below): `NEEDS_REBASE`.
     The conflicting paths (at most 50) and their count are in `detail`. For a pull
     request opened from an agent task (`pull_request_origins.kind = 'agent-task'`),
     Golf comments on the pull request. The comment names the paths and says a
@@ -440,7 +441,7 @@ Then:
   - It is assigned to them when the accountable account is an administrator, as
     assignment needs.
   - The issue's number and assignee are kept in `detail.issue`.
-- **Conflicts:** later commits changed the same paths. The land stays `LANDED`, with
+- **Conflicts:** later commits changed the same lines (or the same non-text paths). The land stays `LANDED`, with
   `detail.revertConflict` (the paths) and `detail.revert.state = 'conflict'`. Golf
   comments and opens the same issue, which lists the paths, instead.
 - **Refused** (a locked branch, lost authority, a base that kept moving): the land stays
@@ -458,8 +459,8 @@ Then:
   changes.
 - Merges still reserve the whole repository briefly. Lands of different pull requests
   overlap everywhere except that moment, and they retry it.
-- Text conflicts are path-level (AM-6 adds line-level merges). Two changes to
-  different lines of one file are a conflict.
+- Text files merge line by line (AM-6, below). Lines or paths both sides changed
+  differently are still a conflict, and Golf never writes conflict markers.
 - Golf never starts the follow-up agent task for a conflict.
 - Comments and issues are recorded under the accountable administrator, because native
   Golf has no service account.
@@ -583,10 +584,41 @@ for the repository. Otherwise it stays the Agent workspace view, as does
 - The browser spec covers the default layout, not all nine layouts, and there is no hosted
   walkthrough yet.
 
+## Line-level merges
+
+AM-6, first slice. Every three-way merge in `tree-merge.mjs` merges text files line by
+line. That covers pull request merges and squashes, lands, automatic reverts and Source
+API commits with `onStale: "merge"`. Two changes to different lines of one file merge.
+
+- **When:** both sides changed a regular file differently, and it has the same mode on
+  every side (`file` or `executable`). A file added on both sides merges against an
+  empty file, as in Git.
+- **How (`text-merge.mjs`):** the outcome of `git merge-file` with its default Myers
+  diff and the default conflict style. A clean merge gives the same bytes. Lines keep
+  their endings (LF, CRLF, or no final newline).
+- **Conflicts:** a change that overlaps or touches the other side's change. Touching
+  means editing adjacent lines, or inserting at the same place. These are conflicts in
+  Git too, unless both sides end up with the same lines. The path is listed with
+  `both_modified` (or `both_added`). Golf never writes conflict markers.
+- **Not merged:**
+  - `binary`: a NUL in the first 8000 bytes, or text that is not UTF-8;
+  - `too_large_to_merge`: over 1 MiB or 50,000 lines on any side;
+  - `merge_budget`: past 200 files or 16 MiB read in one merge;
+  - mode changes on one side with content changes on the other, symlinks and
+    submodules, which still conflict by path.
+- **Differences from Git:**
+  - `git merge` uses histogram diff, while Golf uses Myers like `git merge-file`. Where
+    the two diffs align repeated lines differently, a merge can differ from Git's or
+    conflict where Git's does not.
+  - Golf conflicts where Git would still merge: non-UTF-8 text, files over the bounds,
+    and a mode change on one side combined with a content change on the other.
+  - The worst case for adversarial 50,000-line files is about one second of CPU per
+    file in Node.
+
 ## Not yet implemented
 
 - Batch approval, a revert action in the inbox and hiding agent branches (AM-5).
 - Policy landings that squash; queuing a pull request that is still waiting for checks.
 - A dedicated service account for comments and issues Golf writes (they use the admin who saved the setting).
 - Organization-level agentic policies beyond on/off.
-- Line-level merges (AM-6).
+- Hosted measurement of line-level merges on shared branches (AM-6).

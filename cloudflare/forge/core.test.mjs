@@ -3295,7 +3295,9 @@ test('native squash writes one commit with the base as its only parent and the h
 
 test('native merge refuses conflicting diverged branches and lists at most 50 conflicting paths with their count', async t => {
   const f=await mergeFixture(t), files=prefix=>Array.from({length:60},(_,i)=>fileEntry('c'+String(i).padStart(2,'0'),prefix+String(i).padStart(39,'0')));
-  const others=fixtureEntries.filter(entry=>entry.name!=='hello.txt');
+  const others=fixtureEntries.filter(entry=>entry.name!=='hello.txt'), get=f.env.ARTIFACTS.get;
+  // Both sides changed these files: the merge reads them line by line. Each fixture blob is one line, its own hash.
+  f.env.ARTIFACTS.get=async name=>{const repo=await get(name),readBlob=repo.readBlob;repo.readBlob=async hash=>await readBlob(hash)??new Blob([hash+'\n']);return repo;};
   const v=diverge(f,[...others,fileEntry('hello.txt','8'.repeat(40)),...files('4')],[...others,fileEntry('hello.txt','9'.repeat(40)),...files('5')]), pull=await f.pull();
   const expected=Array.from({length:50},(_,i)=>({path:'c'+String(i).padStart(2,'0'),reason:'both_added'}));
   const observed=(await value(await f.observe(pull))).observation;

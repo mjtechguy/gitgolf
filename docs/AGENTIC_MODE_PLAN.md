@@ -201,7 +201,7 @@ writer in a new `git-objects.mjs`.
    - Different changes to the same path are a conflict. The conflicting paths are
      listed.
    - Mode changes and deletes follow the same rule.
-   - Merging text line by line (diff3) comes later (AM-6). The first version does
+   - Merging text line by line (diff3) came later (AM-6, done 2026-10-15). The first version did
      not attempt it.
 3. **Routes** (`POST /native/source/<action>`, JSON):
    - **`commit`:**
@@ -376,6 +376,13 @@ writer in a new `git-objects.mjs`.
    walkthrough is recorded.
 
 ### AM-6 Budgets and later work
+
+**Status (2026-10-15): line-level merge done locally, not hosted-verified.**
+- `text-merge.mjs` matches `git merge-file` on more than 700 cases.
+- `tree-merge.mjs` uses it in every three-way merge (see "Line-level merges" in
+  `docs/AGENTIC_MODE.md`).
+- The rest of AM-6 is open. So is re-measuring S6 shared-branch commits with
+  line-level merges.
 
 - **Rate budgets** for each API token and agent task: requests and pushes per
   minute.

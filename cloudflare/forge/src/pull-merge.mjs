@@ -36,9 +36,10 @@ function authority(person, row, idle = true) {
 // Responses and the journal list at most this many conflicting paths, with the full count beside them.
 export const conflictLimit = 50;
 
-// The commit a merge of head into base would write: its tree, the new tree objects and its parents, or why not.
-// A head that already contains the base keeps the head tree. Diverged branches get a path-level three-way merge
-// against their single merge base (bounded ancestry read); a path both sides changed differently is a conflict.
+// The commit a merge of head into base would write: its tree, the new tree and blob objects and its parents, or why not.
+// A head that already contains the base keeps the head tree. Diverged branches get a three-way merge against their single
+// merge base (bounded ancestry read; tree-merge.mjs merges by path, then text files line by line); lines or paths both
+// sides changed differently are conflicts.
 // A squash has the same tree and the base as its only parent.
 export async function mergePlan(repo, base, head, method = 'merge') {
   if (base === head) return { blocker: 'nothing_to_merge' };
@@ -167,7 +168,7 @@ export async function standardPullMerge(db, env, person, row, method, body, arti
       const commit = await mergeCommit({ tree: plan.tree, parents: plan.parents, name: options.author?.name || clean(person.full_name) || login,
         email: options.author?.email || `${login}@users.noreply.${new URL(env.PUBLIC_ORIGIN).hostname}`, time: Math.floor(Date.parse(time) / 1000),
         message: ((title || fallback) + (message ? '\n\n' + message : '')).replace(/\n+$/, '') + '\n' });
-      // The commit plus the tree objects only a three-way merge creates; every blob and other tree already exists in the repository.
+      // The commit plus the trees and line-merged blobs only a three-way merge creates; every other object already exists in the repository.
       const request = receiveRequest(current.base.commitId, commit.id, ref, await packObjects([commit, ...plan.objects]));
       // The same single-ref grammar, reservation and journal as a brokered push, plus the exact pull request revision.
       const command = receiveCommand(request), operation = crypto.randomUUID();

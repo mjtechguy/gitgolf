@@ -225,6 +225,21 @@ test('a moved branch fails by default, merges disjoint paths with onStale merge 
   assert.equal(lost.status, 409); assert.equal(lost.body.currentHead, f.head('main'));
 });
 
+test('onStale merge combines edits to different lines of one file and lists edits to the same lines', { skip: !gitAvailable }, async t => {
+  const f = await fixture(t);
+  const lines = Array.from({ length: 12 }, (_, i) => `line ${i + 1}\n`).join(''), at = (from, to) => lines.replace(from, to);
+  const first = await seed(f), start = await f.ok('commit', { repository: key, branch: 'main', expectedHead: first.commitId, message: 'Notes', changes: [{ path: 'notes.txt', content: lines }] });
+  await f.ok('commit', { repository: key, branch: 'main', expectedHead: start.commitId, message: 'Top', changes: [{ path: 'notes.txt', content: at('line 2\n', 'TWO\n') }] }, tokens.bob);
+  const merged = await f.ok('commit', { repository: key, branch: 'main', expectedHead: start.commitId, message: 'Bottom', onStale: 'merge', changes: [{ path: 'notes.txt', content: at('line 11\n', 'ELEVEN\n') }] });
+  assert.equal(merged.merged, true);
+  assert.deepEqual(merged.changedPaths, [{ path: 'notes.txt', change: 'modified' }]);
+  assert.equal(f.g.text(['show', 'main:notes.txt']) + '\n', at('line 2\n', 'TWO\n').replace('line 11\n', 'ELEVEN\n'));
+  f.g.run(['fsck', '--strict', '--full', '--no-dangling']);
+  const clash = await f.call('commit', { repository: key, branch: 'main', expectedHead: start.commitId, message: 'Clash', onStale: 'merge', changes: [{ path: 'notes.txt', content: at('line 2\n', 'two\n') }] });
+  assert.equal(clash.status, 409); assert.deepEqual(clash.body.conflicts, [{ path: 'notes.txt', reason: 'both_modified' }]);
+  assert.equal(f.head('main'), merged.commitId);
+});
+
 test('an idempotency key replays the original commit and refuses different inputs', { skip: !gitAvailable }, async t => {
   const f = await fixture(t);
   const first = await seed(f), idempotencyKey = crypto.randomUUID();
