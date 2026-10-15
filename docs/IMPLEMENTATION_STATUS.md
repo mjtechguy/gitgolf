@@ -1,6 +1,26 @@
 # Golf implementation status
 
-## 2026-10-15 — Hosted checks: agent tasks on MCP, automations, vault, engines; SSH hosts waiting for deploy config
+## 2026-10-15 — SSH hosts deployed on the hosted demo
+
+**Deploy config:** the Alchemy stack builds the SSH image and binds `SSHAgentTask` on `enable-ssh-hosts`
+([SSH_HOSTS.md](SSH_HOSTS.md#deploy)).
+- Every plan and deploy left `Login`, `ControlAccess` and `PreviewAccess` unchanged.
+- The first deploy needed a second run: Alchemy reconciled the container application before the Worker had
+  created the new Durable Object namespace.
+
+**Hosted result:**
+- `agents.ssh-hosts` is READY.
+- A direct SSH host for `git@github.com:22`, used only as a probe, was registered and tested from the hosted container:
+  1. the first test reported GitHub's published ed25519 fingerprint (`SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU`);
+  2. after confirming it, the second test failed with "the host refused Golf's key for git".
+- The probe host was then deleted.
+
+**Not verified on hosted:**
+- a task end to end on a machine that accepts Golf's key;
+- Tailscale and Cloudflare Tunnel reach;
+- Workers VPC (no `SSH_VPC_NETWORK` binding).
+
+## 2026-10-15 — Hosted checks: agent tasks on MCP, automations, vault, engines
 
 On `https://demo.gitgolf.mjtechguy.com`, schema 47, after #113, #115, #116 and #117.
 

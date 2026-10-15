@@ -306,6 +306,21 @@ class Observability(unittest.TestCase):
             self.assertIn("input.executionValueKey ? [Cloudflare.SecretsStore.Secret('ExecutionValueSecret', { store, name: name + '-execution-values', value: Redacted.make(input.executionValueKey) })] : []",stack)
             self.assertIn("input.executionValueKey ? { execution_values: { key: { store: storeId, name: name + '-execution-values' } } } : {}",stack)
 
+    def test_enabling_ssh_hosts_needs_the_value_key_and_stages_only_the_image_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            with self.assertRaises(ValueError): demo.enable_ssh_hosts(directory,{'settings':{}})
+            self.assertFalse((directory/'alchemy-input.json').exists())
+            with patch('builtins.print'): demo.enable_ssh_hosts(directory,{'settings':{'evidence':{}},'executionValueKey':'k'})
+            saved=json.loads((directory/'alchemy-input.json').read_text())
+            self.assertIs(saved['sshHosts'],True)
+            self.assertEqual(saved['settings'],{'evidence':{}})
+            stack=(demo.ROOT/'deploy/alchemy/alchemy.run.ts').read_text()
+            # The build context is staged, never the repository root with its .tmp installation directories.
+            self.assertIn("for (const part of ['go.mod', 'go.sum', 'cmd/golf-agent-host'])",stack)
+            self.assertIn("schedulingPolicy: 'durable_object', context: sshContext,",stack)
+            self.assertIn("SSHAgentTask: Cloudflare.DurableObject('SSHAgentTask', { containers: [sshImage] }), SSH_HOSTS_EXECUTION: 'true'",stack)
+
     def test_enabling_email_names_one_sender_on_the_installation_hostname_after_migration(self):
         import hashlib
         with tempfile.TemporaryDirectory() as temporary:

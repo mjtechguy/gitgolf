@@ -397,6 +397,18 @@ anything else needs its own reviewed step. After each migration it reads the
 created objects back from D1 and only then advances the receipt. Migrate before
 deploying: the new tables are unused by the running Worker.
 
+Turn on coding agents on SSH hosts ([SSH_HOSTS.md](../../docs/SSH_HOSTS.md)) after `enable-secrets`.
+SSH host keys are sealed with the same repository value key:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-ssh-hosts NEW_DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy NEW_DIRECTORY
+```
+
+The stack builds the SSH image from a context staged in `NEW_DIRECTORY/ssh-image`. It binds
+the `SSHAgentTask` Durable Object to that image and sets `SSH_HOSTS_EXECUTION`. If the first deploy
+stops with "requires a resolved Durable Object namespace", run it again.
+
 Prepare repository secrets and variables on a retained installation:
 
 ```sh

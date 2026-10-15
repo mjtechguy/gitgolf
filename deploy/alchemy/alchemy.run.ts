@@ -6,7 +6,7 @@ import { localState } from 'alchemy/State';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
 import * as Redacted from 'effect/Redacted';
-import { readFileSync } from 'node:fs';
+import { cpSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { bindings, outputPath, readConfig } from './native-config.mjs';
 import { WorkflowSettings, workflowSettingsProvider } from './workflow-settings.js';
@@ -21,6 +21,15 @@ const evidence = input.settings.evidence;
 const agents = input.settings.agent_path !== undefined, steps = agents ? 100 : 87;
 // prepare, infer and settle; the same values are in prepare.mjs.
 const aiSteps = 4, aiConcurrency = 4;
+// SSH host tasks (docs/SSH_HOSTS.md): the image builds from a staged context holding only what its Dockerfile copies, never the
+// repository root (which holds .tmp installation directories).
+const ssh = input.sshHosts === true, sshContext = resolve(directory, 'ssh-image');
+if (ssh) {
+  rmSync(sshContext, { recursive: true, force: true });
+  for (const part of ['go.mod', 'go.sum', 'cmd/golf-agent-host'])
+    cpSync(resolve(root, part), resolve(sshContext, part), { recursive: true, filter: source => !source.endsWith('_test.go') });
+  cpSync(resolve(root, 'cloudflare/ssh-hosts/Dockerfile'), resolve(sshContext, 'Dockerfile'));
+}
 
 export default Alchemy.Stack('GolfDemo', {
   providers: Layer.mergeAll(Cloudflare.providers(), Command.providers(), workflowSettingsProvider(), previewDomainProvider()),
@@ -123,6 +132,11 @@ export default Alchemy.Stack('GolfDemo', {
     publish: { repository: name }, observability: { logs: { enabled: false } },
   });
   const published = yield* agent.Application;
+  // Outbound internet is on for this image only: it reaches the registered hosts and this installation's public origin.
+  const sshImage = ssh ? Cloudflare.Container('ssh', {
+    schedulingPolicy: 'durable_object', context: sshContext,
+    publish: { repository: name + '-ssh' }, observability: { logs: { enabled: false } },
+  }) : undefined;
   const control = yield* Cloudflare.Worker('Control', {
     name, main: main(), bundle: false, workersDev: false,
     domain: { name: input.hostname, zoneId: input.zone },
@@ -135,6 +149,7 @@ export default Alchemy.Stack('GolfDemo', {
       PRTestTask: Cloudflare.DurableObject('PRTestTask', { containers: [agent] }),
       // Both task classes start the image under the key `agent`, so they share one container definition.
       ...(agents ? { PRAgentTask: Cloudflare.DurableObject('PRAgentTask', { containers: [agent] }) } : {}),
+      ...(sshImage ? { SSHAgentTask: Cloudflare.DurableObject('SSHAgentTask', { containers: [sshImage] }), SSH_HOSTS_EXECUTION: 'true' } : {}),
       EvidenceWorkflow: Cloudflare.Workflow('EvidenceWorkflow', { workflowName: name, limits: { steps } }),
       ...(pipelines ? { PipelineRun: Cloudflare.DurableObject('PipelineRun'), ALCHEMY_PIPELINE_DEPENDENCY: Output.all(pipelineBucket!.bucketName, pipelineDeadLetter!.queueName).pipe(Output.map(values => values.join(','))) } : {}),
       // Workers AI runs: prepare and settle in the workspace, inference in this Workflow (see cloudflare/forge/prepare.mjs).
