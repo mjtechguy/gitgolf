@@ -201,9 +201,10 @@ export class RepositoryReads extends DurableObject {
     initializeMetadataJobs(ctx);
     const cache = { objects: new Map(), pending: new Map(), bytes: 0 };
     this.warmed = new Set();
-    const owner = ctx.exports.Workspace.get(ctx.exports.Workspace.idFromName(env.WORKSPACE_SLUG));
+    // A fresh stub per call: the Workspace restarts on every deploy, and a stub kept across that restart stays broken.
+    const owner = () => ctx.exports.Workspace.get(ctx.exports.Workspace.idFromName(env.WORKSPACE_SLUG));
     // Indexing mutates only its own journal; it must not queue foreground reads.
-    this.index = serialize(() => advanceMetadataJobs(ctx, { ...env, notifyMetadata: id => owner.activityChanged(String(id), ['issues']), waitUntil: promise => ctx.waitUntil(promise) }));
+    this.index = serialize(() => advanceMetadataJobs(ctx, { ...env, notifyMetadata: id => owner().activityChanged(String(id), ['issues']), waitUntil: promise => ctx.waitUntil(promise) }));
     // Each read's grant is read again afterwards from D1 (scale-out S3), with no hop into the Workspace queue.
     this.dispatch = serialize(async request => {
       return handle(request, { ...env, metadataIndex: (row, person, repo, commitId) => metadataJob(ctx, env, row, person, repo, commitId), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: cache,
