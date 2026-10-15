@@ -17,7 +17,7 @@ export type AiUsage = { generatedAt: string; days: number; since: string; today:
   rows: LedgerRow[]; unreadable: string[]; caps: { requestsPerMinute: number; spendCentsPerDay: number } | null; gateway: Gateway };
 
 const features: Record<string, string> = { agents: 'Agent proposals', advice: 'Review advice', 'review-draft': 'Review drafts', 'review-drafts': 'Review drafts', triage: 'Issue triage',
-  'release-notes': 'Release notes', 'intent-summary': 'Intent summaries', index: 'Search indexing', search: 'Semantic search' };
+  'release-notes': 'Release notes', 'intent-summary': 'Intent summaries', index: 'Search indexing', search: 'Semantic search', automation: 'Automations' };
 const featureName = (id: string) => features[id] || id;
 const number = (value: number) => value.toLocaleString();
 const gatewayStates = { observed: ['Observed', 'available'], degraded: ['Degraded', 'configured'], unavailable: ['Not connected', ''] } as const;

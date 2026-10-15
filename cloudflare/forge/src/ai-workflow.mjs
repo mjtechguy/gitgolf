@@ -7,6 +7,7 @@ import { releaseNotes } from './ai-release-notes.mjs';
 import { intentSummary } from './ai-intent.mjs';
 import { aiModelStillAllowed } from './ai-models.mjs';
 import { resolveEngine, recordRunEngine, runEngine, engineCall } from './engines.mjs';
+import { automationKind } from './automation-tools/custom.mjs';
 
 // One entry per kind; each AI track adds one line here. A kind is
 // { feature (a feature-policy id, such as 'advice'), use (an AI use case in engines.mjs and ai-models.mjs, whose effective engine and model the run records) or a fixed model, roles, target(value, row) → bounded JSON target or invalid(),
@@ -20,6 +21,8 @@ export const aiKinds = {
   'release-notes': releaseNotes,
   'review-draft': reviewDraft,
   'intent-summary': intentSummary,
+  // Custom automations on the default engine (docs/AUTOMATIONS.md); only the run's own automation can ask for one.
+  automation: automationKind,
 };
 
 const time = () => new Date().toISOString();

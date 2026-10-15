@@ -470,6 +470,8 @@ export async function advanceRunNow(env, runId) {
   if (env.notifyPipeline) env.notifyPipeline(run.repository_id);
   // Agentic mode (land-queue.mjs): a finished run can decide a landing or the checks of a landed change. Never awaited here.
   if (finished && env.pipelineFinished) env.pipelineFinished({ ...run, state });
+  // Automations (automations.mjs, loaded on use): a failed run is the pipeline.failed event.
+  if (finished && state === 'FAILURE') await import('./automations.mjs').then(module => module.automationEvent(env, { type: 'pipeline.failed', repositoryId: run.repository_id, runId: run.id, ref: run.ref, commit: run.commit_id })).catch(() => {});
   return { state, nextCheck: finished ? null : Date.now() + 60_000 };
 }
 

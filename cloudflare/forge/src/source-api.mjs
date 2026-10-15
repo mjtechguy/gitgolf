@@ -13,6 +13,7 @@ import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.m
 import { pipelinePolicy } from './pipeline-policy.mjs';
 import { requireScope } from './token-scope.mjs';
 import { blame, grep } from './source-reads.mjs';
+import { automationEvent } from './automations.mjs';
 
 export const sourceActions = new Set(['commit', 'branch', 'files', 'tree', 'blame', 'grep']);
 const reads = { files, tree, blame, grep };
@@ -191,6 +192,8 @@ async function write(db, env, person, row, repo, command, pack, rulesVersion, ct
     try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'push', { ref: command.ref, before: command.old, after: command.next, actorId: person.id, operationId: id }, 'push:' + id), ctx.withArtifact); }
     catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
   }
+  // Automations: a confirmed branch write is a push.
+  if (command.next !== zero) await automationEvent(env, { type: 'push', repositoryId: row.id, ref: command.ref, before: command.old, after: command.next, actorId: person.id });
   return { outcome: 'applied', id };
 }
 

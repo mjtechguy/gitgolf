@@ -33,6 +33,7 @@ import { sourceAPI, sourceCapability } from './source-api.mjs';
 import { agenticModeAPI, agenticCapability, landingCapability } from './agentic-mode.mjs';
 import { landAPI } from './land-queue.mjs';
 import { agentInboxAPI, inboxCapability } from './agent-inbox.mjs';
+import { automationsAPI, automationEvent, automationCapability, processAutomations } from './automations.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
@@ -122,7 +123,7 @@ export async function admitMCP(request) {
 // Reads overlap; a queued mutation/revocation fences all subsequent admissions.
 export function concurrentRead(request) {
   if (!(request instanceof Request) || request.method !== 'POST') return false;
-  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/search/read', '/native/agentic-mode/read', '/native/land/read', '/native/agent-inbox/read'].includes(new URL(request.url).pathname)) return true;
+  if (['/native/pr-evidence/read', '/native/pr-preview/read', '/native/installation/read', '/native/ai/read', '/native/ai-models/read', '/native/ai-usage/read', '/native/search/read', '/native/agentic-mode/read', '/native/land/read', '/native/agent-inbox/read', '/native/automations/read'].includes(new URL(request.url).pathname)) return true;
   if (/^\/rpc\/golf\.v1\.(WorkflowService\/InspectWorkflows|ExecutionPolicyService\/GetExecutionPolicy)$/.test(new URL(request.url).pathname)) return true;
   if (new URL(request.url).pathname === '/rpc/golf.v1.DiscussionCollaborationService/ListIssueTemplates') return true;
   if (/^\/rpc\/golf\.v1\.(?:FeaturePolicyService\/GetFeaturePolicy|RepositoryFeatureService\/GetRepositoryFeatures)$/.test(new URL(request.url).pathname)) return true;
@@ -356,6 +357,8 @@ async function git(db, env, person, request, url, providerFetch) {
       try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'push', { ref: command.ref, before: command.old, after: command.next, actorId: person.id, operationId: operation }, 'push:' + operation), withArtifact); }
       catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
     }
+    // Automations: a confirmed branch push (and pull_request.updated for pull requests whose head it moved).
+    if (operation && applied && command.next !== '0'.repeat(40)) await automationEvent(env, { type: 'push', repositoryId: row.id, ref: command.ref, before: command.old, after: command.next, actorId: person.id });
     await confirmGitCredential(db,person,row);
     let bytes=result.bytes;
     if (service==='git-upload-pack') {
@@ -588,6 +591,11 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
       return reply(await agentTasksAPI(db, env, person, row, request, body, () => withArtifact(env, row, repo => refs(env, repo, row, providerFetch))));
     }
+    if (url.pathname === '/native/automations' || url.pathname === '/native/automations/read') {
+      // Automations (docs/AUTOMATIONS.md): definitions change on the exclusive route; inventories and runs overlap as reads.
+      const result = await automationsAPI(db, env, person, request, body, url.pathname.endsWith('/read'), { repository: () => authorizedRepository(db, person, body.repository, env, body.repositoryId) });
+      return reply(result);
+    }
     if (url.pathname === '/native/ai-models' || url.pathname === '/native/ai-models/read') return await aiModelsAPI(db, env, person, request, body, url.pathname.endsWith('/read'), () => authorizedRepository(db, person, body.repository, env, body.repositoryId));
     if (url.pathname === '/native/ai-usage/read') return await aiUsageAPI(db, env, person, request, body, providerFetch);
     if (url.pathname === '/native/runner-placement') {
@@ -733,6 +741,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       executionValueCapability(env),
       await searchCapability(db, env),
       await agentHostCapability(db),
+      await automationCapability(db),
       await sourceCapability(db),
       await apiTokenCapability(db),
       await vaultCapability(db, env),
@@ -816,7 +825,13 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (service === 'GitTransportService') return reply(await gitCredentials(db,env,person,row,request,method,body));
     if (service === 'PullReviewAuthoringService') return reply(await reviewAuthoring(db,env,person,row,request,method,body,action=>withArtifact(env,row,action)));
     if (service === 'PullReviewRequestService' && method==='GetPullCodeOwners') return reply(await pullCodeOwners(db,env,person,row,body,action=>withArtifact(env,row,action)));
-    if (service === 'PullReviewRequestService') return reply(await pullReviews(db,env,person,row,request,method,body,action=>withArtifact(env,row,action)));
+    if (service === 'PullReviewRequestService') {
+      const value = await pullReviews(db,env,person,row,request,method,body,action=>withArtifact(env,row,action));
+      // Automations: a review request that took effect.
+      if (method === 'SubmitPullReviewRequest' && body.requestReview === true && value?.operation?.phase === 'DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED')
+        await automationEvent(env, { type: 'pull_request.review_requested', repositoryId: row.id, number: body.number, actorId: person.id });
+      return reply(value);
+    }
     if (service === 'PullMergeObservationService') {
       if(method !== 'GetPullRequestMergeObservation') unsupported();
       return reply(await pullMergeObservation(db,env,person,row,body,action=>withArtifact(env,row,action)));
@@ -835,6 +850,9 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
         try { await dispatchPipelineIntake(env, await recordPipelineIntake(db, env, row.id, 'pull_request', { number: value.mutation.number, action: reopened ? 'reopened' : 'opened', headCommitId: value.pullRequest.head?.commitId, actorId: person.id }, 'pull:' + value.mutation.id), withArtifact); }
         catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
       }
+      // Automations: a new issue or pull request (a replayed request finds its runs already queued by their dedupe key).
+      if ((method === 'CreateIssue' || method === 'CreatePullRequest') && value?.mutation?.number)
+        await automationEvent(env, { type: method === 'CreateIssue' ? 'issue.opened' : 'pull_request.opened', repositoryId: row.id, number: value.mutation.number, headCommit: value.pullRequest?.head?.commitId || '', actorId: person.id });
       return reply(value);
     }
     if (method === 'GetRepository') return reply(await withArtifact(env, row, async (_repo, _info, commits) => {
@@ -1098,6 +1116,13 @@ export async function advanceAi(env, id, phase, result) {
     if (person && row) context = { person, row, artifact: action => withArtifact(env, row, action) };
   }
   return aiStep(db, env, run, context, phase, result);
+}
+
+// Automations (automations.mjs): queued runs start and finished work is applied in the workspace write queue, with the installation
+// policy in force now. The engine calls of registry engines run outside the queue (inferAutomationRuns).
+export async function advanceAutomations(env, providerFetch = fetch) {
+  env = await withInstallationPolicy(env);
+  return processAutomations(env, { withArtifact, readTree, readRefs: row => withArtifact(env, row, repo => refs(env, repo, row, providerFetch)) });
 }
 
 export async function testGit(env, id, request, workflows, providerFetch = fetch) {

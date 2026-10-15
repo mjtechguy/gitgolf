@@ -136,7 +136,7 @@ export class RepositoryActivity {
 export async function activitySelection(event) {
   if (!(event instanceof Request)) {
     // The CI intake pass changes nothing a page shows; the jobs it records publish for their own repository.
-    if (event.preview || event.activity || event.ai || event.ci) return;
+    if (event.preview || event.activity || event.ai || event.ci || event.automations) return;
     if (event.notify) return { id: event.repositoryId, topics: event.topics || ['actions', 'agents', 'pulls'] };
     return { job: event.id, topics: ['actions', 'agents', 'pulls'] };
   }

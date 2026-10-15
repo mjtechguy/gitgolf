@@ -18,6 +18,8 @@ export function settingForRoute(kind: string, view?: string, native = false) {
   if (kind === 'repository-audit' || kind === 'organization-audit') return 'settings.installation-audit';
   // Agentic mode (docs/AGENTIC_MODE.md) is a native Worker service; a runtime that does not report it does not open the page.
   if (kind === 'repository-agentic-mode') return 'repository.agentic-mode';
+  // Automations (docs/AUTOMATIONS.md) are a native Worker service at repository, organization and installation scope.
+  if (kind === 'repository-automations' || kind === 'organization-automations' || kind === 'instance-settings' && view === 'automations') return 'automations';
   // Agent hosts (docs/AGENT_HOSTS.md) exist only where the native Worker reports them; the portable runtime keeps its own coding agent pages.
   // API tokens and remote MCP (docs/AGENT_ACCESS.md) are a native Worker service.
   if (kind === 'account-api-tokens') return 'agents.mcp';

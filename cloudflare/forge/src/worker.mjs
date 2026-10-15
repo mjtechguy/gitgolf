@@ -27,6 +27,7 @@ import { sweepAgentTasks } from './agent-hosts.mjs';
 import { settleRefWrites } from './ref-writes.mjs';
 import { afterPipelineRun, sweepLanding } from './land-queue.mjs';
 import { AgentBudgets } from './agent-budgets.mjs';
+import { sweepAutomations, inferAutomationRuns } from './automations.mjs';
 
 
 const heartbeat = 5 * 60_000;
@@ -40,7 +41,9 @@ export class Workspace extends DurableObject {
     const configured = this.configured = { ...env, previewChanged: id => this.activity.publish(String(id), ['actions', 'pulls']), performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask, pipelineCoordinator: ctx.exports.PipelineRun, notifyPipeline: id => this.activity.publish(String(id), ['actions']),
       AiWorkflow: env.AiWorkflow || (env.AI_WORKFLOW_NAME ? ctx.exports.AiWorkflow : undefined),
       // Rate budgets for API tokens and agent tasks (agent-budgets.mjs): in this object's memory, restarted with it.
-      agentBudgets: new AgentBudgets() };
+      agentBudgets: new AgentBudgets(),
+      // Automations (automations.mjs): an event that queued runs asks for a pass after the response.
+      automationsQueued: () => ctx.waitUntil(this.automations().catch(() => {})) };
     if (env.REGISTRY_PROVIDER === 'cloudflare') {
       configured.registryUploadStore = ctx.storage;
       configured.REGISTRY = managedRegistry(configured, input => registryAuthority(configured, input));
@@ -49,7 +52,7 @@ export class Workspace extends DurableObject {
       const selection = await activitySelection(event);
       let result;
       try {
-        result = await (event instanceof Request ? handle(event, configured) : event.ci ? runCI(configured) : event.preview ? servePreview(configured, event.preview) : event.ai ? advanceAi(configured, event.ai, event.phase, event.result) : event.cleanup ? cleanupPreviews(configured) : event.values ? releaseExecutionValues(configured, event.id, id => advanceEvidence(configured, id, 'authorize-test', workflows)) : event.git
+        result = await (event instanceof Request ? handle(event, configured) : event.ci ? runCI(configured) : event.preview ? servePreview(configured, event.preview) : event.ai ? advanceAi(configured, event.ai, event.phase, event.result) : event.automations ? import('./core.mjs').then(core => core.advanceAutomations(configured)) : event.cleanup ? cleanupPreviews(configured) : event.values ? releaseExecutionValues(configured, event.id, id => advanceEvidence(configured, id, 'authorize-test', workflows)) : event.git
           ? event.phase ? agentGit(configured, event.id, event.git, event.phase, workflows) : testGit(configured, event.id, event.git, workflows)
           : event.registry ? testRegistry(configured,event.id,event.registry) : event.notify ? undefined : advanceEvidence(configured, event.id, event.phase, workflows));
         return result;
@@ -92,7 +95,29 @@ export class Workspace extends DurableObject {
     try { await maintain(this.env, this.ctx.exports, this); } catch { /* Each stage's outcome is in the maintenance journal. */ }
   }
   evidence(id, phase) { return this.dispatch({ id, phase }); }
-  ai(id, phase, result) { return this.dispatch({ ai: id, phase, result }); }
+  ai(id, phase, result) {
+    const step = this.dispatch({ ai: id, phase, result });
+    // A settled AI run may be the answer an automation run waits for.
+    if (phase === 'settle') this.ctx.waitUntil(step.then(() => this.automations()).catch(() => {}));
+    return step;
+  }
+  // Automations: a pass in the write queue (start queued runs, apply finished work), then the engine calls of registry engines outside
+  // it and a pass that applies their answers. Concurrent requests share the pass in progress and ask for one more; at most five rounds.
+  automations() {
+    if (this.automationPass) { this.automationAgain = true; return this.automationPass; }
+    this.automationPass = (async () => {
+      try {
+        for (let round = 0; round < 5; round++) {
+          this.automationAgain = false;
+          const result = await this.dispatch({ automations: true });
+          for (const id of result?.repositories || []) this.activity.publish(String(id), ['issues', 'pulls', 'agents']);
+          if (result?.infer) { await inferAutomationRuns(await withInstallationPolicy(this.configured)); this.automationAgain = true; }
+          if (!this.automationAgain) break;
+        }
+      } finally { this.automationPass = null; }
+    })();
+    return this.automationPass;
+  }
   recordPerformance(sample) { this.performance.record(sample); }
   preview(input) { return this.dispatch({ preview: input }); }
   cleanupPreviews() { return this.dispatch({ cleanup: true }); }
@@ -128,6 +153,8 @@ export class Workspace extends DurableObject {
       : path === '/mcp' ? admitMCP(request).then(admitted => admitted instanceof Response ? admitted : this.authority(admitted))
       : path === '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess' || path.startsWith('/native/') || !concurrentRead(request) ? this.authority(request) : this.dispatch(request);
     if (this.env.CI_AUTO === 'true' && request.method === 'POST' && (path.endsWith('/git-receive-pack') || path === '/native/source/commit' || path === '/native/source/branch' || path === '/mcp')) this.ctx.waitUntil(response.then(() => this.runCI()));
+    // A finished agent task may be the work an automation run waits for.
+    if (request.method === 'POST' && /^\/native\/agent-host\/tasks\/[0-9a-f-]{36}\/finish$/.test(path)) this.ctx.waitUntil(response.then(() => this.automations()).catch(() => {}));
     return response;
   }
 }
@@ -207,7 +234,8 @@ export class PipelineRun extends DurableObject {
     const workspace = this.ctx.exports.Workspace, owner = workspace.get(workspace.idFromName(this.env.WORKSPACE_SLUG));
     const env = { ...this.env, pipelineCoordinator: this.ctx.exports.PipelineRun, waitUntil: promise => this.ctx.waitUntil(promise),
       notifyPipeline: id => this.ctx.waitUntil(owner.activityChanged(String(id), ['actions']).catch(() => {})),
-      notifyLanding: id => this.ctx.waitUntil(owner.activityChanged(String(id), ['source', 'pulls', 'issues']).catch(() => {})) };
+      notifyLanding: id => this.ctx.waitUntil(owner.activityChanged(String(id), ['source', 'pulls', 'issues']).catch(() => {})),
+      automationsQueued: () => this.ctx.waitUntil(owner.automations().catch(() => {})) };
     // A finished run may land pull requests (agentic mode) or decide the checks of a landed change; after the run's own update.
     env.pipelineFinished = run => this.ctx.waitUntil((async () => afterPipelineRun(env, run, (await import('./core.mjs')).withArtifact))()
       .catch(error => console.log(JSON.stringify({ event: 'golf.land_after_run_failed', message: String(error?.message || error).slice(0, 160) }))));
@@ -316,7 +344,9 @@ async function maintain(env, exports, owner) {
         const settled = await Promise.allSettled([reconcileIndexes(env), env.SEARCH_INDEX ? advanceSearch(env) : { processed: 0 },
           pipelines ? sweepPipelines(pipelines, (await import('./core.mjs')).withArtifact, id => advancePipelineRun(pipelines, id)).then(r => ({ processed: r.intakes + r.runs })) : { processed: 0 },
           sweepAgentTasks(env.DB.withSession('first-primary')), settleRefWrites(pipelines || env, (await import('./core.mjs')).withArtifact),
-          sweepLanding({ ...(pipelines || env), notifyLanding: id => owner.activityChanged(String(id), ['source', 'pulls', 'issues']).catch(() => {}) }, (await import('./core.mjs')).withArtifact)]);
+          sweepLanding({ ...(pipelines || env), notifyLanding: id => owner.activityChanged(String(id), ['source', 'pulls', 'issues']).catch(() => {}) }, (await import('./core.mjs')).withArtifact),
+          // Automations: due schedules and stale runs (Cron Triggers do not fire on this account; the alarm runs this stage), then a pass.
+          sweepAutomations(env).then(async result => { if (result.pending) await owner.automations(); return result; })]);
         for (const result of settled) if (result.status === 'rejected') throw result.reason;
         return { ...settled[0].value, processed: settled.slice(1).reduce((sum, result) => sum + result.value.processed, 0) }; }],
 
