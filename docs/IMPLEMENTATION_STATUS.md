@@ -1,8 +1,39 @@
 # Golf implementation status
 
-## 2026-10-15 — Scale-out S5 slice 1: runner capacity, autoscaler queue metric, approved capacity requests (schema 49, not yet on hosted)
+## 2026-10-15 — After the 110-agent run: pull requests during merges, the push reservation race, D1 indexes (schemas 50, 51)
 
-[`SCALE_OUT_PLAN.md`](SCALE_OUT_PLAN.md) S5, first slice; details in [`RUNNER_CAPACITY.md`](RUNNER_CAPACITY.md). Golf never starts
+Each fix comes from the hosted runs in [benchmarks/2026-10-15-scale-out](benchmarks/2026-10-15-scale-out/README.md). All are merged,
+migrated and deployed on the hosted demo.
+
+- **Pull requests open while a landing's merge holds the repository (#133).**
+  - `CreatePullRequest` was refused whenever any write held the repository; 14 of 163 `open_pull_request` calls in `s2e` failed
+    this way or because the base moved.
+  - It is now refused only for an unresolved write to one of its own two branches.
+  - The MCP tool reads the branches again, up to three times, when the base moved.
+- **The push reservation race (#134).**
+  - A push whose reservation failed found nothing blocking it, because the other write had just finished, and answered HTTP 412.
+    Git shows that as "unexpected disconnect" (10 pushes in `s2e`).
+  - It now tries again while its authority guard holds.
+- **D1 indexes, from `d1QueriesAdaptiveGroups` on the hosted demo:**
+  - **0050 (#135):**
+    - the CI pass's pending-push query read the whole `git_operations` table: 11,336 rows a call, 38.8 million in three hours;
+    - pull requests by head branch read about 865 rows a call;
+    - landing's per-head lookup scanned every land operation.
+    After the migration, the CI query no longer appears among the top reads.
+  - **0051 (#137):** `settleRefWrites` read 77,944 rows a call, every dispatched operation times every merge.
+    After both migrations and a maintenance pass, the heaviest query over ten minutes read 106 rows in total (runner lookups by
+    token). The sweeps no longer appear among the top reads.
+- **Post-deploy outage removed (#132).** `RepositoryReads` kept a Workspace stub across the Workspace's restart on every deploy, so
+  repository reads answered 503 for about three minutes after each deploy. Reads are now confirmed from D1: during a deploy, 27 of 27
+  probes answered 200.
+- **Not yet measured under load:** #133 and #134 need another hosted agent run, which needs new temporary API tokens from a signed-in
+  session.
+
+## 2026-10-15 — Scale-out S5 slice 1: runner capacity, autoscaler queue metric, approved capacity requests (schema 49, on hosted)
+
+[`SCALE_OUT_PLAN.md`](SCALE_OUT_PLAN.md) S5, first slice; details in [`RUNNER_CAPACITY.md`](RUNNER_CAPACITY.md). Deployed on the hosted
+demo with migration 0049 applied. The metrics route refuses requests without a token, or with an invalid one (401). The signed-in
+pages, `/admin/capacity` and `/admin/costs`, are not yet viewed on hosted. Golf never starts
 machines: it reports capacity and queue depth, and limits rise through requests a second administrator approves.
 
 **Built:**
