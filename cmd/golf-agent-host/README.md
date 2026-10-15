@@ -231,3 +231,11 @@ GOLF_AGENT_HOST_REAL_MCP=1 GOLF_AGENT_HOST_REAL_TOOLS=codex,claude,opencode go t
 Last run with MCP (2026-10-15, Claude Code 2.1.300, codex-cli 0.162.1 with
 `danger-full-access`, opencode 1.18.35): each called the stub's tool through the host's
 per-task configuration and committed the word it returned.
+
+## SSH host modes (`ssh-run`, `ssh-probe`)
+
+Inside the container Golf starts for an SSH host (`cloudflare/ssh-hosts/Dockerfile`, contract: `docs/SSH_HOSTS.md`), the same
+binary runs one task or one connection test against a machine over SSH. The job arrives on standard input only. The
+clone, commit, push, log and finish are the outbound host's own code; only the tool runs on the SSH host, which never
+sees the task token. `ssh_test.go` runs both modes against a local OpenSSH server (`/usr/sbin/sshd`, skipped when absent),
+with the Tailscale and cloudflared helpers replaced by scripts.
