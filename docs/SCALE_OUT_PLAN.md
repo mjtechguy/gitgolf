@@ -1,6 +1,6 @@
 # Scale-out plan: moving long I/O-bound work out of the Workspace Durable Object
 
-Status: S1, S2 and the MCP part of S3 built and measured on the hosted demo, 2026-10-15; S4–S6 proposed. Follows AGENTIC_MODE_PLAN AM-1 item 5 and AM-6, and replaces the "RepositoryWrites split only if CPU
+Status: S1–S3 built; S1, S2 and the MCP part of S3 measured on the hosted demo, 2026-10-15. S4 not needed yet; S5 and S6 in progress. Follows AGENTIC_MODE_PLAN AM-1 item 5 and AM-6, and replaces the "RepositoryWrites split only if CPU
 is the limit" condition with measured evidence. Benchmark: [benchmarks/2026-10-15-100-agents](benchmarks/2026-10-15-100-agents/README.md).
 
 ## Evidence
@@ -96,8 +96,17 @@ At about 110 paced agents in one repository (`mj/agent-bench-3`, hosted):
   - Every repository read a tool makes is confirmed against D1 after it runs (`core.mjs` `confirmReadFromD1`): the request's
     credential, grant and role are read again, so a revocation committed during the read refuses its result.
   - Other tools (`open_pull_request`, `comment`) still go to the Workspace.
-  - Still open in S3: `/native/source/files|tree|blame|grep`, and `RepositoryReads` calling `confirmReadFromD1` instead of the
-    Workspace's `GetRepositoryAccess`.
+- **Status (2026-10-15, later): the rest of S3 is built.**
+  - `/native/source/files|tree|blame|grep` run in the Worker. The route sets the read authority after the grant check, and
+    `confirmReadFromD1` confirms it after the read.
+  - `RepositoryReads` (the UI's per-repository reads) confirms with `confirmReadFromD1` instead of `GetRepositoryAccess` on the
+    Workspace, so no repository read enters the Workspace queue.
+  - Found while deploying it: `RepositoryReads` kept the Workspace stub from its constructor. The Workspace restarts on every deploy,
+    and the kept stub stayed broken. For about three minutes after each deploy, per-repository reads (the UI's repository pages,
+    anonymous public reads) answered 503 "Repository access could not be confirmed". With the D1 confirmation and a fresh stub per
+    call, a deploy on the hosted demo kept 27 of 27 probe reads answering 200.
+  - Regular-expression grep is unblocked, not enabled. A hostile pattern would now end its own Worker request at the CPU limit
+    instead of stalling the shared object. Enabling it is a separate product change.
 
 ### S4 (only if still needed): per-repository coordination object
 
@@ -198,4 +207,4 @@ An **Estimated costs** page under Admin → Operations.
 ## Not in this plan
 
 - Streaming pushes above 8 MiB stays tied to S2.
-- Regex grep stays refused until S3 moves reads out of the shared object.
+- Regex grep: unblocked by S3, not enabled (see S3).

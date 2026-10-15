@@ -22,10 +22,11 @@ export function embeddedAsset(request, assets) {
     return new Response(request.method === 'HEAD' ? null : Uint8Array.from(atob(content), c => c.charCodeAt(0)), { headers: { 'Content-Type': type, 'Cache-Control': immutableAsset(path) ? 'private, max-age=31536000, immutable' : 'no-store' } });
 }
 const gitRoute = /^\/git\/[^/]+\/[^/]+\.git\/(info\/refs|git-upload-pack|git-receive-pack)$/;
-// Served by the stateless Worker (docs/SCALE_OUT_PLAN.md): 'read' for Git advertisements and upload-pack (S1), 'write' for a push or a
-// Source API commit or branch (S2); null for everything else, which the Workspace serves.
+// Served by the stateless Worker (docs/SCALE_OUT_PLAN.md): 'read' for Git advertisements and upload-pack (S1) and the Source API reads
+// (S3), 'write' for a push or a Source API commit or branch (S2); null for everything else, which the Workspace serves.
 export function statelessRoute(request, url = new URL(request.url)) {
   if (request.method === 'POST' && (url.pathname === '/native/source/commit' || url.pathname === '/native/source/branch')) return 'write';
+  if (request.method === 'POST' && /^\/native\/source\/(?:files|tree|blame|grep)$/.test(url.pathname)) return 'read';
   const route = gitRoute.exec(url.pathname);
   if (!route) return null;
   if (route[1] === 'info/refs') return request.method === 'GET' && /^\?service=git-(?:upload|receive)-pack$/.test(url.search) ? 'read' : null;
@@ -143,9 +144,9 @@ async function dispatch(request, env, ctx, clock) {
       }
       return new Response(response.body, { status: response.status, headers: outgoing });
     }
-    // Scale-out S1 and S2 (docs/SCALE_OUT_PLAN.md): clones, fetches, pushes and Source API writes run here, in the stateless Worker, not
-    // in the Workspace admission queue. Their authority and ordering are D1: a fetch reads its grant again after the provider answers, a
-    // write's ref reservation carries the grant, credential and rules guard. An API token's rate budget is charged on the Workspace's
+    // Scale-out S1–S3 (docs/SCALE_OUT_PLAN.md): clones, fetches, pushes, Source API reads and writes run here, in the stateless Worker,
+    // not in the Workspace admission queue. Their authority and ordering are D1: a fetch reads its grant again after the provider answers,
+    // a repository read is confirmed afterwards, a write's ref reservation carries the grant, credential and rules guard. An API token's rate budget is charged on the Workspace's
     // counters by RPC. After a write, one RPC asks the Workspace for what its queue did after one (drains, live activity, CI).
     let stateless = statelessRoute(request, url);
     // MCP (S3): read tools and the Source API write tools run here too, by the class the Workspace would give them (mcp.mjs mcpClass).
@@ -160,7 +161,8 @@ async function dispatch(request, env, ctx, clock) {
       const forwarded = new Request(request, { headers }), core = await import('./core.mjs');
       const selection = stateless === 'write' ? await (await import('./activity.mjs')).activitySelection(forwarded) : null;
       const response = await core.handle(forwarded, { ...env, waitUntil: promise => ctx.waitUntil(promise),
-        ...(url.pathname === '/mcp' ? { confirmRead: core.confirmReadFromD1(forwarded, env) } : {}),
+        // Repository reads (MCP tools, Source API reads) are confirmed against D1 after they run; Git reads check their grant themselves.
+        confirmRead: core.confirmReadFromD1(forwarded, env),
         workspaceBudget: (kind, id, write) => owner.chargeBudget(kind, id, write), pipelineCoordinator: ctx.exports.PipelineRun,
         notifyPipeline: id => ctx.waitUntil(owner.activityChanged(String(id), ['actions']).catch(() => {})),
         automationsQueued: () => ctx.waitUntil(owner.automations().catch(() => {})),
