@@ -95,6 +95,12 @@ time spent queued does not shorten it. Lost tasks: a CLAIMED or RUNNING task
 whose host has not called in for 3 minutes, or past its deadline, becomes `LOST` or
 `TIMED_OUT` in the maintenance sweep.
 
+Rate budgets (AM-6): each task token may make 600 requests and 120 pushes a minute by
+default (installation setting `agent-budgets`). Over budget, `start`, `log` and
+`finish` answer 429 with `Retry-After`. Task Git fetches answer 429 `text/plain`, and
+a push is refused in Git's own report. See the rate budgets section of
+`docs/AGENT_ACCESS.md`.
+
 ## Credentials
 
 - Registration token: `golfagentreg_<64 hex>`, one-time or few-use, 1–24 hours,

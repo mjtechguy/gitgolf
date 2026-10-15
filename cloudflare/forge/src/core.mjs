@@ -25,7 +25,8 @@ import { pipelineAPI, pipelineRunnerAPI } from './pipeline-api.mjs';
 import { agentHostsAPI, agentTasksAPI, agentHostCapability } from './agent-hosts.mjs';
 import { agentHostMachine } from './agent-host-protocol.mjs';
 import { apiTokenSecret, apiTokenActor, apiTokenCapability, apiTokensAPI, scopeRepository, scopePush } from './api-tokens.mjs';
-import { mcpEndpoint, mcpClass, mcpBodyLimit } from './mcp.mjs';
+import { mcpEndpoint, mcpClass, mcpBodyLimit, mcpActivity } from './mcp.mjs';
+import { chargeBudget, budgetJSON, budgetText } from './agent-budgets.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { reserveRefWrite, finishRefWrite, sendRefUpdate, refWriteBlocker } from './ref-writes.mjs';
 import { sourceAPI, sourceCapability } from './source-api.mjs';
@@ -271,6 +272,10 @@ async function refs(env, repo, row, providerFetch) {
 async function git(db, env, person, request, url, providerFetch) {
   const route = /^\/git\/([^/]+)\/([^/]+)\.git\/(info\/refs|git-upload-pack|git-receive-pack)$/.exec(url.pathname);
   if (!route) deny();
+  // Rate budgets (agent-budgets.mjs): an API token's fetch or advertisement is one request, refused with 429 before any repository read;
+  // its push is a write, charged once the command is read so that a refusal arrives in Git's own report.
+  const charge = write => person.api_token_id ? chargeBudget(env, db, 'token', person.api_token_id, write) : null;
+  if (route[3] !== 'git-receive-pack') { const refused = await charge(false); if (refused) return budgetText(refused); }
   const row = await authorizedRepository(db, person, { owner: route[1], name: route[2] }, env);
   const advertisement = route[3] === 'info/refs';
   const service = advertisement ? url.searchParams.get('service') : route[3];
@@ -295,11 +300,16 @@ async function git(db, env, person, request, url, providerFetch) {
     }
   }
   // Git sends one flush packet before a push larger than http.postBuffer, to learn whether the server needs credentials. Access has already been checked.
-  if (!advertisement && service === 'git-receive-pack' && body.length === 4 && new TextDecoder().decode(body) === '0000')
+  if (!advertisement && service === 'git-receive-pack' && body.length === 4 && new TextDecoder().decode(body) === '0000') {
+    const refused = await charge(false);
+    if (refused) return budgetText(refused);
     return new Response(null, { status: 200, headers: { 'Content-Type': 'application/x-git-receive-pack-result', 'Cache-Control': 'no-store' } });
+  }
   let command, rulesVersion;
   if (!advertisement && service === 'git-receive-pack') {
     try { command = receiveCommand(body); } catch { invalid('Only one ordinary SHA-1 branch/tag update per bounded push is supported.'); }
+    const refused = await charge(true);
+    if (refused) return new Response(refusalReport(command, refused.reason), { headers: { ...jsonHeaders, 'Content-Type': 'application/x-git-receive-pack-result', 'Retry-After': String(refused.retryAfter) } });
     if (person.token_scope) await scopePush(db, env, person, row, command.ref);
     rulesVersion = await enforceGitRules(db, row, person, command.ref);
   }
@@ -352,6 +362,23 @@ async function git(db, env, person, request, url, providerFetch) {
     }
     return new Response(bytes, { headers: { ...jsonHeaders, 'Content-Type': result.contentType } });
   });
+}
+
+// An API token's MCP message with an id is one request; a write tool is also a write. Over budget, the agent sees a tool error
+// (JSON-RPC result, isError) naming the budget. Notifications, batches and malformed messages run nothing and are not counted.
+async function mcpBudget(request, env, db, identify) {
+  if (!env.agentBudgets || request.method !== 'POST' || !/^Bearer golf_pat_/.test(request.headers.get('Authorization') || '')) return null;
+  const person = await identify();
+  if (!person.api_token_id) return null;
+  let message;
+  try { message = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await bounded(request.clone().body, mcpBodyLimit))); } catch { return null; }
+  const id = message?.id;
+  if (typeof id !== 'string' && !Number.isInteger(id)) return null;
+  // mcpActivity names a repository only for a known write tool, so this asks whether the named tool writes.
+  const write = message.method === 'tools/call' && Boolean(mcpActivity(JSON.stringify({ method: 'tools/call', params: { name: message.params?.name, arguments: { name: 'x' } } })));
+  const refused = await chargeBudget(env, db, 'token', person.api_token_id, write);
+  return refused && Response.json({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: refused.message }] } },
+    { headers: { ...jsonHeaders, 'Retry-After': String(refused.retryAfter) } });
 }
 
 async function grants(db, env, person, request, body) {
@@ -431,8 +458,14 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     // Agent hosts: host credential and task token routes, outside Access (docs/AGENT_HOSTS.md).
     if (url.pathname.startsWith('/native/agent-host/')) return await agentHostMachine(db, env, request, url, withArtifact, providerFetch);
     // Remote MCP (docs/AGENT_ACCESS.md): each tool calls the UI's own route as an internal request under the caller's credential.
-    if (url.pathname === '/mcp') return await mcpEndpoint(request, env, () => actor(db, request, false, env),
-      internal => handle(internal, { ...env, mcpInternal: true }, providerFetch, imageFetch));
+    if (url.pathname === '/mcp') {
+      // One identification serves the rate budget and the endpoint.
+      let identified;
+      const identify = () => identified ||= actor(db, request, false, env);
+      const refused = await mcpBudget(request, env, db, identify);
+      if (refused) return refused;
+      return await mcpEndpoint(request, env, identify, internal => handle(internal, { ...env, mcpInternal: true }, providerFetch, imageFetch));
+    }
     env.publicRead = env.PUBLIC_REPOSITORIES === 'true' && publicReadRequest(request);
     const publicSession = env.PUBLIC_REPOSITORIES === 'true' && ['/rpc/golf.v1.SessionService/GetSession', '/rpc/golf.v1.SessionService/GetAuthenticationOptions', '/rpc/golf.v1.CapabilityService/ListCapabilities'].includes(url.pathname);
     const person = await env.timings.measure('actor', () => actor(db, request, env.publicRead || publicSession, env));
@@ -481,7 +514,12 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       browser: Boolean(env.BROWSER && env.PREVIEW_BROWSER === 'true'), previewPath: env.PREVIEW_PATH || '', agentPath: env.AGENT_PATH || '',
       testModule: env.TEST_MODULE || '', testWorkflowFormat: env.TEST_WORKFLOW_FORMAT || '', testWorkflowPath: env.TEST_WORKFLOW_PATH || '',
       dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) || 0, previewTTL: Number(env.PREVIEW_TTL) || 0, appTTL: appPolicy(env)?.ttl || 0, pipelines: pipelinePolicy(env) });
-    if (url.pathname === '/native/installation' || url.pathname === '/native/installation/read') return await installationAPI(db, env, person, request, body, url.pathname.endsWith('/read'));
+    if (url.pathname === '/native/installation' || url.pathname === '/native/installation/read') {
+      const response = await installationAPI(db, env, person, request, body, url.pathname.endsWith('/read'));
+      // A saved change (agent rate budgets among them) applies to this workspace's next request, not after the policy cache expires.
+      if (!url.pathname.endsWith('/read') && response.ok) env.agentBudgets?.invalidate();
+      return response;
+    }
     if (url.pathname === '/native/audit/read') return await auditAPI(db, env, person, request, body, () => authorizedRepository(db, person, body.repository, env, body.repositoryId));
     if (url.pathname === '/native/runner-admin') return await nativeRunnerAdmin(db, env, person, request, body);
     if (url.pathname === '/native/pipelines') {
@@ -499,6 +537,11 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     if (url.pathname === '/native/agent-hosts') return reply(await agentHostsAPI(db, env, person, request, body));
     const source = sourceRoute.exec(url.pathname);
     if (source) {
+      // An API token's call is charged to its rate budget first; an MCP tool's internal call was charged as the tool call.
+      if (person.api_token_id && !env.mcpInternal) {
+        const refused = await chargeBudget(env, db, 'token', person.api_token_id, ['commit', 'branch'].includes(source[1]));
+        if (refused) return budgetJSON(refused);
+      }
       // Source API (docs/SOURCE_API.md): grant, token scope, rules and the branch fence are checked inside; public visitors have none.
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (row.role === 'public') deny();

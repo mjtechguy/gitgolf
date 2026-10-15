@@ -218,6 +218,76 @@ git clone https://x:<token>@<host>/git/<owner>/<name>.git
 A token in a clone URL is saved in `.git/config`. On shared machines, prefer a
 credential helper.
 
+## Rate budgets (AM-6)
+
+Each API token and each agent-host task has two budgets a minute: requests, and
+writes. The defaults are:
+
+| Caller | Requests a minute | Writes a minute |
+| --- | --- | --- |
+| API token (`golf_pat_`) | 600 | 60 |
+| Agent task (task token) | 600 | 120 |
+
+**What counts**
+- **API token requests:** each `/mcp` message that has an id, each
+  `/native/source/*` call and each `/git/` request (advertisement, fetch, the
+  pre-push probe or push).
+- **API token writes:** a push (`git-receive-pack` with a command),
+  `/native/source/commit` and `/native/source/branch`, and the MCP write tools
+  (`commit_changes`, `create_branch`, `open_pull_request`, `comment`). A write is also
+  one request. Tokens cannot reach `/native/land`, so landing is not counted.
+- **Agent task requests:** `start`, `log` and `finish`, and each request on the
+  task's Git route. **Writes:** pushes on the task's Git route.
+- An MCP tool's internal requests are not counted again; the tool call was.
+  Notifications, batches and malformed MCP messages run nothing and are not counted.
+- **Never counted:** people. Browser sessions (Access), `golf_native_` credentials
+  and `golf_git_` Git credentials are not budgeted. Neither are runners or agent host
+  credentials (`register`, `heartbeat`, `claim`).
+
+**Over budget** the answer names the budget and when to retry:
+- **Git push:** Git's own report, `! [remote rejected] <ref> (budget: 60 writes per
+  minute for this api token reached; retry in 12 s)`, with `Retry-After`.
+- **Git fetch or advertisement:** HTTP 429, `text/plain`, which Git prints as
+  `remote: API token budget: 600 requests per minute reached; retry in 12 s.`
+- **MCP:** HTTP 200 with a JSON-RPC result `{"isError": true}` whose text is the
+  message, so the agent sees a tool error, plus `Retry-After`.
+- **Source API and the task JSON routes:** HTTP 429,
+  `{"code": "resource_exhausted", "message": "…", "retryAfter": 12}`, with
+  `Retry-After`.
+
+**How it counts.** `cloudflare/forge/src/agent-budgets.mjs`. Each key (`token` or
+`task`, and its id) has a fixed one-minute window that opens with its first request.
+`Retry-After` is the number of seconds until that window closes. A refused request
+counts against nothing.
+
+The counters live in the Workspace Durable Object's memory, which every token
+request already passes through. So there is no new binding and no D1 write per
+request. Memory is bounded: a key idle for two minutes is dropped, and at most 10,000
+keys are kept, dropping the least recently used.
+
+**This is a throttle, not a quota.** A Workspace restart (a deploy, or eviction)
+starts every window again, and a dropped key starts afresh. Counts are not kept
+anywhere durable.
+
+**Setting the budgets.** Operations administrators edit **Agent rate budgets** in
+Admin → Installation (installation setting `agent-budgets`). The value has `enabled`
+and the four limits, each a whole number from 1 to 100,000. It needs no migration.
+- Narrowing saves at once.
+- Raising a limit, or turning enforcement off, widens. That needs the typed setting
+  name and an Access sign-in from the last 10 minutes.
+- Every change is versioned and audited like other installation settings.
+- With enforcement off, use is still counted and shown, but never refused.
+- A locked installation (`policy_editing: false`) uses the defaults.
+- The Workspace reads the setting at most once a minute (one indexed D1 read). A
+  change saved through the admin page drops that cache, so it applies to the next
+  request.
+
+**Seeing use.** Settings → API tokens shows each active token's current window, for
+example "41 of 600 requests · 3 of 60 writes", and marks a token that is at its
+budget. The list route (`/native/api-tokens`, `list`) returns `usage` for each token
+and the `budget` in force. Where no counter exists (a runtime other than the
+Workspace), `budget` is `null` and the page says use is not counted.
+
 ## Security notes
 
 - Secrets are never stored, logged or audited. Agent host logs redact `golf_pat_`
@@ -242,3 +312,6 @@ credential helper.
 - The agent host task prompt does not mention the MCP endpoint yet (AM-3 item 4).
 - Codex and OpenCode configuration snippets follow those tools' documented remote MCP
   settings, but they have not been run against Golf.
+- Rate budgets (AM-6) are covered by local tests only (`agent-budgets.test.mjs` and
+  the `agent-budgets.spec.ts` browser spec). They have not been run on the hosted
+  demo, and the bench has not been re-run to measure them.

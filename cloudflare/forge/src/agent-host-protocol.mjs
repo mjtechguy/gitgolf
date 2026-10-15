@@ -4,7 +4,8 @@
 // The task route pushes through the same fenced single-ref write as /git/: one branch, create or this task's own
 // fast-forward, at most 8 MiB.
 import { digest, Fault, invalid, reply, uuidOK, conflict } from './common.mjs';
-import { advertisedRefs, bounded, defaultBranchAdvertisement, defaultBranchRefsV2, gitRequest, gitV2Command, receiveCommand, refusedRef, acceptedReport, sha } from './git.mjs';
+import { advertisedRefs, bounded, defaultBranchAdvertisement, defaultBranchRefsV2, gitRequest, gitV2Command, receiveCommand, refusedRef, refusalReport, acceptedReport, sha } from './git.mjs';
+import { chargeBudget, budgetJSON, budgetText } from './agent-budgets.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
 import { reserveRefWrite, finishRefWrite, sendRefUpdate } from './ref-writes.mjs';
 import { ownerSlug } from './owners.mjs';
@@ -80,6 +81,9 @@ export async function agentHostMachine(db, env, request, url, withArtifact, prov
   const body = await json(request, action === 'log' ? 160 * 1024 : 96 * 1024);
   const task = await taskByToken(db, tokenOf(request, false), id);
   if (!task) unauthenticated('Task token unknown.');
+  // Each task's rate budget (agent-budgets.mjs), counted once its token is known to be the task's own.
+  const refused = await chargeBudget(env, db, 'task', task.id, false);
+  if (refused) return budgetJSON(refused);
   if (action === 'start') return reply(await start(db, task));
   if (action === 'log') return appendLog(db, task, body);
   return reply(await finish(db, env, task, body, withArtifact, providerFetch));
@@ -246,6 +250,8 @@ async function taskGit(db, env, request, url, id, route, withArtifact, providerF
         request.headers.get('Content-Type') !== `application/x-${service}-request`)) return text('Invalid Git request.', 400);
     const push = service === 'git-receive-pack';
     if (push && task.state !== 'RUNNING') return text('Pushes are accepted only while the task is RUNNING; call start first.', 403);
+    // The task's rate budget: a fetch or advertisement is one request (429); a push is a write, refused in Git's own report below.
+    if (advertisement || !push) { const refused = await chargeBudget(env, db, 'task', task.id, false); if (refused) return budgetText(refused); }
     const { repository, refusal } = await authority(db, env, task, false);
     if (refusal) return text(refusal.message, 403);
     let body = null;
@@ -256,12 +262,18 @@ async function taskGit(db, env, request, url, id, route, withArtifact, providerF
       else if (request.headers.has('Content-Encoding')) return text('Unsupported Git content encoding.', 415);
     }
     // Git sends one flush packet before a large push to learn whether credentials are needed; the token was checked above.
-    if (push && body?.length === 4 && new TextDecoder().decode(body) === '0000') return new Response(null, { status: 200, headers: { 'Content-Type': 'application/x-git-receive-pack-result', 'Cache-Control': 'no-store' } });
+    if (push && body?.length === 4 && new TextDecoder().decode(body) === '0000') {
+      const refused = await chargeBudget(env, db, 'task', task.id, false);
+      if (refused) return budgetText(refused);
+      return new Response(null, { status: 200, headers: { 'Content-Type': 'application/x-git-receive-pack-result', 'Cache-Control': 'no-store' } });
+    }
     const protocol = !push && request.headers.get('Git-Protocol') === 'version=2' ? 'version=2' : null;
     const refsOf = async repo => advertisedRefs((await gitRequest(env, repo, repository.artifact_name, 'info/refs?service=git-upload-pack', 'git-upload-pack', null, providerFetch)).bytes);
     let command;
     if (push && body) {
       try { command = receiveCommand(body); } catch { return text('Only one ordinary branch update per push is accepted.', 403); }
+      const refused = await chargeBudget(env, db, 'task', task.id, true);
+      if (refused) return new Response(refusalReport(command, refused.reason), { headers: { 'Content-Type': 'application/x-git-receive-pack-result', 'Cache-Control': 'no-store', 'Retry-After': String(refused.retryAfter) } });
       if (command.ref !== 'refs/heads/' + task.branch) return text(`This task may push only refs/heads/${task.branch}.`, 403);
       if (command.next === zero) return text('This task may not delete its branch.', 403);
       if (command.old !== zero && command.old !== task.commit_id) return text('Only a new branch, or a fast-forward of the commit this task pushed before, is accepted.', 403);
