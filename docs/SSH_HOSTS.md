@@ -309,32 +309,45 @@ docker build --platform linux/amd64 -f cloudflare/ssh-hosts/Dockerfile -t <repos
   - user 1000;
   - `CMD sleep infinity`.
 
-## Deploy changes needed
+## Deploy
 
-These are for whoever owns `deploy/alchemy/*` and the demo scripts; this change does
-not edit them.
+**Alchemy (the hosted demo):** run `enable-secrets` first if the installation has no
+repository value key, then:
+
+```sh
+python3 scripts/cloudflare_alchemy_demo.py enable-ssh-hosts DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py plan DIRECTORY
+python3 scripts/cloudflare_alchemy_demo.py deploy DIRECTORY
+```
+
+The stack then stages a build context in `DIRECTORY/ssh-image` holding only `go.mod`, `go.sum`,
+`cmd/golf-agent-host` (without tests) and the Dockerfile, never the repository root. From it, it:
+- builds the image as the container application `ssh` (repository `<worker>-ssh`, scheduling
+  `durable_object`, logs off);
+- binds `SSHAgentTask` to it;
+- sets `SSH_HOSTS_EXECUTION=true`.
+
+Alchemy adds the `new_sqlite_classes` migration itself.
+
+The first deploy that adds the class can stop with "requires a resolved Durable Object namespace"
+after the Worker upload. The container application is reconciled before the Worker has created the
+new namespace. Run `plan` and `deploy` again; the second run creates only the container
+application.
+
+**Other deploy tools need the same pieces:**
 
 1. **Container application:**
-   - name `<worker>-ssh`;
-   - image built from `cloudflare/ssh-hosts/Dockerfile` with the repository root as
-     context, linux/amd64;
+   - image built from `cloudflare/ssh-hosts/Dockerfile`, linux/amd64;
    - scheduling policy `durable_object`;
-   - the image key must be **`ssh`**: the class starts `this.container.images.ssh`.
+   - the image key must be **`ssh`**: the class starts `this.container.images.ssh` as `standard-1`
+     with Internet egress.
 
-   Instance type `standard-1` is chosen in code. Suggested max instances: 10. Each task
-   and each connection test holds one instance while it runs; tests are about a minute.
-   Observability logs off: the container prints nothing secret, but the job is not
-   logged either.
-
-   For alchemy:
-   `Cloudflare.Container('ssh', { schedulingPolicy: 'durable_object', context: <repo root>, dockerfile: 'cloudflare/ssh-hosts/Dockerfile', publish: { repository: name + '-ssh' }, observability: { logs: { enabled: false } } })`.
+   Each task and each connection test holds one instance while it runs; a test takes under a minute.
 2. **Durable Object:**
-   - export `SSHAgentTask`, SQLite storage, `containers: [ssh]`;
-   - a migration adding it to `new_sqlite_classes`;
-   - the class is exported from `worker.mjs`, `test-entry.mjs` and `agent-entry.mjs`, so
-     every entry can bind it.
+   - `SSHAgentTask`, SQLite storage, bound to that container;
+   - its `new_sqlite_classes` migration.
 
-   For alchemy: `SSHAgentTask: Cloudflare.DurableObject('SSHAgentTask', { containers: [ssh] })`.
+   It is exported from `worker.mjs`, `test-entry.mjs` and `agent-entry.mjs`.
 3. **Text binding** `SSH_HOSTS_EXECUTION = "true"`. The Workspace only hands
    `ctx.exports.SSHAgentTask` to the code when this is set, so the capability stays
    UNCONFIGURED until both exist.
@@ -343,17 +356,22 @@ not edit them.
 5. **Optional, Workers VPC:** a `vpc_networks` binding named `SSH_VPC_NETWORK` with
    either `tunnel_id` or `network_id: "cf1:network"` (Mesh). Binding a tunnel needs the
    Connectivity Directory Admin role. Without it the `workers-vpc` reach reports itself
-   unavailable.
+   unavailable. The Alchemy stack does not bind one yet.
 6. **Schema 47:** apply `0047_ssh_hosts.sql`.
-7. **Nothing else.** No new secrets: Golf generates the SSH keys. No new Queue,
-   Workflow or route. `PUBLIC_ORIGIN` must be the origin the container reaches, because
-   the clone, log and finish go there over HTTPS from the container.
+7. **Nothing else.** No new secrets: Golf generates the SSH keys. `PUBLIC_ORIGIN` must be
+   the origin the container reaches, because the clone, log and finish go there over
+   HTTPS from the container.
 
 ## Not done, and what remains to verify
 
-- **Hosted run:** a real Container with Internet egress to a real SSH port, Tailscale
-  and Cloudflare Access from inside Cloudflare Containers, and the container egress
-  limits on port 22.
+- **Hosted run, done in part (2026-10-15):** a connection test from the hosted container to
+  `github.com:22` was offered GitHub's published ed25519 host key, pinned it, and on the
+  next test reported that the host refused Golf's key. Container start, egress on port 22,
+  host key pinning and the refusal are verified.
+
+  Still to verify:
+  - a task end to end on a machine that accepts Golf's key;
+  - Tailscale and Cloudflare Access from inside Cloudflare Containers.
 - **Workers VPC** against a real `vpc_networks` binding, and Durable Object lifetime
   while it only bridges.
 - **Golf MCP** for SSH host tasks. That would need the task token on the remote host,

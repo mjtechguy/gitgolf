@@ -398,6 +398,15 @@ def enable_secrets(directory, value):
         ' Secrets and variables stay unavailable until this installation has an approved Actions workflow profile.'))
 
 
+def enable_ssh_hosts(directory, value):
+    # SSH host keys and reach secrets are sealed with the repository value encryption key (docs/SSH_HOSTS.md).
+    if not value.get('executionValueKey'):
+        raise ValueError('Run enable-secrets first; SSH host keys are sealed with its encryption key')
+    value['sshHosts'] = True
+    replace_private_json(directory/'alchemy-input.json', value)
+    print('SSH host tasks prepared; deploy to build the SSH image and bind the SSHAgentTask Durable Object.')
+
+
 def enable_email(directory, value, limit):
     if type(limit) is not int or not 1 <= limit <= 5000:
         raise ValueError('Use a daily email attempt limit between 1 and 5000')
@@ -645,7 +654,7 @@ def destroy(directory, value):
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__, epilog='Fresh install: init --account-id ... (no directory), then plan/deploy/seed DIRECTORY. '
         'Existing installation handoff: prepare /PATH/TO/ownership.json. See deploy/alchemy/README.md.')
-    parser.add_argument('action', choices=['init', 'prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email', 'enable-search', 'enable-pipelines', 'rename-workspace'])
+    parser.add_argument('action', choices=['init', 'prepare', 'plan', 'deploy', 'build', 'receipt', 'seed', 'destroy', 'renew-deploy', 'renew-credentials', 'enable-public', 'seed-public', 'enable-observability', 'enable-analytics', 'enable-webhooks', 'enable-ai', 'enable-workflow', 'enable-dead-letter', 'enable-operations', 'enable-rate-limit', 'migrate', 'enable-secrets', 'enable-email', 'enable-search', 'enable-pipelines', 'enable-ssh-hosts', 'rename-workspace'])
     parser.add_argument('--slug', help='new workspace name for rename-workspace')
     parser.add_argument('--origin', action='append', default=[], help='approved webhook receiver origin for enable-webhooks')
     parser.add_argument('--days', type=int, default=7, help='lifetime for renew-credentials, 1 to 30 days')
@@ -713,6 +722,7 @@ def main():
     if args.action == 'rename-workspace': return rename_workspace(directory, value, args.slug)
     if args.action == 'migrate': return migrate(directory, value)
     if args.action == 'enable-secrets': return enable_secrets(directory, value)
+    if args.action == 'enable-ssh-hosts': return enable_ssh_hosts(directory, value)
     if args.action == 'enable-public': return enable_public(directory, value)
     if args.action == 'build': return build(directory, value)
     if args.action == 'receipt': return receipt(directory, value)
