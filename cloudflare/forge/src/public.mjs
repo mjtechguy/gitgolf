@@ -8,6 +8,7 @@ import { pipelinePolicy } from './pipeline-policy.mjs';
 import { forgejoRunner, forgejoRunnerRoute, actionsGit, actionsGitRoute } from './forgejo-runner.mjs';
 import { actionsArtifacts, artifactRoute } from './actions-artifacts.mjs';
 import { machineTokenRoute } from './api-tokens.mjs';
+import { browserErrorPage } from './error-page.mjs';
 
 // "appearance" or "appearance/layout", matching web/public/theme.js.
 export const defaultAppearance = /^(classic(\/(primer|workbench|reader))?|golf(\/(refined|strokes|tiles))?|flare(\/(kumo|overview|console))?)$/;
@@ -25,6 +26,7 @@ export async function publicFetch(request, env, ctx) {
     let response;
     try { response = await dispatch(request, env, ctx, clock); }
     catch { response = new Response('Temporarily unavailable', { status: 503, headers: { 'Cache-Control': 'no-store' } }); }
+    response = browserErrorPage(request, response, requestId) || response;
     const headers = new Headers(response.headers);
     if (clock.header()) headers.append('Server-Timing', clock.header());
     if (env.OPERATIONS_OBSERVABILITY === 'true') console.log(JSON.stringify({ event: 'golf.request', requestId, release, status: response.status, durationMs: Math.round(performance.now() - start) }));

@@ -2401,3 +2401,33 @@ pre.automation-output-text { padding:8px 10px; max-height:20rem; overflow:auto; 
 .repository-search-field { min-width:0; flex:0 1 240px; }
 .repository-search-field .search-input input { min-height:32px; padding-block:5px; font-size:.8125rem; }
 @media(max-width:720px) { .repository-search-form .button { flex:1 1 100%; } .repository-search-field { flex-basis:100%; } }
+
+/* Not-found, unavailable and error screens (ErrorScreens.tsx): a hole drawing, one line of golf, then the plain facts. */
+.error-screen { position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:10px; width:100%; max-width:640px; margin:32px auto; padding:28px 32px 32px; border:1px solid var(--line); border-top:3px solid var(--accent-bg); border-radius:var(--radius-panel); background:var(--panel); text-align:left; color:var(--text); }
+.error-screen-hole { width:100%; max-width:300px; height:auto; margin:0 0 6px -6px; padding:4px 0; background-image:radial-gradient(var(--line) 1px,transparent 1px); background-size:12px 12px; }
+.error-screen-hole path { fill:none; stroke-linecap:round; stroke-linejoin:round; }
+.error-screen-ground { stroke:var(--line-strong); stroke-width:1; }
+.error-screen-pole { stroke:var(--text); stroke-width:1.5; }
+.error-screen-hole .error-screen-flag { fill:var(--accent-bg); stroke:var(--accent); stroke-width:1; }
+.error-screen-flight { stroke:var(--muted); stroke-width:1.5; stroke-dasharray:2 6; animation:error-screen-flight 1.4s linear infinite; }
+.error-screen-stakes path { stroke:var(--muted); stroke-width:2.5; }
+.error-screen-ball { fill:var(--panel); stroke:var(--text); stroke-width:1.5; transform-box:fill-box; transform-origin:center; animation:error-screen-ball .7s cubic-bezier(.3,1.6,.5,1) both; }
+.error-screen-mark { fill:var(--accent); font:700 15px var(--mono); }
+@keyframes error-screen-flight { to { stroke-dashoffset:-16; } }
+@keyframes error-screen-ball { from { transform:translateY(-10px); opacity:0; } }
+.error-screen-code { font-size:.75rem; text-transform:uppercase; }
+.error-screen-quip { font-size:clamp(1.75rem,4vw,2.625rem); font-weight:900; text-transform:uppercase; letter-spacing:-.045em; line-height:1.05; overflow-wrap:normal; }
+.error-screen-title { font-size:1.125rem; }
+.error-screen-body { max-width:58ch; color:var(--muted); line-height:1.7; }
+.error-screen .error { align-self:stretch; margin:2px 0; }
+.error-screen-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+.error-screen-trace { display:grid; gap:4px; align-self:stretch; margin:10px 0 0; padding-top:12px; border-top:1px solid var(--line); color:var(--muted); font-size:.8125rem; }
+.error-screen-trace>div { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; }
+.error-screen-trace dt { min-width:84px; }
+.error-screen-trace dd { display:inline-flex; align-items:center; gap:2px; min-width:0; margin:0; }
+.error-screen-trace code { color:var(--text); font:.8125rem/1.5 var(--mono); overflow-wrap:anywhere; }
+.error-screen-hint { color:var(--muted); font-size:.8125rem; }
+.loading-screen .error-screen { margin:0; }
+:root:is([data-appearance=classic],[data-appearance=flare]) .error-screen-quip { font-weight:700; text-transform:none; letter-spacing:-.02em; }
+@media(max-width:720px) { .error-screen { margin:16px auto; padding:20px; } .error-screen-actions .button { flex:1 1 auto; } }
+@media(prefers-reduced-motion:reduce) { .error-screen-flight,.error-screen-ball { animation:none; } }

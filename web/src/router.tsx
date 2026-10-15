@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { createRootRoute, createRoute, createRouter, notFound, isNotFound, redirect, useMatches, stripSearchParams } from '@tanstack/react-router';
 import { App } from './App';
+import { CrashScreen } from './ErrorScreens';
 import { defaultRepositorySearch, isCommitID, isRunID, isWorkflowJobInstanceID, isWorkflowStepID } from './navigation';
 import { sourcePath, sourceRef, sourceRepositoryID } from './sourceReads';
 import type { Location, RepositorySearch } from './navigation';
@@ -26,7 +27,7 @@ function RoutedApp() {
 const rootRoute = createRootRoute({
   component: RoutedApp,
   notFoundComponent: () => <App location={{ kind: 'missing' }} />,
-  errorComponent: ({ error }) => isNotFound(error) || error instanceof Error && isNotFound(error.cause) ? <App location={{ kind: 'missing' }} /> : <main className="page-stack"><section className="browser-panel credential-form-content"><h1>Golf could not load this page.</h1><p>The page or its required assets are unavailable. Reload to check your sign-in and fetch the current version.</p><button className="button primary" onClick={() => window.location.reload()}>Reload Golf</button></section></main>,
+  errorComponent: ({ error }) => isNotFound(error) || error instanceof Error && isNotFound(error.cause) ? <App location={{ kind: 'missing' }} /> : <CrashScreen error={error} />,
 });
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
