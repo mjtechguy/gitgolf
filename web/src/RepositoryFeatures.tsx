@@ -5,7 +5,7 @@ import { Code, ConnectError } from '@connectrpc/connect';
 import { repositoryFeatureClient } from './featurePolicyApi';
 import { FeatureDecider, type RepositoryFeature } from './gen/golf/v1/feature_policy_pb';
 import { errorMessage } from './api';
-import { Loading, PanelError } from './RepositoryUI';
+import { holdErrorOnFocus, Loading, PanelError } from './RepositoryUI';
 import { useRuntimeCapabilities } from './useRuntimeCapabilities';
 import { settingAvailable } from './runtimeCapabilities';
 
@@ -15,7 +15,7 @@ const featuresKey = (userId: string, owner: string, name: string) => ['repositor
 export function useRepositoryFeatures(userId: string, owner: string, name: string, enabled = true) {
   // Only an installation that reports feature policies is asked; others never receive the probe.
   const runtime = useRuntimeCapabilities(), reported = settingAvailable(runtime.isError ? undefined : runtime.data, 'settings.feature-policy');
-  return useQuery({ queryKey: featuresKey(userId, owner, name), enabled: enabled && reported && Boolean(userId), staleTime: 15_000, gcTime: 60_000, retry: false,
+  return useQuery({ queryKey: featuresKey(userId, owner, name), enabled: enabled && reported && Boolean(userId), staleTime: 15_000, gcTime: 60_000, retry: false, ...holdErrorOnFocus,
     queryFn: ({ signal }) => repositoryFeatureClient.getRepositoryFeatures({ repository: { owner, name } }, { signal, timeoutMs: 8_000 }) });
 }
 

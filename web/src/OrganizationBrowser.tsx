@@ -1,4 +1,4 @@
-import { RepositoryVisibility } from './RepositoryUI';
+import { holdErrorOnFocus, RepositoryVisibility } from './RepositoryUI';
 import { nativeAPI } from './NativeForge';
 import { DataTable } from './DataTable';
 import { useRuntimeCapabilities } from './useRuntimeCapabilities';
@@ -99,7 +99,7 @@ function OrganizationDetail({ organization: name, teamId, userId }: { organizati
   const runtime = useRuntimeCapabilities();
   const native = runtime.data?.runtimeProfile === 'cloudflare-native';
   const queryKey = ['organization', userId, name];
-  const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'metadata'], queryFn: async ({ signal }) => {
+  const query = useQuery({ ...privateQuery, ...holdErrorOnFocus, queryKey: [...queryKey, 'metadata'], queryFn: async ({ signal }) => {
     const response = await organizationClient.getOrganization({ organization: name }, { signal, timeoutMs: 8_000 });
     if (!response.organization) throw new ConnectError('The organization response is missing its metadata.', Code.Internal);
     return response.organization;

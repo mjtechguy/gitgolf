@@ -7,7 +7,7 @@ import { Link } from '@tanstack/react-router';
 import { MapPin, Link2, Building2, UserRound } from 'lucide-react';
 import { nativeAPI } from './NativeForge';
 import { repositoryOptions } from './navigation';
-import { Loading, PanelError, privateQuery } from './RepositoryUI';
+import { holdErrorOnFocus, Loading, PanelError, privateQuery } from './RepositoryUI';
 import { ResourceError } from './ErrorScreens';
 
 const MarkdownBody = lazy(() => import('./RepositoryContent').then(m => ({ default: m.MarkdownBody })));
@@ -42,7 +42,7 @@ export function PublicDiscovery({ owner, initialQuery = '', initialTopic = '' }:
 export function PublicOwnerProfile({ owner, userId }: { owner: string; userId: string }) {
   const cache = useQueryClient(), [editing, setEditing] = useState(false);
   const key = ['public-profile', userId, owner];
-  const query = useQuery({ ...privateQuery, queryKey: key, queryFn: ({ signal }) => nativeAPI<Profile>('/native/public-profile', { action: 'get', owner }, signal) });
+  const query = useQuery({ ...privateQuery, ...holdErrorOnFocus, queryKey: key, queryFn: ({ signal }) => nativeAPI<Profile>('/native/public-profile', { action: 'get', owner }, signal) });
   const value = query.data;
   if (query.error) return <ResourceError subject="profile" level={1} error={query.error} retry={() => void query.refetch()} />;
   if (!value) return <Loading label="Opening profile…" />;

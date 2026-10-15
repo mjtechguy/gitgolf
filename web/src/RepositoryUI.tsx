@@ -11,6 +11,9 @@ export function RepositoryVisibility({ isPrivate }: { isPrivate: boolean }) {
 
 // Private panels revalidate on mount, discard inactive content, and hide data while revalidating.
 export const privateQuery = { staleTime: 0, gcTime: 0 };
+// A read that answered with an error has no data, so it always counts as stale and returning to the tab refetched it,
+// swapping the error screen for the loading state on every visibility change. An error stays until Try again or navigation.
+export const holdErrorOnFocus = { refetchOnWindowFocus: (query: { state: { status: string } }) => query.state.status !== 'error' };
 // Exact immutable observations remain in memory only while mounted. The enclosing
 // repository/session gate still revalidates authority and hides on denial.
 export const privateSnapshotQuery = { ...privateQuery, staleTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false };
