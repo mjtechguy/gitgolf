@@ -101,6 +101,10 @@ At about 110 paced agents in one repository (`mj/agent-bench-3`, hosted):
     `confirmReadFromD1` confirms it after the read.
   - `RepositoryReads` (the UI's per-repository reads) confirms with `confirmReadFromD1` instead of `GetRepositoryAccess` on the
     Workspace, so no repository read enters the Workspace queue.
+  - Found while deploying it: `RepositoryReads` kept the Workspace stub from its constructor. The Workspace restarts on every deploy,
+    and the kept stub stayed broken. For about three minutes after each deploy, per-repository reads (the UI's repository pages,
+    anonymous public reads) answered 503 "Repository access could not be confirmed". With the D1 confirmation and a fresh stub per
+    call, a deploy on the hosted demo kept 27 of 27 probe reads answering 200.
   - Regular-expression grep is unblocked, not enabled. A hostile pattern would now end its own Worker request at the CPU limit
     instead of stalling the shared object. Enabling it is a separate product change.
 
