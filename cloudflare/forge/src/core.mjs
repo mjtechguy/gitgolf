@@ -380,7 +380,7 @@ async function git(db, env, person, request, url, providerFetch) {
 // An API token's or agent task's MCP message with an id is one request; a write tool is also a write. Over budget, the agent sees a
 // tool error (JSON-RPC result, isError) naming the budget. Notifications, batches and malformed messages run nothing and are not counted.
 async function mcpBudget(request, env, db, identify) {
-  if (!env.agentBudgets || request.method !== 'POST' || !/^Bearer golf_(?:pat|agent_task)_/.test(request.headers.get('Authorization') || '')) return null;
+  if (!env.agentBudgets && !env.workspaceBudget || request.method !== 'POST' || !/^Bearer golf_(?:pat|agent_task)_/.test(request.headers.get('Authorization') || '')) return null;
   const person = await identify();
   const subject = budgetSubject(person);
   if (!subject) return null;
@@ -442,6 +442,17 @@ async function sourceEntry(repo, entry, path) {
 
 // How long a push waits for its branch or a merge holding the repository before it is refused (env.pushWaitMs shortens it in tests).
 const pushWaitMs = 20_000;
+// Read authority answered from D1 (scale-out S3, docs/SCALE_OUT_PLAN.md) for reads served outside the Workspace: after a read, the
+// request's credential, its grant and role are read again, so a revocation committed meanwhile refuses the response.
+export function confirmReadFromD1(request, env) {
+  return async authority => {
+    const db = env.DB.withSession('first-primary');
+    const person = await actor(db, request, false, env);
+    const row = await authorizedRepository(db, person, authority.repository, { ...env, publicRead: authority.role === 'public' && env.PUBLIC_REPOSITORIES === 'true' }, authority.repositoryId);
+    if (row.role !== authority.role) deny();
+  };
+}
+
 export async function handle(request, env, providerFetch = fetch, imageFetch = fetch) {
   const start = performance.now(), clock = timings();
   const configured = { ...env, timings: clock, DB: timedDatabase(env.DB, clock) };

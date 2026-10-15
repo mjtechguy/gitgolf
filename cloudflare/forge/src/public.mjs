@@ -147,11 +147,20 @@ async function dispatch(request, env, ctx, clock) {
     // in the Workspace admission queue. Their authority and ordering are D1: a fetch reads its grant again after the provider answers, a
     // write's ref reservation carries the grant, credential and rules guard. An API token's rate budget is charged on the Workspace's
     // counters by RPC. After a write, one RPC asks the Workspace for what its queue did after one (drains, live activity, CI).
-    const stateless = statelessRoute(request, url);
+    let stateless = statelessRoute(request, url);
+    // MCP (S3): read tools and the Source API write tools run here too, by the class the Workspace would give them (mcp.mjs mcpClass).
+    // Their repository reads are confirmed against D1 afterwards (core.mjs confirmReadFromD1). Every other tool goes to the Workspace.
+    if (!stateless && request.method === 'POST' && url.pathname === '/mcp') {
+      const { mcpClass, mcpBodyLimit } = await import('./mcp.mjs');
+      let kind;
+      try { kind = mcpClass(new TextDecoder('utf-8', { fatal: true }).decode(await bounded(request.clone().body, mcpBodyLimit))); } catch { /* The Workspace answers. */ }
+      stateless = kind === 'read' ? 'read' : kind === 'transfer' ? 'write' : null;
+    }
     if (stateless) {
-      const forwarded = new Request(request, { headers });
+      const forwarded = new Request(request, { headers }), core = await import('./core.mjs');
       const selection = stateless === 'write' ? await (await import('./activity.mjs')).activitySelection(forwarded) : null;
-      const response = await (await import('./core.mjs')).handle(forwarded, { ...env, waitUntil: promise => ctx.waitUntil(promise),
+      const response = await core.handle(forwarded, { ...env, waitUntil: promise => ctx.waitUntil(promise),
+        ...(url.pathname === '/mcp' ? { confirmRead: core.confirmReadFromD1(forwarded, env) } : {}),
         workspaceBudget: (kind, id, write) => owner.chargeBudget(kind, id, write), pipelineCoordinator: ctx.exports.PipelineRun,
         notifyPipeline: id => ctx.waitUntil(owner.activityChanged(String(id), ['actions']).catch(() => {})),
         automationsQueued: () => ctx.waitUntil(owner.automations().catch(() => {})),

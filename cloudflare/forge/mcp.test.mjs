@@ -9,6 +9,8 @@ import { spawnSync } from 'node:child_process';
 import { handle, serialize, admission } from './src/core.mjs';
 import { packetLine } from './src/git.mjs';
 import { gitAvailable, gitFixture } from './git-cli-fixture.mjs';
+import { publicFetch } from './src/public.mjs';
+import { AgentBudgets, chargeBudget } from './src/agent-budgets.mjs';
 
 const gitTypes = { '040000': 'tree', '100644': 'blob', '100755': 'exec', '120000': 'symlink', '160000': 'gitlink' };
 
@@ -213,4 +215,35 @@ test('admission and live activity read the tool from the body: reads overlap, wr
   assert.deepEqual(mcpActivity(body('tools/call', 'commit_changes')), { name: 'project', topics: ['source', 'pulls', 'actions'] });
   assert.deepEqual(mcpActivity(body('tools/call', 'comment')), { name: 'project', topics: ['issues', 'pulls'] });
   assert.equal(mcpActivity(body('tools/call', 'read_files')), undefined);
+});
+
+test('the stateless Worker serves read and Source API tools, confirms reads against D1, and leaves other tools to the Workspace', async t => {
+  const f = await accessFixture(t);
+  f.env.agentBudgets = new AgentBudgets();
+  const { secret, token } = await f.create({ repositories: ['1'] });
+  const forwarded = [], settled = [], waits = [];
+  const ctx = { waitUntil: promise => waits.push(promise), exports: { Workspace: { idFromName: key => key, get: () => ({
+    fetch: async request => { forwarded.push(JSON.parse(await request.text()).params?.name); return Response.json({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: 'workspace' }] } }); },
+    chargeBudget: (...args) => chargeBudget(f.env, f.env.DB, ...args), writeSettled: async (...args) => { settled.push(args); },
+    automations: async () => {}, activityChanged: async () => {} }) } } };
+  const call = (name, args) => publicFetch(new Request(origin + '/mcp', { method: 'POST', headers: { Authorization: bearer(secret), 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { ...repository, ...args } } }) }), { ...f.env, WORKSPACE_SLUG: 'alice' }, ctx).then(r => r.json());
+  // A read tool, served here and charged on the Workspace's counters.
+  const pull = await call('get_pull_request', { number: 14 });
+  assert.equal(pull.result.isError, undefined); assert.equal(data(pull.result).number, 14);
+  assert.deepEqual(forwarded, []); assert.equal(f.env.agentBudgets.usage('token', token.id).requests, 1);
+  // A Source API tool is a write here, settled once in the Workspace.
+  const branch = await call('create_branch', { branch: 'agent/stateless', from: 'feature' });
+  assert.equal(branch.result.isError, undefined, text(branch.result)); await Promise.all(waits);
+  assert.equal(settled.length, 1); assert.equal(settled[0][0].name, 'project'); assert.equal(settled[0][1], true);
+  // Opening a pull request (an exclusive tool) still goes to the Workspace.
+  assert.equal(text((await call('open_pull_request', { head: 'agent/stateless', base: 'main', title: 'x' })).result), 'workspace');
+  assert.deepEqual(forwarded, ['open_pull_request']);
+  // A grant deleted while the read runs: its result is not returned.
+  const original = globalThis.fetch;
+  globalThis.fetch = (input, init) => { f.sql.prepare('DELETE FROM grants WHERE repository_id=1 AND user_id=1').run(); return original(input, init); };
+  try {
+    const revoked = await call('get_pull_request', { number: 14 });
+    assert.equal(revoked.result.isError, true); assert.ok(!text(revoked.result).includes('Feature work'));
+  } finally { globalThis.fetch = original; }
 });
