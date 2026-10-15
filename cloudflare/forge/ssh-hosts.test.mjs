@@ -256,6 +256,11 @@ test('Assign to agent on an SSH host: refused until ready, then claimed by Golf 
   const full = await sshTaskJob(f.env.DB, f.env, created.task.id, job.token);
   assert.deepEqual([full.origin, full.task.cloneUrl, full.task.branch, full.task.baseCommit, full.task.tool, full.ssh.address, full.ssh.port, full.ssh.user, full.ssh.reach],
     [origin, `${origin}/native/agent-host/tasks/${created.task.id}/git`, 'golf-agent/' + created.task.id.slice(0, 8), base, 'claude', 'build.example.net', 2222, 'agent', 'direct']);
+  assert.equal('mode' in full.task, false);
+  // A review task (agent_task_reviews) tells the container to run read-only.
+  f.sql.prepare('INSERT INTO agent_task_reviews(task_id,created_at) VALUES(?,?)').run(created.task.id, 't');
+  assert.equal((await sshTaskJob(f.env.DB, f.env, created.task.id, job.token)).task.mode, 'review');
+  f.sql.prepare('DELETE FROM agent_task_reviews WHERE task_id=?').run(created.task.id);
   assert.match(full.ssh.privateKey, /^[A-Za-z0-9+/]+=*$/);
   assert.match(full.ssh.hostKey, /^ssh-ed25519 /);
   await assert.rejects(sshTaskJob(f.env.DB, f.env, created.task.id, 'golf_agent_task_' + created.task.id + '_' + '0'.repeat(64)), /no longer claimed/);

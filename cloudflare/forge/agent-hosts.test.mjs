@@ -319,3 +319,36 @@ test('the capability is ready with the schema and the feature follows the instal
   assert.equal((await capabilities()).state, 'CAPABILITY_STATE_DISABLED');
   assert.deepEqual(await f.tasks({ action: 'available' }), { status: 200, hosts: [], featureOn: false, reason: 'Coding agents on your machines are turned off for this repository by the installation policy.' });
 });
+
+test('review tasks: a pull request only, a read-only tool on a 0.2.0 host, no MCP or push, and the review is the finish', async t => {
+  const f = await fixture(t), host = await f.connect();
+  const review = (body = {}) => f.assign(host, { target: { kind: 'pull_request', number: 14 }, mode: 'review', ...body });
+  // The host registered as 0.1.0; a heartbeat that reports 0.2.0 lets it review.
+  let refused = await review();
+  assert.equal(refused.status, 412); assert.match(refused.message, /golf-agent-host 0\.1\.0; review tasks need 0\.2\.0/);
+  assert.equal((await f.machine('heartbeat', { tools, hostVersion: '0.2.0' }, host.credential)).status, 200);
+  refused = await review({ target: { kind: 'issue', number: 12 } });
+  assert.equal(refused.status, 400); assert.match(refused.message, /reviews a pull request/);
+  refused = await review({ tool: 'opencode' });
+  assert.equal(refused.status, 412); assert.match(refused.message, /OpenCode has no read-only mode/);
+  assert.equal((await review({ mode: 'bogus' })).status, 400);
+  const created = (await review({ instructions: 'Focus on error handling.' })).task;
+  assert.deepEqual([created.mode, created.baseRef, created.baseCommit], ['review', 'refs/heads/feature', feature]);
+  assert.equal((await f.assign(host)).task.mode, 'change');
+  // The claimed job says review, carries no MCP endpoint, and the prompt asks for a review without changes.
+  const { task } = await f.machine('claim', { claimId: uuid() }, host.credential);
+  assert.equal(task.id, created.id);
+  assert.deepEqual([task.mode, task.mcp], ['review', null]);
+  assert.match(task.prompt, /This is a read-only review; Golf discards any change\./); assert.match(task.prompt, /Focus on error handling\./);
+  await f.machine(`tasks/${task.id}/start`, {}, task.token);
+  // The task token cannot push, and a finish naming a commit is refused.
+  const pushed = await f.push(task.id, task.token, zero, proposal, 'refs/heads/' + task.branch);
+  assert.equal(pushed.status, 403); assert.match(await pushed.text(), /read-only/);
+  assert.equal((await f.machine(`tasks/${task.id}/finish`, { state: 'succeeded', commitId: proposal, summary: 'x' }, task.token)).status, 400);
+  // A review longer than 4 KiB (up to 12 KiB) is kept whole.
+  const text = 'Looks fine. ' + 'Finding at src/parse.js:3. '.repeat(300);
+  assert.deepEqual(await f.machine(`tasks/${task.id}/finish`, { state: 'succeeded', exitCode: 0, summary: text, usage: { inputTokens: 10 } }, task.token), { status: 200, ok: true, state: 'SUCCEEDED' });
+  const done = (await f.tasks({ action: 'get', id: task.id })).task;
+  assert.deepEqual([done.state, done.mode, done.commitId, done.summary.length], ['SUCCEEDED', 'review', '', text.length]);
+  assert.equal(f.pushes.length, 0);
+});

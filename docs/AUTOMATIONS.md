@@ -25,7 +25,7 @@ contracts (comments, labels, private review drafts, issues, draft pull requests,
 | trigger | `{ events: [...], schedule?: { everyMinutes: 15–10080 } }`. Events: `pull_request.opened`, `pull_request.updated`, `pull_request.review_requested`, `issue.opened`, `pipeline.failed`, `push`. Each tool accepts a subset. |
 | target | Organization and installation automations list repositories (`owner/name`, none = every repository in scope). `branches` and `paths` are glob patterns (the agentic-mode matcher): a pull request's base branch, the pushed branch, or the branch an Actions run ran on; paths match the files a pull request or push changed. |
 | engine | `default` (AI runs: the engine selection for the use case, by default the Workers AI model in AI models), an engine id from [Engines](ENGINES.md), or a coding CLI (`codex`, `claude`, `opencode`, `grok`). |
-| place | `cloud` for model engines; `agent-host` (with a host) for coding CLIs. `cloud` for a CLI is refused: cloud sandboxes are phase 3. `ssh-host` is refused until SSH hosts can take automation tasks. |
+| place | `cloud` for model engines; `agent-host` (with a host) for coding CLIs. SSH hosts are agent hosts, so they are chosen as an `agent-host` too. `cloud` for a CLI is refused: cloud sandboxes are phase 3. |
 | instructions | Up to 4,000 bytes, versioned (`automation_instructions`); every change is a new version and old versions stay readable. |
 | output | `comment`, `review` (a private review draft), `labels`, `issue`, `draft-pr`, `report` (kept on the run). |
 | limits | `perDay` 1–500 started runs, `concurrency` 1–10 running at once (the rest wait), `maxOpenPRs` 1–50 open draft pull requests (for `draft-pr`), `dedupeWindow` 0–10080 minutes (0: a dedupe key runs once forever; otherwise once per window). |
@@ -108,7 +108,7 @@ the request that caused it; in the Workspace it runs after the response (`waitUn
 
 | Tool | Events | Engines | Outputs |
 | --- | --- | --- | --- |
-| PR reviewer | `pull_request.opened`, `.updated`, `.review_requested`, schedule | model | `review`: the AI review-draft contract (ai-review.mjs). On `default` it is the acting person's AI review draft on the pull request, which they edit and publish as their own pending review; the run keeps the summary and findings. `comment`: the neutralized review text. One run per head; a head that moved on is skipped. |
+| PR reviewer | `pull_request.opened`, `.updated`, `.review_requested`, schedule | model or coding CLI | `review`: the AI review-draft contract (ai-review.mjs). On `default` it is the acting person's AI review draft on the pull request, which they edit and publish as their own pending review; the run keeps the summary and findings. `comment`: the neutralized review text. One run per head; a head that moved on is skipped. **On a coding CLI** (for example Claude Code under its own OAuth sign-in on an agent host or SSH host) it is a read-only review task ([AGENT_HOSTS.md](AGENT_HOSTS.md#review-tasks-schema-48)). The tool's final text is posted as the `comment`, the only output for a CLI, because there are no structured findings for a draft. |
 | Issue triage | `issue.opened`, schedule | model (Clef on `default`) | `labels`: only the single label Clef chose with a probability of at least 0.5 (or a registry engine's first label). `comment`: suggestions, possible duplicates from semantic search when the repository has a served index (score ≥ 0.82, at most 3; otherwise it says the check is unavailable) and a request for details when the description has fewer than 30 characters (a rule, not a model judgement). Needs an admin as acting person, as AI triage does. |
 | Issue → PR | `issue.opened` | coding CLI on an agent host | `draft-pr` from the task's proposal branch into the default branch (origin `agent-task`), `comment` on the issue. No changes or a failed task opens nothing. |
 | CI fixer | `pipeline.failed` | coding CLI on an agent host | The tail of each failed job's log (stored with secrets masked; Golf credentials masked again) goes into the task instructions. A failure on an open pull request's head (a run the pull request started, or a push or manual run on its head branch) is fixed against that branch (`comment` posts the excerpt); one on the default branch first opens an `issue` with the excerpt (the agent task needs an issue). Other branches are skipped. Then `draft-pr`. |
@@ -132,7 +132,7 @@ workflow, agent hosts and pipeline bucket; no new bindings.
 ## Not done
 
 - Hosted evidence for custom automations and for provider-model engines (OpenAI, Anthropic, xAI, Google).
-- Coding CLIs in cloud sandboxes (phase 3) and on SSH hosts (refused until SSH hosts take automation tasks).
+- Coding CLIs in cloud sandboxes (phase 3). SSH hosts take automation tasks as agent hosts; the separate `ssh-host` place value is still refused.
 - Stored `coding-cli` engines from the engines registry are not offered; CLI automations name the tool and the agent host.
 - Inline review comments: the native forge has no inline review comments, so findings are `path:line` bullets, as in AI review drafts.
 - Learning from dismissed comments, the rest of the library (phase 4), inbound webhook and release triggers.

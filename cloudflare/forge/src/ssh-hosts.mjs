@@ -8,7 +8,7 @@
 //   Durable Object (ssh-task.mjs), whose container runs `golf-agent-host ssh-run` against the host and reports through the task routes.
 import { Fault, invalid, deny, digest } from './common.mjs';
 import { admissionRefusal, agentTools, canManage, deleteHost, fields, forbidden, hostViews, managerMessage, maxDuration, now, organization, parse, plain,
-  random, refuse, repositoryRow, scopes, sshHost, targetURL, terminalStates } from './agent-hosts.mjs';
+  isReview, random, refuse, repositoryRow, scopes, sshHost, targetURL, terminalStates } from './agent-hosts.mjs';
 import { ownerSlug } from './owners.mjs';
 import { openSecret, sealSecret, sealedKeyId } from './vault.mjs';
 
@@ -362,6 +362,7 @@ export async function sshTaskJob(db, env, taskId, token) {
   if (!repository) throw Error('The task repository is unavailable');
   return { origin: env.PUBLIC_ORIGIN, task: { id: task.id, repository: `${ownerSlug(repository, env)}/${repository.name}`, cloneUrl: `${env.PUBLIC_ORIGIN}/native/agent-host/tasks/${task.id}/git`, branch: task.branch,
     baseRef: task.base_ref, baseCommit: task.base_commit, tool: task.tool, model: task.model, prompt: task.prompt, deadline: task.deadline, token,
+    ...(await isReview(db, task.id) ? { mode: 'review' } : {}),
     target: { kind: task.target_kind, number: task.target_number, title: task.target_title, url: targetURL(env, repository, task.target_kind, task.target_number) } },
     ssh: await sshConnectionJob(db, env, task.host_id) };
 }

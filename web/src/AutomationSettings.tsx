@@ -205,7 +205,7 @@ function AutomationForm({ label, tool, inventory, target, initial, submitLabel, 
         if (kind === 'cli' && !form.getFieldValue('hostId')) form.setFieldValue('hostId', inventory.hosts[0]?.id || '');
         form.setFieldValue('output', kept.length ? kept : allowed.slice(0, 1));
       }}>{!field.state.value ? <option value="" disabled>Choose an engine</option> : null}
-        {(['model', 'cli'] as const).map(kind => { const items = engines.filter(engine => engine.kind === kind); return items.length ? <optgroup key={kind} label={kind === 'model' ? 'Models' : 'Coding CLIs on an agent host'}>{items.map(engine => <option key={engine.id} value={engine.id}>{engine.label}</option>)}</optgroup> : null; })}
+        {(['model', 'cli'] as const).map(kind => { const items = engines.filter(engine => engine.kind === kind); return items.length ? <optgroup key={kind} label={kind === 'model' ? 'Models' : tool.id === 'pr-reviewer' ? 'Coding CLIs on an agent host (read-only review)' : 'Coding CLIs on an agent host'}>{items.map(engine => <option key={engine.id} value={engine.id}>{engine.label}</option>)}</optgroup> : null; })}
       </select></label>
       <p className="field-help">{selected?.detail || ''}{!inventory.enginesRegistered && tool.engines !== 'cli' ? ' Until the engines registry is part of this installation, the installation model selection is the only model engine.' : ''}</p></>; }}</form.Field>
     <form.Subscribe selector={state => kindOf(state.values.engine)}>{kind => kind === 'cli' ? <>

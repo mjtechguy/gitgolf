@@ -156,7 +156,7 @@ async function definition(db, env, person, scope, body, tool, current) {
     if (!await db.prepare("SELECT 1 AS ok FROM agent_hosts WHERE id=? AND deleted=0 AND state='ACTIVE'").bind(Number(hostId)).first()) refuse('That agent host is not available.');
   } else if (place !== 'cloud') invalid('A model engine runs in the cloud; agent hosts run coding CLIs.');
   const output = has('output') ? body.output : current.output;
-  const allowed = tool.id === 'custom' ? (isCLI(engine) ? ['draft-pr'] : ['comment', 'issue', 'report']) : tool.outputs;
+  const allowed = tool.id === 'custom' ? (isCLI(engine) ? ['draft-pr'] : ['comment', 'issue', 'report']) : isCLI(engine) && tool.cliOutputs ? tool.cliOutputs : tool.outputs;
   if (!Array.isArray(output) || !output.length || new Set(output).size !== output.length || output.some(kind => !allowed.includes(kind))) invalid(`Choose outputs from ${allowed.join(', ')}.`);
   const limitsIn = has('limits') ? body.limits : {};
   if (!limitsIn || typeof limitsIn !== 'object' || Array.isArray(limitsIn) || Object.keys(limitsIn).some(key => !Object.hasOwn(automationLimits, key))) invalid('Limits are perDay, concurrency, maxOpenPRs and dedupeWindow.');
@@ -547,10 +547,10 @@ function runContext(db, env, deps, a, run, person, row) {
       if (input !== undefined) await db.prepare('UPDATE automation_runs SET input=?,updated_at=? WHERE id=?').bind(JSON.stringify(input), now(), run.id).run();
       return createAiRun(db, env, person, row, { kind, target, idempotencyKey: run.id });
     },
-    async assignAgent({ kind, number, instructions }) {
+    async assignAgent({ kind, number, instructions, mode = 'change' }) {
       if (a.place !== 'agent-host') refuse(placeNotes[a.place] || 'Choose an agent host for this automation.');
       const { task } = await agentTasksAPI(db, env, person, row, null, { action: 'create', repository: key, repositoryId: String(row.id), target: { kind, number }, hostId: a.host_id, tool: a.engine,
-        model: '', instructions: clipBytes(instructions, 4096), idempotencyKey: run.id }, () => deps.readRefs(row));
+        model: '', instructions: clipBytes(instructions, 4096), mode, idempotencyKey: run.id }, () => deps.readRefs(row));
       return task;
     },
     taskSummary: task => parse(task.result, {}).summary || '',

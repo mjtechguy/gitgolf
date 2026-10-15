@@ -11,7 +11,7 @@ import { enforceGitRules } from './repository-rules.mjs';
 import { reserveRefWrite, finishRefWrite, sendRefUpdate } from './ref-writes.mjs';
 import { ownerSlug } from './owners.mjs';
 import { featureOff } from './feature-policy.mjs';
-import { admissionRefusal, agentSchema, agentTools, byteLength, maxDuration, now, parse, random, refuse, repositoryRow, scrub, targetURL, terminalStates } from './agent-hosts.mjs';
+import { admissionRefusal, agentSchema, agentTools, byteLength, isReview, maxDuration, now, parse, random, refuse, repositoryRow, reviewSummaryBytes, scrub, targetURL, terminalStates } from './agent-hosts.mjs';
 
 const zero = '0'.repeat(40);
 const unauthenticated = message => { throw new Fault('unauthenticated', 401, message); };
@@ -66,9 +66,11 @@ async function authority(db, env, task, withTools) {
 }
 async function claimedTask(db, env, task, repository, token) {
   // Golf's remote MCP endpoint for the same task token (api-tokens.mjs taskTokenActor) while agent access is on for the repository.
-  const mcp = await featureOff(db, env, repository, 'agent-access') ? null : { url: env.PUBLIC_ORIGIN + '/mcp' };
+  // A review task gets none: it may not commit or open pull requests, and the field mode tells the host to run read-only.
+  const review = await isReview(db, task.id);
+  const mcp = review || await featureOff(db, env, repository, 'agent-access') ? null : { url: env.PUBLIC_ORIGIN + '/mcp' };
   return { task: { id: task.id, repository: `${ownerSlug(repository, env)}/${repository.name}`, cloneUrl: `${env.PUBLIC_ORIGIN}/native/agent-host/tasks/${task.id}/git`, branch: task.branch,
-    baseRef: task.base_ref, baseCommit: task.base_commit, tool: task.tool, model: task.model, prompt: task.prompt, deadline: task.deadline, token, mcp,
+    baseRef: task.base_ref, baseCommit: task.base_commit, tool: task.tool, model: task.model, prompt: task.prompt, deadline: task.deadline, token, mcp, ...(review ? { mode: 'review' } : {}),
     target: { kind: task.target_kind, number: task.target_number, title: task.target_title, url: targetURL(env, repository, task.target_kind, task.target_number) } } };
 }
 
@@ -122,6 +124,8 @@ async function heartbeat(db, host, body) {
   if (!Array.isArray(tools) || tools.length > 8 || new Set(tools.map(item => item?.tool)).size !== tools.length ||
       tools.some(item => !item || !agentTools.includes(item.tool) || !plain(item.version ?? '', 64) || ![true, false, null].includes(item.signedIn ?? null) || !plain(item.account ?? '', 128)))
     invalid('Report up to 8 tools from codex, claude, opencode and grok with a version, signedIn true, false or null and an optional account label.');
+  // golf-agent-host 0.2.0 and later report their version on each heartbeat; it decides whether the host may take review tasks.
+  if (body.hostVersion !== undefined && !plain(body.hostVersion, 64)) invalid('Report the host version as text up to 64 characters.');
   const time = now();
   await db.batch([
     // A tool the host no longer reports is no longer installed there.
@@ -129,7 +133,7 @@ async function heartbeat(db, host, body) {
     ...tools.map(item => db.prepare(`INSERT INTO agent_host_tools(host_id,tool,version,signed_in,account,updated_at) VALUES(?,?,?,?,?,?)
       ON CONFLICT(host_id,tool) DO UPDATE SET version=excluded.version,signed_in=excluded.signed_in,account=excluded.account,updated_at=excluded.updated_at`)
       .bind(host.id, item.tool, item.version ?? '', item.signedIn === null || item.signedIn === undefined ? null : item.signedIn ? 1 : 0, item.account ?? '', time)),
-    db.prepare('UPDATE agent_hosts SET last_seen_at=? WHERE id=?').bind(time, host.id),
+    db.prepare('UPDATE agent_hosts SET last_seen_at=?,host_version=COALESCE(?,host_version) WHERE id=?').bind(time, body.hostVersion ?? null, host.id),
   ]);
   const { results } = await db.prepare("SELECT id FROM agent_tasks WHERE host_id=? AND state IN ('CLAIMED','RUNNING') AND cancel_requested=1 ORDER BY created_at").bind(host.id).all();
   return { ok: true, cancel: results.map(row => row.id), state: host.state };
@@ -208,14 +212,18 @@ async function appendLog(db, task, body) {
 async function finish(db, env, task, body, withArtifact, providerFetch) {
   if (terminalStates.includes(task.state)) return { ok: true, state: task.state };
   const { exitCode = null, commitId = '', summary = '', changedFiles = [], usage = {}, failure = '' } = body;
+  // A review task's final text is the review (up to 12 KiB); it never names a commit, and nothing is verified on a branch.
+  const review = await isReview(db, task.id);
   let state = finishes[body.state];
-  if (!state || exitCode !== null && !Number.isSafeInteger(exitCode) || typeof commitId !== 'string' || commitId && !sha(commitId) || typeof summary !== 'string' || byteLength(summary) > 4096 ||
+  if (!state || exitCode !== null && !Number.isSafeInteger(exitCode) || typeof commitId !== 'string' || commitId && !sha(commitId) || typeof summary !== 'string' || byteLength(summary) > (review ? reviewSummaryBytes : 4096) ||
       !Array.isArray(changedFiles) || changedFiles.length > 1000 || changedFiles.some(file => typeof file !== 'string' || !file || file.length > 1024) || typeof failure !== 'string' || failure.length > 512 ||
       !usage || typeof usage !== 'object' || Array.isArray(usage) || Object.entries(usage).some(([key, value]) => !['inputTokens', 'outputTokens', 'costUsd'].includes(key) || typeof value !== 'number' || !Number.isFinite(value) || value < 0))
     invalid('Finish with a state, an exit code, a commit, a summary up to 4 KiB, up to 1,000 changed files, reported usage and a failure up to 512 characters.');
-  if (state === 'SUCCEEDED' && !commitId) invalid('A succeeded task names its commit.');
+  if (review && commitId) invalid('A review task does not commit.');
+  if (state === 'SUCCEEDED' && !commitId && !review) invalid('A succeeded task names its commit.');
+  if (review && state === 'NO_CHANGES') state = 'SUCCEEDED';
   let reason = state === 'SUCCEEDED' ? '' : scrub(failure);
-  if (state === 'SUCCEEDED') {
+  if (state === 'SUCCEEDED' && !review) {
     // The proposal is the branch at commitId, with baseCommit on its first-parent chain within 50 commits.
     const repository = await repositoryRow(db, task.repository_id);
     const verified = repository?.artifact_name === task.artifact_name && await withArtifact(env, repository, async repo => {
@@ -254,6 +262,7 @@ async function taskGit(db, env, request, url, id, route, withArtifact, providerF
         request.headers.get('Content-Type') !== `application/x-${service}-request`)) return text('Invalid Git request.', 400);
     const push = service === 'git-receive-pack';
     if (push && task.state !== 'RUNNING') return text('Pushes are accepted only while the task is RUNNING; call start first.', 403);
+    if (push && await isReview(db, task.id)) return text('A review task is read-only; its token cannot push.', 403);
     // The task's rate budget: a fetch or advertisement is one request (429); a push is a write, refused in Git's own report below.
     if (advertisement || !push) { const refused = await chargeBudget(env, db, 'task', task.id, false); if (refused) return budgetText(refused); }
     const { repository, refusal } = await authority(db, env, task, false);

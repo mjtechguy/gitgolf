@@ -77,11 +77,11 @@ function AssignToAgent({ context, userId, target, close, created }: { context: C
   const hosts = available.data?.hosts || [];
   const usable = hosts.flatMap(host => host.tools.filter(tool => tool.usable).map(tool => ({ host, tool })));
   const best = usable.find(choice => choice.host.online) || usable[0], first = best ? `${best.host.id}:${best.tool.tool}` : '';
-  const form = useForm({ defaultValues: { choice: first, model: '', instructions: '' }, onSubmit: async ({ value }) => {
+  const form = useForm({ defaultValues: { choice: first, model: '', instructions: '', review: false }, onSubmit: async ({ value }) => {
     setError(undefined);
     const split = value.choice.indexOf(':'), hostId = value.choice.slice(0, split), tool = value.choice.slice(split + 1);
     try {
-      const result = await api<{ task: AgentTask }>(tasksPath, { ...context, action: 'create', target: { kind: target.kind, number: target.number }, hostId, tool, ...(value.model.trim() ? { model: value.model.trim() } : {}), ...(value.instructions.trim() ? { instructions: value.instructions } : {}), idempotencyKey: idempotencyKey.current });
+      const result = await api<{ task: AgentTask }>(tasksPath, { ...context, action: 'create', target: { kind: target.kind, number: target.number }, hostId, tool, ...(value.model.trim() ? { model: value.model.trim() } : {}), ...(value.instructions.trim() ? { instructions: value.instructions } : {}), ...(value.review && target.kind === 'pull_request' ? { mode: 'review' } : {}), idempotencyKey: idempotencyKey.current });
       idempotencyKey.current = crypto.randomUUID(); created(result.task);
     } catch (e) { if (e instanceof ConnectError) idempotencyKey.current = crypto.randomUUID(); setError(e); }
   } });
@@ -101,6 +101,8 @@ function AssignToAgent({ context, userId, target, close, created }: { context: C
             <span><strong>{toolLabel(tool.tool)}</strong><small>{[tool.version, signedInLabel(tool.signedIn)].filter(Boolean).join(' · ')}</small>{!tool.usable && tool.reason ? <small className="agent-choice-reason">{tool.reason}</small> : null}</span></label>; })
             : <p className="field-help">This host has not reported any coding tool.</p>}
         </fieldset>)}</>}</form.Field>
+        {target.kind === 'pull_request' ? <form.Field name="review">{field => <><label className="checkbox-field"><input type="checkbox" checked={field.state.value} onChange={e => field.handleChange(e.target.checked)} />Review only</label>
+          <p className="field-help">The tool reads the pull request in a read-only mode (Claude Code, Codex or Grok), changes and pushes nothing, and its answer is the review.</p></>}</form.Field> : null}
         <form.Field name="model">{field => <label>Model <span className="optional">optional</span><input value={field.state.value} maxLength={128} autoComplete="off" placeholder="The tool’s default" onChange={e => field.handleChange(e.target.value)} /></label>}</form.Field>
         <form.Field name="instructions">{field => <label>Instructions <span className="optional">optional</span><textarea rows={4} maxLength={4096} value={field.state.value} onChange={e => field.handleChange(e.target.value)} placeholder="Anything to add to the issue text, for example where to look or how to test" /></label>}</form.Field>
         <p className="field-help">Golf sends the tool the {what}’s title, description, its 20 most recent comments and these instructions. With a shared host the task runs under its owner’s signed-in subscription.</p>
@@ -136,6 +138,7 @@ function AgentTaskDetail({ context, userId, initial, writer, admin, close, listK
     <dl className="detail-grid agent-task-facts">
       <div><dt>Requested by</dt><dd>{requesterLogin(task)} · <DateLabel value={task.createdAt} relative /></dd></div>
       <div><dt>Ran</dt><dd>{task.startedAt ? `${duration(task.startedAt, task.finishedAt)}${task.finishedAt ? '' : ' so far'}` : active ? 'Not started' : '—'}</dd></div>
+      {task.mode === 'review' ? <div><dt>Mode</dt><dd>Review only, at <code>{task.baseCommit.slice(0, 7)}</code> of <code>{branchName(task.baseRef)}</code></dd></div> : null}
       <div><dt>Branch</dt><dd><span className="pipeline-ref"><GitBranch size={13} aria-hidden="true" />{task.branch}</span> from <code>{branchName(task.baseRef)}</code> at <code>{task.baseCommit.slice(0, 7)}</code></dd></div>
       <div><dt>Model</dt><dd>{task.model || 'The tool’s default'}</dd></div>
     </dl>
@@ -145,7 +148,11 @@ function AgentTaskDetail({ context, userId, initial, writer, admin, close, listK
     {failure ? <p className="error" role="alert">{failure}</p> : null}
     {task.state === 'CANCELLED' ? <p className="field-help" role="status">The task was cancelled. {task.failureReason ? `${failureText(task)} ` : ''}Nothing was proposed.</p> : null}
     {task.state === 'NO_CHANGES' ? <p className="field-help" role="status">The tool finished without changing any file, so there is nothing to propose.</p> : null}
-    {task.state === 'SUCCEEDED' ? <div className="agent-task-result">
+    {task.state === 'SUCCEEDED' && task.mode === 'review' ? <div className="agent-task-result">
+      {task.summary ? <div className="agent-task-summary"><h5>Review by {toolLabel(task.tool)} (read-only, unverified)</h5><MarkdownBody text={task.summary} label="Review, rendered Markdown" /></div> : <p className="field-help">The tool finished without a review.</p>}
+      {usage ? <p className="field-help">Usage as reported by {toolLabel(task.tool)}: {[usage.inputTokens ? `${usage.inputTokens.toLocaleString()} input tokens` : '', usage.outputTokens ? `${usage.outputTokens.toLocaleString()} output tokens` : '', usage.costUsd ? `$${usage.costUsd.toFixed(2)}` : ''].filter(Boolean).join(', ')}.</p> : null}
+    </div> : null}
+    {task.state === 'SUCCEEDED' && task.mode !== 'review' ? <div className="agent-task-result">
       <p className="agent-task-commit"><GitCommitHorizontal size={15} aria-hidden="true" />Commit <code>{task.commitId.slice(0, 12)}</code> on <code>{task.branch}</code><CopyButton text={task.branch} label="Copy branch name" /></p>
       {task.changedFiles.length ? <details className="metadata-details" open={task.changedFiles.length <= 8}><summary>{task.changedFiles.length} changed {task.changedFiles.length === 1 ? 'file' : 'files'}</summary><ul className="agent-task-files">{task.changedFiles.map(file => <li key={file}><code>{file}</code></li>)}</ul></details> : null}
       {task.summary ? <div className="agent-task-summary"><h5>What {toolLabel(task.tool)} reported</h5><MarkdownBody text={task.summary} label="Reported summary, rendered Markdown" /></div> : null}
