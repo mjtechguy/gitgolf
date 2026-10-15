@@ -168,8 +168,8 @@ async function write(db, env, person, row, repo, command, pack, rulesVersion, ct
   const authorityNow = guard || authority(person, row, rulesVersion);
   if (!await reserveRefWrite(db, { id, repositoryId: row.id, userId: person.id, command, guard: authorityNow })) {
     const state = await db.prepare('SELECT write_pending,EXISTS(SELECT 1 FROM git_ref_writes WHERE repository_id=r.id AND ref=? AND outcome IS NULL) AS busy FROM repositories r WHERE id=?').bind(command.ref, row.id).first();
-    if (state?.write_pending) conflict();
-    if (state?.busy) return { outcome: 'busy' };
+    // A merge (a person's or a policy landing) holds the whole repository for a few seconds: wait for it like a busy branch.
+    if (state?.write_pending || state?.busy) return { outcome: 'busy' };
     // The other write may have finished between the reservation and this read: if the same authority guard (grant, versions, rules,
     // credential and token liveness) still holds, it was a lost race for the ref, not a changed access.
     if (await db.prepare(`SELECT 1 WHERE ${authorityNow.sql}`).bind(...authorityNow.values).first()) return { outcome: 'busy' };
@@ -314,7 +314,7 @@ async function commit(db, env, person, row, body, ctx) {
   const input = await commitInput(body, ctx.literalPath);
   requireScope(person, row.id, { write: true, ref: input.ref });
   writer(row);
-  if (row.repository_write_pending ?? row.write_pending) conflict();
+  // A merge holding the repository is waited for in commitAttempts (write answers busy), within the commit's time budget.
   const rulesVersion = await enforceGitRules(db, row, person, input.ref);
   const saved = input.key ? await claim(db, person, row, input) : null;
   if (saved?.result) return saved.result;
@@ -364,7 +364,7 @@ async function commitAttempts(db, env, person, row, repo, input, rulesVersion, c
     const record = input.key && (id => db.prepare('UPDATE source_commits SET operation_id=?,result=? WHERE user_id=? AND idempotency_key=?').bind(id, JSON.stringify(value), person.id, input.key).run());
     const sent = await write(db, env, person, row, repo, { ref: input.ref, old: creating ? zero : current, next: object.id }, await packObjects([...reachable(objects, treeId), object]), rulesVersion, ctx, record);
     if (sent.outcome === 'applied') return value;
-    if (attempt >= limits.attempts || Date.now() - started >= (env.sourceCommitBudgetMs ?? limits.budgetMs)) throw new Refused('aborted', 409, (sent.outcome === 'busy' ? `Another write to ${input.name} stayed in flight` : `Branch ${input.name} kept changing`) + `; nothing was committed after ${attempt} attempts in ${Math.round((Date.now() - started) / 1000)} s.` + (sent.status ? ' Last provider status: ' + sent.status : ''), { currentHead: current || '' });
+    if (attempt >= limits.attempts || Date.now() - started >= (env.sourceCommitBudgetMs ?? limits.budgetMs)) throw new Refused('aborted', 409, (sent.outcome === 'busy' ? `Another write to ${input.name} or a merge in this repository stayed in flight` : `Branch ${input.name} kept changing`) + `; nothing was committed after ${attempt} attempts in ${Math.round((Date.now() - started) / 1000)} s.` + (sent.status ? ' Last provider status: ' + sent.status : ''), { currentHead: current || '' });
     // Jittered wait for the branch's turn: 100 ms doubling to at most 1.5 s.
     if (sent.outcome === 'busy') { const cap = Math.min(1500, 100 * 2 ** Math.min(attempt, 4)); await new Promise(resolve => setTimeout(resolve, cap / 2 + Math.random() * cap / 2)); }
     refs = await refsOf(env, repo, row, ctx.providerFetch); current = refs.get(input.ref);

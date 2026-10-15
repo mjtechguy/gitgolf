@@ -43,7 +43,7 @@ export async function objectFixture(t) {
   const refs = new Map([['refs/heads/main', commit], ['refs/tags/light', commit], ['refs/tags/v1.0', tagObject], ['refs/tags/v1.0^{}', commit]]);
   const objects = new Map(), bucket = { puts: 0, losePut: false, loseAcknowledgement: false, failHead: false, failDelete: false };
   const view = key => { const object = objects.get(key); return object ? { key, size: object.bytes.length, customMetadata: object.customMetadata, httpMetadata: object.httpMetadata } : null; };
-  const env = { DB: db, ACCOUNT_ID: 'c'.repeat(32), ARTIFACTS_NAMESPACE: 'test-space', WORKSPACE_SLUG: 'alice', PUBLIC_ORIGIN: origin,
+  const env = { DB: db, pushWaitMs: 100, ACCOUNT_ID: 'c'.repeat(32), ARTIFACTS_NAMESPACE: 'test-space', WORKSPACE_SLUG: 'alice', PUBLIC_ORIGIN: origin,
     ARTIFACTS: { async get(name) { return {
       async info() { return { name, remote: `https://${env.ACCOUNT_ID}.artifacts.cloudflare.net/git/test-space/${name}.git` }; },
       async createToken() { return { plaintext: 'art_v1_read' }; }, async revokeToken() { return true; }, [Symbol.dispose]() {},

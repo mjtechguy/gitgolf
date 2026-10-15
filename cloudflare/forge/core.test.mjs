@@ -75,7 +75,7 @@ async function fixture(t) {
     },
   };
   const repos = new Map(), tokens = new Set(); let creates = 0, effects = 0, losePush = false, loseReply = false, refuseRef = false, held, forks = 0, loseFork = false;
-  const env = { DB: db, ACCOUNT_ID: 'c'.repeat(32), ARTIFACTS_NAMESPACE: 'test-space', WORKSPACE_SLUG: 'alice', PUBLIC_ORIGIN: 'https://golf.example.com',
+  const env = { DB: db, pushWaitMs: 100, ACCOUNT_ID: 'c'.repeat(32), ARTIFACTS_NAMESPACE: 'test-space', WORKSPACE_SLUG: 'alice', PUBLIC_ORIGIN: 'https://golf.example.com',
     ARTIFACTS: {
       async create(name) {
         creates++; repos.set(name, { ref: null, refs: new Map() });
@@ -322,6 +322,21 @@ test('ambiguous Git effects are resent only as the same compare-and-swap, a boun
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_ref_unknown').get().n, 1);
   assert.equal(f.sql.prepare('SELECT state FROM git_operations').get().state, 'DISPATCHED');
   assert.equal(f.tokens.size, 0);
+});
+
+test('a push waits out a merge holding the repository and then lands; a longer hold is refused in Git\'s report', async t => {
+  const f = await fixture(t); await f.create();
+  const send = (ref, old = zero, next = commit) => handle(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + ownerToken, 'Content-Type': 'application/x-git-receive-pack-request' }, body: push(ref, old, next) }), f.env, f.providerFetch);
+  f.env.pushWaitMs = 5000;
+  f.sql.exec("UPDATE repositories SET write_pending='merge-op'");
+  setTimeout(() => f.sql.exec('UPDATE repositories SET write_pending=NULL'), 400);
+  const started = Date.now(), pushed = await send('refs/heads/waited');
+  assert.equal(pushed.status, 200); assert.doesNotMatch(await pushed.text(), /remote rejected|\bng\b/); assert.ok(Date.now() - started >= 300);
+  f.env.pushWaitMs = 100;
+  f.sql.exec("UPDATE repositories SET write_pending='merge-op'");
+  assert.match(await (await send('refs/heads/refused')).text(), /finishing a merge/);
+  f.sql.exec('UPDATE repositories SET write_pending=NULL');
 });
 
 test('the ref fence: a push to another branch proceeds, one to the same branch conflicts, a held repository refuses both', async t => {

@@ -402,4 +402,9 @@ test('concurrent commits: other branches proceed, the same branch is fenced and 
   const pushes = f.counts.pushes, held = await f.call('commit', { repository: key, branch: 'main', expectedHead: f.head('main'), message: 'x', changes: [{ path: 'held.txt', content: 'x' }] });
   assert.equal(held.status, 409); assert.match(held.body.message, /in flight; nothing was committed after \d+ attempts in \d+ s/); delete f.env.sourceCommitBudgetMs; assert.equal(f.counts.pushes, pushes);
   assert.equal((await f.call('branch', { repository: key, branch: 'other', action: 'create', from: 'main' })).status, 200);
+  // A merge holding the whole repository (a landing) is waited for like a busy branch, then the commit lands.
+  f.sql.exec("DELETE FROM git_ref_writes; DELETE FROM git_operations WHERE id='held'; UPDATE repositories SET write_pending='merge-op'");
+  setTimeout(() => f.sql.exec('UPDATE repositories SET write_pending=NULL'), 300);
+  const waited = await f.call('commit', { repository: key, branch: 'other', expectedHead: f.head('other'), message: 'after the merge', changes: [{ path: 'after.txt', content: 'after' }] });
+  assert.equal(waited.status, 200, JSON.stringify(waited.body)); assert.equal(f.g.text(['show', 'other:after.txt']), 'after');
 });
