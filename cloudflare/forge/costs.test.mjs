@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { handle, concurrentRead } from './src/core.mjs';
-import { rates, priced, billable, monthPeriod, runningLine, serviceTotal, measuredUnits, estimate, validScenario, validUnits, defaultScenario, readUsage, r2Operations, pricesAsOf } from './src/costs.mjs';
+import { rates, priced, billable, monthPeriod, runningLine, serviceTotal, measuredUnits, estimate, validScenario, validUnits, defaultScenario, readUsage, r2Operations, pricesAsOf, probes } from './src/costs.mjs';
 
 const origin = 'https://golf.example.com', account = 'c'.repeat(32), database = '0b2b7c1e-1111-4222-8333-444455556666';
 const rate = id => rates.find(item => item.id === id);
@@ -146,6 +146,11 @@ test('usage reads degrade per service: no token, refused token, timeout and a re
   const accountWide = await readUsage(f.env, period, window, analytics());
   assert.equal(accountWide.results.get('d1.storage').state, 'not-configured'); assert.equal(accountWide.results.get('d1.rows-read').scope, 'account');
   assert.match(r2Operations([{ dimensions: { actionType: 'PutBucketMagic', bucketName: 'b' }, sum: { requests: 2 } }], []).note, /Priced as Class A/);
+  // Without bound buckets the query groups the account by action only: rows carry no bucket name.
+  assert.deepEqual(r2Operations([{ dimensions: { actionType: 'GetObject' }, sum: { requests: 3 } }, { dimensions: { actionType: 'PutObject' }, sum: { requests: 1 } }], []), { 'r2.class-a': 1, 'r2.class-b': 3 });
+  const r2Env = { ACCOUNT_ID: 'a'.repeat(32), EVIDENCE_BUCKET: {}, OPERATIONS_WORKER: 'golf' }, r2Period = monthPeriod(Date.parse('2026-10-15T12:00:00Z')), r2Window = { start: '2026-10-08T12:00:00Z', end: '2026-10-15T12:00:00Z' };
+  const r2Query = buckets => probes({ ...r2Env, OPERATIONS_BUCKETS: buckets }, r2Period, r2Window).find(probe => probe.id === 'r2').query();
+  assert.match(r2Query('golf-evidence'), /bucketName_in: \["golf-evidence"\]/); assert.doesNotMatch(r2Query(''), /bucketName/);
 });
 
 test('estimated costs are for operations administrators only, read as a concurrent read', async t => {

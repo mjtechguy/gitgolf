@@ -244,8 +244,10 @@ export function probes(env, period, window) {
       } } }`,
       read: account => { const size = total(account.now, row => row.max?.databaseSizeBytes, false, 'D1 storage') / 1e9; return { mtd: { 'd1.storage': size }, win: { 'd1.storage': size } }; } },
     { id: 'r2', service: 'r2', rates: ['r2.class-a', 'r2.class-b'], confirmed: true, scope: buckets.length ? 'buckets' : 'account', available: Boolean(env.EVIDENCE_BUCKET || env.PIPELINE_BUCKET),
-      query: () => bothTimes('r2OperationsAdaptiveGroups', '{ sum { requests } dimensions { actionType bucketName } }',
-        (start, end) => `limit: 1000, filter: {datetime_geq: ${literal(start)}, datetime_leq: ${literal(end)}}`),
+      // Filtered to this installation's buckets where they are known: an account with many buckets has more bucket × action rows than one
+      // answer holds. Without them, the whole account by action.
+      query: () => bothTimes('r2OperationsAdaptiveGroups', buckets.length ? '{ sum { requests } dimensions { actionType bucketName } }' : '{ sum { requests } dimensions { actionType } }',
+        (start, end) => `limit: 1000, filter: {${buckets.length ? `bucketName_in: [${buckets.map(literal).join(', ')}], ` : ''}datetime_geq: ${literal(start)}, datetime_leq: ${literal(end)}}`),
       read: account => both(account, rows => r2Operations(rows, buckets)) },
     { id: 'r2-storage', service: 'r2', rates: ['r2.storage'], confirmed: true, scope: buckets.length ? 'buckets' : 'account', available: Boolean(env.EVIDENCE_BUCKET || env.PIPELINE_BUCKET),
       query: () => `query { viewer { ${account} {
@@ -269,13 +271,13 @@ export function probes(env, period, window) {
 // R2 operation classes as the pricing page lists them; an action it does not list is priced as Class A (the higher rate) and named.
 const classA = new Set(['ListBuckets', 'PutBucket', 'ListObjects', 'PutObject', 'CopyObject', 'CompleteMultipartUpload', 'CreateMultipartUpload', 'LifecycleStorageTierTransition', 'ListMultipartUploads', 'UploadPart', 'UploadPartCopy', 'ListParts', 'PutBucketEncryption', 'PutBucketCors', 'PutBucketLifecycleConfiguration']);
 const classB = new Set(['HeadBucket', 'HeadObject', 'GetObject', 'UsageSummary', 'GetBucketEncryption', 'GetBucketLocation', 'GetBucketCors', 'GetBucketLifecycleConfiguration']);
-const free = new Set(['DeleteObject', 'DeleteBucket', 'AbortMultipartUpload']);
+const free = new Set(['DeleteObject', 'DeleteObjects', 'DeleteBucket', 'AbortMultipartUpload']);
 export function r2Operations(rows, buckets) {
   if (!Array.isArray(rows) || rows.length >= 1000) shape();
   const out = { 'r2.class-a': 0, 'r2.class-b': 0 }, unlisted = new Set();
   for (const row of rows) {
     const action = row.dimensions?.actionType, bucket = row.dimensions?.bucketName, requests = row.sum?.requests;
-    if (typeof action !== 'string' || typeof bucket !== 'string' || !finite(requests)) shape();
+    if (typeof action !== 'string' || buckets.length && typeof bucket !== 'string' || !finite(requests)) shape();
     if (buckets.length && !buckets.includes(bucket)) continue;
     if (free.has(action)) continue;
     if (classB.has(action)) out['r2.class-b'] += requests;
