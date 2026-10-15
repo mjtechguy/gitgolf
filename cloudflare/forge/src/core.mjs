@@ -337,7 +337,9 @@ async function git(db, env, person, request, url, providerFetch) {
         operation = crypto.randomUUID();
         if (await reserveRefWrite(db, { id: operation, repositoryId: row.id, userId: person.id, command, guard })) break;
         const blocker = await refWriteBlocker(db, row.id, command.ref);
-        if (!blocker) conflict();
+        // Nothing holds it now: either the other write finished between the reservation and this read (try again), or the authority
+        // guard no longer holds (access, identity or rules changed), refused at once.
+        if (!blocker && !await db.prepare(`SELECT 1 AS ok WHERE ${guard.sql}`).bind(...guard.values).first()) conflict();
         if (Date.now() - started >= (env.pushWaitMs ?? pushWaitMs)) return refuse(blocker === 'branch' ? 'another push to this branch is in progress; fetch and retry' : 'the repository is finishing a merge; retry shortly');
         await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 350));
       }
