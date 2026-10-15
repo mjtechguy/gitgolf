@@ -12,31 +12,33 @@ import { gitCredentialSQL } from './git-credentials.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { pipelinePolicy } from './pipeline-policy.mjs';
 import { requireScope } from './token-scope.mjs';
+import { blame, grep } from './source-reads.mjs';
 
-export const sourceActions = new Set(['commit', 'branch', 'files', 'tree']);
+export const sourceActions = new Set(['commit', 'branch', 'files', 'tree', 'blame', 'grep']);
+const reads = { files, tree, blame, grep };
 const MiB = 1024 * 1024, limits = { changes: 500, total: 8 * MiB, file: 4 * MiB, message: 64 * 1024, paths: 100, inline: MiB, read: 4 * MiB, entries: 10000, attempts: 3 };
 const zero = '0'.repeat(40), encoder = new TextEncoder(), decoder = new TextDecoder();
 const kinds = { __proto__: null, blob: 'file', exec: 'executable', symlink: 'symlink', tree: 'directory', gitlink: 'submodule' };
 const modeTypes = Object.fromEntries(Object.entries(treeModes).map(([type, mode]) => [mode, type]));
 
 // A refusal whose JSON body carries more than code and message (currentHead, conflicts).
-class Refused extends Fault { constructor(code, status, message, detail = {}) { super(code, status, message); this.detail = detail; } }
+export class Refused extends Fault { constructor(code, status, message, detail = {}) { super(code, status, message); this.detail = detail; } }
 const tooLarge = message => { throw new Fault('resource_exhausted', 413, message); };
 
 export async function sourceCapability(db) {
   const ready = (await db.prepare('PRAGMA table_info(source_commits)').all()).results.length > 0;
   return { id: 'repository.source-api', label: 'Source API', state: ready ? 'CAPABILITY_STATE_READY' : 'CAPABILITY_STATE_DISABLED',
-    reason: ready ? 'POST /native/source/commit, branch, files and tree: commit up to 500 changes (8 MiB) to a branch without a clone, with an expected head, optional path-level merge onto a moved branch and idempotency keys; read files and trees at a commit. Branch rules, the branch write fence and pipeline intake apply as for a push. Line-level merging is not available.'
+    reason: ready ? 'POST /native/source/commit, branch, files and tree: commit up to 500 changes (8 MiB) to a branch without a clone, with an expected head, optional path-level merge onto a moved branch and idempotency keys; read files and trees at a commit, blame a file along its first-parent history and search a commit for exact text or a regular expression. Branch rules, the branch write fence and pipeline intake apply as for a push. Line-level merging is not available.'
       : 'Apply the schema 38 migration to use the Source API.' };
 }
 
 // row: authorizedRepository's row (grant role, access version). ctx: { withArtifact, providerFetch, literalPath, ciState }.
 export async function sourceAPI(db, env, person, row, action, body, ctx) {
-  if (!sourceActions.has(action)) invalid('Use commit, branch, files or tree.');
+  if (!sourceActions.has(action)) invalid('Use commit, branch, files, tree, blame or grep.');
   try {
-    if (action === 'files' || action === 'tree') {
+    if (reads[action]) {
       requireScope(person, row.id);
-      return await ctx.withArtifact(env, row, repo => (action === 'files' ? files : tree)(env, repo, row, body, ctx));
+      return await ctx.withArtifact(env, row, repo => reads[action](env, repo, row, body, ctx));
     }
     return await (action === 'commit' ? commit : branch)(db, env, person, row, body, ctx);
   } catch (error) {
@@ -54,7 +56,7 @@ const branchName = (value, field = 'branch') => {
 const writer = row => { if (!['write', 'admin'].includes(row.role)) throw new Fault('permission_denied', 403, 'Writing needs a write or admin grant on this repository.'); };
 
 // ---------- reads ----------
-async function commitAt(env, repo, row, ref, ctx) {
+export async function commitAt(env, repo, row, ref, ctx) {
   const name = ref === undefined || ref === '' ? row.default_branch : ref;
   if (typeof name !== 'string' || !sha(name) && !validRef(name.startsWith('refs/') ? name : 'refs/heads/' + name)) invalid('Use a branch, a tag or a full 40-character commit ID for ref.');
   let hash = sha(name) ? name : null;
@@ -66,7 +68,7 @@ async function commitAt(env, repo, row, ref, ctx) {
   if (!value || value.hash !== hash || !sha(value.treeHash)) throw new Fault('not_found', 404, 'The ref does not name a commit in this repository.');
   return value;
 }
-async function entryAt(read, treeHash, path) {
+export async function entryAt(read, treeHash, path) {
   let entry = { type: 'tree', hash: treeHash };
   for (const part of path ? path.split('/') : []) {
     if (entry.type !== 'tree') return null;
@@ -121,22 +123,26 @@ async function tree(env, repo, row, body, ctx) {
   const root = await entryAt(read, value.treeHash, path);
   if (!root) throw new Fault('not_found', 404, 'The path does not exist at this commit.');
   if (root.type !== 'tree') invalid('The path is a file; list a directory.');
-  const entries = []; let truncated = false, level = [[root.hash, path]];
-  // Breadth first, eight directory reads at a time, stopping at 10,000 entries.
+  const { entries, truncated } = await listTree(read, root.hash, path, recursive, limits.entries);
+  return { repositoryId: String(row.id), commitId: value.hash, path, entries: entries.map(([entry, path]) => wireEntry(entry, path)), truncated, limit: limits.entries };
+}
+// Breadth first, eight directory reads at a time, stopping at limit entries; [entry, path] pairs sorted by path.
+export async function listTree(read, hash, path, recursive, limit) {
+  const entries = []; let truncated = false, level = [[hash, path]];
   walk: while (level.length) {
     const next = [];
     for (let i = 0; i < level.length; i += 8) {
       for (const [list, prefix] of await Promise.all(level.slice(i, i + 8).map(async ([hash, prefix]) => [await read(hash), prefix]))) for (const entry of list) {
-        if (entries.length >= limits.entries) { truncated = true; break walk; }
+        if (entries.length >= limit) { truncated = true; break walk; }
         const child = prefix ? prefix + '/' + entry.name : entry.name;
-        entries.push(wireEntry(entry, child));
+        entries.push([entry, child]);
         if (recursive && entry.type === 'tree') next.push([entry.hash, child]);
       }
     }
     level = next;
   }
-  entries.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-  return { repositoryId: String(row.id), commitId: value.hash, path, entries, truncated, limit: limits.entries };
+  entries.sort((a, b) => a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0);
+  return { entries, truncated };
 }
 
 // ---------- writes ----------
