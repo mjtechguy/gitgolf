@@ -26,6 +26,7 @@ import { reconcileAi, runAiWorkflow } from './ai-workflow.mjs';
 import { sweepAgentTasks } from './agent-hosts.mjs';
 import { settleRefWrites } from './ref-writes.mjs';
 import { afterPipelineRun, sweepLanding } from './land-queue.mjs';
+import { AgentBudgets } from './agent-budgets.mjs';
 
 
 const heartbeat = 5 * 60_000;
@@ -37,7 +38,9 @@ export class Workspace extends DurableObject {
     const workflows = env.EvidenceWorkflow || ctx.exports.EvidenceWorkflow;
     this.activity = new RepositoryActivity(ctx.storage, (request, input) => this.authority({ activity: true, request, input }));
     const configured = this.configured = { ...env, previewChanged: id => this.activity.publish(String(id), ['actions', 'pulls']), performanceSnapshot: () => this.performance.metrics(), watchRepository: request => this.activity.watch(request), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: { objects: new Map(), pending: new Map(), bytes: 0 }, testTasks: ctx.exports.PRTestTask, agentTasks: ctx.exports.PRAgentTask, pipelineCoordinator: ctx.exports.PipelineRun, notifyPipeline: id => this.activity.publish(String(id), ['actions']),
-      AiWorkflow: env.AiWorkflow || (env.AI_WORKFLOW_NAME ? ctx.exports.AiWorkflow : undefined) };
+      AiWorkflow: env.AiWorkflow || (env.AI_WORKFLOW_NAME ? ctx.exports.AiWorkflow : undefined),
+      // Rate budgets for API tokens and agent tasks (agent-budgets.mjs): in this object's memory, restarted with it.
+      agentBudgets: new AgentBudgets() };
     if (env.REGISTRY_PROVIDER === 'cloudflare') {
       configured.registryUploadStore = ctx.storage;
       configured.REGISTRY = managedRegistry(configured, input => registryAuthority(configured, input));

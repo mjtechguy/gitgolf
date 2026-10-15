@@ -1,5 +1,57 @@
 # Golf implementation status
 
+## 2026-10-15 — AM-6 rate budgets for each API token and agent task (local evidence only)
+
+**What exists**
+- Each API token (`golf_pat_`) and each agent-host task has a budget of requests and
+  writes per minute. The defaults are 600/60 for tokens and 600/120 for tasks.
+- Writes are:
+  - pushes;
+  - `/native/source/commit` and `/native/source/branch`;
+  - the MCP write tools.
+- Over budget, the refusal names the budget and when to retry:
+  - Git push: Git's own report, `budget: …`;
+  - Git fetch: 429 `text/plain`;
+  - MCP: a tool error (HTTP 200, `isError`);
+  - Source API and the task JSON routes: 429
+    `{code: resource_exhausted, message, retryAfter}`.
+  - Every refusal carries `Retry-After`.
+- People (Access sessions, `golf_native_` and `golf_git_` credentials) are never
+  counted.
+
+**How**
+- `cloudflare/forge/src/agent-budgets.mjs` keeps a fixed one-minute window per key in
+  the Workspace Durable Object's memory. No new binding and no D1 write per request.
+- Memory is bounded: idle keys go after 2 minutes, with at most 10,000 keys (least
+  recently used dropped first).
+- It is a throttle, not a quota: a Workspace restart starts every window again.
+- Deviation from the plan: the plan named the Workers Rate Limiting binding. Bindings
+  belong to the deploy scripts, so counting happens in the Workspace instead.
+- Charging happens at the routing layer: `core.mjs` for `/git/`, `/native/source/*`
+  and `/mcp` (the tool name is read from the JSON-RPC body), and
+  `agent-host-protocol.mjs` for task routes, once the token is known. `mcp.mjs` and
+  `source-api.mjs` are unchanged.
+
+**Policy**
+- The installation setting `agent-budgets` has `enabled` and four limits, each 1 to
+  100,000.
+- It is edited in Admin → Installation with the existing versioning, widening
+  confirmation and audit.
+- The Workspace reads it at most once a minute, and an admin save applies to the next
+  request.
+- Settings → API tokens shows each token's current window against the budget.
+
+**Checks run**
+- `node --test cloudflare/forge/*.test.mjs`: 647 tests, 646 pass, 1 skipped. Before
+  the change: 638 tests, 637 pass, 1 skipped. The 9 new tests are in
+  `agent-budgets.test.mjs`.
+- `npx tsc --noEmit -p web`: clean.
+- Playwright `agent-budgets.spec.ts`, `api-tokens.spec.ts` and
+  `native-installation-settings.spec.ts` with a mocked backend: 15 passed, 5 skipped
+  (review screenshots).
+
+**Not verified:** a hosted run, and re-running the bench with budgets on.
+
 ## 2026-10-15 — AM-5 agentic inbox and intent summaries walked through on the hosted demo
 
 **Inbox:** `https://demo.gitgolf.mjtechguy.com/mj/agent-bench-3/agents`, with agentic mode on, shows:

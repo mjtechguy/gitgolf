@@ -29,7 +29,7 @@ export function InstallationCard({ item, children }: { item: InstallationItem; c
   return <section className="browser-panel settings-card" aria-labelledby={`installation-${item.id}`}>
     <div className="browser-panel-heading"><h3 id={`installation-${item.id}`}>{item.label}</h3><span className={`visibility ${tone}`}>{label}</span></div>
     <div className="settings-card-body"><p className="settings-card-service">{item.service}</p><InstallationValues values={item.values} />{children}</div>
-    <p className="panel-footnote">{item.reason} Changed at deploy: <code>{item.change.settingsKey}</code> in <code>forge.json</code>{item.change.alchemy ? <>, or the Alchemy script’s <code>{item.change.alchemy}</code></> : null}.</p>
+    <p className="panel-footnote">{item.reason}{item.change.settingsKey ? <> Changed at deploy: <code>{item.change.settingsKey}</code> in <code>forge.json</code>{item.change.alchemy ? <>, or the Alchemy script’s <code>{item.change.alchemy}</code></> : null}.</> : null}</p>
   </section>;
 }
 
@@ -58,7 +58,7 @@ export function NativeInstallationAdmin({ userId, signingOut }: { userId: string
     </section>)}
     {data.recent ? <RecentChanges entries={data.recent} /> : null}
     <details className="settings-diagnostics"><summary>If an administrator’s Access session is stolen</summary><div className="credential-form-content">
-      <p>Within this installation’s deploy allocation, someone holding an operations administrator’s Access session could add a webhook origin (sending data there still needs a repository administrator to subscribe to it), turn AI advice or agent proposals on (private source then reaches Workers AI, up to the AI Gateway caps), raise email, webhook and preview limits, turn anonymous rate limiting off, and turn email, advice and agents off.</p>
+      <p>Within this installation’s deploy allocation, someone holding an operations administrator’s Access session could add a webhook origin (sending data there still needs a repository administrator to subscribe to it), turn AI advice or agent proposals on (private source then reaches Workers AI, up to the AI Gateway caps), raise email, webhook and preview limits, turn anonymous rate limiting off, raise agent rate budgets or stop enforcing them, and turn email, advice and agents off.</p>
       <p>They cannot go beyond what the deploy allocated, read secret values, or edit or remove audit entries. Widening needs the typed setting name and an Access sign-in from the last 10 minutes, every change is in the audit log with where it came from, and the operator can return all of this to deploy only with <code>policy_editing: false</code>. Administrators are not emailed about changes yet.</p></div></details>
     <InstallationCapabilities />
   </>;

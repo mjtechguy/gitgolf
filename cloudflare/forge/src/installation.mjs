@@ -12,6 +12,7 @@ import { appPolicy } from './app-policy.mjs';
 import { executionValueState } from './execution-values.mjs';
 import { previewSlots } from './environments.mjs';
 import { defaultAppearance } from './public.mjs';
+import { agentBudgetsPolicy, budgetOverlayValue } from './agent-budgets.mjs';
 
 // Newest first: the first table present names the applied schema.
 const schemaTables = [[43, 'pull_intent_summaries'], [42, 'land_operations'], [41, 'repository_agentic_settings'], [40, 'git_ref_unknown'], [39, 'api_tokens'], [38, 'source_commits'], [37, 'git_ref_writes'], [36, 'agent_tasks'], [35, 'pipeline_intake'], [34, 'search_state'], [33, 'repository_ai_models'], [32, 'ai_runs'], [31, 'policy_revisions'], [30, 'installation_audit'], [29, 'discussion_attachment_operations'], [28, 'repository_release_operations'], [27, 'email_deliveries'], [26, 'execution_value_brokers'],
@@ -61,6 +62,11 @@ export function installationGroups(env, today) {
       item('rate-limit', 'Anonymous rate limit', 'Workers rate limiting', state(limit, env.ANONYMOUS_READ_LIMIT && env.PUBLIC_REPOSITORIES === 'true'),
         [limit && { label: 'Limit', value: `About ${limit.limit} requests per ${limit.period} seconds per client network and location` }, !limit && { label: 'Limit', value: env.ANONYMOUS_READ_LIMIT ? (env.PUBLIC_REPOSITORIES === 'true' ? 'Installed value is not valid' : 'Installed, but public repositories are off') : 'Not installed' }],
         'anonymous_rate_limit', 'enable-rate-limit', 'Counts are approximate and per Cloudflare location; signed-in, credentialed and runner requests are never counted.'),
+      ((value, n = number => number.toLocaleString('en-US')) => item('agent-budgets', 'Agent rate budgets', 'Durable Objects', 'configured',
+        [{ label: 'Budgets', value: value.enabled ? 'On' : 'Off (counted, never refused)' },
+          { label: 'Each API token', value: `${n(value.tokenRequestsPerMinute)} requests and ${n(value.tokenWritesPerMinute)} writes a minute` },
+          { label: 'Each agent task', value: `${n(value.taskRequestsPerMinute)} requests and ${n(value.taskWritesPerMinute)} writes a minute` }], '', '',
+        'A throttle kept in the workspace’s memory, not a quota: counts restart when the workspace restarts. People signed in through Access are never counted.'))(budgetOverlayValue(env)),
     ] },
     { id: 'automation', label: 'Automation', items: [
       item('evidence', 'Pull-request evidence', 'Queues, Workflows and R2', state(evidence, env.EVIDENCE_QUEUE_NAME || env.EVIDENCE_WORKFLOW_NAME),
@@ -161,6 +167,7 @@ export const installationPolicies = {
     effect: { queued: 'Previews already published keep their expiry.', inFlight: 'A publication already admitted completes with the lifetime it was admitted with.', new: 'New publications and renewals use the new lifetime; a new preview is refused while the installation holds that many.' } },
   'rate-limit': toggle('Anonymous rate limit', env => rateLimitPolicy(env), { ANONYMOUS_LIMIT_OFF: 'true' },
     { queued: 'Nothing is queued by the limit.', inFlight: 'Requests already admitted are unaffected.', new: 'The next anonymous request is limited, or not.' }, true),
+  'agent-budgets': agentBudgetsPolicy,
   evidence: { label: 'Daily evidence admissions', deploy: env => evidencePolicy(env) ? { dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) } : null,
     bounds: (env, deploy) => ({ dailyLimit: [1, deploy.dailyLimit] }),
     validate(env, value, deploy) { if (!shape(value, ['dailyLimit']) || !int(value.dailyLimit, 1, deploy.dailyLimit)) invalid(`Daily admissions must be a whole number from 1 to the deploy value ${deploy.dailyLimit}.`); return { dailyLimit: value.dailyLimit }; },

@@ -3,6 +3,7 @@
 // current grant: authorizedRepository caps the role and the push reservation re-checks the token row in the same statement.
 import { digest, Fault, invalid } from './common.mjs';
 import { ownerColumns, ownerJoin, ownerSlug } from './owners.mjs';
+import { budgetPolicy } from './agent-budgets.mjs';
 
 export const tokenPrefix = 'golf_pat_';
 const secretPattern = /^golf_pat_[A-Za-z0-9_-]{43}$/;
@@ -129,7 +130,11 @@ export async function apiTokensAPI(db, env, person, request, body) {
     const { results } = await db.prepare('SELECT * FROM api_tokens WHERE user_id=? ORDER BY id DESC LIMIT 200').bind(person.id).all();
     const names = await repositoryNames(db, env, [...new Set(results.flatMap(t => t.repositories === null ? [] : JSON.parse(t.repositories)))]);
     const tokens = results.map(t => wire(t, person, names, now));
-    return { tokens, active: tokens.filter(t => t.state === 'active').length, limit: 50, mcpUrl: env.PUBLIC_ORIGIN + '/mcp', origin: env.PUBLIC_ORIGIN };
+    // Rate budgets (agent-budgets.mjs): this workspace's current one-minute window for each token, or null where nothing counts.
+    const policy = await budgetPolicy(env, db);
+    if (policy) for (const token of tokens) token.usage = env.agentBudgets.usage('token', token.id);
+    return { tokens, active: tokens.filter(t => t.state === 'active').length, limit: 50, mcpUrl: env.PUBLIC_ORIGIN + '/mcp', origin: env.PUBLIC_ORIGIN,
+      budget: policy && { enabled: policy.enabled, requestsPerMinute: policy.tokenRequestsPerMinute, writesPerMinute: policy.tokenWritesPerMinute } };
   }
   if (body.action === 'create') {
     if (!fields(body, ['action', 'label', 'repositories', 'permission', 'branchPattern', 'lifetimeHours'])) invalid('Unknown field.');
