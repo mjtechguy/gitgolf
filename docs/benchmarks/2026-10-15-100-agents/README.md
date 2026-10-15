@@ -211,6 +211,38 @@ From a read-only audit of what the mix sends as `exclusive` (2026-10-15):
 
 Landing (`/native/land`, `landSoon`) already runs outside the exclusive class and relies on D1 fences, which shows the pattern works.
 
+## Run `overlap`: D1-ordered writes as transfers (aborted, rolled back)
+
+Branch `admission-overlap` (not merged) classed these writes as transfers:
+- agent-host heartbeat, claim, start, log and finish;
+- reported checks;
+- new issues, comments, pull requests and reviews, plus MCP `open_pull_request` and `comment`.
+
+It also moved several mis-classed reads to `read`, retried id collisions and moved discussions, and made the
+one-open-pull-request check atomic. 722 forge tests passed, including a new one: five concurrent creates fail 4 of 5 with 503
+without the retry, and all succeed with it. A single pull request landed 5.8 s after opening on hosted.
+
+**Under the same ~110-agent mix:**
+- Eight minutes in, the whole demo stopped answering. Source API commits reset or timed out at 60–90 s, a `files` read timed out at
+  30 s, and the home page timed out at 20 s.
+- The bench was stopped at 17:50 UTC. The demo answered again at 17:52 (home 200 in 9.6 s).
+- The Worker was rolled back to `main` at 17:53 (home 200 in 0.26 s).
+
+**What it shows:**
+- With the old classes, exclusive requests were the backpressure. The repository was slow, but alive.
+- Letting the D1-ordered writes overlap removed that backpressure, and the one Workspace Durable Object (single-threaded, one per
+  installation, 128 MB) saturated for every request, not just this repository's.
+- The admission classes are therefore not the real limit. The object's capacity is.
+- No result JSON was written, because the processes were killed.
+
+**Direction:** scale out by sharding.
+1. One Durable Object per repository, so repositories stop competing (the deferred `RepositoryWrites` split).
+2. Move the heavy work (serving clones, building packs, tree merges, building Source API commits) out of the Durable Object into
+   the stateless Worker, which scales horizontally. The Durable Object keeps only short ordering steps; the D1 fences stay
+   authoritative.
+
+Before building: measure the CPU time per request type inside the Workspace.
+
 ## Chart plan (for the blog post)
 
 All numbers come from `summary.csv`. If images are generated with an image model (Codex, gpt-image-2), give it the exact
