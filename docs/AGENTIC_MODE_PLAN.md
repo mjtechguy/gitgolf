@@ -349,7 +349,7 @@ writer in a new `git-objects.mjs`.
 
 ### AM-5 Agentic inbox and intent summaries
 
-**Status (2026-10-14): first slice merged; hosted walkthrough pending.** #101 (inbox, AI intent summaries, schema 43). Not yet: revert action in the inbox, batch approval, hiding agent branches, all-layout browser coverage.
+**Status (2026-10-15): first slice done, hosted walkthrough recorded.** #101 (inbox, AI intent summaries, schema 43); on hosted the inbox sorted a sensitive PR into Needs a person and listed 16 landings with the policy revert, and an AI intent summary was generated and shown marked AI-written. Not yet: revert action in the inbox, batch approval, hiding agent branches, all-layout browser coverage.
 
 1. Repository page `/:owner/:repo/agents` becomes the inbox. It is linked from the
    repository navigation when agentic mode is on. Sections, each in the shared
