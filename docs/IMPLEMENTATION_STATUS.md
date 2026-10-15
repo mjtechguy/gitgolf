@@ -1,5 +1,51 @@
 # Golf implementation status
 
+## 2026-10-15 — Scale-out S1–S3 on the hosted demo: Git, Source API and MCP reads outside the Workspace queue
+
+[`SCALE_OUT_PLAN.md`](SCALE_OUT_PLAN.md) phases S1, S2 and the MCP part of S3 are built, deployed on the hosted demo and measured
+at about 30, 60 and 110 agents in one repository. Data and method: [benchmarks/2026-10-15-scale-out](benchmarks/2026-10-15-scale-out/README.md).
+
+**Built:**
+- **S1:** the edge Worker serves `info/refs` and `git-upload-pack` itself. The grant is read again after the provider answers.
+- **S2:** pushes and their advertisement, `/native/source/commit` and `/native/source/branch` run in the Worker.
+  - Their order is the D1 ref reservation and its authority guard.
+  - One `writeSettled` RPC runs the queue's after-write work: drains, live activity and the CI pass.
+- **S3 (MCP):** read tools, `initialize`, `tools/list`, `commit_changes` and `create_branch` run in the Worker. Each repository
+  read is confirmed against D1 afterwards (`confirmReadFromD1`).
+- **Budgets:** API token and task budgets stay in the Workspace's memory and are charged by a `chargeBudget` RPC, which is not an
+  admission.
+- **Revocation semantics:** for these routes, revocation is now committed, not queued. A revocation committed before the response
+  refuses it; one still waiting in the Workspace queue no longer does.
+
+**Measured at about 110 agents** (`s2e`, against this morning's `fixed3`):
+
+| Operation | `fixed3` | `s2e` |
+| --- | --- | --- |
+| Clones | 6 of 68, p50 154 s | 182 of 182, p50 3.1 s |
+| Pushes | 249 of 279, p50 101 s | 471 of 478, p50 2.4 s |
+| Agent commits | 167 of 203, p50 47.6 s | 163 of 163, p50 1.6 s |
+| Pull requests landed | 77 of 105, p50 64 s | 111 of 149, p50 6.6 s |
+| Workspace admission wait | 14–47 s | p50 0 ms, p95 1.8 s |
+
+**Fixed along the way (each found by the runs):**
+- **Automatic CI:** every write asked for an exclusive CI pass in the queue. Passes are now coalesced.
+- **Merge bases:**
+  - `comparison()` read up to 500 commits of each tip's ancestry when the base had moved by a merge. Past that size, pull requests
+    with passing checks silently never landed.
+  - It is now Git's date-ordered merge-base walk.
+  - Verified on hosted: #530 landed at the first sweep after the deploy, after 18 minutes stuck.
+- **Busy merges:** a merge Artifacts refused as busy (`ERR artifacts_git_receive_pack_busy`) fenced the whole repository for two to
+  seven minutes. It is now settled as refused at once, and the land retries it.
+- **Logging:** `golf.land_soon_skipped` and `golf.request_unconfirmed`.
+
+**Checks:** `node --test cloudflare/forge/*.test.mjs`: 731 tests, 730 pass, 1 skipped, 0 fail. No `web/` changes.
+
+**Open:**
+- **Distance to D1:** each D1 call from the Worker costs about 100 ms against about 20 ms from the object next to the primary.
+  Smart Placement for the Worker needs the deploy tooling.
+- **Rest of S3:** the Source API reads, and `RepositoryReads`' confirmation.
+- **S4–S6:** per-repository coordination, runner capacity with approval, estimated costs.
+
 ## 2026-10-15 — Overlapping writes overloaded the single Workspace; a merge that was not applied is now settled
 
 **Overlap experiment (branch `admission-overlap`, not merged):**
