@@ -1016,6 +1016,9 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if (/^\/rpc\/golf\.v1\.RepositoryExecutionValueService\/(Save|Delete)/.test(new URL(request.url).pathname)) response.headers.set('Golf-Execution-Effect', 'none');
       return response;
     }
+    // Not a refusal: record what failed (message only, bounded) so the operator can tell a provider or database fault from a bug.
+    console.log(JSON.stringify({ event: 'golf.request_unconfirmed', path: new URL(request.url).pathname.slice(0, 200), error: String(error?.name || 'Error').slice(0, 60),
+      message: String(error?.message || error).slice(0, 200) }));
     return reply({ code: 'unavailable', message: 'Native repository operation could not be confirmed.' }, 503);
   }
 }

@@ -311,7 +311,12 @@ export async function autoLand(env, repositoryId, { commitId, limit = landLimits
     try { value = await landingEvaluation(db, env, { ...row, write_pending: null }, pull.number, artifact, settings, feature); }
     catch (error) { if (error instanceof Fault) continue; throw error; }
     const conflicted = onlyConflict(value) && value.ifMergeable.decision === 'land';
-    if (value.evaluation.decision !== 'land' && !conflicted || value.headCommitId !== head) continue;
+    if (value.evaluation.decision !== 'land' && !conflicted || value.headCommitId !== head) {
+      // A targeted pass (landSoon: a check reported, a pull request opened) says why this head did not land; the sweep stays quiet.
+      if (commitId) console.log(JSON.stringify({ event: 'golf.land_soon_skipped', repositoryId: String(row.id), number: pull.number, decision: value.evaluation.decision,
+        reasons: (value.evaluation.reasons || []).slice(0, 5).map(reason => String(reason).slice(0, 160)), headMoved: value.headCommitId !== head }));
+      continue;
+    }
     const op = await create(db, row, value.d, { trigger: 'policy', actorId: 0, method: 'merge', headCommitId: head,
       detail: { decision: 'land', reasons: (conflicted ? value.ifMergeable : value.evaluation).reasons, principal: principal.login } });
     if (!op) continue;
