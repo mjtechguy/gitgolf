@@ -364,6 +364,18 @@ test('ambiguous Git effects are resent only as the same compare-and-swap, a boun
   assert.equal(f.tokens.size, 0);
 });
 
+test('a write that finishes between a push\'s reservation and its blocker check is a race: the push tries again and lands', async t => {
+  const f = await fixture(t); await f.create();
+  f.env.pushWaitMs = 5000;
+  // A merge holds the repository when the push reserves, and has finished by the time the push asks what blocks it.
+  f.sql.exec("UPDATE repositories SET write_pending='merge-op'");
+  const prepare = f.env.DB.prepare.bind(f.env.DB);
+  f.env.DB.prepare = sql => { if (sql.startsWith('SELECT write_pending,EXISTS')) f.sql.exec('UPDATE repositories SET write_pending=NULL'); return prepare(sql); };
+  const pushed = await handle(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + ownerToken, 'Content-Type': 'application/x-git-receive-pack-request' }, body: push('refs/heads/raced', zero, commit) }), f.env, f.providerFetch);
+  assert.equal(pushed.status, 200); assert.doesNotMatch(await pushed.text(), /remote rejected|\bng\b/);
+});
+
 test('a push waits out a merge holding the repository and then lands; a longer hold is refused in Git\'s report', async t => {
   const f = await fixture(t); await f.create();
   const send = (ref, old = zero, next = commit) => handle(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/git-receive-pack', {
