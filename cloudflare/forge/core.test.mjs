@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
-import { digest, handle, serialize, concurrentRead, advanceEvidence, testGit, agentGit, servePreview, cleanupPreviews, runCI, withArtifact } from './src/core.mjs';
+import { digest, handle, serialize, concurrentRead, advanceEvidence, testGit, agentGit, servePreview, cleanupPreviews, runCI, withArtifact, confirmReadFromD1 } from './src/core.mjs';
 import { settleRefWrites } from './src/ref-writes.mjs';
 import { allocateApps } from './app-fixture.mjs';
 import { previewBundle } from './src/delivery.mjs';
@@ -304,6 +304,29 @@ test('a clone outside the workspace queue is refused when its grant is revoked w
   assert.equal(response.status, 404); assert.ok(!(await response.text()).includes('git-upload-pack'));
   f.sql.prepare("INSERT INTO grants VALUES(1,1,'admin')").run();
   assert.equal((await handle(new Request(f.env.PUBLIC_ORIGIN + '/git/alice/project.git/info/refs?service=git-upload-pack', { headers: { Authorization: 'Bearer ' + ownerToken } }), f.env, f.providerFetch)).status, 200);
+});
+
+test('reads confirmed from D1 (RepositoryReads, the stateless Worker): the credential, grant and role read again after the read', async t => {
+  const f = await fixture(t); await f.create(); await f.sendPush();
+  f.sql.exec("UPDATE users SET email=login || '@example.invalid'");
+  const request = headers => new Request(f.env.PUBLIC_ORIGIN + '/rpc/golf.v1.RepositoryService/GetContents', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    body: JSON.stringify({ repository: { owner: 'alice', name: 'project' }, repositoryId: '1', ref: commit, path: 'hello.txt' }) });
+  const read = async (headers, during) => {
+    const req = request(headers);
+    return handle(req, { ...f.env, confirmRead: async (authority, clock) => { during?.(); return confirmReadFromD1(req, f.env)(authority, clock); } }, f.providerFetch);
+  };
+  // A native credential and an Access identity (the browser) both pass while nothing changed.
+  for (const headers of [{ Authorization: 'Bearer ' + ownerToken }, { 'X-Golf-Native-Access-Email': 'alice@example.invalid' }]) assert.equal((await read(headers)).status, 200);
+  // A lowered role, a deleted grant or a revoked credential between the read and the response refuses it.
+  const lowered = await read({ Authorization: 'Bearer ' + ownerToken }, () => f.sql.prepare("UPDATE grants SET role='read' WHERE user_id=1").run());
+  assert.equal(lowered.status, 404); f.sql.prepare("UPDATE grants SET role='admin' WHERE user_id=1").run();
+  assert.equal((await read({ 'X-Golf-Native-Access-Email': 'alice@example.invalid' }, () => f.sql.prepare('DELETE FROM grants WHERE user_id=1').run())).status, 404);
+  f.sql.prepare("INSERT INTO grants VALUES(1,1,'admin')").run();
+  assert.equal((await read({ Authorization: 'Bearer ' + ownerToken }, () => f.sql.prepare('UPDATE credentials SET revoked=1 WHERE user_id=1').run())).status, 401);
+  // An anonymous read of a public repository is confirmed as public; a repository made private meanwhile refuses it.
+  f.env.PUBLIC_REPOSITORIES = 'true'; f.sql.exec('INSERT INTO repository_visibility(repository_id,is_public,version) VALUES(1,1,1)');
+  assert.equal((await read({})).status, 200);
+  assert.equal((await read({}, () => f.sql.prepare('UPDATE repository_visibility SET is_public=0,version=2 WHERE repository_id=1').run())).status, 404);
 });
 
 test('membership never implies repository access; grants and revocation are current', async t => {

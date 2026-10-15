@@ -446,9 +446,10 @@ const pushWaitMs = 20_000;
 // request's credential, its grant and role are read again, so a revocation committed meanwhile refuses the response.
 export function confirmReadFromD1(request, env) {
   return async authority => {
-    const db = env.DB.withSession('first-primary');
-    const person = await actor(db, request, false, env);
-    const row = await authorizedRepository(db, person, authority.repository, { ...env, publicRead: authority.role === 'public' && env.PUBLIC_REPOSITORIES === 'true' }, authority.repositoryId);
+    const db = env.DB.withSession('first-primary'), publicRead = authority.role === 'public' && env.PUBLIC_REPOSITORIES === 'true';
+    // A public read may come from an anonymous visitor; the repository must still be public.
+    const person = await actor(db, request, publicRead, env);
+    const row = await authorizedRepository(db, person, authority.repository, { ...env, publicRead }, authority.repositoryId);
     if (row.role !== authority.role) deny();
   };
 }
@@ -574,6 +575,8 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       // Source API (docs/SOURCE_API.md): grant, token scope, rules and the branch fence are checked inside; public visitors have none.
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (row.role === 'public') deny();
+      // A read is confirmed after it runs where the caller supplies confirmRead (scale-out S3: the stateless Worker, against D1).
+      if (!['commit', 'branch'].includes(source[1])) env.readAuthority = { repository: { owner: ownerSlug(row, env), name: row.name }, repositoryId: String(row.id), role: row.role };
       const result = await sourceAPI(db, env, person, row, source[1], body, { withArtifact, providerFetch, literalPath,
         ciState: env.CI_AUTO === 'true' && evidencePolicy(env) && testPolicy(env) ? 'PENDING' : 'NONE' });
       return result instanceof Response ? result : reply(result);

@@ -6,7 +6,7 @@ import { runMaintenance } from './operations.mjs';
 import { withInstallationPolicy } from './installation.mjs';
 import { publicFetch } from './public.mjs';
 import { DurableObject, WorkflowEntrypoint, WorkerEntrypoint } from 'cloudflare:workers';
-import { handle, serialize, admission, admitMCP, concurrentRead, advanceEvidence, advanceAi, advanceSearch, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI } from './core.mjs';
+import { handle, serialize, admission, admitMCP, concurrentRead, advanceEvidence, advanceAi, advanceSearch, testGit, testRegistry, registryExecution, agentGit, servePreview, cleanupPreviews, runCI, confirmReadFromD1 } from './core.mjs';
 import { consumeEvidence, consumeEvidenceDeadLetters, reconcileEvidence } from './evidence.mjs';
 import { Fault, deny } from './common.mjs';
 import { reconcileIndexes } from './repository-indexes.mjs';
@@ -204,21 +204,10 @@ export class RepositoryReads extends DurableObject {
     const owner = ctx.exports.Workspace.get(ctx.exports.Workspace.idFromName(env.WORKSPACE_SLUG));
     // Indexing mutates only its own journal; it must not queue foreground reads.
     this.index = serialize(() => advanceMetadataJobs(ctx, { ...env, notifyMetadata: id => owner.activityChanged(String(id), ['issues']), waitUntil: promise => ctx.waitUntil(promise) }));
+    // Each read's grant is read again afterwards from D1 (scale-out S3), with no hop into the Workspace queue.
     this.dispatch = serialize(async request => {
-      return handle(request, { ...env, metadataIndex: (row, person, repo, commitId) => metadataJob(ctx, env, row, person, repo, commitId), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: cache, confirmRead: async (authority, clock) => {
-        const headers = new Headers(request.headers); headers.set('Content-Type', 'application/json'); headers.set('Connect-Protocol-Version', '1');
-        const receipt = await owner.fetch(new Request(env.PUBLIC_ORIGIN + '/rpc/golf.v1.RepositoryAccessService/GetRepositoryAccess', {
-          method: 'POST', headers, body: JSON.stringify({ repository: authority.repository }) }));
-        for (const part of (receipt.headers.get('Server-Timing') || '').split(',')) {
-          const stage = /^\s*(queue|d1|actor|grant);dur=([\d.]+)(?:;desc="\d+ calls")?\s*$/.exec(part);
-          if (stage) clock.record('authority_' + stage[1], Number(stage[2]));
-        }
-        if (receipt.status === 401) throw new Fault('unauthenticated', 401, 'Sign-in required.');
-        if (receipt.status === 404 || receipt.status === 403) deny();
-        if (!receipt.ok) throw Error('Read authority unavailable');
-        const current = (await receipt.json()).access;
-        if (current?.repositoryId !== authority.repositoryId || current.currentPermission !== authority.role) deny();
-      } });
+      return handle(request, { ...env, metadataIndex: (row, person, repo, commitId) => metadataJob(ctx, env, row, person, repo, commitId), waitUntil: promise => ctx.waitUntil(promise), gitObjectCache: cache,
+        confirmRead: confirmReadFromD1(request, env) });
     }, event => event instanceof Request);
   }
   fetch(request) {

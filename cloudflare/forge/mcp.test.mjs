@@ -247,3 +247,21 @@ test('the stateless Worker serves read and Source API tools, confirms reads agai
     assert.equal(revoked.result.isError, true); assert.ok(!text(revoked.result).includes('Feature work'));
   } finally { globalThis.fetch = original; }
 });
+
+test('Source API reads run in the stateless Worker and are confirmed against D1 after they read', async t => {
+  const f = await accessFixture(t);
+  f.env.agentBudgets = new AgentBudgets();
+  const { secret } = await f.create({ repositories: ['1'] });
+  const forwarded = [];
+  const ctx = { waitUntil() {}, exports: { Workspace: { idFromName: key => key, get: () => ({
+    fetch: async request => { forwarded.push(new URL(request.url).pathname); return new Response(null, { status: 204 }); },
+    chargeBudget: (...args) => chargeBudget(f.env, f.env.DB, ...args) }) } } };
+  const tree = () => publicFetch(new Request(origin + '/native/source/tree', { method: 'POST', headers: { Authorization: bearer(secret), 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    body: JSON.stringify({ repository, repositoryId: '1', commitId: feature }) }), { ...f.env, WORKSPACE_SLUG: 'alice' }, ctx);
+  const read = await tree();
+  assert.equal(read.status, 200); assert.ok((await read.json()).entries.length > 0); assert.deepEqual(forwarded, []);
+  const original = globalThis.fetch;
+  globalThis.fetch = (input, init) => { f.sql.prepare('DELETE FROM grants WHERE repository_id=1 AND user_id=1').run(); return original(input, init); };
+  try { const revoked = await tree(); assert.equal(revoked.status, 404); assert.ok(!JSON.stringify(await revoked.json()).includes('hello')); }
+  finally { globalThis.fetch = original; }
+});

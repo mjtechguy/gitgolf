@@ -14,7 +14,7 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
     export const advanceAi=()=>{};
     export const advanceSearch=()=>{};
     export const activityAuthority=(request,env,input)=>env.handle(request);
-    export const testGit=()=>{},testRegistry=()=>{},registryExecution=()=>{},agentGit=()=>{},servePreview=()=>{},cleanupPreviews=()=>{},runCI=env=>env.ci?.();`;
+    export const testGit=()=>{},testRegistry=()=>{},registryExecution=()=>{},agentGit=()=>{},servePreview=()=>{},cleanupPreviews=()=>{},runCI=env=>env.ci?.(),confirmReadFromD1=()=>async()=>{};`;
   return source ? { url: 'data:text/javascript,' + encodeURIComponent(source), shortCircuit: true } : next(specifier, context);
 } });
 const { Workspace } = await import('./src/worker.mjs');
