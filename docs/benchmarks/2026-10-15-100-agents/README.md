@@ -77,9 +77,34 @@ maintenance sweep.
   - A Source API commit treats the repository reservation like a busy branch, within its existing 30 s budget.
   - A Git push waits up to 20 s for its branch or the repository before Git's refusal report.
 
-## After the fixes
+## After the fixes (run `fixed`, the same mix)
 
-Run `fixed`, the same mix: results are added below when the run completes.
+| Scenario / operation | Failed: baseline → fixed | p50: baseline → fixed | p95: baseline → fixed |
+| --- | --- | --- | --- |
+| S2 Git push, a branch each | 6.9 % → **0.8 %** | 29.8 s → 69.2 s | 69.7 s → 98.2 s |
+| S6 commit, a branch each | 13.9 % → **7.4 %** (now waits, then 60 s client timeouts) | 13.8 s → 23.4 s | 36.6 s → 58.1 s |
+| S6 commit, shared branch | 27.2 % → **1.4 %** | 24.6 s → 40.9 s | 40.4 s → 56.8 s |
+| S4 shallow clone | 0 % → 25 % (60 s client timeouts) | 42.7 s → 83.7 s | 99.0 s → 145.2 s |
+| S4 background pushes | 13 of 175 refused → 1 of 148 | 29.1 s → 62.5 s | 63.7 s → 100.0 s |
+| S7 landed within 15 min | 14 of 69 → 17 of 68 (see the caveat below) | — | — |
+
+**Deployment throughput was flat:**
+- **Successful writes** (pushes, Source API commits, opened pull requests): 0.75/s on the baseline, 0.70/s after the fixes.
+- **Successful reads** (clone, ls-remote, fetch): 0.18/s, then 0.11/s.
+- **What the fixes did:** they turned refusals into waiting, and the waiting shows up as latency. They did not add capacity.
+
+**What this says:**
+- A hundred agents writing about once a minute need about 1.7 writes/s plus reads. One repository moves about 0.7.
+- The earlier 2.4 writes/s was a different load: closed-loop Source API commits only, no Git transfers, pull requests or landings.
+- The limit is the repository's one Workspace Durable Object.
+  - Commits and Git transfers are already the overlapping `transfer` class (up to 24 at once), and MCP reads are `read`.
+  - So the likely ceiling is the object's single thread doing all the CPU work: packs, tree merges, upload-pack.
+  - The next run records each request's Server-Timing (`queue` = waiting for admission, `worker` = the request) to confirm that.
+
+**Caveat on S7 in run `fixed`:**
+- The browser CI stand-in's tab reloaded and the loop stopped, until about 15:13 UTC. Pull requests opened in the meantime had no check, so they could not land.
+- When restarted, the loop reported one check about every 30 s (each report is a write in the same queue). Pull requests had waited 6–20 minutes for their check.
+- Run `fixed2` repeats the mix with the CI stand-in inside the bench: each S7 agent reports `bench/ci` right after opening its pull request, using a short-lived administrator credential.
 
 ## Chart plan (for the blog post)
 

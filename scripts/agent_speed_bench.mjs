@@ -29,6 +29,8 @@ const USAGE =`Usage: node scripts/agent_speed_bench.mjs [--scenarios S1,S2,S3,S4
   like an agent that thinks between writes; 0 (default) is a closed loop.
 Environment: GOLF_BENCH_ORIGIN, GOLF_BENCH_REPOS=owner/name,...
   GOLF_BENCH_GIT_TOKEN | GOLF_BENCH_GIT_TOKENS=owner/name=token,... | GOLF_BENCH_API_TOKEN
+  optional GOLF_BENCH_CI_TOKEN (an administrator's credential: S7 reports GOLF_BENCH_CI_CONTEXT, default bench/ci, as passed on each
+  pull request head right after opening it, standing in for CI)
   optional GOLF_BENCH_ACCESS_ID + GOLF_BENCH_ACCESS_SECRET (Cloudflare Access service token)`;
 
 // ---------- arguments and environment ----------
@@ -74,9 +76,9 @@ export function readEnv(env = process.env) {
   const id = env.GOLF_BENCH_ACCESS_ID || '', secret = env.GOLF_BENCH_ACCESS_SECRET || '';
   if (Boolean(id) !== Boolean(secret)) problems.push('Set both GOLF_BENCH_ACCESS_ID and GOLF_BENCH_ACCESS_SECRET, or neither');
   const cfg = { origin, host, repos, gitTokens, gitToken: env.GOLF_BENCH_GIT_TOKEN || '', apiToken: env.GOLF_BENCH_API_TOKEN || '',
-    access: id && secret ? { id, secret } : null, problems };
+    ciToken: env.GOLF_BENCH_CI_TOKEN || '', ciContext: env.GOLF_BENCH_CI_CONTEXT || 'bench/ci', access: id && secret ? { id, secret } : null, problems };
   for (const r of repos) if (!gitAuth(cfg, r)) problems.push(`No Git credential for ${r} (GOLF_BENCH_GIT_TOKEN, GOLF_BENCH_GIT_TOKENS or GOLF_BENCH_API_TOKEN)`);
-  cfg.secrets = [id, secret, cfg.gitToken, cfg.apiToken, ...gitTokens.values()].filter(s => s && s.length >= 4);
+  cfg.secrets = [id, secret, cfg.gitToken, cfg.apiToken, cfg.ciToken, ...gitTokens.values()].filter(s => s && s.length >= 4);
   for (const s of [...cfg.secrets]) cfg.secrets.push(Buffer.from('golf:' + s).toString('base64'));
   return cfg;
 }
@@ -151,7 +153,16 @@ export function stats(values) {
 const emptyOutcomes = () => ({ ok: 0, contention_409: 0, nonff_rejected: 0, 413: 0, 429: 0, 503: 0, other: {} });
 
 class Recorder {
-  constructor(cfg) { Object.assign(this, { cfg, ops: new Map(), local: [], samples: new Set(), release: new Set(), workerRelease: new Set() }); }
+  constructor(cfg) { Object.assign(this, { cfg, ops: new Map(), local: [], samples: new Set(), release: new Set(), workerRelease: new Set(), timing: new Map() }); }
+  // Server-Timing of an HTTP operation: queue (waiting for admission in the repository's Workspace) and worker (the whole request).
+  timed(op, h) {
+    const st = h.get('server-timing') || '', dur = name => { const m = new RegExp(`(?:^|,)\\s*${name};dur=([\\d.]+)`).exec(st); return m ? Number(m[1]) : null; };
+    const queue = dur('queue'), worker = dur('worker');
+    if (queue === null && worker === null) return;
+    if (!this.timing.has(op)) this.timing.set(op, { queue: [], worker: [] });
+    if (queue !== null) this.timing.get(op).queue.push(queue);
+    if (worker !== null) this.timing.get(op).worker.push(worker);
+  }
   add(op, ms, outcome, detail) {
     if (!this.ops.has(op)) this.ops.set(op, { lat: [], outcomes: emptyOutcomes() });
     const o = this.ops.get(op);
@@ -291,12 +302,13 @@ const workers = (ctx, n, repoFor, offset = 0) => Promise.all(range(n).map(i => w
 
 // ---------- RPC and Source API ----------
 
-async function post(ctx, url, headers, body, rec, op) {
+async function post(ctx, url, headers, body, rec, op, timingOp = op) {
   const t0 = performance.now();
   try {
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) });
     const text = await res.text(), ms = performance.now() - t0;
     rec?.headers(res.headers);
+    if (rec && timingOp) rec.timed(timingOp, res.headers);
     if (op) rec.add(op, ms, httpOutcome(res.status), `HTTP ${res.status} ${text}`);
     let json = null; try { json = JSON.parse(text); } catch { /* non-JSON body */ }
     return { status: res.status, json };
@@ -325,7 +337,8 @@ async function scenario(ctx, id, n) {
     const seconds = (performance.now() - started) / 1000;
     let background;
     if (bg) { await bg.done; background = bg.rec.summary(['push'], seconds); bg.rec.release.forEach(v => rec.release.add(v)); bg.rec.workerRelease.forEach(v => rec.workerRelease.add(v)); }
-    const ops = Object.fromEntries([...rec.ops.keys()].map(k => [k, rec.summary([k], seconds)]));
+    const ops = Object.fromEntries([...rec.ops.keys()].map(k => [k, { ...rec.summary([k], seconds),
+      ...(rec.timing.has(k) ? { serverTimingMs: { queue: stats(rec.timing.get(k).queue), worker: stats(rec.timing.get(k).worker) } } : {}) }]));
     const main = rec.summary(PRIMARY[id], seconds);
     return { ...result, ...(variant ? { variant } : {}), durationSec: Math.round(seconds * 100) / 100, ...main,
       contention: main.outcomes.contention_409 + main.outcomes.nonff_rejected, ops, localGitMs: stats(rec.local),
@@ -405,9 +418,10 @@ async function scenario(ctx, id, n) {
     const s = await seed(ctx, repo);
     if (!s.base) return skip('skipped', 'empty repository');
     const [owner, name] = repo.split('/'), commitUrl = `${ctx.cfg.origin}/native/source/commit`;
-    const mcp = async (tool, args, op) => {
+    const mcp = async (tool, args) => {
       const r = await post(ctx, `${ctx.cfg.origin}/mcp`, { ...apiHeaders(ctx.cfg), Accept: 'application/json, text/event-stream' },
-        { jsonrpc: '2.0', id: randomBytes(4).toString('hex'), method: 'tools/call', params: { name: tool, arguments: { owner, name, ...args } } }, null);
+        { jsonrpc: '2.0', id: randomBytes(4).toString('hex'), method: 'tools/call', params: { name: tool, arguments: { owner, name, ...args } } }, rec, null,
+        tool === 'open_pull_request' ? 'open_pr' : 'poll_pr');
       const result = r.json?.result, text = result?.content?.[0]?.text || r.json?.error?.message || '';
       let value = null; try { value = JSON.parse(text); } catch { /* a tool error is text */ }
       return { ok: r.status === 200 && result && !result.isError, status: r.status, value, text };
@@ -428,6 +442,13 @@ async function scenario(ctx, id, n) {
         rec.add('open_pr', performance.now() - t0, pr.ok ? 'ok' : pr.status === 200 ? 'other:tool_error' : httpOutcome(pr.status), pr.text);
         if (!pr.ok || !pr.value?.number) continue;
         opened++;
+        // CI stand-in: report the required check on the head commit, as CI would after the pull request opens.
+        const head = c.json?.commitId;
+        if (ctx.cfg.ciToken && head) {
+          const t1 = performance.now(), check = await post(ctx, `${ctx.cfg.origin}/native/repository-check`, { ...accessHeaders(ctx.cfg), Authorization: 'Bearer ' + ctx.cfg.ciToken, 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+            { repository: { owner, name }, commitId: head, context: ctx.cfg.ciContext, state: 'REPORTED_CHECK_STATE_SUCCESS', description: 'bench CI stand-in', idempotencyKey: crypto.randomUUID() }, rec, null, 'ci_report');
+          rec.add('ci_report', performance.now() - t1, httpOutcome(check.status), `HTTP ${check.status}`);
+        }
         const number = pr.value.number, openedAt = performance.now();
         let done = false;
         while (!done && performance.now() - openedAt < landTimeout && !ctx.stopped) {
