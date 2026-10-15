@@ -1,5 +1,26 @@
 # Golf implementation status
 
+## 2026-10-15 — Overlapping writes overloaded the single Workspace; a merge that was not applied is now settled
+
+**Overlap experiment (branch `admission-overlap`, not merged):**
+- Classing the D1-ordered writes (agent-host routes, reported checks, new issues, comments, pull requests and reviews) as
+  overlapping passed 722 forge tests.
+- Under the ~110-agent mix it made the whole demo unresponsive within eight minutes: the one Workspace Durable Object saturated.
+- The bench was stopped and the Worker rolled back to `main`.
+- The admission classes were the backpressure. Raising capacity needs scaling out: Durable Objects per repository, and heavy work
+  (clones, packs, merges, Source API object building) moved to the stateless Worker. See
+  [the benchmark README](benchmarks/2026-10-15-100-agents/README.md).
+
+**Bug it exposed, fixed and verified on hosted:**
+- **Symptom:** a landing's merge was answered with `ERR artifacts_git_receive_pack_busy` and its branch never moved. It stayed
+  `DISPATCH_UNKNOWN` and fenced `mj/agent-bench-3` (`write_pending`) indefinitely. Every branch delete and landing was refused
+  with 412.
+- **Cause:** `pull-merge.mjs` `settle()` only recorded success, and `settleRefWrites` skips merges.
+- **Fix:** two minutes after sending, a merge whose branch does not hold its commit is settled as not applied (`REJECTED`,
+  `NOT_APPLIED`, repository released).
+- **Verified:** after the deploy, the hosted fence cleared at the next maintenance sweep (18:11 UTC), the merge became `REJECTED`
+  and its land `FAILED`.
+
 ## 2026-10-15 — 100 agents in one repository: measured on hosted, two fixes, and the remaining ceiling
 
 Full method, data and charts plan: [benchmarks/2026-10-15-100-agents](benchmarks/2026-10-15-100-agents/README.md).

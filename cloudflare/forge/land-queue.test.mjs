@@ -417,6 +417,28 @@ test('maintenance settles a land interrupted after its merge was sent', { skip }
     .run(crypto.randomUUID(), b.number, b.number, b.head);
   await sweepLanding(f.env, withArtifact);
   assert.equal(f.ops().find(o => o.number === b.number).state, 'FAILED');
+  // A merge sent while the provider was busy, whose branch never moved: once two minutes old, maintenance settles it as not applied,
+  // the land fails and the repository is released (it used to stay fenced for good). A younger one still waits.
+  const c = f.pull('feature-c', { 'src/c.js': 'c\n' }), git = crypto.randomUUID(), merge = crypto.randomUUID(), base = f.head('main');
+  const stuck = old => {
+    f.sql.exec(`DELETE FROM land_operations WHERE number=${c.number}; DELETE FROM pull_merge_operations WHERE pull_request_id=${c.number}; DELETE FROM git_operations WHERE id='${git}'`);
+    f.sql.prepare("INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) VALUES(?,1,2,'refs/heads/main',?,?,'DISPATCHED',?)").run(git, base, 'f'.repeat(40), old);
+    f.sql.prepare(`INSERT INTO pull_merge_operations(actor_id,operation_id,repository_id,pull_request_id,input_hash,original,phase,detail,git_operation_id,merge_commit_id,actual_base_commit_id,created_at,updated_at)
+      VALUES(2,?,1,?,'h',?,'DISPATCH_UNKNOWN','provider_status: ERR artifacts_git_receive_pack_busy',?,'','',?,?)`).run(merge, c.number, JSON.stringify({ number: c.number, headCommitId: c.head, method: 'merge' }), git, old, old);
+    f.sql.prepare("UPDATE repositories SET write_pending=? WHERE id=1").run(git);
+    f.sql.prepare(`INSERT INTO land_operations(id,repository_id,pull_request_id,number,trigger,actor_id,state,method,head_commit_id,detail,created_at,updated_at)
+      VALUES(?,1,?,?,'person',2,'LANDING','merge',?,?,?,'2026-01-01T00:00:00Z')`).run(crypto.randomUUID(), c.number, c.number, c.head, JSON.stringify({ merge: { actorId: '2', operationId: merge } }), old);
+  };
+  stuck(new Date().toISOString());
+  await sweepLanding(f.env, withArtifact);
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories WHERE id=1').get().write_pending, git);
+  stuck('2026-01-01T00:00:00Z');
+  await sweepLanding(f.env, withArtifact);
+  assert.equal(f.sql.prepare('SELECT write_pending FROM repositories WHERE id=1').get().write_pending, null);
+  assert.equal(f.sql.prepare('SELECT phase,detail FROM pull_merge_operations WHERE operation_id=?').get(merge).phase, 'REJECTED');
+  assert.equal(f.sql.prepare('SELECT outcome FROM git_ref_writes WHERE operation_id=?').get(git).outcome, 'NOT_APPLIED');
+  assert.equal(f.ops().find(o => o.number === c.number).state, 'FAILED');
+  assert.equal(f.head('main'), base);
 });
 
 test('landSoon lands the pull request whose head just passed its checks, after the response; only where landing without a person is on', { skip }, async t => {
