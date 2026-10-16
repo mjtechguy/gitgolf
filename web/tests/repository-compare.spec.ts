@@ -11,7 +11,7 @@ const repository=create(v.RepositorySchema,{id:'9007199254740993',name:'design-s
 const fork=create(v.RepositorySchema,{id:'9007199254740994',name:'renamed-source',fullName:'team/renamed-source',defaultBranch:'main',private:true});
 const diff='diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1 @@\n-old\n+const PRIVATE_COMPARE = "<script>window.executed=true</script>";\n';
 async function backend(page:Page) {
- const state={signedIn:true,sourceDenied:false,compareCode:'' as 'not_found'|'failed_precondition'|'',mismatch:false,empty:false,mode:'success',created:[] as CreatePullRequestRequest[],compared:[] as RepositoryComparisonSelection[],lookups:0,branches:[] as string[],wait:undefined as Promise<void>|undefined};
+ const state={signedIn:true,sourceDenied:false,compareCode:'' as 'not_found'|'failed_precondition'|'',mismatch:false,empty:false,mode:'success',created:[] as CreatePullRequestRequest[],compared:[] as RepositoryComparisonSelection[],lookups:0,branches:[] as string[],wait:undefined as Promise<void>|undefined,moreBranches:undefined as Promise<void>|undefined};
  function outcome(value:CreatePullRequestRequest) {
   const pull={id:'9007199254740995',number:24,title:state.mode==='wrong-result'?'Wrong':value.title,body:value.body,state:v.IssueState.OPEN,draft:value.draft,user,revision:'d'.repeat(64),createdAt:'2026-10-03T12:00:00Z',base:{repositoryId:repository.id,ref:value.baseBranch,commitId:value.baseCommitId},head:{repositoryId:value.sourceRepositoryId,ref:value.headBranch,commitId:value.headCommitId}};
   const mutation={idempotencyKey:value.idempotencyKey,repository:value.repository,repositoryId:repository.id,kind:state.mode==='wrong-kind'?v.IssueMutationKind.CREATE_ISSUE:v.IssueMutationKind.CREATE_PULL,state:state.mode==='rejected'?v.IssueMutationState.REJECTED:v.IssueMutationState.SUCCEEDED,pullRequestId:pull.id,number:24,observedResultId:pull.id,observedNumber:24,failureCode:state.mode==='rejected'?'target_changed':''};
@@ -34,7 +34,7 @@ async function backend(page:Page) {
   if(method==='ListBranches'){
    const input=request(route,v.ListBranchesRequestSchema);const key=input.repository!.owner+'/'+input.repository!.name;state.branches.push(key);
    if(key.startsWith('team/')&&state.sourceDenied)return reject(route,'not_found','Source access revoked');
-   const second=input.page?.page===2;return respond(route,v.ListBranchesResponseSchema,{branches:second?[{name:'feature/slash',commitId:head}]:[{name:'main',commitId:base},{name:'feature',commitId:head}],page:second?undefined:{nextPage:2}});
+   const second=input.page?.page===2;if(second&&state.moreBranches)await state.moreBranches;return respond(route,v.ListBranchesResponseSchema,{branches:second?[{name:'feature/slash',commitId:head}]:[{name:'main',commitId:base},{name:'feature',commitId:head}],page:second?undefined:{nextPage:2}});
   }
   if(method==='GetRepositoryComparison'){
    const input=request(route,v.GetRepositoryComparisonRequestSchema);state.compared.push(input.selection!);if(state.wait)await state.wait;
@@ -65,6 +65,13 @@ test('canonical compare renders pinned commit/file views and opens explicit read
 });
 test('renamed fork and paged slash branch selection preserve exact IDs and source commit links',async({page})=>{
  const state=await backend(page);await page.goto('/alex/design-system/compare');await page.getByLabel('Choose source repository').click();await page.getByLabel('Source repository',{exact:true}).fill('team/renamed-source');await page.getByRole('button',{name:'Choose repository',exact:true}).click();await page.getByLabel('Compare branch',{exact:true}).click();await page.getByRole('button',{name:'Load more branches',exact:true}).click();await page.getByLabel('Search loaded compare branches').fill('slash');await page.getByRole('button',{name:/feature\/slash Listed at/}).click();await page.getByRole('button',{name:'Compare',exact:true}).click();await expect(page.getByRole('region',{name:'Changed files'})).toBeVisible();expect(state.compared[0]).toMatchObject({sourceRepository:{owner:'team',name:'renamed-source'},sourceRepositoryId:fork.id,headBranch:'feature/slash'});await page.getByRole('button',{name:'Commits',exact:true}).click();await expect(page.getByRole('link',{name:'Add useful feature',exact:true})).toHaveAttribute('href',/\/team\/renamed-source\/commit\/bbbb/);expect(state.branches).toContain('team/renamed-source');
+});
+test('loading more branches keeps the picker open while the clicked button waits disabled',async({page})=>{
+ // The clicked button becomes a disabled "Loading…" and Chrome drops its focus to nowhere; the picker must not read that as leaving.
+ const state=await backend(page);let release=()=>{};state.moreBranches=new Promise<void>(resolve=>{release=resolve;});await page.goto('/alex/design-system/compare');await page.getByLabel('Compare branch',{exact:true}).click();
+ await page.getByRole('button',{name:'Load more branches',exact:true}).click();await expect(page.getByRole('button',{name:'Loading…',exact:true})).toBeDisabled();
+ await expect(page.getByLabel('Search loaded compare branches')).toBeVisible();await expect(page.getByLabel('Compare branch',{exact:true})).toBeFocused();
+ release();await expect(page.getByRole('button',{name:/feature\/slash Listed at/})).toBeVisible();
 });
 test('empty comparison disables PR creation and same-repository swap keeps branch names',async({page})=>{
  const state=await backend(page);state.empty=true;await compare(page);await expect(page.getByRole('button',{name:'Open pull request',exact:true})).toBeDisabled();await expect(page.getByText('There are no changes in this comparison.')).toBeVisible();await page.getByLabel('Swap base and compare branches').click();await expect(page).toHaveURL(/base=feature/);await expect(page.getByLabel('Base branch',{exact:true})).toContainText('feature');
