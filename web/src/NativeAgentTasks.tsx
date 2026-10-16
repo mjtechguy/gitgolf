@@ -105,7 +105,7 @@ function AssignToAgent({ context, userId, target, close, created }: { context: C
           <p className="field-help">The tool reads the pull request in a read-only mode (Claude Code, Codex or Grok), changes and pushes nothing, and its answer is the review.</p></>}</form.Field> : null}
         <form.Field name="model">{field => <label>Model <span className="optional">optional</span><input value={field.state.value} maxLength={128} autoComplete="off" placeholder="The tool’s default" onChange={e => field.handleChange(e.target.value)} /></label>}</form.Field>
         <form.Field name="instructions">{field => <label>Instructions <span className="optional">optional</span><textarea rows={4} maxLength={4096} value={field.state.value} onChange={e => field.handleChange(e.target.value)} placeholder="Anything to add to the issue text, for example where to look or how to test" /></label>}</form.Field>
-        <p className="field-help">Golf sends the tool the {what}’s title, description, its 20 most recent comments and these instructions. With a shared host the task runs under its owner’s signed-in subscription.</p>
+        <p className="field-help">Golf sends the tool the {what}’s title, description, up to its 20 most recent comments and these instructions, in a prompt of at most 32 KiB. When they do not fit, Golf shortens the description first, then leaves out the oldest of those comments; the prompt marks the cut and says how many comments it left out. Your instructions are never cut. With a shared host the task runs under its owner’s signed-in subscription.</p>
         {error ? <p className="error" role="alert">{message(error)}</p> : null}
         <form.Subscribe selector={state => [state.isSubmitting, state.values.choice] as const}>{([submitting, choice]) => <div className="credential-actions">
           <button className="button primary" disabled={submitting || !choice}><Bot size={15} aria-hidden="true" />{submitting ? 'Assigning…' : 'Assign'}</button><button type="button" className="button secondary" onClick={close}>Cancel</button></div>}</form.Subscribe>
@@ -205,7 +205,7 @@ function TaskLogView({ context, task }: { context: Context; task: AgentTask }) {
         : <p className="pipeline-log-empty">{terminal ? complete ? 'This task produced no log.' : 'Reading the log…' : 'No output yet.'}</p>}
       {truncated ? <p className="pipeline-log-empty agent-task-log-truncated" role="status">Log truncated: Golf keeps the first 10,000 lines or 512 KiB of a task’s log; later lines were not stored.</p> : null}
     </div>
-    <p className="panel-footnote">Output from the tool on the host, streamed as it runs. Golf does not filter it; the tool never receives Golf credentials.</p>
+    <p className="panel-footnote">Output from the tool on the host, streamed as it runs. Golf stores each line with NUL bytes removed and anything shaped like a Golf credential (task, host, registration, native, Git and API tokens) replaced by ***; nothing else is filtered. The tool gets no Golf credential except, when Golf MCP tools are on for the task, the task’s own token.</p>
   </div>;
 }
 

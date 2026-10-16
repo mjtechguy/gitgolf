@@ -357,12 +357,16 @@ func (w streamWriter) Write(p []byte) (int, error) {
 	if s.exceeded || s.failed {
 		return n, nil
 	}
-	if int64(n) > s.limit-s.count {
-		s.exceeded = true
-		s.cancel()
-		return n, nil
+	// A write that crosses the limit still delivers the part that fits (ending on a UTF-8 boundary), then stops the step.
+	exceeded := int64(n) > s.limit-s.count
+	if exceeded {
+		keep := int(s.limit - s.count)
+		for i := 0; i < utf8.UTFMax-1 && keep > 0 && !utf8.RuneStart(p[keep]); i++ {
+			keep--
+		}
+		p = p[:keep]
 	}
-	s.count += int64(n)
+	s.count += int64(len(p))
 	for len(p) > 0 {
 		size := min(len(p), 8192)
 		if s.onLog != nil && s.onLog(s.ctx, LogChunk{Stream: w.stream, Data: append([]byte(nil), p[:size]...)}) != nil {
@@ -371,6 +375,10 @@ func (w streamWriter) Write(p []byte) (int, error) {
 			break
 		}
 		p = p[size:]
+	}
+	if exceeded {
+		s.exceeded = true
+		s.cancel()
 	}
 	return n, nil
 }

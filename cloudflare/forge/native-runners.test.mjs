@@ -58,6 +58,19 @@ test('native pools and machines use versioned controls and one-time credentials'
   await assert.rejects(nativeRunnerAdmin(f.db, f.env, f.person, bearer, { action: 'list' }), /administrator sign-in/);
 });
 
+test('the runner inventory returns at most its bounds, newest machines first, with totals and per-pool counts read in SQL', async t => {
+  const f = await fixture(t), pool = f.sql.prepare("INSERT INTO native_runner_pools(id,name,version,state,trust_class,max_parallel,image_id,created_at) VALUES(?,?,1,'ACTIVE','UNTRUSTED',1,'img','t')");
+  for (let i = 0; i < 3; i++) pool.run('p' + i, 'pool-' + i);
+  const machine = f.sql.prepare("INSERT INTO native_runner_machines(id,pool_id,name,version,state,sponsor_id,credential_digest,expires_at,created_at) VALUES(?,?,?,1,'ACTIVE',1,?,9999999999,?)");
+  for (let i = 0; i < 101; i++) machine.run('m' + String(i).padStart(3, '0'), i === 0 ? 'p1' : 'p0', 'host-' + i, 'c' + i, new Date(Date.UTC(2026, 9, 1) + i * 60_000).toISOString());
+  const inventory = await f.call({ action: 'list' });
+  assert.deepEqual([inventory.pools.length, inventory.machines.length, inventory.poolCount, inventory.machineCount, inventory.truncated], [3, 100, 3, 101, true]);
+  // The oldest host is the one left out, and the pool table still counts it.
+  assert.equal(inventory.machines[0].name, 'host-100');
+  assert.equal(inventory.machines.some(m => m.name === 'host-0'), false);
+  assert.deepEqual(inventory.pools.map(p => [p.name, p.machine_count]), [['pool-0', 100], ['pool-1', 1], ['pool-2', 0]]);
+});
+
 test('native machine claim, heartbeat and result bind one source and one cleanup receipt', async t => {
   const f = await fixture(t), poolId = crypto.randomUUID(), machineId = crypto.randomUUID(), jobId = crypto.randomUUID();
   await f.call({ action: 'savePool', id: poolId, expectedVersion: 0, name: 'native', state: 'ACTIVE', trustClass: 'UNTRUSTED', maxParallel: 1 });

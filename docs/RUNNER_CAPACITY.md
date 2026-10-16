@@ -39,7 +39,8 @@ Counting rules:
 - **Unmatched** is the jobs no *active* runner can take, by labels and scope.
 - Repository feature policy (Actions turned off for a repository) is not applied here: such a job counts as queued until Golf's
   24-hour sweep cancels it.
-- At most 2,000 runners and 5,000 queued jobs are read; beyond that the page says the counts are partial.
+- At most 2,000 runners (the newest) and 5,000 queued jobs (the longest waiting, by `queued_at`: a retry re-queues the same job
+  with a new time) are read; beyond that the page says which read was cut and that its counts are partial.
 - **Held** (slice 2): of a pool's queued jobs, those whose organization or repository runs its share, and, while the pool runs as many
   jobs as its cap, all the others. A job held by both is counted once, under the share.
 
@@ -57,7 +58,7 @@ Authorization: Bearer golf_capacity_…
 
 ```json
 { "pool": "forgejo-actions:docker,ubuntu-latest", "engine": "forgejo-actions", "labels": ["docker", "ubuntu-latest"],
-  "queued": 5, "running": 2, "online": 2, "oldestWaitSeconds": 125, "registered": 3, "truncated": false,
+  "queued": 5, "running": 2, "online": 2, "oldestWaitSeconds": 125, "registered": 3, "truncated": false, "runnersTruncated": false, "jobsTruncated": false,
   "held": 2, "claimable": 3, "cap": 4, "at": "2026-10-15T20:00:00.000Z" }
 ```
 
@@ -65,7 +66,8 @@ Authorization: Bearer golf_capacity_…
   ignored, as in matching. Any other parameter is refused.
 - The pool is the one with exactly that label set. A label set with no runners yet answers with the jobs those labels would take in
   every repository, so a scaler can start a pool from zero.
-- `queued`, `running` and `online` follow the inventory's rules. `oldestWaitSeconds` is 0 when nothing waits.
+- `queued`, `running` and `online` follow the inventory's rules. `oldestWaitSeconds` is 0 when nothing waits. `truncated` is either
+  bound reached; `runnersTruncated` and `jobsTruncated` say which.
 - Slice 2 adds these fields; the ones above keep their meaning:
   - `held`: queued jobs that cannot start now, because the pool runs as many jobs as its cap or their organization or repository runs
     its share;

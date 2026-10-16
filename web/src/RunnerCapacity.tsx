@@ -23,7 +23,7 @@ export type CapacityRequest = { id: string; key: string; field: string; label: s
   reason: string; requestedBy: string; requestedAt: string; mine: boolean; state: 'PENDING' | 'APPROVED' | 'DECLINED' | 'WITHDRAWN' | 'APPLIED' | 'FAILED'; decidedBy: string; decidedAt: string; decisionNote: string;
   appliedBy: string; appliedAt: string; deploy: Deploy | null };
 type MetricsToken = { id: string; label: string; createdBy: string; createdAt: string; expiresAt: string; lastUsedAt: string; revokedAt: string; state: 'active' | 'expired' | 'revoked' };
-export type Capacity = { generatedAt: string; selfHosted: { configured: boolean; pools: Pool[]; unmatched: { queued: number; oldestWaitSeconds: number | null; byEngine: Record<string, number> }; truncated: boolean; onlineWindowSeconds: number };
+export type Capacity = { generatedAt: string; selfHosted: { configured: boolean; pools: Pool[]; unmatched: { queued: number; oldestWaitSeconds: number | null; byEngine: Record<string, number> }; truncated: boolean; runnersTruncated?: boolean; jobsTruncated?: boolean; onlineWindowSeconds: number };
   nativePools: NativePool[]; containers: ContainerClass[]; hosts: Hosts[]; runnerPolicies: RunnerPolicies; shares: { rows: ShareRow[]; schema: string }; settings: Setting[]; requests: CapacityRequest[]; tokens: MetricsToken[]; schema: string; editing: string; metricsPath: string; origin: string; you: string };
 type Preview = { current: number; requested: number; ceiling: number; needsDeploy: boolean; estimatedMonthlyDelta: number | null; estimateBasis: string; deploy: Deploy | null };
 
@@ -31,6 +31,11 @@ type Preview = { current: number; requested: number; ceiling: number; needsDeplo
 type Row = { id: string; source: string; name: string; capacity: string; online: string; running: Count; queued: Count; held: Count; wait: number | null; note: string };
 const engines: Record<string, string> = { 'forgejo-actions': 'Forgejo runners', 'gitlab-ci': 'GitLab runners' };
 const shown = (value: Count) => value === null ? 'Unknown' : String(value);
+// Which of the two bounded reads was cut (capacity.mjs pipelineRows); a server without the split flags means both.
+const truncation = ({ truncated, runnersTruncated = truncated, jobsTruncated = truncated }: Capacity['selfHosted']) =>
+  runnersTruncated && jobsTruncated ? ' Only the newest 2,000 runners and the 5,000 longest-waiting queued jobs were read; counts are partial.'
+    : runnersTruncated ? ' Only the newest 2,000 runners were read; pool counts are partial.'
+      : jobsTruncated ? ' Only the 5,000 longest-waiting queued jobs were read; queue counts are partial.' : '';
 export const waitText = (seconds: number | null) => seconds === null ? '—' : seconds < 60 ? `${seconds} s` : seconds < 3600 ? `${Math.floor(seconds / 60)} min` : `${Math.floor(seconds / 3600)} h ${Math.floor(seconds % 3600 / 60)} min`;
 export const money = (value: number | null) => value === null ? 'Not estimated' : `${value < 0 ? '−' : '+'}$${Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} a month`;
 const message = (error: unknown) => error instanceof Error ? error.message : 'The capacity operation could not be confirmed. Refresh before trying again.';
@@ -115,7 +120,7 @@ export function RunnerCapacity({ userId, signingOut }: { userId: string; signing
     {error && !deciding ? <p className="error" role="alert">{error}</p> : null}
     <section className="browser-panel" aria-labelledby="capacity-inventory"><div className="browser-panel-heading"><h2 id="capacity-inventory">Capacity by source</h2><span className="policy-card-note">Current snapshot from Golf’s records</span></div>
       <DataTable data={inventoryRows(data)} columns={inventoryColumns} getRowId={row => row.id} label="runner capacity" pagination={false} />
-      <p className="panel-footnote">Self-hosted runners are pooled by engine and label names (a Forgejo label <code>name:docker://image</code> counts as <code>name</code>), as the claim matches them. A pool’s queue is the jobs its labels take in repositories its runners’ scope covers; a job several pools can take is counted in each. Held jobs wait for their pool’s cap or their organization’s or repository’s share; a job held by both is counted once, under the share. Online means seen in the last {data.selfHosted.onlineWindowSeconds / 60} minutes.{data.selfHosted.truncated ? ' Only the newest runners and oldest queued jobs were read; counts are partial.' : ''}</p>
+      <p className="panel-footnote">Self-hosted runners are pooled by engine and label names (a Forgejo label <code>name:docker://image</code> counts as <code>name</code>), as the claim matches them. A pool’s queue is the jobs its labels take in repositories its runners’ scope covers; a job several pools can take is counted in each. Held jobs wait for their pool’s cap or their organization’s or repository’s share; a job held by both is counted once, under the share. Online means seen in the last {data.selfHosted.onlineWindowSeconds / 60} minutes.{truncation(data.selfHosted)}</p>
     </section>
     <RunnerPolicyPanels policies={data.runnerPolicies} pools={data.selfHosted.pools} shares={data.shares.rows} sharesSchema={data.shares.schema} refresh={refresh} />
     <section className="browser-panel" aria-labelledby="capacity-requests"><div className="browser-panel-heading"><h2 id="capacity-requests">Capacity requests</h2>

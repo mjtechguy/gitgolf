@@ -160,9 +160,10 @@ answers `{ ok: true, state }` with the state it has.
 
 Log `offset` is the number of lines already accepted; a retried chunk with an old
 offset is ignored for the lines already stored. An offset past the accepted count is
-409 `{ code, message, nextOffset }`; resend from `nextOffset`. Golf credentials
-(`golf_agent_task_…`, `golf_agent_host_…`, `golfagentreg_…`, `golf_native_…`,
-`golf_git_…`) are replaced with `***` in stored lines and failure text. Heartbeat's
+409 `{ code, message, nextOffset }`; resend from `nextOffset`. Stored lines drop NUL
+bytes, and Golf credentials (`golf_agent_task_…`, `golf_agent_host_…`, `golfagentreg_…`,
+`golf_native_…`, `golf_git_…` and personal API tokens) are replaced with `***` in stored
+lines, the summary and failure text; nothing else is filtered, and the task page says so. Heartbeat's
 `cancel` lists every `CLAIMED` or `RUNNING` task of the host with a cancel request; the
 host learns of a cancel there (it never sends empty log chunks). `cancel: true` (from heartbeat,
 start or log) means the host must stop the tool's process group, discard the working
@@ -252,8 +253,12 @@ operations administrators.
 - `create` `{ target: { kind, number }, hostId, tool, model?, instructions?, idempotencyKey }`
   → `{ task }`. `instructions` ≤ 4 KiB. The server builds the prompt from the issue or
   pull request title and body, up to the 20 most recent comments, and the
-  instructions (total ≤ 32 KiB, truncated with a marker), plus a fixed preamble that
-  says to change files in the working copy only and not to push.
+  instructions (total ≤ 32 KiB), plus a fixed preamble that says to change files in the
+  working copy only and not to push. Over the bound the description is cut first (with a
+  marker, down to half of what the discussion may use), so the newest comments stay;
+  older comments are then left out whole and the comments heading says how many, and a
+  newest comment that alone does not fit is cut with a marker. Instructions are never
+  cut. The assign form states this rule.
   Issue → base is the default branch head. Pull request → base is the pull request's
   head commit and branch.
 - `list` `{ target? }` → `{ tasks, canAssign }` (newest first, 50).

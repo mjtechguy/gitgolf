@@ -311,6 +311,31 @@ test('logs stop storing past their bound and say so; the prompt is bounded at 32
   assert.ok(new TextEncoder().encode(prompt).length <= 32 * 1024); assert.match(prompt, /Truncated by Golf[\s\S]*Instructions from alice\n\nDo it\./);
 });
 
+test('an over-long prompt shortens the description first, keeps the newest comments and names the older ones it leaves out', () => {
+  const env = { PUBLIC_ORIGIN: 'https://golf.example.invalid', WORKSPACE_SLUG: 'alice' }, task = { kind: 'issue', baseRef: 'refs/heads/main', baseCommit: 'a'.repeat(40), branch: 'golf-agent/x' };
+  const comment = (i, size = 10) => ({ login: 'bob', created_at: `2026-10-0${1 + (i % 9)}T00:00:00Z`, body: `comment-${i} ` + 'c'.repeat(size) });
+  const build = (body, comments) => buildPrompt({ name: 'project', owner_slug: 'alice' }, env, task, { number: 1, title: 'Big', body }, comments, 'Do it.', 'alice');
+  const bytes = text => new TextEncoder().encode(text).length;
+  // A long description: it is cut, and all three comments follow it whole.
+  const long = build('z'.repeat(64 * 1024), [comment(1), comment(2), comment(3)]);
+  assert.ok(bytes(long) <= 32 * 1024);
+  assert.match(long, /Truncated by Golf: the description exceeds[\s\S]*## The 3 most recent comments, oldest first\n[\s\S]*comment-1[\s\S]*comment-3[\s\S]*Instructions from alice\n\nDo it\.\n$/);
+  // Many long comments: the description stays whole, the newest comments stay, and the heading says how many older ones were left out.
+  const many = build('Fix the retry loop.', Array.from({ length: 20 }, (_, i) => comment(i, 3000)));
+  assert.ok(bytes(many) <= 32 * 1024);
+  assert.doesNotMatch(many, /Truncated by Golf/);
+  assert.match(many, /Fix the retry loop\.\n\n## The (\d+) most recent comments, oldest first \(Golf left out (\d+) older ones to stay within the 32 KiB prompt limit\)/);
+  const [, kept, left] = /## The (\d+) most recent comments, oldest first \(Golf left out (\d+)/.exec(many);
+  assert.equal(Number(kept) + Number(left), 20);
+  assert.match(many, /comment-19 /); assert.doesNotMatch(many, /comment-0 /);
+  // A newest comment that alone does not fit is cut, never dropped in silence.
+  const huge = build('Short.', [comment(1), comment(2, 40 * 1024)]);
+  assert.ok(bytes(huge) <= 32 * 1024);
+  assert.match(huge, /Short\.\n\n## The 1 most recent comments, oldest first \(Golf left out 1 older one to stay within the 32 KiB prompt limit\)\n[\s\S]*comment-2 c+\n\n\[Truncated by Golf: this comment exceeds the 32 KiB prompt limit\.\]\n\n## Instructions/);
+  // Everything that fits is sent as before.
+  assert.match(build('Small.', [comment(1)]), /Small\.\n\n## The 1 most recent comments, oldest first\n\n### bob at [^\n]+\n\ncomment-1 c{10}\n\n## Instructions/);
+});
+
 test('the capability is ready with the schema and the feature follows the installation policy', async t => {
   const f = await fixture(t);
   const capabilities = async () => (await f.signed('/rpc/golf.v1.CapabilityService/ListCapabilities', {})).capabilities.find(c => c.id === 'agents.hosts');

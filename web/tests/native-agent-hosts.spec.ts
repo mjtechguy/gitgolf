@@ -196,6 +196,8 @@ test('assigning an issue shows unusable tools disabled with their reason, stream
   await expect(dialog.getByRole('radio', { name: /Grok/ })).toBeDisabled();
   await expect(dialog.getByText('only the person who registered it may run tools')).toBeVisible();
   await dialog.getByLabel('Instructions').fill('Keep the public API unchanged.');
+  // The prompt bound and what it cuts first (agent-hosts.mjs buildPrompt).
+  await expect(dialog.getByText('in a prompt of at most 32 KiB. When they do not fit, Golf shortens the description first, then leaves out the oldest of those comments')).toBeVisible();
   await dialog.getByRole('button', { name: 'Assign', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   const create = state.calls.find(c => c.action === 'create')!;
@@ -205,6 +207,9 @@ test('assigning an issue shows unusable tools disabled with their reason, stream
   const logView = detail.getByRole('log', { name: 'Agent task log' });
   await expect(logView).toContainText('Reading src/webhooks/deliver.ts');
   await expect(logView).toContainText('Committed 3 files');
+  // Stored lines are scrubbed (agent-hosts.mjs scrub), and the footnote says so.
+  await expect(detail).toContainText('Golf stores each line with NUL bytes removed and anything shaped like a Golf credential');
+  await expect(detail).not.toContainText('does not filter');
   await expect(detail).toContainText('Proposal ready');
   await expect(detail).toContainText('3 changed files');
   await expect(detail.getByLabel('Reported summary, rendered Markdown')).toContainText('Retries failed deliveries up to 5 times');

@@ -109,6 +109,42 @@ func TestRunnerRejectsUnapprovedOrMalformedJobsBeforeDocker(t *testing.T) {
 	}
 }
 
+func TestLogSinkStoresThePrefixUnderTheLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		writes []string
+		want   string
+	}{
+		{"crossing write keeps its prefix", []string{"0123456789", "abcdefghij"}, "0123456789abcdef"},
+		{"first write over the limit", []string{"0123456789abcdefghij"}, "0123456789abcdef"},
+		{"cut ends on a UTF-8 boundary", []string{"0123456789abcd", "€!"}, "0123456789abcd"},
+		{"fits exactly", []string{"0123456789abcdef"}, "0123456789abcdef"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var stored bytes.Buffer
+			sink := &logSink{ctx: ctx, cancel: cancel, limit: 16, onLog: func(_ context.Context, c LogChunk) error { stored.Write(c.Data); return nil }}
+			for i, w := range tc.writes {
+				stream := []string{"stdout", "stderr"}[i%2]
+				if n, err := (streamWriter{sink, stream}).Write([]byte(w)); n != len(w) || err != nil {
+					t.Fatalf("write %d: n=%d err=%v", i, n, err)
+				}
+			}
+			over := len(strings.Join(tc.writes, "")) > 16
+			if stored.String() != tc.want || sink.exceeded != over || (ctx.Err() != nil) != over {
+				t.Fatalf("stored=%q exceeded=%v cancelled=%v", stored.String(), sink.exceeded, ctx.Err() != nil)
+			}
+			if over {
+				(streamWriter{sink, "stdout"}).Write([]byte("later"))
+				if stored.String() != tc.want {
+					t.Fatalf("stored after the limit: %q", stored.String())
+				}
+			}
+		})
+	}
+}
+
 // Opt-in qualification uses only synthetic scripts on a local Docker daemon.
 func TestDockerIsolation(t *testing.T) {
 	image := os.Getenv("GOLF_RUNNER_TEST_IMAGE")

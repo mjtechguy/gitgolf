@@ -81,11 +81,13 @@ async function pipelineRows(db, engine = null) {
   const { results: runners } = await db.prepare(`SELECT n.id,n.engine,n.scope,n.scope_id,n.labels,n.state,n.last_seen_at,
     (SELECT count(*) FROM pipeline_jobs j WHERE j.engine=n.engine AND j.state='RUNNING' AND j.runner_id=n.id) AS running FROM pipeline_runners n WHERE n.deleted=0${engine ? ' AND n.engine=?' : ''} ORDER BY n.id DESC LIMIT ${runnerLimit + 1}`)
     .bind(...(engine ? [engine] : [])).all();
-  // The claim's own filter: the job's run is current, not cancelled and still open.
+  // The claim's own filter: the job's run is current, not cancelled and still open. Longest waits first (a retry re-queues the same
+  // id with a new queued_at), so a truncated read keeps the oldest waits.
   const { results: jobs } = await db.prepare(`SELECT j.id,j.engine,j.runs_on,COALESCE(j.queued_at,j.created_at) AS since,r.repository_id,o.owner_id,CASE WHEN k.kind='ORGANIZATION' THEN k.id END AS organization_id FROM pipeline_jobs j
     JOIN pipeline_runs r ON r.id=j.run_id AND r.attempt=j.attempt LEFT JOIN repository_owners o ON o.repository_id=r.repository_id LEFT JOIN native_owners k ON k.id=o.owner_id
-    WHERE j.state='QUEUED'${engine ? ' AND j.engine=?' : ''} AND r.cancel_requested=0 AND r.state IN ('QUEUED','RUNNING','WAITING') ORDER BY j.id LIMIT ${jobLimit + 1}`).bind(...(engine ? [engine] : [])).all();
-  return { runners: runners.slice(0, runnerLimit), jobs: jobs.slice(0, jobLimit), truncated: runners.length > runnerLimit || jobs.length > jobLimit };
+    WHERE j.state='QUEUED'${engine ? ' AND j.engine=?' : ''} AND r.cancel_requested=0 AND r.state IN ('QUEUED','RUNNING','WAITING') ORDER BY since,j.id LIMIT ${jobLimit + 1}`).bind(...(engine ? [engine] : [])).all();
+  const runnersTruncated = runners.length > runnerLimit, jobsTruncated = jobs.length > jobLimit;
+  return { runners: runners.slice(0, runnerLimit), jobs: jobs.slice(0, jobLimit), truncated: runnersTruncated || jobsTruncated, runnersTruncated, jobsTruncated };
 }
 
 // ---------- the other sources ----------
@@ -140,14 +142,14 @@ async function hosts(db, now) {
 }
 
 export async function capacityInventory(db, env, now = Date.now()) {
-  const { runners, jobs, truncated } = await pipelineRows(db);
+  const { runners, jobs, truncated, runnersTruncated, jobsTruncated } = await pipelineRows(db);
   const shares = await shareInventory(db, env, jobs, { named: true, now });
   const { pools, unmatched } = runnerPools(runners, jobs, now, { caps: shares.policies.pools, heldBy: shares.heldBy });
   const hostRows = await hosts(db, now), ssh = hostRows[1];
   // The two runner policies as the Installation page reads them, so this page edits them through /native/installation.
   const settings = await installationSettings(db), policy = key => installationPolicyView(env, key, settings?.get(key)) || null;
   return { generatedAt: iso(now),
-    selfHosted: { configured: Boolean(pipelinePolicy(env)), pools, unmatched, truncated, onlineWindowSeconds: runnerOnline / 1000 },
+    selfHosted: { configured: Boolean(pipelinePolicy(env)), pools, unmatched, truncated, runnersTruncated, jobsTruncated, onlineWindowSeconds: runnerOnline / 1000 },
     runnerPolicies: { pools: policy('runner-pools'), shares: policy('runner-shares') },
     shares: { rows: shares.rows, schema: shares.schema === false ? sharesMigration : 'ready' },
     nativePools: await nativePools(db, now),
@@ -437,7 +439,7 @@ export async function capacityMetrics(db, env, request, url) {
   const listed = text.split(',').map(label => label.trim()).filter(Boolean);
   if (listed.length > 32 || listed.some(label => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?::[\x21-\x7e]{1,200})?$/.test(label))) invalid('Labels are up to 32 comma-separated runner labels.');
   const labels = poolLabels(listed), id = poolId(engine, labels);
-  const { runners, jobs, truncated } = await pipelineRows(db, engine), shares = await shareInventory(db, env, jobs);
+  const { runners, jobs, truncated, runnersTruncated, jobsTruncated } = await pipelineRows(db, engine), shares = await shareInventory(db, env, jobs);
   // A virtual installation-scope member stands in for a pool with no runners, so its queue is still published.
   const members = runners.filter(runner => poolId(runner.engine, poolLabels(parse(runner.labels, []))) === id);
   const pool = runnerPools(members.length ? members : [{ engine, scope: 'installation', scope_id: '', labels: JSON.stringify(labels), state: 'NONE', last_seen_at: null, running: 0 }], jobs, now,
@@ -446,5 +448,5 @@ export async function capacityMetrics(db, env, request, url) {
     try { await db.prepare('UPDATE capacity_metrics_tokens SET last_used_at=? WHERE id=?').bind(iso(now), token.id).run(); } catch { /* best effort */ }
   // held: queued jobs that cannot start now because of the pool's cap or a share; claimable = queued − held, what more runners could start.
   return Response.json({ pool: id, engine, labels, queued: pool.queued, running: pool.running, online: pool.online, oldestWaitSeconds: pool.oldestWaitSeconds ?? 0,
-    registered: members.length, truncated, held: pool.held, claimable: pool.claimable, cap: pool.cap, at: iso(now) }, { headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+    registered: members.length, truncated, runnersTruncated, jobsTruncated, held: pool.held, claimable: pool.claimable, cap: pool.cap, at: iso(now) }, { headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 }

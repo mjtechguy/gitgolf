@@ -30,14 +30,14 @@ const fixture: Capacity = { generatedAt: now, schema: 'ready', editing: '', metr
   settings: [{ key: 'evidence', field: 'dailyLimit', label: 'Daily evidence admissions', unit: 'a day', policyLabel: 'Daily evidence admissions', version: '3', cost: 'Per CI run, measured on this installation', allocated: true, current: 10, ceiling: 50, deployMax: 50, fixed: '', deploySetting: 'settings.evidence.daily_limit' }],
   requests: [pending, waiting], tokens: [{ id: '1', label: 'keda-golf-ci', createdBy: 'alice', createdAt: now, expiresAt: new Date(Date.now() + 86400_000).toISOString(), lastUsedAt: '', revokedAt: '', state: 'active' }] };
 
-async function capacityBackend(page: Page) {
+async function capacityBackend(page: Page, data: Capacity = fixture) {
   const writes: Record<string, unknown>[] = [], reads: Record<string, unknown>[] = [];
   await featureBackend(page);
   await page.route('**/rpc/golf.v1.CapabilityService/ListCapabilities', route => respond(route, ListCapabilitiesResponseSchema, { runtimeProfile: 'cloudflare-native', capabilities: capabilities.map(id => ({ id, label: id, state: 3, reason: 'Available.' })) }));
   await page.route('**/native/capacity/read', route => {
     const body = route.request().postDataJSON(); reads.push(body);
     if (body.action === 'preview') return route.fulfill({ json: { current: 10, requested: body.value, ceiling: 50, needsDeploy: false, estimatedMonthlyDelta: 0.97, estimateBasis: 'Upper bound: measured per CI run.', deploy: null } });
-    return route.fulfill({ json: fixture });
+    return route.fulfill({ json: data });
   });
   await page.route('**/native/installation', route => {
     const body = route.request().postDataJSON(); writes.push(body);
@@ -98,6 +98,13 @@ test('runner capacity leads with the inventory; request and approval forms open 
   expect(writes.at(-1)).toMatchObject({ action: 'approve', id: '7', expectedVersion: '3', confirmation: 'evidence' });
   expect(String(writes.at(-1)!.operationId)).toMatch(/^[0-9a-f-]{36}$/);
   await expect(page.getByRole('table', { name: 'capacity metrics tokens' })).toContainText('keda-golf-ci');
+});
+
+test('a truncated inventory says which read was cut: the newest runners or the longest-waiting queued jobs', async ({ page }) => {
+  await capacityBackend(page, { ...fixture, selfHosted: { ...fixture.selfHosted, truncated: true, runnersTruncated: false, jobsTruncated: true } });
+  await page.goto('/admin/capacity');
+  await expect(page.getByText('Only the 5,000 longest-waiting queued jobs were read; queue counts are partial.')).toBeVisible();
+  await expect(page.getByText(/newest 2,000 runners/)).toHaveCount(0);
 });
 
 test('pool caps and runner shares lead with current values; Add and Edit open forms, and widening asks for the setting name', async ({ page }) => {
