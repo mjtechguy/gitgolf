@@ -165,9 +165,11 @@ test('the AI impact page holds counts, not claims: tiers, proposals and acceptan
 
 test('the AI impact page says which sources it could not read, and why it is off', async ({ page }) => {
   await backend(page);
-  await page.route('**/native/contributions/read', route => route.fulfill({ json: { ...impact, unreadable: ['automation-runs'] } }));
+  await page.route('**/native/contributions/read', route => route.fulfill({ json: { ...impact, unreadable: ['automation-runs'], comparison: { ...impact.comparison, truncated: true } } }));
   await page.goto('/admin/ai-impact');
   await expect(page.getByRole('alert').filter({ hasText: 'automation runs' })).toContainText('missing from the totals, not zero');
+  // A capped comparison names which merges it read.
+  await expect(page.getByRole('region', { name: 'Comparison: time to merge' })).toContainText('Read from the 20,000 earliest merges in the period; later ones are left out.');
   await page.route('**/native/contributions/read', route => route.fulfill({ json: { state: 'off', reason: 'Contribution graphs are turned off for every repository by the installation policy.' } }));
   await page.reload();
   await expect(page.getByRole('note').filter({ hasText: 'turned off for every repository' })).toBeVisible();

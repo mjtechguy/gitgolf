@@ -96,7 +96,7 @@ export function AiImpact({ userId, signingOut }: { userId: string; signingOut: b
         ['Median, opened from an agent task or an API token, or landed by policy', duration(data.comparison.aiInvolved.medianHours), `${number(data.comparison.aiInvolved.count)} merged`],
         ['Median, all other merged pull requests', duration(data.comparison.other.medianHours), `${number(data.comparison.other.count)} merged`],
       ]} />
-      <p className="panel-footnote">{data.comparison.label} The two groups differ in size, scope and who chose to use an agent.{data.comparison.truncated ? ' Read from the first 20,000 merges in the period.' : ''}</p></section>
+      <p className="panel-footnote">{data.comparison.label} The two groups differ in size, scope and who chose to use an agent.{data.comparison.truncated ? ' Read from the 20,000 earliest merges in the period; later ones are left out.' : ''}</p></section>
     <div className="settings-card-grid">
       <section className="browser-panel settings-card" aria-labelledby="ai-impact-proposals"><div className="browser-panel-heading"><h2 id="ai-impact-proposals">Agent proposals</h2></div>
         <div className="settings-card-body"><dl className="settings-profile">
