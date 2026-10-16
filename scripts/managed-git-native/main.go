@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const nativeOrigin = "http://gitea:3000"
+const nativeOrigin = "http://forgejo:3000"
 const inputLimit = 1 << 20
 const responseLimit = 2 << 20
 

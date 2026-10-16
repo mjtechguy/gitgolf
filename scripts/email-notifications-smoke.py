@@ -34,7 +34,7 @@ SERVICE = 'EmailNotificationService/'
 ACCOUNT_PATH = '/account/settings'
 REPOSITORY_PATH = '/{owner}/{name}/settings/webhooks'
 ADMIN_PATH = '/admin/settings/notifications'
-NATIVE_IMAGE = 'gitea/gitea:1.27.3-rootless'
+NATIVE_IMAGE = 'codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'
 PG_IMAGE = 'postgres:18.4-alpine3.24'
 STAGE = 'arguments'
 OUTPUT = None
@@ -274,7 +274,7 @@ def main():
     if args.self_check:self_check();return
     if not args.image or not args.sink_image or not args.output:parser.error('Require --image --sink-image and fresh --output')
     args.output.mkdir(parents=True,exist_ok=False,mode=0o700);OUTPUT=args.output.resolve();OUTPUT.chmod(0o700);record(status='running',browser='pending' if args.ui else 'not_requested')
-    env={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k not in ('DATABASE_URL','DOCKER_HOST','DOCKER_CONTEXT','SSL_CERT_FILE','SSL_CERT_DIR')};env['COMPOSE_DISABLE_ENV_FILE']='true'
+    env={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k not in ('DATABASE_URL','DOCKER_HOST','DOCKER_CONTEXT','SSL_CERT_FILE','SSL_CERT_DIR')};env['COMPOSE_DISABLE_ENV_FILE']='true'
     def run(*command,payload=None,timeout=120):
         result=subprocess.run(command,cwd=ROOT,env=env,input=None if payload is None else json.dumps(payload).encode(),capture_output=True,timeout=timeout)
         assert result.returncode==0 and len(result.stdout)<=4<<20 and len(result.stderr)<=4<<20,'Private subprocess failed; diagnostics withheld'
@@ -288,7 +288,7 @@ def main():
     reserve=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',images['golf'],'-Pk','/');assert int(reserve.splitlines()[-1].split()[3])>=2*1024*1024
     if args.ui:assert (ROOT/'web/node_modules/playwright/index.mjs').is_file()
     spec=importlib.util.spec_from_file_location('email_ports',ROOT/'scripts/observability-smoke.py');helpers=importlib.util.module_from_spec(spec);spec.loader.exec_module(helpers)
-    ports=helpers.free_ports(3);previous=smoke.GOLF,smoke.GITEA;smoke.GOLF,smoke.GITEA=f'http://127.0.0.1:{ports[0]}',f'http://127.0.0.1:{ports[1]}'
+    ports=helpers.free_ports(3);previous=smoke.GOLF,smoke.FORGE;smoke.GOLF,smoke.FORGE=f'http://127.0.0.1:{ports[0]}',f'http://127.0.0.1:{ports[1]}'
     control_url=f'http://127.0.0.1:{ports[2]}';control_key=secrets.token_urlsafe(32);project='golf-email-proof-'+secrets.token_hex(5)
     occupied=[]
     for identifier in run('docker','network','ls','-q').splitlines():
@@ -306,7 +306,7 @@ def main():
         run('openssl','x509','-req','-days','1','-in',str(fixture/'server.csr'),'-CA',str(fixture/'ca.crt'),'-CAkey',str(fixture/'ca.key'),'-CAcreateserial','-extfile',str(fixture/'extensions'),'-out',str(fixture/'server.crt'))
         for name in ('ca.key','server.key'):(fixture/name).chmod(0o600)
         (fixture/'ca.crt').chmod(0o644)
-        values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')};values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_PUSH_CI_ENABLED='false')
+        values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())};values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_PUSH_CI_ENABLED='false')
         policy=json.dumps([{'host':'receiver.golf.test','port':465,'tls_mode':'implicit','ips':[receiver_ip+'/32']}]);private_write(directory/'proof.env',''.join(k+'='+v+'\n' for k,v in values.items()))
         private_write(directory/'proof.yaml',f'''services:
   postgres:
@@ -314,12 +314,12 @@ def main():
     pull_policy: never
     mem_limit: 768m
     cpus: 1
-  gitea:
+  forgejo:
     image: {images['native']}
     pull_policy: never
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
     mem_limit: 512m
     cpus: 1
   golf:
@@ -342,7 +342,7 @@ def main():
       GOLF_ALLOW_INSECURE_COOKIES: 'true'
       GOLF_ENCRYPTION_KEY: {values['GOLF_ENCRYPTION_KEY']}
       DATABASE_URL: postgres://golf:{values['GOLF_DB_PASSWORD']}@postgres:5432/golf?sslmode=disable
-      GITEA_URL: http://gitea:3000
+      GOLF_FORGE_URL: http://forgejo:3000
       SSL_CERT_FILE: /proof-ca.crt
       GOLF_EMAIL_EGRESS_POLICY: '{policy}'
     volumes: ["{fixture/'ca.crt'}:/proof-ca.crt:ro"]
@@ -386,7 +386,7 @@ networks:
 ''')
         compose=['docker','compose','--project-directory',str(ROOT),'-p',project,'--env-file',str(directory/'proof.env'),'-f',str(ROOT/'compose.yaml'),'-f',str(directory/'proof.yaml')]
         def command(*args,payload=None,timeout=120):return run(*compose,*args,payload=payload,timeout=timeout)
-        def admin(*args):return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*args)
+        def admin(*args):return command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*args)  # Forgejo's upstream path
         def call(role,method,body=None,expected=200,headers=None):return checked_rpc(actors[role]['session'],SERVICE+method,body,expected,headers)
         def rpc(role,method,body=None,expected=200,headers=None):return checked_rpc(actors[role]['session'],method,body,expected,headers)
         def control(path,body=None):
@@ -446,7 +446,7 @@ networks:
             result=rpc('owner','RepositoryService/CreateIssue',{'repository':target['repository'],'repositoryId':target['repositoryId'],'title':'Owned category event','body':'PRIVATE_EMAIL_QUALIFIER_BODY','idempotencyKey':str(uuid.uuid4())});assert result['mutation']['state']=='ISSUE_MUTATION_STATE_SUCCEEDED'
         def pending(role):return until(lambda:next((v for v in history(role,target) if v['state']=='queued'),None))
         try:
-            stage('fresh core and local TLS receiver; worker initially stopped');started=True;command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf','receiver',timeout=180);smoke.ready();assert smoke.provider('','GET','version')['version']=='1.27.3'
+            stage('fresh core and local TLS receiver; worker initially stopped');started=True;command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','forgejo','golf','receiver',timeout=180);smoke.ready();assert smoke.provider('','GET','version')['version']=='15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
             until(lambda:control('/receipts'),transient=True)
             stage('ordinary native actors and explicit managed local enrollment')
             for role in ('operator','owner','reader','outsider',*(('uidark','uilight') if args.ui else ())):
@@ -509,7 +509,7 @@ networks:
             intent={'deliveryId':fresh['id'],'expectedContactVersion':own('reader')['contactVersion'],'operationId':str(uuid.uuid4())};current_redelivery=call('reader','RedeliverOwnEmail',intent)['delivery'];assert terminal('reader',current_redelivery['id'],target)['state']=='accepted'
             if args.ui:
                 stage('actual account/repository/administrator browser views and privacy')
-                config={'golf':smoke.GOLF,'native':smoke.GITEA,'control':control_url,'controlKey':control_key,'repository':native['full_name'],'target':target,'ownerToken':actors['owner']['token'],'operator':{k:actors['operator'][k] for k in ('email','password')},'fixtures':{theme:{k:actors['ui'+theme][k] for k in ('email','password','name','id')} for theme in ('dark','light')},'output':str(OUTPUT),'runtime':baseline,'emailObservationTarget':{'id':transport_id,'version':'1','generation':'1'},'paths':{'account':ACCOUNT_PATH,'repository':REPOSITORY_PATH.format(**repository),'admin':ADMIN_PATH}}
+                config={'golf':smoke.GOLF,'native':smoke.FORGE,'control':control_url,'controlKey':control_key,'repository':native['full_name'],'target':target,'ownerToken':actors['owner']['token'],'operator':{k:actors['operator'][k] for k in ('email','password')},'fixtures':{theme:{k:actors['ui'+theme][k] for k in ('email','password','name','id')} for theme in ('dark','light')},'output':str(OUTPUT),'runtime':baseline,'emailObservationTarget':{'id':transport_id,'version':'1','generation':'1'},'paths':{'account':ACCOUNT_PATH,'repository':REPOSITORY_PATH.format(**repository),'admin':ADMIN_PATH}}
                 result=subprocess.run(['node',str(ROOT/'scripts/email-notifications-browser.mjs')],cwd=ROOT,env=env,input=json.dumps(config).encode(),capture_output=True,timeout=420);assert len(result.stdout)<=65536 and len(result.stderr)<=65536;browser=json.loads((OUTPUT/'browser-manifest.json').read_text());record(browser=browser);assert result.returncode==0 and browser['status']=='passed_cleanup_pending' and len(browser['captures'])==12
             stage('current native access removal cancels queued mail with zero receiver bytes')
             command('stop','email-worker');activity();queued=pending('reader');smoke.provider(actors['owner']['token'],'DELETE',route+'/collaborators/'+actors['reader']['name'],expected=204);before=control('/receipts');command('start','email-worker');until(lambda:scalar("SELECT count(*) FROM golf_email_deliveries WHERE id='"+queued['id']+"' AND state='cancelled'")==1);time.sleep(2);after=control('/receipts');assert after==before
@@ -551,7 +551,7 @@ networks:
                     try:
                         args=['docker',resource,verb] if resource=='ps' else ['docker',resource,verb,'-q'];assert not run(*args,'--filter','label=com.docker.compose.project='+project)
                     except Exception:cleanup_errors.append(resource+' absence')
-            smoke.GOLF,smoke.GITEA=previous;record(cleanup='passed' if not cleanup_errors else 'failed',cleanupFailures=cleanup_errors,status='passed' if passed and not cleanup_errors else 'failed')
+            smoke.GOLF,smoke.FORGE=previous;record(cleanup='passed' if not cleanup_errors else 'failed',cleanupFailures=cleanup_errors,status='passed' if passed and not cleanup_errors else 'failed')
         if original:raise original
         assert passed and not cleanup_errors,'Owned cleanup incomplete; fixed categories recorded'
     print('PASS: owned verified mailbox, real local TLS SMTP acceptance/retry/privacy and cleanup; no external providers or retained stack modified',flush=True)

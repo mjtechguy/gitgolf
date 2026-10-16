@@ -34,7 +34,7 @@ try {
     pending.push((async () => { check(response.status() === 200); const body = await response.json(); equivalent(config.target, body, true); replies.push({ method, body }); })().catch(() => errors.push(true)));
   });
   const headers = { Authorization: 'token '+config.ownerToken };
-  const nativeBase = config.gitea+'/api/v1/repos/'+config.repository+'/keys/';
+  const nativeBase = config.forge+'/api/v1/repos/'+config.repository+'/keys/';
   async function nativeKey(id, expected) {
     const response = await context.request.get(nativeBase+id, { headers });
     const statusKey = 'NativeAssociationRead:'+response.status(); statusCounts[statusKey] = (statusCounts[statusKey] || 0)+1;

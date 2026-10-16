@@ -24,11 +24,12 @@ import traceback
 
 sys.dont_write_bytecode = True
 import smoke
+import uuid
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = 'RepositoryTeamAccessService/'
 STAGE = 'arguments'
 OUTPUT = None
-NATIVE_SOURCES = ['https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/'+path for path in ('routers/api/v1/repo/teams.go', 'routers/api/v1/org/team.go', 'routers/api/v1/api.go', 'modules/structs/org_team.go', 'models/organization/org.go')]
+NATIVE_SOURCES = ['https://codeberg.org/forgejo/forgejo/raw/tag/v15.0.9/'+path for path in ('routers/api/v1/repo/teams.go', 'routers/api/v1/org/team.go', 'routers/api/v1/api.go', 'modules/structs/org_team.go', 'models/organization/org.go')]
 PROOF = {'status':'not_started', 'nativeSources':NATIVE_SOURCES, 'scope':'Disposable organization repository existing-team associations only; no atomic CAS, invitations, custom roles, CI or full Access readiness', 'cleanup':'not_started', 'captures':[]}
 
 
@@ -96,7 +97,7 @@ def team_configuration(row):
 
 def associations(token, repository, organization_id):
     import urllib.request
-    request = urllib.request.Request(smoke.GITEA+'/api/v1/repos/'+repository+'/teams', headers={'Authorization':'token '+token})
+    request = urllib.request.Request(smoke.FORGE+'/api/v1/repos/'+repository+'/teams', headers={'Authorization':'token '+token})
     with smoke.client().open(request, timeout=15) as response:
         assert response.status == 200 and not response.headers.get('Link')
         raw = response.read((1<<20)+1); assert len(raw) <= 1<<20
@@ -178,7 +179,7 @@ def main():
         assert (ROOT/'web/node_modules/playwright/index.mjs').is_file()
     spec = importlib.util.spec_from_file_location('team_access_helpers', ROOT/'scripts/observability-smoke.py')
     helpers = importlib.util.module_from_spec(spec); spec.loader.exec_module(helpers)
-    environment = {key:value for key,value in os.environ.items() if not key.startswith(('GOLF_', 'GITEA_', 'POSTGRES_', 'COMPOSE_', 'OTEL_', 'AWS_', 'RUSTFS_')) and key != 'DATABASE_URL'}
+    environment = {key:value for key,value in os.environ.items() if not key.startswith(('GOLF_', 'FORGEJO_', 'POSTGRES_', 'COMPOSE_', 'OTEL_', 'AWS_', 'RUSTFS_')) and key != 'DATABASE_URL'}
     def run(*arguments, payload=None, timeout=180):
         result = subprocess.run(arguments, cwd=ROOT, env=environment, input=None if payload is None else json.dumps(payload).encode(), capture_output=True, timeout=timeout)
         assert result.returncode == 0 and len(result.stdout) <= 8<<20 and len(result.stderr) <= 8<<20, 'Private subprocess failed; diagnostics withheld'
@@ -188,18 +189,18 @@ def main():
     image, revision = inspected['Id'], inspected['Config'].get('Labels', {}).get('org.opencontainers.image.revision')
     assert re.fullmatch(r'sha256:[0-9a-f]{64}', image) and re.fullmatch(r'[0-9a-f]{40}', revision or ''), 'Require explicitly revision-labeled product image'
     # Fail before creating anything rather than pulling or consuming retained disk.
-    for name in ('postgres:18.4-alpine3.24', 'gitea/gitea:1.27.3-rootless'):
+    for name in ('postgres:18.4-alpine3.24', 'codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'):
         run('docker', 'image', 'inspect', name)
     space = run('docker', 'run', '--rm', '--pull=never', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--entrypoint', '/bin/df', image, '-Pk', '/')
     assert int(space.splitlines()[-1].split()[3]) >= 2*1024*1024, 'Require 2 GiB free Docker VM space before fresh stack'
     project = 'golf-team-access-proof-'+secrets.token_hex(5)
-    ports = helpers.free_ports(2); previous = smoke.GOLF, smoke.GITEA
-    smoke.GOLF, smoke.GITEA = 'http://127.0.0.1:'+str(ports[0]), 'http://127.0.0.1:'+str(ports[1])
+    ports = helpers.free_ports(2); previous = smoke.GOLF, smoke.FORGE
+    smoke.GOLF, smoke.FORGE = 'http://127.0.0.1:'+str(ports[0]), 'http://127.0.0.1:'+str(ports[1])
     actors, enrolled, bearers, organizations, repositories, started, passed = {}, [], [], {}, {}, False, False
     record(project=project, selectedImage=image, sourceRevision=revision, cleanup='not_created')
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory = Path(temporary); directory.chmod(0o700)
-        values = {key:secrets.token_hex(24) for key in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD')}
+        values = {key:secrets.token_hex(24) for key in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(), GOLF_PUBLIC_URL=smoke.GOLF, GOLF_PUSH_CI_ENABLED='false')
         env_file, override = directory/'core.env', directory/'proof.yaml'
         helpers.private_write(env_file, ''.join(key+'='+value+'\n' for key,value in values.items()))
@@ -208,14 +209,14 @@ def main():
     image: {image}
     pull_policy: never
     ports: !override ["127.0.0.1:{ports[0]}:8080"]
-  gitea:
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
 ''')
         compose = ['docker', 'compose', '-p', project, '--env-file', str(env_file), '-f', str(ROOT/'compose.yaml'), '-f', str(override)]
         def command(*arguments, **kwargs): return run(*compose, *arguments, **kwargs)
-        def admin(*arguments): return command('exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini', 'admin', 'user', *arguments)
+        def admin(*arguments): return command('exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *arguments)  # Forgejo's upstream path
         def operator(action, payload):
             result = json.loads(command('exec', '-T', 'golf', '/usr/local/bin/golf', 'local-account', action, payload=payload))
             assert result['state'] == 'complete'; return result['result']
@@ -223,7 +224,7 @@ def main():
             container = command('ps', '-q', 'golf'); assert re.fullmatch(r'[0-9a-f]{12,64}', container)
             observed = json.loads(run('docker', 'inspect', '--format', '{"image":{{json .Image}},"reference":{{json .Config.Image}},"revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}},"composeConfigHash":{{json (index .Config.Labels "com.docker.compose.config-hash")}}}', container))
             assert observed['image'] == image and observed['reference'] == image and observed['revision'] == revision
-            observed['nativeVersion'] = smoke.request(smoke.client(), 'GET', smoke.GITEA+'/api/v1/version')['version']; assert observed['nativeVersion'] == '1.27.3'
+            observed['nativeVersion'] = smoke.request(smoke.client(), 'GET', smoke.FORGE+'/api/v1/version')['version']; assert observed['nativeVersion'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
             return observed
         def call(actor, method, payload, **kwargs): return checked_rpc(actor['session'], SERVICE+method, payload, **kwargs)
         try:
@@ -328,7 +329,7 @@ def main():
             if args.ui:
                 stage('real shared team inventory/editor/attach/detach/reload and response-loss browser qualification')
                 owner_target,inventory=inspect()
-                browser_config={'stackRoot':str(ROOT),'golf':smoke.GOLF,'gitea':smoke.GITEA,'repository':native['full_name'],'repositoryId':repo_id,'ownerId':org_id,'email':owner['email'],'password':owner['password'],'readerEmail':member['email'],'readerPassword':member['password'],'ownerToken':owner['token'],'teamId':str(builders['id']),'teamName':builders['name'],'screenshots':str(OUTPUT),'runtime':before_runtime}
+                browser_config={'stackRoot':str(ROOT),'golf':smoke.GOLF,'forge':smoke.FORGE,'repository':native['full_name'],'repositoryId':repo_id,'ownerId':org_id,'email':owner['email'],'password':owner['password'],'readerEmail':member['email'],'readerPassword':member['password'],'ownerToken':owner['token'],'teamId':str(builders['id']),'teamName':builders['name'],'screenshots':str(OUTPUT),'runtime':before_runtime}
                 result=subprocess.run(['node',str(ROOT/'scripts/repository-team-access-browser.mjs')],cwd=ROOT,env=environment,input=json.dumps(browser_config).encode(),capture_output=True,timeout=360)
                 assert len(result.stdout)<=65536 and len(result.stderr)<=65536
                 browser_proof=json.loads((OUTPUT/'browser-manifest.json').read_text());record(browser=browser_proof['status'],captures=browser_proof['captures'],browserFailedStage=browser_proof.get('failedStage'),browserRequestCounts=browser_proof.get('requestCounts',{}),browserProcedureStatusCounts=browser_proof.get('procedureStatusCounts',{}))
@@ -389,7 +390,7 @@ def main():
             def remove(route,role,identifier,owner_identifier=None):
                 # Never follow a stale alias or delete a different current native ID.
                 def native_request(method):
-                    request=urllib.request.Request(smoke.GITEA+'/api/v1/'+route,method=method,headers={'Authorization':'token '+actors['owner']['token']})
+                    request=urllib.request.Request(smoke.FORGE+'/api/v1/'+route,method=method,headers={'Authorization':'token '+actors['owner']['token']})
                     try:response=cleanup_client.open(request,timeout=15)
                     except urllib.error.HTTPError as error:response=error
                     with response:
@@ -418,7 +419,7 @@ def main():
                     command('down','--volumes','--remove-orphans',timeout=180)
                     for arguments in [('ps','-aq'),('volume','ls','-q'),('network','ls','-q')]:assert not run('docker',*arguments,'--filter','label=com.docker.compose.project='+project)
             except Exception:failures.append('fresh project resources')
-            finally:smoke.GOLF,smoke.GITEA=previous;record(cleanup='failed' if failures else 'passed',cleanupFailureCategories=failures)
+            finally:smoke.GOLF,smoke.FORGE=previous;record(cleanup='failed' if failures else 'passed',cleanupFailureCategories=failures)
             if failures and passed:record(failedStage='owned fixture cleanup')
             assert not failures,'Owned native/managed cleanup incomplete (fresh project removed)'
             print('Cleanup: disposable actors/orgs/repos purged, managed sessions/bearers revoked/accounts disabled, fresh Compose resources removed.',flush=True)

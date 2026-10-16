@@ -11,7 +11,7 @@ import time
 from urllib.parse import quote
 
 sys.dont_write_bytecode=True
-from smoke import ROOT,GOLF,GITEA,admin,client,provider,ready,request,rpc,wait_for_push
+from smoke import ROOT,GOLF,FORGE,admin,client,provider,ready,request,rpc,wait_for_push
 
 BROWSER=r'''
 import {pathToFileURL} from 'node:url';import {join} from 'node:path';import {writeFile} from 'node:fs/promises';
@@ -19,7 +19,7 @@ let browser,context,config,stage='initialization';function check(value){if(!valu
 try{
  const {chromium}=await import(pathToFileURL(join(process.cwd(),'web/node_modules/playwright/index.mjs')));let input='';for await(const p of process.stdin)input+=p;config=JSON.parse(input);input='';
  browser=await chromium.launch();context=await browser.newContext({viewport:{width:1280,height:900}});const headers={Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'};
- check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithGiteaToken',{headers,data:{token:config.token}})).status()===200);
+ check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithForgeToken',{headers,data:{token:config.token}})).status()===200);
  const page=await context.newPage();const errors=[];page.on('pageerror',()=>errors.push(true));const url=config.golf+'/'+config.repository+'/pull/'+config.number;
  for(const theme of ['dark','light'])for(const width of [1280,390]){
   stage='inline comments '+theme+' '+width;await page.setViewportSize({width,height:900});await page.goto(url);await page.getByRole('button',{name:'Show inline comments (54)',exact:true}).waitFor();
@@ -32,14 +32,14 @@ try{
  }
  stage='own pending draft inspection';await page.getByRole('button',{name:'Show inline comments (1)',exact:true}).click();const pending=page.getByRole('region',{name:'Inline comments for review '+config.pendingId,exact:true});await pending.getByText('Own pending inline text',{exact:true}).waitFor();await page.getByRole('button',{name:'Hide inline comments (1)',exact:true}).click();
  stage='files changed comment panel';await page.getByRole('navigation',{name:'Pull request workspace',exact:true}).getByRole('link',{name:'Files changed',exact:true}).click();await page.locator('.diff-file').first().waitFor();await page.getByRole('button',{name:'Show review comments',exact:true}).click();await page.getByRole('button',{name:'Show inline comments (54)',exact:true}).click();await page.getByRole('region',{name:'Inline comments for review '+config.reviewId,exact:true}).getByText('Native reader reply',{exact:true}).waitFor();
- stage='live private inline read revocation';check((await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);await page.getByRole('region',{name:'Inline comments for review '+config.reviewId,exact:true}).waitFor({state:'detached',timeout:15000});check(!await page.locator('body').innerText().then(t=>t.includes('Native reader reply')||t.includes('Own pending inline text')));check(errors.length===0);
+ stage='live private inline read revocation';check((await context.request.delete(config.forge+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);await page.getByRole('region',{name:'Inline comments for review '+config.reviewId,exact:true}).waitFor({state:'detached',timeout:15000});check(!await page.locator('body').innerText().then(t=>t.includes('Native reader reply')||t.includes('Own pending inline text')));check(errors.length===0);
  console.log('PASS: actual inline-comment UI, 54 complete reads, safe Markdown, individual/deleted-resolver observation, own pending inspection, Files changed panel, both themes/mobile and live private revocation');
 }catch{console.error('Inline review browser failed at '+stage+'; private diagnostics withheld');process.exitCode=1;}
 finally{if(context&&config)try{check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/Logout',{headers:{Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'},data:{}})).status()===200);}catch{console.error('Inline review browser logout failed');process.exitCode=1;}await browser?.close();}
 '''
 
 def mcp_comments(binary,credential,api,selection,expected_ids):
- env={k:v for k,v in os.environ.items() if k not in {'GOLF_API_TOKEN','GOLF_GITEA_TOKEN','GOLF_URL','MCPGODEBUG'}};env['GOLF_API_TOKEN' if api else 'GOLF_GITEA_TOKEN']=credential
+ env={k:v for k,v in os.environ.items() if k not in {'GOLF_API_TOKEN','GOLF_FORGE_TOKEN','GOLF_URL','MCPGODEBUG'}};env['GOLF_API_TOKEN' if api else 'GOLF_FORGE_TOKEN']=credential
  process=subprocess.Popen([str(binary),'--url',GOLF,'mcp'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env)
  def send(value):process.stdin.write((json.dumps(value)+'\n').encode());process.stdin.flush()
  def receive(identity):
@@ -56,11 +56,11 @@ def mcp_comments(binary,credential,api,selection,expected_ids):
   process.stdout.close();process.stderr.close()
 
 def main():
- ready();assert request(client(),'GET',GITEA+'/api/v1/version')['version']=='1.27.3';stage='accounts';prefix='golf-inline-read-'+secrets.token_hex(4);users=[];actors={};deleted=set()
+ ready();assert request(client(),'GET',FORGE+'/api/v1/version')['version']=='15.0.9+gitea-1.22.0';stage='accounts';prefix='golf-inline-read-'+secrets.token_hex(4);users=[];actors={};deleted=set()  # Forgejo's upstream version string
  try:
   for role in ['owner','author','reviewer','reader','outsider']:
    name=prefix+'-'+role;admin('create','--username',name,'--email',name+'@example.invalid','--random-password','--must-change-password=false');users.append(name);token=admin('generate-access-token','--username',name,'--token-name',prefix,'--scopes','write:user,write:repository','--raw').strip();session=None
-   if role!='author':session=client();rpc(session,'SessionService/LoginWithGiteaToken',{'token':token})
+   if role!='author':session=client();rpc(session,'SessionService/LoginWithForgeToken',{'token':token})
    actors[role]={'name':name,'token':token,'session':session,'id':provider(token,'GET','user')['id']}
   owner,author,reviewer,reader,outsider=[actors[role] for role in actors];stage='native PR setup';repo=provider(owner['token'],'POST','user/repos',{'name':'private','private':True,'auto_init':True},201);full=repo['full_name'];route='repos/'+full;key={'owner':owner['name'],'name':'private'};wait_for_push(owner['token'],full)
   for actor,permission in [(author,'write'),(reviewer,'write'),(reader,'read')]:provider(owner['token'],'PUT',route+'/collaborators/'+actor['name'],{'permission':permission},204)
@@ -87,7 +87,7 @@ def main():
    args={'repository':full,'number':number,'review_id':review_id,'repository_id':selection['repositoryId'],'pull_request_id':selection['pullRequestId'],'review_commit_id':head};mcp_comments(binary,reader['token'],False,args,expected_ids);mcp_comments(binary,bearer,True,args,expected_ids)
   finally:rpc(reader['session'],'ApiCredentialService/RevokeApiCredential',{'credentialId':issued['credential']['id']})
   print('PASS: actual Golf54-comment complete read/order/body/location/blame/resolver-ghost preservation; wrong identities/head/private/Origin/pending denial; own pending; CLI and PAT/bearer MCP',flush=True)
-  stage='served browser';screens=ROOT/'.tmp/pull-review-comments-smoke';screens.mkdir(exist_ok=True);proof=subprocess.run(['node','--input-type=module','-e',BROWSER],cwd=ROOT,input=json.dumps({'golf':GOLF,'gitea':GITEA,'repository':full,'number':number,'reviewId':review_id,'pendingId':str(own['id']),'resolvedId':str(parent['id']),'replyId':str(reply['id']),'token':reader['token'],'user':reader['name'],'ownerToken':owner['token'],'screenshots':str(screens)}),capture_output=True,text=True,timeout=120)
+  stage='served browser';screens=ROOT/'.tmp/pull-review-comments-smoke';screens.mkdir(exist_ok=True);proof=subprocess.run(['node','--input-type=module','-e',BROWSER],cwd=ROOT,input=json.dumps({'golf':GOLF,'forge':FORGE,'repository':full,'number':number,'reviewId':review_id,'pendingId':str(own['id']),'resolvedId':str(parent['id']),'replyId':str(reply['id']),'token':reader['token'],'user':reader['name'],'ownerToken':owner['token'],'screenshots':str(screens)}),capture_output=True,text=True,timeout=120)
   for line in proof.stdout.splitlines():print(line)
   for line in proof.stderr.splitlines():
    if line.startswith('Inline review browser failed at ') or line=='Inline review browser logout failed':print(line)

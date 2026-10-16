@@ -158,7 +158,7 @@ def main():
     stack=args.stack_root.resolve(); record(status='running')
     spec=importlib.util.spec_from_file_location('runner_control_helpers',stack/'scripts/observability-smoke.py')
     helpers=importlib.util.module_from_spec(spec); spec.loader.exec_module(helpers)
-    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
+    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
     def run(*argv,payload=None,timeout=180):
         result=subprocess.run(argv,cwd=stack,env=environment,input=None if payload is None else json.dumps(payload).encode(),capture_output=True,timeout=timeout)
         assert result.returncode==0 and len(result.stdout)<=8<<20 and len(result.stderr)<=8<<20, 'Private subprocess failed; diagnostics withheld'
@@ -166,20 +166,20 @@ def main():
     stage('exact cached images and fresh-stack reserve')
     core_row=json.loads(run('docker','image','inspect',args.image))[0]; core=core_row['Id']; worker=json.loads(run('docker','image','inspect',args.runner_image))[0]['Id']
     assert re.fullmatch(r'sha256:[a-f0-9]{64}',core) and re.fullmatch(r'sha256:[a-f0-9]{64}',worker)
-    for cached in ('postgres:18.4-alpine3.24','gitea/gitea:1.27.3-rootless',DIND): run('docker','image','inspect',cached)
+    for cached in ('postgres:18.4-alpine3.24','codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413',DIND): run('docker','image','inspect',cached)
     space=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',core,'-Pk','/')
     assert int(space.splitlines()[-1].split()[3])>=2*1024*1024
     revision=(core_row.get('Config',{}).get('Labels') or {}).get('org.opencontainers.image.revision')
     record(coreImage=core,runnerImage=worker,servedSourceRevision=revision if re.fullmatch(r'[a-f0-9]{40}',revision or '') else None,workingTreeHead=run('git','rev-parse','HEAD'))
     if args.ui: assert (stack/'web/node_modules/playwright/index.mjs').is_file()
-    project='golf-runners-'+secrets.token_hex(5); ports=helpers.free_ports(2); previous=smoke.GOLF,smoke.GITEA
-    smoke.GOLF,smoke.GITEA=f'http://127.0.0.1:{ports[0]}',f'http://127.0.0.1:{ports[1]}'
+    project='golf-runners-'+secrets.token_hex(5); ports=helpers.free_ports(2); previous=smoke.GOLF,smoke.FORGE
+    smoke.GOLF,smoke.FORGE=f'http://127.0.0.1:{ports[0]}',f'http://127.0.0.1:{ports[1]}'
     workers=['local-docker','protocol-worker']+(['ui-dark-1440','ui-dark-390','ui-light-1440','ui-light-390'] if args.ui else [])
     keys={name:base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=') for name in workers}
     actors={}; forbidden=list(keys.values()); started=False; original_failure=None; cleanup=[]; passed=False; daemon=None
     with tempfile.TemporaryDirectory(prefix=project+'-') as temp:
         directory=Path(temp);directory.chmod(0o700)
-        values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')}
+        values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_RUNNER_KEY=keys['local-docker'],GOLF_RUNNER_KEYS=json.dumps(keys),GOLF_RUNNER_IMAGES=json.dumps({'linux':IMAGE}),GOLF_RUNNER_JOB_IMAGE=IMAGE,GOLF_RUNNER_APPROVED_IMAGES=json.dumps([IMAGE]),GOLF_PUSH_CI_ENABLED='false')
         forbidden.extend(v for k,v in values.items() if k.endswith(('PASSWORD','ENCRYPTION_KEY')))
         env_file=directory/'core.env'; override=directory/'proof.yaml'
@@ -189,9 +189,9 @@ def main():
     image: {core}
     pull_policy: never
     ports: !override ["127.0.0.1:{ports[0]}:8080"]
-  gitea:
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
   runner:
     image: {worker}
@@ -203,7 +203,7 @@ def main():
 ''')
         compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(stack/'compose.yaml'),'-f',str(stack/'deploy/compose/compose.ci.yaml'),'-f',str(override)]
         def command(*argv,**kw): return run(*compose,*argv,**kw)
-        def admin(*argv): return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*argv)
+        def admin(*argv): return command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*argv)  # Forgejo's upstream path
         def rpc(actor,procedure,payload=None,**kw):return checked_rpc(actor['session'],procedure,payload,**kw)
         def controls(actor):return inventory(rpc(actor,SERVICE+'GetInstanceRunners'),workers)
         def state(actor,worker_id):return next(row for row in controls(actor) if row['workerId']==worker_id)
@@ -238,7 +238,7 @@ def main():
         def runtime():
             value=json.loads(run('docker','inspect',command('ps','-q','golf')))[0]
             assert value['Image']==core
-            return {'image':value['Image'],'composeConfigHash':value['Config']['Labels']['com.docker.compose.config-hash'],'nativeVersion':smoke.request(smoke.client(),'GET',smoke.GITEA+'/api/v1/version')['version']}
+            return {'image':value['Image'],'composeConfigHash':value['Config']['Labels']['com.docker.compose.config-hash'],'nativeVersion':smoke.request(smoke.client(),'GET',smoke.FORGE+'/api/v1/version')['version']}
         def containers(attempt):
             assert re.fullmatch(r'[a-f0-9]{32}',attempt)
             ids=command('exec','-T','runner-daemon','docker','ps','-aq','--filter','label=io.golf.runner.managed=true','--filter','label=io.golf.runner.attempt='+attempt).split()
@@ -257,9 +257,9 @@ def main():
         try:
             stage('fresh base and dedicated daemon; no runner process yet')
             started=True;record(project=project,cleanup='pending')
-            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf','runner-daemon');smoke.ready()
+            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','forgejo','golf','runner-daemon');smoke.ready()
             command('up','-d','--no-build','--pull','never','runner-image-init')
-            baseline=runtime();assert baseline['nativeVersion']=='1.27.3';record(runtimeBefore=baseline)
+            baseline=runtime();assert baseline['nativeVersion']=='15.0.9+gitea-1.22.0';record(runtimeBefore=baseline)  # Forgejo's upstream version string
             daemon=command('ps','-q','runner-daemon');assert re.fullmatch(r'[a-f0-9]{12,64}',daemon)
             helpers.private_write(OUTPUT/'seed-pending.json',json.dumps({'schema':'golf.runner-controls.seed.v1','project':project,'containerId':daemon,'jobImage':IMAGE,'daemonImage':DIND,'expiresAfterSeconds':args.seed_timeout,'helperNeverPullsOrBuilds':True},indent=2)+'\n')
             print('PREREQUISITE: root seed fresh owned daemon '+daemon+' with exact pinned Alpine and DinD; helper never pulls/builds.',flush=True)
@@ -310,7 +310,7 @@ def main():
                 rpc(owner,SERVICE+method,{},expected=403,headers={'Origin':'https://wrong.golf.invalid'})
                 checked_rpc(smoke.client(),SERVICE+method,{},expected=403,headers={'Authorization':'Bearer '+credential['token']})
             rpc(owner,'ApiCredentialService/RevokeApiCredential',{'credentialId':credential['credential']['id']})
-            pat=smoke.client();checked_rpc(pat,'SessionService/LoginWithGiteaToken',{'token':owner['token']});checked_rpc(pat,SERVICE+'GetInstanceRunners',expected=403);checked_rpc(pat,SERVICE+'GetRepositoryRunners',selection,expected=403);checked_rpc(pat,'SessionService/Logout')
+            pat=smoke.client();checked_rpc(pat,'SessionService/LoginWithForgeToken',{'token':owner['token']});checked_rpc(pat,SERVICE+'GetInstanceRunners',expected=403);checked_rpc(pat,SERVICE+'GetRepositoryRunners',selection,expected=403);checked_rpc(pat,'SessionService/Logout')
             pactor=actors['protocol'];old=state(pactor,'protocol-worker');wrong={'workerId':'protocol-worker','expectedVersion':old['version'],'state':'RUNNER_CONTROL_STATE_DRAINING','currentPassword':'wrong owned password'};rpc(pactor,SERVICE+'UpdateRunnerControl',wrong,expected=403)
             stage('protocol-only leased attempt drain/revoke fences; not executed Docker work')
             first=dispatch();leased=lease(first);prefix='/internal/ci/attempt/'+leased['attemptId'];cap=leased['attemptToken']
@@ -379,7 +379,7 @@ def main():
                     command('down','--volumes','--remove-orphans',timeout=180)
                     for argv in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):assert not run('docker',*argv,'--filter','label=com.docker.compose.project='+project)
                 except Exception:cleanup.append('fresh-compose-resources')
-            smoke.GOLF,smoke.GITEA=previous;record(status='passed' if passed and not cleanup else 'failed',complete=passed and not cleanup,cleanup='failed' if cleanup else 'passed',cleanupFailures=cleanup)
+            smoke.GOLF,smoke.FORGE=previous;record(status='passed' if passed and not cleanup else 'failed',complete=passed and not cleanup,cleanup='failed' if cleanup else 'passed',cleanupFailures=cleanup)
             (OUTPUT/'manifest.json').write_text(safe_manifest(PROOF,forbidden));(OUTPUT/'manifest.json').chmod(0o600)
         if original_failure is not None:raise original_failure
         assert passed and not cleanup

@@ -20,7 +20,7 @@ import time
 import urllib.request
 
 sys.dont_write_bytecode = True
-from smoke import ROOT, GITEA, client, command, provider, ready, request, wait_for_push
+from smoke import ROOT, FORGE, client, command, provider, ready, request, wait_for_push
 
 
 def main():
@@ -32,11 +32,11 @@ def main():
 
     def admin(*values):
         return command('docker', 'compose', '--project-directory', str(stack), '--file', str(stack/'compose.yaml'),
-                       '--env-file', str(stack/'.env'), 'exec', '-T', 'gitea', 'gitea',
-                       '--config', '/etc/gitea/app.ini', 'admin', 'user', *values)
+                       '--env-file', str(stack/'.env'), 'exec', '-T', 'forgejo', 'forgejo',
+                       '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *values)  # Forgejo's upstream path
 
     def native_diff(token, route):
-        req = urllib.request.Request(GITEA+'/api/v1/'+route+'.diff', headers={'Authorization': 'token '+token})
+        req = urllib.request.Request(FORGE+'/api/v1/'+route+'.diff', headers={'Authorization': 'token '+token})
         with client().open(req, timeout=20) as response:
             assert response.status == 200
             raw = response.read(512*1024+1)
@@ -44,7 +44,7 @@ def main():
             return raw.decode('utf-8')
 
     ready()
-    assert request(client(), 'GET', GITEA+'/api/v1/version')['version'] == '1.27.3'
+    assert request(client(), 'GET', FORGE+'/api/v1/version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
     prefix = 'golf-inline-pub-probe-'+secrets.token_hex(4)
     users, repositories, actors = [], [], {}
     pg = prefix+'-pg'
@@ -96,7 +96,7 @@ def main():
         assert pending['state'] == 'PENDING' and pending['comments_count'] == 1
         pending_children = provider(reviewer['token'], 'GET', proute+'/reviews/'+str(pending['id'])+'/comments')
         assert len(pending_children) == 1
-        envelope = {'URL': GITEA, 'Owner': owner['name'], 'Repository': 'private', 'Reviewer': reviewer['name'], 'ReviewerToken': reviewer['token'], 'Path': 'src/context ü.txt',
+        envelope = {'URL': FORGE, 'Owner': owner['name'], 'Repository': 'private', 'Reviewer': reviewer['name'], 'ReviewerToken': reviewer['token'], 'Path': 'src/context ü.txt',
                     'RepositoryID': repo['id'], 'PullID': pull['id'], 'Number': pull['number'], 'ReviewerID': reviewer['id'],
                     'Base': base, 'Head': head, 'MergeBase': merge_base, 'Diff': native_diff(owner['token'], proute), 'PendingID': pending['id'], 'PendingChildID': pending_children[0]['id']}
         stage = 'isolated Golf PostgreSQL'

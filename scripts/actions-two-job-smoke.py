@@ -180,14 +180,14 @@ def main():
     args=parser.parse_args();stack=args.stack_root.resolve();output=args.output.resolve()
     forge = args.forge_kind
     native_image = 'codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'
-    native_version = '15.0.9+gitea-1.22.0'
+    native_version = '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
     compose_file = 'compose.yaml'
     init_file = 'deploy/postgres/forgejo-init.sh'
-    config_file = '/var/lib/gitea/custom/conf/app.ini'
+    config_file = '/var/lib/gitea/custom/conf/app.ini'  # Forgejo's upstream path
     workflow_dirs = '.forgejo/workflows,.github/workflows'
     if not args.forgejo_spec: parser.error('--forgejo-spec is required')
     spec_path = args.forgejo_spec
-    assert hashlib.sha256(spec_path.read_bytes()).hexdigest() == json.loads((stack/'docs/compatibility/forgejo-inventory.json').read_text())['targetSHA256'], 'Forgejo API baseline differs from the inventoried snapshot'
+    assert hashlib.sha256(spec_path.read_bytes()).hexdigest() == json.loads((stack/'docs/compatibility/profile.json').read_text())['forgejo']['spec_sha256'], 'Forgejo API baseline differs from the pinned compatibility profile'
     official_spec = json.loads(spec_path.read_bytes())
     PATH=args.workflow_directory+'/two-job.yml';WITH_PUSH=args.with_push;WITH_GIT=args.git_image_proof is not None
     WITH_ORDINARY=args.ordinary_actions_bundles is not None
@@ -207,7 +207,7 @@ def main():
     for digest in (args.expected_core_sha256,args.expected_runner_sha256,args.expected_engine_sha256):assert re.fullmatch('[a-f0-9]{64}',digest)
     files=source_files(stack)  # Refuse absent prepared fixture before resource operations.
     output.mkdir(parents=True,mode=0o700);output.chmod(0o700)
-    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
+    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
     forbidden=[];manifest={'complete':False,'passed':False,'proofKind':'maintained-actions-two-job-needs','sourceRevision':args.source_revision,'sourceDirty':bool(subprocess.check_output(['git','status','--porcelain'],cwd=stack,env=environment).strip()),'sourceFiles':{path:hashlib.sha256((stack/path).read_bytes()).hexdigest() for path in ('internal/workflowpath/path.go','internal/server/workflows.go','internal/server/workflow_runs.go','internal/server/server.go','internal/server/repository_events.go','internal/server/execution_policy.go','scripts/actions-two-job-smoke.py',compose_file,init_file,'deploy/compose/compose.actions-engine.yaml','cmd/golf-runner/main.go','cmd/golf-runner/git_execution.go','internal/server/runner_transport.go','internal/runner/actions_git_source.go','engines/act/execute.go','engines/act/git_source.go','engines/act/job_disk.go','engines/act/upstream_source_manifest.json')},'workflowPath':PATH,'withPush':WITH_PUSH,'fixtureSha256':{path:hashlib.sha256(data).hexdigest() for path,data in files.items()},'limitations':['Owned input-free two-job maintained Actions fixture only; no matrix, outputs, secrets, remote actions, failure/skip or cancellation qualification.','Current native before/after read authority is not an atomic native CAS.']}
     if WITH_ORDINARY:
         for path in ('internal/runner/action_bundles.go','internal/runner/dependency_access.go','internal/runner/dependency_firewall.go','internal/runner/job_git.go','internal/runner/masked_output.go','internal/runner/git_source_envelope.go','cmd/golf-runner/job_git.go','internal/server/job_git_capability.go','internal/server/runner_git_source.go','internal/server/actions_engine.go','internal/server/push_materializer.go','internal/server/database/migrations/202610070092_remote_actions.sql','engines/act/remote_actions.go','engines/act/job_git.go','engines/act/native_executor.go','deploy/docker/actions/Dockerfile','scripts/compatibility/requests-proof.py','deploy/compose/compose.actions-remote.yaml'):
@@ -232,7 +232,7 @@ def main():
             helpers.private_write(output/'private-failure-message.txt',redact(str(error))[:8192])
             record(originalFailure={'type':type(error).__name__,'stage':STAGE,'frames':[{'file':Path(v.filename).name if Path(v.filename).name in {Path(__file__).name,'actions-engine-smoke.py','workflow-notifications-smoke.py','observability-smoke.py','smoke.py'} else 'dependency','line':v.lineno} for v in traceback.extract_tb(error.__traceback__)[-6:]]})
     REPORT_FAILURE=failure
-    record(stage=STAGE,forgeKind=forge,nativeWebhookDialect='gitea',nativeSpecSHA256=hashlib.sha256(spec_path.read_bytes()).hexdigest())
+    record(stage=STAGE,forgeKind=forge,nativeWebhookDialect='forgejo',nativeSpecSHA256=hashlib.sha256(spec_path.read_bytes()).hexdigest())
     def snapshot():
         ids=execute('docker','ps','-aq','--no-trunc').splitlines();assert len(ids)<=500
         if not ids:return {}
@@ -253,7 +253,7 @@ def main():
     before=snapshot();helpers.private_write(output/'foreign-before.json',json.dumps(before,indent=2))
     project=PROJECT_PREFIX+secrets.token_hex(5);ports=helpers.free_ports(4 if WITH_GIT else 3)
     for argv in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):assert not execute('docker',*argv,'--filter','label=com.docker.compose.project='+project)
-    previous=smoke.GOLF,smoke.GITEA;smoke.GOLF=f'http://127.0.0.1:{ports[0]}';smoke.GITEA=f'http://127.0.0.1:{ports[1]}';secure=f'https://127.0.0.1:{ports[2]}'
+    previous=smoke.GOLF,smoke.FORGE;smoke.GOLF=f'http://127.0.0.1:{ports[0]}';smoke.FORGE=f'http://127.0.0.1:{ports[1]}';secure=f'https://127.0.0.1:{ports[2]}'
     assert len(set(platforms.values()))==1
     record(images=images,platforms=platforms,binarySha256=binaries,project=project,helperRevision=execute('git','rev-parse','HEAD'))
     actors={};started=False;passed=False;cleanup=[];bootstrap_created=False;git_tag=None;ci_tag=None
@@ -284,7 +284,7 @@ def main():
             def request(opener,method,url,payload=None,headers=None,expected=200):return original_request(opener,method,url,payload,headers={'Origin':public,**(headers or {})},expected=expected)
             smoke.request=request
         helpers.private_write(directory/'proof.env',''.join(k+"='"+v+"'\n" for k,v in values.items()))
-        overlay={'services':{'golf':{'image':images['golf'],'pull_policy':'never','mem_limit':'384m','environment':{'GOLF_FORGE_URL':'http://'+forge+':3000','GOLF_ACTIONS_ENGINE_CATALOG':act.CATALOG}},forge:{'image':images['native'],'pull_policy':'never','mem_limit':'512m','environment':{forge.upper()+'__server__ROOT_URL':smoke.GITEA+'/',forge.upper()+'__server__DISABLE_SSH':'true',forge.upper()+'__server__START_SSH_SERVER':'false',forge.upper()+'__actions__ENABLED':'false',forge.upper()+'__log__MODE':'console'}},'postgres':{'image':images['postgres'],'pull_policy':'never','mem_limit':'768m','command':['postgres','-c','max_wal_size=64MB','-c','min_wal_size=32MB','-c','checkpoint_timeout=30s']},'runner':{'image':images['runner'],'pull_policy':'never'},'runner-daemon':{'image':images['daemon'],'pull_policy':'never','mem_limit':'1024m'},'runner-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'},'runner-actions-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'}}}
+        overlay={'services':{'golf':{'image':images['golf'],'pull_policy':'never','mem_limit':'384m','environment':{'GOLF_FORGE_URL':'http://'+forge+':3000','GOLF_ACTIONS_ENGINE_CATALOG':act.CATALOG}},forge:{'image':images['native'],'pull_policy':'never','mem_limit':'512m','environment':{forge.upper()+'__server__ROOT_URL':smoke.FORGE+'/',forge.upper()+'__server__DISABLE_SSH':'true',forge.upper()+'__server__START_SSH_SERVER':'false',forge.upper()+'__actions__ENABLED':'false',forge.upper()+'__log__MODE':'console'}},'postgres':{'image':images['postgres'],'pull_policy':'never','mem_limit':'768m','command':['postgres','-c','max_wal_size=64MB','-c','min_wal_size=32MB','-c','checkpoint_timeout=30s']},'runner':{'image':images['runner'],'pull_policy':'never'},'runner-daemon':{'image':images['daemon'],'pull_policy':'never','mem_limit':'1024m'},'runner-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'},'runner-actions-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'}}}
         if WITH_GIT:
             source_row=json.loads(execute('docker','image','inspect',git_proof['originalSourceImage']['Id']))[0]
             assert source_row['Id']==git_proof['originalSourceImage']['Id'] and source_row['Os']+'/'+source_row['Architecture']==platforms['runner'] and not source_row['Config'].get('Volumes')
@@ -383,7 +383,7 @@ def main():
             record(seedReceipt=helpers.until(seeded,args.seed_wait_seconds))
             bootstrap=project+'-bootstrap';admin('create','--username',bootstrap,'--email',bootstrap+'@example.invalid','--random-password','--must-change-password=false','--admin');bootstrap_created=True
             assert smoke.provider('','GET','version')['version']==native_version
-            native_spec=smoke.request(smoke.client(),'GET',smoke.GITEA+'/swagger.v1.json')
+            native_spec=smoke.request(smoke.client(),'GET',smoke.FORGE+'/swagger.v1.json')
             for field in ('paths','definitions','securityDefinitions'):
                 assert native_spec.get(field)==official_spec.get(field), 'Installed API specification differs from the pinned planning baseline'
             record(installedSpec={'version':native_version,'canonicalSha256':hashlib.sha256(json.dumps(native_spec,sort_keys=True,separators=(',',':')).encode()).hexdigest(),'pathsDefinitionsSecurityMatch':True,'instance':'fresh owned qualification '+forge+'; not the retained installation','nativeActionsEnabled':False,'workflowDirs':workflow_dirs})
@@ -419,7 +419,7 @@ def main():
                         result=subprocess.run(['git','-c','core.hooksPath=/dev/null',*argv],env=git_env,capture_output=True,timeout=30)
                         assert result.returncode==0 and len(result.stdout)<=1<<20 and len(result.stderr)<=1<<20,'Owned native Git failed; output withheld'
                         return result.stdout.decode().strip()
-                    native_git('clone','--quiet',smoke.GITEA+'/'+native['full_name']+'.git',str(clone))
+                    native_git('clone','--quiet',smoke.FORGE+'/'+native['full_name']+'.git',str(clone))
                     native_git('-C',str(clone),'add','--chmod=+x','bin/executable.sh')
                     native_git('-C',str(clone),'-c','user.name=Owned fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Owned executable mode')
                     native_git('-C',str(clone),'push','--quiet','origin','HEAD')
@@ -473,7 +473,7 @@ def main():
                 if WITH_GIT:
                     full_logs=rpc('owner','WorkflowRunService/GetWorkflowRunLogs',{'runId':observed['id']})
                     output_text=''.join(v['text'] for v in full_logs.get('logs',[]))
-                    # Gitea's REST commit.tree.sha aliases the commit. Independent
+                    # Forgejo's REST commit.tree.sha aliases the commit. Independent
                     # native Git readback must verify the actual tree object.
                     native_git('-C',str(clone),'fetch','--quiet','origin',head)
                     assert native_git('-C',str(clone),'rev-parse','FETCH_HEAD')==head
@@ -519,7 +519,7 @@ def main():
                     command('stop','runner')
                     command('up','-d','--no-build','--pull','never','--no-deps','golf');smoke.ready()
                     command('up','-d','--no-build','--pull','never','--no-deps','--force-recreate','runner')
-                    smoke.provider(owner['token'],'POST',base+'/hooks',{'type':'gitea','active':True,'events':['push'],'branch_filter':'*','config':{'url':'http://golf:8080/hooks/forgejo/'+connection,'content_type':'json','http_method':'POST','secret':signing_secret}},expected=201)
+                    smoke.provider(owner['token'],'POST',base+'/hooks',{'type':'forgejo','active':True,'events':['push'],'branch_filter':'*','config':{'url':'http://golf:8080/hooks/forgejo/'+connection,'content_type':'json','http_method':'POST','secret':signing_secret}},expected=201)
                     # The existing native-activity proof admits only events clearly
                     # newer than the grant (whole-second provider clocks + skew).
                     import time
@@ -609,7 +609,7 @@ def main():
             try:
                 after=snapshot();helpers.private_write(output/'foreign-after.json',json.dumps(after,indent=2));difference=notifications.foreign_diff(before,after);record(foreignComparison=difference,foreignIdentityUnchanged=difference['identityUnchanged']);assert difference['identityUnchanged']
             except Exception:cleanup.append('foreign-identity')
-            smoke.GOLF,smoke.GITEA=previous
+            smoke.GOLF,smoke.FORGE=previous
             smoke.client,smoke.request=original_client,original_request
             if ci_tag:
                 try:execute("docker","image","rm","--no-prune",ci_tag)

@@ -15,12 +15,12 @@ import urllib.error
 import urllib.request
 
 sys.dont_write_bytecode = True
-from smoke import GITEA, admin, client, provider, ready, wait_for_push
+from smoke import FORGE, admin, client, provider, ready, wait_for_push
 
 
 def probe(token, method, route, payload=None, expected=200, headers=False):
     request = urllib.request.Request(
-        GITEA + '/api/v1/' + route, method=method,
+        FORGE + '/api/v1/' + route, method=method,
         data=None if payload is None else json.dumps(payload).encode(),
         headers={'Authorization': 'token ' + token, 'Content-Type': 'application/json'})
     try:

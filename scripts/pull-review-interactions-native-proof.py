@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Qualify team requests, published inline interactions and CODEOWNERS reads.
-Uses retained native Gitea plus an isolated host PostgreSQL schema; no runtime
+Uses retained native Forgejo plus an isolated host PostgreSQL schema; no runtime
 restart, resource increase, CI, model execution or direct forge storage writes.
 """
 import argparse,json,os,secrets,subprocess,sys,tempfile
 from pathlib import Path
 sys.dont_write_bytecode=True
-from smoke import ROOT,GITEA,command,provider,wait_for_push
+from smoke import ROOT,FORGE,command,provider,wait_for_push
 
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--lifecycle',action='store_true',help='Qualify published review dismissal/restoration instead of inline interactions');p.add_argument('--stack-root',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();stack=a.stack_root.resolve();os.umask(0o077)
  assert os.environ.get('GOLF_TEST_DATABASE_URL'),'Supply owned isolated host PostgreSQL';a.output.mkdir(parents=True,exist_ok=False)
  report={'passed':False,'ownedFixturesPurged':False,'dockerResourcesCreated':0};users=[];actors={};repos=[];org=None;prefix='golf-review077-'+secrets.token_hex(4)
- def admin(*v):return command('docker','compose','--project-directory',str(stack),'--file',str(stack/'compose.yaml'),'--env-file',str(stack/'.env'),'exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*v)
+ def admin(*v):return command('docker','compose','--project-directory',str(stack),'--file',str(stack/'compose.yaml'),'--env-file',str(stack/'.env'),'exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*v)  # Forgejo's upstream path
  try:
   for role in ('owner','reviewer'):
    name=prefix+'-'+role;admin('create','--username',name,'--email',name+'@example.invalid','--random-password','--must-change-password=false');users.append(name)
@@ -24,7 +24,7 @@ def main():
   provider(owner['token'],'PUT','teams/'+str(team['id'])+'/repos/'+repo['full_name'],expected=204)
   with tempfile.TemporaryDirectory(prefix='golf-review077-') as d:
    f=Path(d)/'fixture.json';fd=os.open(f,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-   with os.fdopen(fd,'w') as out:json.dump({'URL':GITEA,'Owner':owner['name'],'Reviewer':reviewer['name'],'OwnerToken':owner['token'],'ReviewerToken':reviewer['token'],'Organization':org['name'],'Branch':repo['default_branch'],'RepositoryID':repo['id'],'TeamID':team['id']},out)
+   with os.fdopen(fd,'w') as out:json.dump({'URL':FORGE,'Owner':owner['name'],'Reviewer':reviewer['name'],'OwnerToken':owner['token'],'ReviewerToken':reviewer['token'],'Organization':org['name'],'Branch':repo['default_branch'],'RepositoryID':repo['id'],'TeamID':team['id']},out)
    result=subprocess.run(['go','test','-race','./internal/server','-run','^TestReviewLifecycleNativeProof$' if a.lifecycle else '^TestReviewInteractionsNativeProof$','-count=1','-v'],cwd=ROOT,env={**os.environ,'GOLF_REVIEW_INTERACTIONS_NATIVE_PROOF':str(f)},capture_output=True,text=True,timeout=240)
    safe=[]
    for line in (result.stdout+result.stderr).splitlines():

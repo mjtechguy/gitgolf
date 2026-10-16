@@ -18,6 +18,7 @@ import urllib.request
 
 sys.dont_write_bytecode = True
 import smoke
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('helpers', ROOT/'scripts/observability-smoke.py')
@@ -30,7 +31,7 @@ def main():
     parser.add_argument('--image', required=True)
     args = parser.parse_args()
     environment = {k: v for k, v in os.environ.items() if not k.startswith(
-        ('GOLF_', 'GITEA_', 'POSTGRES_', 'COMPOSE_', 'RUSTFS_', 'AWS_', 'OTEL_')) and k != 'DATABASE_URL'}
+        ('GOLF_', 'FORGEJO_', 'POSTGRES_', 'COMPOSE_', 'RUSTFS_', 'AWS_', 'OTEL_')) and k != 'DATABASE_URL'}
 
     def run(*arguments, payload=None):
         result = subprocess.run(arguments, input=None if payload is None else json.dumps(payload).encode(),
@@ -42,23 +43,23 @@ def main():
     print('Golf image: '+image, flush=True)
     project = 'golf-https-proof-'+secrets.token_hex(5)
     tls_port, http_port, native_port = helpers.free_ports(3)
-    original = smoke.GOLF, smoke.GITEA
-    smoke.GOLF, smoke.GITEA = f'https://localhost:{tls_port}', f'http://127.0.0.1:{native_port}'
+    original = smoke.GOLF, smoke.FORGE
+    smoke.GOLF, smoke.FORGE = f'https://localhost:{tls_port}', f'http://127.0.0.1:{native_port}'
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory = Path(temporary)
         directory.chmod(0o700)
-        values = {k: secrets.token_hex(24) for k in ['POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD']}
+        values = {k: secrets.token_hex(24) for k in ['POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'FORGEJO_DB_PASSWORD']} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),
             GOLF_PUBLIC_URL=smoke.GOLF, GOLF_HTTPS_HOST='localhost', GOLF_HTTPS_PORT=str(tls_port),
-            GOLF_HTTP_PORT=str(http_port), GOLF_EDGE_BIND='127.0.0.1', GITEA_PUBLIC_URL='',
-            GITEA_OAUTH_CLIENT_ID='', GITEA_OAUTH_CLIENT_SECRET='', GOLF_ENCRYPTION_KEYS='',
+            GOLF_HTTP_PORT=str(http_port), GOLF_EDGE_BIND='127.0.0.1', GOLF_FORGE_PUBLIC_URL='',
+            GOLF_FORGE_OAUTH_CLIENT_ID='', GOLF_FORGE_OAUTH_CLIENT_SECRET='', GOLF_ENCRYPTION_KEYS='',
             GOLF_ACTIVE_ENCRYPTION_KEY='', GOLF_REPOSITORY_EVENT_CONNECTIONS='')
         helpers.private_write(directory/'env', ''.join(k+'='+v+'\n' for k, v in values.items()))
         helpers.private_write(directory/'override.yaml', f'''services:
   golf:
     image: {image}
     pull_policy: never
-  gitea:
+  forgejo:
     ports: !override ["127.0.0.1:{native_port}:3000"]
 ''')
         compose = ['docker', 'compose', '-p', project, '--env-file', str(directory/'env'),
@@ -69,7 +70,7 @@ def main():
             return run(*compose, *arguments, **kwargs)
 
         def native(*arguments):
-            return command('exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini',
+            return command('exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini',  # Forgejo's upstream path
                 'admin', 'user', *arguments)
 
         try:
@@ -159,7 +160,7 @@ def main():
             print('PASS: verified TLS, secure host-only persistent cookie, Origin/fetch guards, no-store RPC, private routes, redirect, restart, logout', flush=True)
         finally:
             command('down', '-v', '--remove-orphans')
-            smoke.GOLF, smoke.GITEA = original
+            smoke.GOLF, smoke.FORGE = original
 
 
 if __name__ == '__main__':

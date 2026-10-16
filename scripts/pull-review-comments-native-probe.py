@@ -14,13 +14,13 @@ from urllib.parse import quote, urlsplit
 from runpy import run_path
 
 sys.dont_write_bytecode = True
-from smoke import GITEA, ROOT, admin, client, provider, ready, request, wait_for_push
+from smoke import FORGE, ROOT, admin, client, provider, ready, request, wait_for_push
 probe = run_path(str(ROOT/'scripts/pull-review-native-probe.py'))['probe']
 
 
 def main():
     ready()
-    assert request(client(), 'GET', GITEA+'/api/v1/version')['version'] == '1.27.3', 'Native version outside qualified contract'
+    assert request(client(), 'GET', FORGE+'/api/v1/version')['version'] == '15.0.9+gitea-1.22.0', 'Native version outside qualified contract'  # Forgejo's upstream version string
     prefix = 'golf-inline-probe-' + secrets.token_hex(4)
     users, actors, repositories = [], {}, []
     stage = 'accounts'

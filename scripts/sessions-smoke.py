@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify per-user session listing/revocation against the actual Compose stack.
 
-Uses disposable Gitea users and scoped PATs through supported CLI/API operations.
+Uses disposable Forgejo users and scoped PATs through supported CLI/API operations.
 No database or .env edits; no credentials or cookie values are printed. Requires
 the current built Golf image. Provider consent/tokens are distinct from Golf
 sessions. The broader OAuth smoke separately qualifies the OAuth credential path.
@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 sys.dont_write_bytecode = True
-from smoke import GITEA, GOLF, ROOT, admin, client, ready, request, rpc
+from smoke import FORGE, GOLF, ROOT, admin, client, ready, request, rpc
 
 
 BROWSER_CHECK = r'''
@@ -41,7 +41,7 @@ try {
     return response.json();
   }
   stage = 'second real session';
-  await call(other, 'LoginWithGiteaToken', { token: config.token });
+  await call(other, 'LoginWithForgeToken', { token: config.token });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', () => errors.push('runtime error'));
@@ -152,7 +152,7 @@ def main():
 
         def login(label):
             opener = client()
-            assert rpc(opener, 'SessionService/LoginWithGiteaToken', {'token': identities[label]['token']})['user']['login'] == identities[label]['name']
+            assert rpc(opener, 'SessionService/LoginWithForgeToken', {'token': identities[label]['token']})['user']['login'] == identities[label]['name']
             return opener
 
         alice = [login('alice') for _ in range(5)]
@@ -215,7 +215,7 @@ def main():
         recovered = login('alice')
         assert len(sessions(recovered)) == 1
         basic = base64.b64encode((identities['alice']['name'] + ':' + identities['alice']['password']).encode()).decode()
-        token_url = GITEA + '/api/v1/users/' + identities['alice']['name'] + '/tokens'
+        token_url = FORGE + '/api/v1/users/' + identities['alice']['name'] + '/tokens'
         tokens = request(client(), 'GET', token_url, headers={'Authorization': 'Basic ' + basic})
         token_id = next(item['id'] for item in tokens if item['name'] == 'session-lifecycle')
         request(client(), 'DELETE', token_url + '/' + str(token_id), headers={'Authorization': 'Basic ' + basic}, expected=204)

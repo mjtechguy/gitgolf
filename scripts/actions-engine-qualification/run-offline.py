@@ -33,7 +33,7 @@ def main():
     artifacts = Path(args.artifacts).resolve()
     artifacts.mkdir(parents=True, exist_ok=False, mode=0o700)
     env = {key: value for key, value in os.environ.items() if not key.startswith(
-        ('GOLF_', 'GITEA_', 'POSTGRES_', 'OTEL_', 'COMPOSE_', 'RUSTFS_', 'AWS_', 'GIT_'))
+        ('GOLF_', 'FORGEJO_', 'POSTGRES_', 'OTEL_', 'COMPOSE_', 'RUSTFS_', 'AWS_', 'GIT_'))
         and key not in ('DATABASE_URL', 'DOCKER_HOST', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH')}
     owner = 'golf-act-proof-' + secrets.token_hex(6)
     manifest = {'complete': False, 'passed': False, 'engine': json.loads(

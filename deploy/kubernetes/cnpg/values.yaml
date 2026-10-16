@@ -9,8 +9,8 @@ resources:
   requests: {cpu: 500m, memory: 512Mi}
   limits: {cpu: '2', memory: 2Gi}
 golfAuthSecret: ''
-giteaAuthSecret: ''
-# Same namespace basic-auth Secrets: username=golf/gitea and password.
+forgejoAuthSecret: ''
+# Same namespace basic-auth Secrets: username=golf/forgejo and password.
 # Keep this DB lifecycle independent of the application Helm release.
 backup:
   enabled: true

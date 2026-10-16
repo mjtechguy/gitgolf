@@ -11,7 +11,7 @@ import sys
 import time
 
 sys.dont_write_bytecode = True
-from smoke import ROOT, GITEA, GOLF, admin, client, ready, rpc
+from smoke import ROOT, FORGE, GOLF, admin, client, ready, rpc
 spec = importlib.util.spec_from_file_location('organization_smoke', ROOT / 'scripts/organizations-smoke.py')
 helpers = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helpers)
@@ -51,7 +51,7 @@ try {
  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.evaluate(()=>scrollTo(0,0));
  await page.screenshot({path:join(config.screenshots,'pulls-light-mobile.png')});
- stage='revocation'; const response=await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.reader,
+ stage='revocation'; const response=await context.request.delete(config.forge+'/api/v1/repos/'+config.repository+'/collaborators/'+config.reader,
  {headers:{Authorization:'token '+config.ownerToken}}); check(response.status()===204);
  await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();
  await page.getByRole('alert').waitFor(); check(await page.getByLabel('Pull request body, plain text').count()===0);
@@ -88,7 +88,7 @@ def main():
             read = admin('generate-access-token', '--username', name, '--token-name', prefix+'-read',
                          '--scopes', 'read:user,read:repository', '--raw').strip()
             session = client()
-            rpc(session, 'SessionService/LoginWithGiteaToken', {'token': read})
+            rpc(session, 'SessionService/LoginWithForgeToken', {'token': read})
             actors[role] = {'name': name, 'token': token, 'read': read, 'session': session}
         owner, author, reader, outsider = [actors[r] for r in ['owner','author','reader','outsider']]
         repo = provider(owner['token'], 'POST', 'user/repos', {'name':'private', 'private':True,'auto_init':True}, expected=201)
@@ -135,7 +135,7 @@ def main():
                          '--scopes','read:user','--raw').strip()
         restricted_session=client()
         try:
-            rpc(restricted_session,'SessionService/LoginWithGiteaToken',{'token':restricted})
+            rpc(restricted_session,'SessionService/LoginWithForgeToken',{'token':restricted})
             for method in ['GetPullRequest','ListPullRequestReviews']:
                 rpc(restricted_session,'RepositoryService/'+method,request,expected=403)
             rpc(restricted_session,'RepositoryService/ListPullRequests',{'repository':key},expected=403)
@@ -179,7 +179,7 @@ def main():
         assert recorded['commitId']==head and head!=new_head
         print('PASS: advanced source observation preserves the native reviewed commit',flush=True)
         screenshots=ROOT/'.tmp/pull-smoke'; screenshots.mkdir(parents=True,exist_ok=True)
-        config={'golf':GOLF,'gitea':GITEA,'token':reader['read'],'ownerToken':owner['token'],
+        config={'golf':GOLF,'forge':FORGE,'token':reader['read'],'ownerToken':owner['token'],
                 'reader':reader['name'],'repository':full,'title':title,'number':number,
                 'lastReview':str(reviews[-1]['id']),'screenshots':str(screenshots)}
         result=subprocess.run(['node','--input-type=module','-e',BROWSER],input=json.dumps(config),

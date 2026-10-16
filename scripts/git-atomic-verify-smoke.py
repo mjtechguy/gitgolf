@@ -4,7 +4,7 @@
 Uses only two disposable local Git repositories and a private packet trace.
 One disposable local pre-receive hook supplies a deterministic race barrier.
 No provider, credentials, canonical ref-file edits or HOME override.
-This tests a Git protocol primitive, not a complete Gitea policy boundary.
+This tests a Git protocol primitive, not a complete Forgejo policy boundary.
 """
 import os
 from pathlib import Path
@@ -128,7 +128,7 @@ if any(line.endswith(' refs/heads/main-race') for line in updates):
         print('PASS: ' + version + '; unchanged source omitted from atomic update commands')
         print('PASS: already changed source rejects atomic push through explicit stale lease')
         print('PASS: deterministic source change after command receipt does not reject target publication')
-    print('PASS: disposable repositories, local hook and traces removed; no Gitea instance accessed')
+    print('PASS: disposable repositories, local hook and traces removed; no Forgejo instance accessed')
 
 
 if __name__ == '__main__':

@@ -69,7 +69,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def native(token, method, path, payload=None, expected=200):
-    request = urllib.request.Request(smoke.GITEA+'/api/v1/'+path, data=None if payload is None else json.dumps(payload).encode(), method=method, headers={'Content-Type':'application/json','Authorization':'token '+token})
+    request = urllib.request.Request(smoke.FORGE+'/api/v1/'+path, data=None if payload is None else json.dumps(payload).encode(), method=method, headers={'Content-Type':'application/json','Authorization':'token '+token})
     try: response = urllib.request.build_opener(NoRedirect()).open(request, timeout=45)
     except urllib.error.HTTPError as error: response = error
     with response:
@@ -366,7 +366,7 @@ def main():
     args.output.mkdir(mode=0o700,parents=True,exist_ok=False); args.output.chmod(0o700); OUTPUT = args.output.resolve(); record(status='running',browser='pending' if args.ui else 'not_requested')
     helper_spec = importlib.util.spec_from_file_location('rules_stack_helpers',ROOT/'scripts/observability-smoke.py')
     helpers = importlib.util.module_from_spec(helper_spec); helper_spec.loader.exec_module(helpers)
-    environment = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k != 'DATABASE_URL'}
+    environment = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k != 'DATABASE_URL'}
     def run(*arguments,payload=None,timeout=180):
         result = subprocess.run(arguments,cwd=ROOT,env=environment,input=None if payload is None else json.dumps(payload).encode(),capture_output=True,timeout=timeout)
         assert result.returncode == 0 and len(result.stdout) <= 8<<20 and len(result.stderr) <= 8<<20, 'Private subprocess failed; diagnostics withheld'
@@ -375,17 +375,17 @@ def main():
     if args.ui: assert (ROOT/'web/node_modules/playwright/index.mjs').is_file()
     info = json.loads(run('docker','image','inspect',args.image))[0]; image = info['Id']; revision = info['Config'].get('Labels',{}).get('org.opencontainers.image.revision')
     assert re.fullmatch(r'sha256:[a-f0-9]{64}',image) and re.fullmatch(r'[a-f0-9]{40}',revision or '')
-    for dependency in ('postgres:18.4-alpine3.24','gitea/gitea:1.27.3-rootless'): run('docker','image','inspect',dependency)
+    for dependency in ('postgres:18.4-alpine3.24','codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'): run('docker','image','inspect',dependency)
     free = run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',image,'-Pk','/')
     assert int(free.splitlines()[-1].split()[3]) >= 2*1024*1024, 'Require 2 GiB Docker VM reserve'
-    project = 'golf-rules49-'+secrets.token_hex(5); ports = helpers.free_ports(3); previous = smoke.GOLF,smoke.GITEA
-    smoke.GOLF,smoke.GITEA = 'http://127.0.0.1:'+str(ports[0]),'http://127.0.0.1:'+str(ports[1])
+    project = 'golf-rules49-'+secrets.token_hex(5); ports = helpers.free_ports(3); previous = smoke.GOLF,smoke.FORGE
+    smoke.GOLF,smoke.FORGE = 'http://127.0.0.1:'+str(ports[0]),'http://127.0.0.1:'+str(ports[1])
     actors,enrolled,bearers,repositories,orgs = {},[],[],{},{}
     started,passed = False,False; record(project=project,selectedImage=image,sourceRevision=revision)
     with native_proxy.NativeProxy(ports[2],project) as proxy, tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         ACTIVE_PROXY = proxy
         directory = Path(temporary); directory.chmod(0o700)
-        values = {k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')}
+        values = {k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_PUSH_CI_ENABLED='false')
         env_file,override = directory/'proof.env',directory/'proof.yaml'; helpers.private_write(env_file,''.join(k+'='+v+'\n' for k,v in values.items()))
         helpers.private_write(override,f'''services:
@@ -394,12 +394,12 @@ def main():
     pull_policy: never
     ports: !override ["127.0.0.1:{ports[0]}:8080"]
     environment:
-      GITEA_URL: http://native-qualification-proxy:8081
-  gitea:
+      GOLF_FORGE_URL: http://native-qualification-proxy:8081
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
-      GITEA__migrations__ALLOWED_DOMAINS: gitea
-      GITEA__migrations__ALLOW_LOCALNETWORKS: "true"
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
+      FORGEJO__migrations__ALLOWED_DOMAINS: forgejo
+      FORGEJO__migrations__ALLOW_LOCALNETWORKS: "true"
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
 ''')
         environment.update(proxy.environment())
@@ -407,14 +407,14 @@ def main():
         helpers.private_write(proxy_override,json.dumps({'services':{native_proxy.SERVICE_NAME:proxy.compose_service(image,binary),'golf':{'depends_on':{native_proxy.SERVICE_NAME:{'condition':'service_started'}}}}}))
         compose = ['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/'compose.yaml'),'-f',str(override),'-f',str(proxy_override)]
         def command(*arguments,**kwargs): return run(*compose,*arguments,**kwargs)
-        def admin(*arguments): return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*arguments)
+        def admin(*arguments): return command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*arguments)  # Forgejo's upstream path
         def operator(action,payload):
             result = json.loads(command('exec','-T','golf','/usr/local/bin/golf','local-account',action,payload=payload)); assert result['state'] == 'complete'; return result['result']
         def runtime():
             cid = command('ps','-q','golf'); assert re.fullmatch(r'[a-f0-9]{12,64}',cid)
             value = json.loads(run('docker','inspect','--format','{"image":{{json .Image}},"reference":{{json .Config.Image}},"revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}},"composeConfigHash":{{json (index .Config.Labels "com.docker.compose.config-hash")}}}',cid))
             assert value['image'] == image and value['reference'] == image and value['revision'] == revision
-            value['nativeVersion'] = native('', 'GET','version')['version']; assert value['nativeVersion'] == '1.27.3'; return value
+            value['nativeVersion'] = native('', 'GET','version')['version']; assert value['nativeVersion'] == '15.0.9+gitea-1.22.0'; return value  # Forgejo's upstream version string
         def access(actor,repository):
             a = rpc(actor['session'],'RepositoryAccessService/GetRepositoryAccess',{'repository':repository})['access']
             assert re.fullmatch(r'[1-9][0-9]*',a['repositoryId']) and re.fullmatch(r'[1-9][0-9]*',a['ownerId']) and re.fullmatch(r'[a-f0-9]{64}',a['revision'])
@@ -538,7 +538,7 @@ def main():
             native(owner['token'],'PATCH',path,{'archived':True}); archived_intent=intent(owner,personal,'CREATE_BRANCH',ruleName='archive/*',desiredBranch={'ruleName':'archive/*','priority':'1','requiredApprovals':'0'})
             archive_count=proxy.total(personal);rpc(owner['session'],MUTATE,archived_intent,expected=400,code='failed_precondition');inspect(owner,archived_intent,'REJECTED');assert proxy.total(personal)==archive_count
             native(owner['token'],'PATCH',path,{'archived':False})
-            mirror=native(owner['token'],'POST','repos/migrate',{'clone_addr':'http://gitea:3000/'+owner['name']+'/rules.git','repo_owner':owner['name'],'repo_name':'rules-mirror','service':'git','mirror':True,'private':True,'auth_username':owner['name'],'auth_password':owner['token'],'mirror_interval':'168h'},201)
+            mirror=native(owner['token'],'POST','repos/migrate',{'clone_addr':'http://forgejo:3000/'+owner['name']+'/rules.git','repo_owner':owner['name'],'repo_name':'rules-mirror','service':'git','mirror':True,'private':True,'auth_username':owner['name'],'auth_password':owner['token'],'mirror_interval':'168h'},201)
             repositories[mirror['full_name']]=(mirror['id'],mirror['owner']['id']);assert mirror['mirror'] is True;mirror_key={'owner':owner['name'],'name':'rules-mirror'}
             mirror_intent=intent(owner,mirror_key,'CREATE_BRANCH',ruleName='mirror/*',desiredBranch={'ruleName':'mirror/*','priority':'1','requiredApprovals':'0'})
             mirror_count=proxy.total(mirror_key);rpc(owner['session'],MUTATE,mirror_intent,expected=400,code='failed_precondition');inspect(owner,mirror_intent,'REJECTED');assert proxy.total(mirror_key)==mirror_count
@@ -636,7 +636,7 @@ def main():
                     command('down','--volumes','--remove-orphans',timeout=180)
                     for arguments in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')): assert not run('docker',*arguments,'--filter','label=com.docker.compose.project='+project)
             except Exception: failures.append('fresh project resources')
-            finally: ACTIVE_PROXY=None;smoke.GOLF,smoke.GITEA = previous; record(cleanup='failed' if failures else 'passed',cleanupFailureCategories=failures)
+            finally: ACTIVE_PROXY=None;smoke.GOLF,smoke.FORGE = previous; record(cleanup='failed' if failures else 'passed',cleanupFailureCategories=failures)
             if failures and passed: record(failedStage='owned fixture cleanup')
             if failures:
                 if not passed: record(originalFailurePreserved=True)

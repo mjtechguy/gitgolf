@@ -85,7 +85,7 @@ try{
   }
   check(errors.length===0);results.push({number:item.number,mutation});
   if(item.decision==='REQUEST_CHANGES'){
-   stage='live native access removal';check((await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);
+   stage='live native access removal';check((await context.request.delete(config.forge+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);
    await page.locator('.diff-file').first().waitFor({state:'detached',timeout:20000});await publication.waitFor({state:'detached',timeout:20000});const body=await page.locator('body').innerText();check(!body.includes(item.summary)&&!body.includes(item.oldBody)&&!body.includes(item.newBody)&&!body.includes(item.head));
   }
   await reader.close();await page.close();
@@ -119,7 +119,7 @@ def main():
         return result.stdout.strip()
 
     def admin(*values):
-        return command(*compose, 'exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini', 'admin', 'user', *values)
+        return command(*compose, 'exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *values)  # Forgejo's upstream path
 
     def operator(action, payload):
         out = json.loads(command(*compose, 'exec', '-T', 'golf', '/usr/local/bin/golf', 'local-account', action, payload=payload))
@@ -134,7 +134,7 @@ def main():
         return {'containerImageReference': reference, 'imageInspectId': image, 'composeConfigHash': config, 'repoDigests': json.loads(digests) or []}
 
     def native_diff(token, route):
-        req = urllib.request.Request(smoke.GITEA + '/api/v1/' + route + '.diff', headers={'Authorization': 'token ' + token})
+        req = urllib.request.Request(smoke.FORGE + '/api/v1/' + route + '.diff', headers={'Authorization': 'token ' + token})
         with smoke.client().open(req, timeout=20) as response:
             assert response.status == 200
             raw = response.read((512 << 10) + 1)
@@ -143,7 +143,7 @@ def main():
 
     try:
         smoke.ready()
-        assert smoke.provider('', 'GET', 'version')['version'] == '1.27.3'
+        assert smoke.provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
         baseline = runtime()
         prefix = 'golf-inline-served-' + secrets.token_hex(4)
         stage = 'disposable native actors and managed enrollment'
@@ -201,7 +201,7 @@ def main():
                           'summary': 'Saved inline qualification ' + decision, 'oldBody': 'Saved old-side note ' + decision, 'newBody': 'Saved new-side note ' + decision,
                           'hunkHeader': next(line for line in raw.splitlines() if line.startswith('@@ '))})
         stage = 'actual served browser publication'
-        config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': reviewer['email'], 'password': reviewer['password'], 'user': reviewer['name'], 'userId': str(reviewer['id']),
+        config = {'golf': smoke.GOLF, 'forge': smoke.FORGE, 'email': reviewer['email'], 'password': reviewer['password'], 'user': reviewer['name'], 'userId': str(reviewer['id']),
                   'ownerToken': owner['token'], 'repository': full, 'repositoryKey': {'owner': owner['name'], 'name': 'private'}, 'repositoryId': str(repo['id']), 'path': path,
                   'merge': merge, 'base': base, 'pulls': pulls, 'screenshots': str(screens), 'runtime': baseline, 'restartBackend': args.restart_backend, 'compose': compose, 'stack': str(stack)}
         result = subprocess.run(['node', '--input-type=module', '-e', BROWSER], cwd=stack, input=json.dumps(config), capture_output=True, text=True, timeout=180)

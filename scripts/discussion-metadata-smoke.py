@@ -125,7 +125,7 @@ def main():
         try:
             if created:
                 smoke.admin('delete', '--username', name, '--purge')
-                smoke.request(smoke.client(), 'GET', smoke.GITEA+'/api/v1/users/'+name, expected=404)
+                smoke.request(smoke.client(), 'GET', smoke.FORGE+'/api/v1/users/'+name, expected=404)
                 report['ownedUserPurged'] = True
         except BaseException:
             report['passed'] = False

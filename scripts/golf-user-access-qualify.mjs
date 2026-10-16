@@ -145,7 +145,7 @@ try {
   target = enrollment.account; assert(target && id(target.golfUserId) && target.nativeUserId === config.target.nativeUserId && target.username === config.target.login && !target.isInstanceAdmin && !target.disabled && target.credentialVersion === '1'); checked('ordinary native identity enrolled through supported Golf API');
   const local = await login('SessionService/LoginWithPassword', { username: config.target.email, password });
   const secondLocal = await login('SessionService/LoginWithPassword', { username: config.target.email, password });
-  const pat = await login('SessionService/LoginWithGiteaToken', { token: config.target.token }); checked('two local sessions and a native-token session resolve exact fixture identity');
+  const pat = await login('SessionService/LoginWithForgeToken', { token: config.target.token }); checked('two local sessions and a native-token session resolve exact fixture identity');
   const api = success(await request('ApiCredentialService/CreateApiCredential', { label: 'owned suspension qualification', lifetimeSeconds: 3600 }, pat)).token; assert(typeof api === 'string' && api.startsWith('golf_ro_')); secrets.push(api);
   step = 'current Golf inventory'; const initial = await inventory(); assert(!initial.suspended && (initial.version || '0') === '0'); checked('current exact Golf/native mapping and initial active version');
   let git;
@@ -172,12 +172,12 @@ try {
   for (const cookie of [local, secondLocal, pat]) assert.equal((await request('SessionService/GetSession', {}, cookie)).status, 401);
   assert.equal((await request('RepositoryService/ListRepositories', {}, undefined, api)).status, 401);
   if (git) await gitRead(git, 401); checked('old local/token/API and requested managed Git access refused');
-  for (const [path, body] of [['SessionService/LoginWithPassword', { username: config.target.email, password }], ['SessionService/LoginWithGiteaToken', { token: config.target.token }]]) assert.equal((await request(path, body)).status, 401); checked('suspended local and native-token re-entry refused');
+  for (const [path, body] of [['SessionService/LoginWithPassword', { username: config.target.email, password }], ['SessionService/LoginWithForgeToken', { token: config.target.token }]]) assert.equal((await request(path, body)).status, 401); checked('suspended local and native-token re-entry refused');
   step = 'original operation inspection'; const inspect = success(await request('InstanceAdminService/GetGolfUserAccessOperation', { golfUserId: target.golfUserId, nativeUserId: target.nativeUserId, operationId: suspend.operationId }, config.adminCookie.value)); receipt(inspect, suspend); checked('original durable operation inspected without replay');
   step = 'exact idempotency'; receipt(success(await request('InstanceAdminService/ChangeGolfUserAccess', suspend, config.adminCookie.value)), suspend); const changed = await request('InstanceAdminService/ChangeGolfUserAccess', { ...suspend, reason: 'A different owned intent' }, config.adminCookie.value); assert.equal(changed.status, 409); checked('exact original input remains idempotent and changed UUID intent refused');
   step = 'fixture restoration'; const restore = intent('1', false, 'Owned explicit restoration proof'); const restored = receipt(success(await request('InstanceAdminService/ChangeGolfUserAccess', restore, config.adminCookie.value)), restore); assert.equal(restored.sessionsRevoked || '0', '0'); assert.equal(restored.automationGrantsRevoked || '0', '0');
   for (const cookie of [local, secondLocal, pat]) assert.equal((await request('SessionService/GetSession', {}, cookie)).status, 401); assert.equal((await request('RepositoryService/ListRepositories', {}, undefined, api)).status, 401); if (git) await gitRead(git, 401);
-  await login('SessionService/LoginWithPassword', { username: config.target.email, password }); await login('SessionService/LoginWithGiteaToken', { token: config.target.token }); checked('explicit restore permits fresh sessions while old credentials remain revoked');
+  await login('SessionService/LoginWithPassword', { username: config.target.email, password }); await login('SessionService/LoginWithForgeToken', { token: config.target.token }); checked('explicit restore permits fresh sessions while old credentials remain revoked');
   report.passed = true;
 } catch { report.failure = { stage: step, ...(rpcFailure?.stage === step ? { rpc: { status: rpcFailure.status, code: rpcFailure.code } } : {}), reason: 'A bounded supported-API assertion failed; response bodies and credentials were withheld.' }; }
 finally {

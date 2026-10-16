@@ -242,7 +242,7 @@ def main():
     stack=args.stack_root.resolve();binary,binary_sha=rules.proxy_binary_receipt(args.proxy_binary)
     args.output.mkdir(mode=0o700,parents=True,exist_ok=False);OUTPUT=args.output.resolve();rules.ROOT=stack;rules.PROOF=PROOF;rules.OUTPUT=OUTPUT
     record(status='running',helperSha256=rules.file_sha256(Path(__file__),1<<20),runtimeSourceRevision=args.source_revision)
-    env={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k not in ('DATABASE_URL','DOCKER_HOST','DOCKER_CONTEXT','SSL_CERT_FILE','SSL_CERT_DIR')};env['COMPOSE_DISABLE_ENV_FILE']='true'
+    env={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k not in ('DATABASE_URL','DOCKER_HOST','DOCKER_CONTEXT','SSL_CERT_FILE','SSL_CERT_DIR')};env['COMPOSE_DISABLE_ENV_FILE']='true'
     def subprocess_run(*arguments,payload=None,timeout=180):
         result=subprocess.run(arguments,cwd=stack,env=env,input=None if payload is None else json.dumps(payload).encode(),capture_output=True,timeout=timeout)
         assert result.returncode==0 and len(result.stdout)<=8<<20 and len(result.stderr)<=8<<20,'Bounded private subprocess failed; output withheld'
@@ -263,7 +263,7 @@ def main():
         return filtered_foreign(json.loads(_execute('docker','inspect',*identifiers)))
     foreign_before=foreign_snapshot();private_snapshot('foreign-before',foreign_before);record(foreignBeforeCaptured=True,foreignBeforeCount=len(foreign_before))
     project='golf-rules49-'+secrets.token_hex(5);ports=helpers.free_ports(4)
-    previous=smoke.GOLF,smoke.GITEA;smoke.GOLF,smoke.GITEA='http://127.0.0.1:'+str(ports[0]),'http://127.0.0.1:'+str(ports[1])
+    previous=smoke.GOLF,smoke.FORGE;smoke.GOLF,smoke.FORGE='http://127.0.0.1:'+str(ports[0]),'http://127.0.0.1:'+str(ports[1])
     occupied=[]
     for cid in subprocess_run('docker','network','ls','-q').splitlines():
         row=json.loads(subprocess_run('docker','network','inspect',cid))[0];occupied.extend(network_subnets(row))
@@ -278,24 +278,24 @@ def main():
         subprocess_run('openssl','req','-newkey','rsa:2048','-nodes','-subj','/CN=receiver.golf.test','-keyout',str(fixture/'server.key'),'-out',str(fixture/'server.csr'))
         subprocess_run('openssl','x509','-req','-days','1','-in',str(fixture/'server.csr'),'-CA',str(fixture/'ca.crt'),'-CAkey',str(fixture/'ca.key'),'-CAcreateserial','-extfile',str(fixture/'extensions'),'-out',str(fixture/'server.crt'));(fixture/'ca.crt').chmod(0o644)
         worker_key=base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
-        values={name:secrets.token_hex(24) for name in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')};values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_PUSH_CI_ENABLED='false',GOLF_RUNNER_KEYS=json.dumps({'local-docker':worker_key}),GOLF_RUNNER_KEY=worker_key,GOLF_RUNNER_IMAGES=json.dumps({'linux':JOB_IMAGE}),GOLF_RUNNER_APPROVED_IMAGES=json.dumps([JOB_IMAGE]),GOLF_RUNNER_JOB_IMAGE=JOB_IMAGE)
+        values={name:secrets.token_hex(24) for name in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())};values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_PUSH_CI_ENABLED='false',GOLF_RUNNER_KEYS=json.dumps({'local-docker':worker_key}),GOLF_RUNNER_KEY=worker_key,GOLF_RUNNER_IMAGES=json.dumps({'linux':JOB_IMAGE}),GOLF_RUNNER_APPROVED_IMAGES=json.dumps([JOB_IMAGE]),GOLF_RUNNER_JOB_IMAGE=JOB_IMAGE)
         smtp_policy=json.dumps([{'host':'receiver.golf.test','port':465,'tls_mode':'implicit','ips':[sink_ip+'/32']}]);web_policy=json.dumps([{'origin':'https://receiver.golf.test','addresses':[sink_ip],'path_prefix':'/workflow-proof'}])
-        base_env={'GOLF_PUBLIC_URL':smoke.GOLF,'GOLF_ALLOW_INSECURE_COOKIES':'true','GOLF_ENCRYPTION_KEY':values['GOLF_ENCRYPTION_KEY'],'DATABASE_URL':'postgres://golf:'+values['GOLF_DB_PASSWORD']+'@postgres:5432/golf?sslmode=disable','GITEA_URL':'http://native-qualification-proxy:8081','SSL_CERT_FILE':'/proof-ca.crt','GOLF_EMAIL_EGRESS_POLICY':smtp_policy,'GOLF_WEBHOOK_EGRESS_POLICY':web_policy}
+        base_env={'GOLF_PUBLIC_URL':smoke.GOLF,'GOLF_ALLOW_INSECURE_COOKIES':'true','GOLF_ENCRYPTION_KEY':values['GOLF_ENCRYPTION_KEY'],'DATABASE_URL':'postgres://golf:'+values['GOLF_DB_PASSWORD']+'@postgres:5432/golf?sslmode=disable','GOLF_FORGE_URL':'http://native-qualification-proxy:8081','SSL_CERT_FILE':'/proof-ca.crt','GOLF_EMAIL_EGRESS_POLICY':smtp_policy,'GOLF_WEBHOOK_EGRESS_POLICY':web_policy}
         worker=lambda command:{'image':images['golf'],'pull_policy':'never','command':[command],'environment':base_env,'volumes':[str(fixture/'ca.crt')+':/proof-ca.crt:ro'],'networks':['default','proofsink'],'read_only':True,'tmpfs':['/tmp:size=16777216,mode=1777'],'cap_drop':['ALL'],'security_opt':['no-new-privileges:true'],'mem_limit':'256m','cpus':0.5,'pids_limit':64,'stop_grace_period':'20s'}
-        overlay={'services':{'golf':{'image':images['golf'],'pull_policy':'never','environment':base_env,'volumes':[str(fixture/'ca.crt')+':/proof-ca.crt:ro'],'networks':['default','proofsink'],'mem_limit':'384m'},'postgres':{'image':images['postgres'],'pull_policy':'never','mem_limit':'768m'},'gitea':{'image':images['native'],'pull_policy':'never','mem_limit':'512m','environment':{'GITEA__server__ROOT_URL':smoke.GITEA+'/','GITEA__server__DISABLE_SSH':'true','GITEA__server__START_SSH_SERVER':'false'}},'email-worker':worker('email-worker'),'webhook-worker':worker('webhook-worker'),native_proxy.SERVICE_NAME:proxy.compose_service(images['golf'],binary),'runner':{'image':images['runner'],'pull_policy':'never'},'runner-daemon':{'image':images['daemon'],'pull_policy':'never','mem_limit':'1024m','cpus':2},'receiver':{'image':images['sink'],'pull_policy':'never','user':str(os.getuid())+':'+str(os.getgid()),'entrypoint':['python3','/fixture/sink.py'],'ports':['127.0.0.1:'+str(ports[3])+':8765'],'read_only':True,'tmpfs':['/tmp:size=16777216,mode=1777'],'volumes':[str(fixture)+':/fixture:ro'],'cap_drop':['ALL'],'security_opt':['no-new-privileges:true'],'sysctls':{'net.ipv4.ip_unprivileged_port_start':'0'},'mem_limit':'64m','pids_limit':32,'networks':{'default':{},'proofsink':{'ipv4_address':sink_ip,'aliases':['receiver.golf.test']}}}},'networks':{'proofsink':{'internal':True,'ipam':{'config':[{'subnet':str(subnet)}]}}}}
+        overlay={'services':{'golf':{'image':images['golf'],'pull_policy':'never','environment':base_env,'volumes':[str(fixture/'ca.crt')+':/proof-ca.crt:ro'],'networks':['default','proofsink'],'mem_limit':'384m'},'postgres':{'image':images['postgres'],'pull_policy':'never','mem_limit':'768m'},'forgejo':{'image':images['native'],'pull_policy':'never','mem_limit':'512m','environment':{'FORGEJO__server__ROOT_URL':smoke.FORGE+'/','FORGEJO__server__DISABLE_SSH':'true','FORGEJO__server__START_SSH_SERVER':'false'}},'email-worker':worker('email-worker'),'webhook-worker':worker('webhook-worker'),native_proxy.SERVICE_NAME:proxy.compose_service(images['golf'],binary),'runner':{'image':images['runner'],'pull_policy':'never'},'runner-daemon':{'image':images['daemon'],'pull_policy':'never','mem_limit':'1024m','cpus':2},'receiver':{'image':images['sink'],'pull_policy':'never','user':str(os.getuid())+':'+str(os.getgid()),'entrypoint':['python3','/fixture/sink.py'],'ports':['127.0.0.1:'+str(ports[3])+':8765'],'read_only':True,'tmpfs':['/tmp:size=16777216,mode=1777'],'volumes':[str(fixture)+':/fixture:ro'],'cap_drop':['ALL'],'security_opt':['no-new-privileges:true'],'sysctls':{'net.ipv4.ip_unprivileged_port_start':'0'},'mem_limit':'64m','pids_limit':32,'networks':{'default':{},'proofsink':{'ipv4_address':sink_ip,'aliases':['receiver.golf.test']}}}},'networks':{'proofsink':{'internal':True,'ipam':{'config':[{'subnet':str(subnet)}]}}}}
         helpers.private_write(directory/'proof.env',''.join(k+"='"+v+"'\n" for k,v in values.items()));helpers.private_write(directory/'services.json',json.dumps(overlay));helpers.private_write(directory/'ports.yaml',f'''services:
   golf:
     ports: !override ["127.0.0.1:{ports[0]}:8080"]
     depends_on:
       native-qualification-proxy: {{condition: service_started}}
-  gitea:
+  forgejo:
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
   runner:
     depends_on: !override {{golf: {{condition: service_started}}, runner-daemon: {{condition: service_healthy}}}}
 ''')
         env.update(proxy.environment());compose=['docker','compose','--project-directory',str(stack),'-p',project,'--env-file',str(directory/'proof.env'),'-f',str(stack/'compose.yaml'),'-f',str(stack/'deploy/compose/compose.ci.yaml'),'-f',str(directory/'services.json'),'-f',str(directory/'ports.yaml')]
         def command(*arguments,_execute=subprocess_run,**kw):return _execute(*compose,*arguments,**kw)
-        admin=lambda *arguments:command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*arguments)
+        admin=lambda *arguments:command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*arguments)  # Forgejo's upstream path
         native=rules.native
         def rpc(role,method,body=None,expected=200,code=None):return rules.rpc(actors[role]['session'],method,body,expected,code)
         def control(path,body=None):
@@ -333,8 +333,8 @@ def main():
             return True
         runs,subscriptions={},{}
         try:
-            stage('fresh ordinary/native/bootstrap/runtime and owned TLS sink');started=True;command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf',native_proxy.SERVICE_NAME,'receiver','runner-daemon',timeout=180);proxy.ready();smoke.ready()
-            assert native('','GET','version')['version']=='1.27.3'
+            stage('fresh ordinary/native/bootstrap/runtime and owned TLS sink');started=True;command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','forgejo','golf',native_proxy.SERVICE_NAME,'receiver','runner-daemon',timeout=180);proxy.ready();smoke.ready()
+            assert native('','GET','version')['version']=='15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
             bootstrap=project+'-bootstrap';admin('create','--username',bootstrap,'--email',bootstrap+'@example.invalid','--random-password','--must-change-password=false','--admin');bootstrap_created=True
             for role in ('owner',*MODES):
                 actor={'name':project+'-'+role,'session':smoke.client(),'created':False,'enrolled':False};actors[role]=actor;actor.update(email=actor['name']+'@example.invalid',password='Owned workflow mail '+secrets.token_urlsafe(24))
@@ -470,7 +470,7 @@ def main():
                     if not difference['identityUnchanged']:failures.append('foreign identity changed')
                 except Exception as error:
                     record(foreignIdentityUnchanged=False,foreignComparison={'identityUnchanged':False,'observationUnavailable':True,**closed_failure(error)});failures.append('foreign identity observation unavailable')
-            rules.ACTIVE_PROXY=None;smoke.GOLF,smoke.GITEA=previous
+            rules.ACTIVE_PROXY=None;smoke.GOLF,smoke.FORGE=previous
             record(status='qualified' if passed and not failures else 'failed',cleanup='failed' if failures else 'passed',cleanupFailureCategories=failures,bootstrapCleanup='fresh_owned_native_volume_removed' if bootstrap_created and not failures else 'not_claimed',originalFailurePreserved=bool(PROOF.get('failedStage')))
             if failures and passed:raise AssertionError('Owned cleanup incomplete')
     if passed:print('PASS: bounded056 real workflow terminal SMTP/HMAC filters/retries; cleanup separate, broader gates remain open')

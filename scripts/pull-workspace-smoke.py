@@ -31,7 +31,7 @@ try{
  let input='';for await(const part of process.stdin)input+=part;config=JSON.parse(input);input='';
  browser=await chromium.launch();context=await browser.newContext({viewport:{width:1280,height:900}});
  const headers={Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'};
- stage='session';const auth=await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithGiteaToken',{headers,data:{token:config.token}});check(auth.status()===200);
+ stage='session';const auth=await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithForgeToken',{headers,data:{token:config.token}});check(auth.status()===200);
  const page=await context.newPage(),errors=[];page.on('pageerror',()=>errors.push(true));
  for(const theme of ['dark','light'])for(const width of [1280,390])for(const view of ['commits','checks']){
   stage=view+' '+theme+' '+width;
@@ -42,7 +42,7 @@ try{
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.screenshot({path:join(config.screenshots,'native-pr-'+view+'-'+theme+'-'+width+'.png'),fullPage:true});
  }
- stage='permission revocation';await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.reader,{headers:{Authorization:'token '+config.ownerToken}}).then(r=>check(r.status()===204));
+ stage='permission revocation';await context.request.delete(config.forge+'/api/v1/repos/'+config.repository+'/collaborators/'+config.reader,{headers:{Authorization:'token '+config.ownerToken}}).then(r=>check(r.status()===204));
  stage='live revoked row removal';await page.getByRole('cell',{name:'Pending',exact:true}).waitFor({state:'detached',timeout:15000});
  stage='revocation alert';await page.getByRole('alert').first().waitFor();stage='revoked row cleanup';for(const state of ['Pending','Failure','Success'])check(await page.getByRole('cell',{name:state,exact:true}).count()===0);
  stage='page runtime errors';check(errors.length===0);console.log('PASS: production-served PR commits/checks, exact links, dark/light/mobile and revoked-access cleanup');
@@ -68,7 +68,7 @@ def main():
                         '--scopes','write:user,write:repository','--raw').strip()
             read=admin('generate-access-token','--username',name,'--token-name',prefix+'-read',
                        '--scopes','read:user,read:repository','--raw').strip()
-            session=client();rpc(session,'SessionService/LoginWithGiteaToken',{'token':read})
+            session=client();rpc(session,'SessionService/LoginWithForgeToken',{'token':read})
             actors[role]={'name':name,'token':token,'read':read,'session':session}
         owner,author,reader,outsider=[actors[r] for r in ['owner','author','reader','outsider']]
         repo=provider(owner['token'],'POST','user/repos',{'name':'private','private':True,'auto_init':True},expected=201)
@@ -159,7 +159,7 @@ def main():
         restricted=admin('generate-access-token','--username',owner['name'],'--token-name',prefix+'-no-repo','--scopes','read:user','--raw').strip()
         limited=client()
         try:
-            rpc(limited,'SessionService/LoginWithGiteaToken',{'token':restricted})
+            rpc(limited,'SessionService/LoginWithForgeToken',{'token':restricted})
             for method in ['ListPullRequestCommits','ListPullRequestChecks']:
                 rpc(limited,'RepositoryService/'+method,{'selection':selection},expected=403)
         finally:rpc(limited,'SessionService/Logout')
@@ -181,7 +181,7 @@ def main():
         provider(author['token'],'POST',fork_route+'/branches',{'new_branch_name':'browser','old_ref_name':head},expected=201)
         browser_pull=provider(author['token'],'POST',route+'/pulls',{'head':author['name']+':browser','base':repo['default_branch'],'title':'Browser workspace qualification'},expected=201)
         screenshots=ROOT/'.tmp/pull-workspace-smoke';screenshots.mkdir(parents=True,exist_ok=True)
-        config={'golf':GOLF,'gitea':helpers.GITEA,'token':reader['read'],'ownerToken':owner['token'],
+        config={'golf':GOLF,'forge':helpers.FORGE,'token':reader['read'],'ownerToken':owner['token'],
                 'reader':reader['name'],'repository':full,'number':browser_pull['number'],'screenshots':str(screenshots)}
         result=subprocess.run(['node','--input-type=module','-e',BROWSER],input=json.dumps(config),cwd=ROOT,text=True,capture_output=True,timeout=120)
         assert result.returncode==0,result.stderr;print(result.stdout.strip(),flush=True)

@@ -20,7 +20,7 @@ import time
 import urllib.request
 
 sys.dont_write_bytecode = True
-from smoke import ROOT, GITEA, client, command, provider, ready, request, wait_for_push
+from smoke import ROOT, FORGE, client, command, provider, ready, request, wait_for_push
 
 
 def main():
@@ -34,11 +34,11 @@ def main():
 
     def admin(*values):
         return command('docker', 'compose', '--project-directory', str(stack), '--file', str(stack/'compose.yaml'),
-                       '--env-file', str(stack/'.env'), 'exec', '-T', 'gitea', 'gitea',
-                       '--config', '/etc/gitea/app.ini', 'admin', 'user', *values)
+                       '--env-file', str(stack/'.env'), 'exec', '-T', 'forgejo', 'forgejo',
+                       '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *values)  # Forgejo's upstream path
 
     def native_diff(token, route):
-        req = urllib.request.Request(GITEA+'/api/v1/'+route+'.diff', headers={'Authorization': 'token '+token})
+        req = urllib.request.Request(FORGE+'/api/v1/'+route+'.diff', headers={'Authorization': 'token '+token})
         with client().open(req, timeout=20) as response:
             assert response.status == 200
             raw = response.read(512*1024+1)
@@ -46,7 +46,7 @@ def main():
             return raw.decode('utf-8')
 
     ready()
-    assert request(client(), 'GET', GITEA+'/api/v1/version')['version'] == '1.27.3'
+    assert request(client(), 'GET', FORGE+'/api/v1/version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
     prefix = 'golf-bot-pub-probe-'+secrets.token_hex(4)
     users, repositories, actors = [], [], {}
     pg = prefix+'-pg'
@@ -101,7 +101,7 @@ def main():
         assert pending['state'] == 'PENDING' and pending['comments_count'] == 1
         pending_children = provider(publisher['token'], 'GET', proute+'/reviews/'+str(pending['id'])+'/comments')
         assert len(pending_children) == 1
-        envelope = {'URL': GITEA, 'Owner': owner['name'], 'Repository': 'private', 'SponsorToken': owner['token'], 'PublisherToken': publisher['token'],
+        envelope = {'URL': FORGE, 'Owner': owner['name'], 'Repository': 'private', 'SponsorToken': owner['token'], 'PublisherToken': publisher['token'],
                     'RepositoryID': repo['id'], 'PullID': pull['id'], 'Number': pull['number'], 'OwnerID': owner['id'], 'PublisherID': publisher['id'],
                     'Base': base, 'Head': head, 'MergeBase': merge_base, 'Diff': native_diff(owner['token'], proute), 'PendingID': pending['id'], 'PendingChildID': pending_children[0]['id']}
         stage = 'isolated Golf PostgreSQL'
@@ -159,7 +159,7 @@ def main():
         if args.output:
             args.output.mkdir(mode=0o700,parents=True,exist_ok=True)
             files=['internal/server/agent_comment_commands.go','internal/server/reviewer_worker.go','internal/server/reviewer_publication.go','internal/server/reviewer_publication_native_test.go','internal/server/database/migrations/202610050085_agent_comment_commands.sql','scripts/reviewer-publication-native-proof.py']
-            manifest={'result':'PASS' if passed else 'FAIL','source_commit':source,'source_clean':not bool(command('git','status','--porcelain')),'native_version':'1.27.3','source_files':{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in files},'native_command_capture_edit_delete':passed,'production_publication':passed,'fixture_cleanup':True,'new_docker_resources':int(pg_started),'no_model_execution':True,'scope':'production native helper with isolated host schema; not served runtime or worker'}
+            manifest={'result':'PASS' if passed else 'FAIL','source_commit':source,'source_clean':not bool(command('git','status','--porcelain')),'native_version':'15.0.9+gitea-1.22.0','source_files':{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in files},'native_command_capture_edit_delete':passed,'production_publication':passed,'fixture_cleanup':True,'new_docker_resources':int(pg_started),'no_model_execution':True,'scope':'production native helper with isolated host schema; not served runtime or worker'}  # Forgejo's upstream version string
             target=args.output/'manifest.json'
             descriptor=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
             with os.fdopen(descriptor,'w') as stream: json.dump(manifest,stream,indent=2)

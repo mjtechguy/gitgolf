@@ -33,6 +33,41 @@ def denied(check):
     raise AssertionError('Unsafe recovery input accepted')
 
 
+def check_native_settings():
+    # Forgejo 15.0.9 cron inventory (services/cron/tasks_basic.go and
+    # tasks_extended.go at v15.0.9); actions tasks never register while
+    # [actions] ENABLED=false.
+    assert len(recovery.NATIVE_CRON_TASKS) == len(set(recovery.NATIVE_CRON_TASKS)) == 24
+    assert 'remove_resolved_reports' in recovery.NATIVE_CRON_TASKS
+    # Forgejo's environment-to-ini encoding: literal or _0X2E_-escaped dots.
+    settings = recovery.native_settings({'FORGEJO__cron.update_mirrors__ENABLED': 'false',
+        'FORGEJO__cron_0X2E_gc_lfs__ENABLED': 'false', 'FORGEJO__Database__HOST': 'postgres:5432',
+        'FORGEJO__server__ROOT_0X5F_URL': 'x', 'FORGEJO__no_key': 'ignored', 'UNRELATED': 'ignored'})
+    assert settings == {('cron.update_mirrors', 'ENABLED'): 'false', ('cron.gc_lfs', 'ENABLED'): 'false',
+                        ('database', 'HOST'): 'postgres:5432', ('server', 'ROOT_URL'): 'x'}
+    for env in [{'FORGEJO__cron.gc_lfs__ENABLED': 'false', 'FORGEJO__cron_0X2E_gc_lfs__ENABLED': 'true'},
+                {'FORGEJO__actions__ENABLED': 'false', 'FORGEJO__ACTIONS__enabled': 'true'},
+                {recovery.UPSTREAM_ENV_PREFIX+'actions__ENABLED': 'true'},
+                {'FORGEJO__database__PASSWD__FILE': '/run/secret'}]:
+        denied(lambda: recovery.native_settings(env))
+    data = str(recovery.FORGEJO_DATA)
+    native = {'GITEA_WORK_DIR': data, 'GITEA_CUSTOM': data+'/custom',  # Forgejo's upstream name
+              'GITEA_APP_INI': str(recovery.FORGEJO_APP_INI), 'HOME': data+'/git',  # Forgejo's upstream name
+              'FORGEJO__database__DB_TYPE': 'postgres', 'FORGEJO__database__HOST': 'postgres:5432',
+              'FORGEJO__database__NAME': 'forgejo', 'FORGEJO__database__USER': 'forgejo',
+              'FORGEJO__database__PASSWD': 'fixture'}
+    recovery.validate_forgejo_environment(native, 'fixture')
+    for key, value in [('FORGEJO__database__NAME', 'golf'), ('FORGEJO__database__PASSWD', 'other'),
+                       ('GITEA_APP_INI', '/etc/forge/app.ini'),  # Forgejo's upstream name
+                       ('FORGEJO_CUSTOM', '/external'),
+                       ('FORGEJO_WORK_DIR', '/external'), ('HOME', '/root'),
+                       (recovery.UPSTREAM_ENV_PREFIX+'database__HOST', 'external:5432')]:
+        denied(lambda: recovery.validate_forgejo_environment(dict(native, **{key: value}), 'fixture'))
+    assert recovery.forgejo_volumes() == ['forgejo-data:'+data]
+    assert recovery.FILES == {'compose.json', 'postgres-init.sh', 'golf.dump', 'forgejo.dump', 'forgejo-data.tar'}
+    assert (recovery.ROOT/recovery.POSTGRES_INIT).is_file()
+
+
 def main():
     compose_files = [Path('/fixture/compose.yaml'), Path('/fixture/compose.ci.yaml'), Path('/fixture/compose.storage.yaml')]
     for label in ['/fixture/compose.yaml', '/fixture/compose.yaml,/fixture/compose.storage.yaml',
@@ -44,47 +79,64 @@ def main():
                   '/fixture/compose.yaml,/fixture/compose.storage.yaml,/fixture/compose.ci.yaml']:
         assert not recovery.matching_compose_files(label, compose_files)
     assert not recovery.matching_compose_files('/fixture/compose.yaml', [compose_files[0], compose_files[0]])
+    # Forgejo's rootless image keeps data and app.ini in one volume; derive its
+    # upstream path names from recovery.py instead of restating them.
+    data, top = str(recovery.FORGEJO_DATA), recovery.DATA_ROOT
     with tempfile.TemporaryDirectory(prefix='golf-recovery-test-') as directory:
         path = Path(directory)/'volume.tar'
-        root = entry('gitea', tarfile.DIRTYPE, mode=0o700)
-        file = entry('gitea/regular')
+        root = entry(top, tarfile.DIRTYPE, mode=0o700)
+        file = entry(top+'/regular')
         cases = [
-            [entry('/gitea/absolute')], [entry('gitea/../escape')], [entry('gitea/./alias')],
-            [entry('gitea//alias')], [file, file], [entry('gitea/socket', b's')],
-            [entry('gitea/device', tarfile.CHRTYPE)], [entry('gitea/suid', mode=0o4600)],
-            [entry('gitea/foreign-owner', uid=1234)], [entry('gitea/missing/file')],
-            [entry('gitea/link', tarfile.SYMTYPE, '/etc/passwd')],
-            [entry('gitea/link', tarfile.SYMTYPE, '../escape')],
-            [entry('gitea/link', tarfile.LNKTYPE, '../escape')],
-            [entry('gitea/link', tarfile.LNKTYPE, 'gitea')],
-            [entry('gitea/link', tarfile.SYMTYPE, 'missing')],
-            [entry('gitea/link', tarfile.SYMTYPE, 'regular'), entry('gitea/link/child')],
+            [entry('/'+top+'/absolute')], [entry(top+'/../escape')], [entry(top+'/./alias')],
+            [entry(top+'//alias')], [file, file], [entry(top+'/socket', b's')],
+            [entry(top+'/device', tarfile.CHRTYPE)], [entry(top+'/suid', mode=0o4600)],
+            [entry(top+'/foreign-owner', uid=1234)], [entry(top+'/missing/file')],
+            [entry(top+'/link', tarfile.SYMTYPE, '/etc/passwd')],
+            [entry(top+'/link', tarfile.SYMTYPE, '../escape')],
+            [entry(top+'/link', tarfile.LNKTYPE, '../escape')],
+            [entry(top+'/link', tarfile.LNKTYPE, top)],
+            [entry(top+'/link', tarfile.SYMTYPE, 'missing')],
+            [entry(top+'/link', tarfile.SYMTYPE, 'regular'), entry(top+'/link/child')],
+            [entry('other-root/regular')],
         ]
         for rows in cases:
             archive(path, [root, file, *rows] if file not in rows else [root, *rows])
             denied(lambda: recovery.validate_volume(path))
-        archive(path, [root, file, entry('gitea/link', tarfile.SYMTYPE, 'regular'),
-                       entry('gitea/hard', tarfile.LNKTYPE, 'gitea/regular')])
+        archive(path, [root, file, entry(top+'/link', tarfile.SYMTYPE, 'regular'),
+                       entry(top+'/hard', tarfile.LNKTYPE, top+'/regular')])
         recovery.validate_volume(path)
-        ini = b'[database]\nDB_TYPE=postgres\nHOST=postgres:5432\nNAME=gitea\nUSER=gitea\n[repository]\nROOT=/var/lib/gitea/git/repositories\n'
-        archive(path, [root, entry('gitea/app.ini', data=ini)])
+        conf = [entry(top+'/custom', tarfile.DIRTYPE, mode=0o700), entry(top+'/custom/conf', tarfile.DIRTYPE, mode=0o700)]
+        assert recovery.DATA_APP_INI == top+'/custom/conf/app.ini'
+
+        def ini_volume(data, mode=0o600, extra=()):
+            return [root, *conf, entry(recovery.DATA_APP_INI, data=data, mode=mode), *extra]
+
+        repositories = (data+'/git/repositories').encode()
+        ini = (b'[database]\nDB_TYPE=postgres\nHOST=postgres:5432\nNAME=forgejo\nUSER=forgejo\n[repository]\nROOT='+
+               repositories+b'\n[repository.local]\nLOCAL_COPY_PATH='+str(recovery.FORGEJO_TEMP).encode()+b'/local-repo\n')
+        archive(path, ini_volume(ini))
         recovery.validate_volume(path, config=True)
-        for data in [ini+b'[storage]\nSTORAGE_TYPE=minio\n', ini.replace(b'/var/lib/gitea/git/repositories', b'/external/repositories'),
-                     ini.replace(b'/var/lib/gitea/git/repositories', b'/var/lib/gitea/../../external'),
-                     ini+b'[security]\nSECRET_KEY_URI=file:/external/key\n',
-                     ini+b'[security]\nSECRET_KEY_URI=file:/var/lib/gitea/%2e%2e/key\n',
-                     ini+b'[server]\nSSH_SERVER_HOST_KEYS=/external/hostkey\n',
-                     ini.replace(b'postgres:5432', b'external:5432')]:
-            archive(path, [root, entry('gitea/app.ini', data=data)])
+        for value in [ini+b'[storage]\nSTORAGE_TYPE=minio\n', ini.replace(repositories, b'/external/repositories'),
+                      ini.replace(repositories, data.encode()+b'/../../external'),
+                      ini.replace(b'NAME=forgejo', b'NAME=golf'), ini.replace(b'USER=forgejo', b'USER=postgres'),
+                      ini+b'[security]\nSECRET_KEY_URI=file:/external/key\n',
+                      ini+b'[security]\nSECRET_KEY_URI=file:'+data.encode()+b'/%2e%2e/key\n',
+                      ini+b'[server]\nSSH_SERVER_HOST_KEYS=/external/hostkey\n',
+                      ini+b'[repository.upload]\nTEMP_PATH=/external/uploads\n',
+                      ini.replace(b'postgres:5432', b'external:5432')]:
+            archive(path, ini_volume(value))
             denied(lambda: recovery.validate_volume(path, config=True))
-        archive(path, [root, entry('gitea/app.ini', data=ini, mode=0o644)])
+        archive(path, ini_volume(ini, mode=0o644))
+        denied(lambda: recovery.validate_volume(path, config=True))
+        archive(path, [root, file])
         denied(lambda: recovery.validate_volume(path, config=True))
         stage = Path(directory)
-        archive(stage/'gitea-config.tar', [root, entry('gitea/app.ini', data=ini+b'[security]\nSECRET_KEY_URI=file:/var/lib/gitea/secret\n')])
-        archive(stage/'gitea-data.tar', [root, file])
-        denied(lambda: recovery.validate_pair(stage))
-        archive(stage/'gitea-data.tar', [root, file, entry('gitea/secret')])
-        recovery.validate_pair(stage)
+        referenced = ini+b'[security]\nSECRET_KEY_URI=file:'+data.encode()+b'/secret\n'
+        archive(stage/'forgejo-data.tar', ini_volume(referenced, extra=[file]))
+        denied(lambda: recovery.validate_forgejo_data(stage))
+        archive(stage/'forgejo-data.tar', ini_volume(referenced, extra=[file, entry(top+'/secret')]))
+        recovery.validate_forgejo_data(stage)
+        check_native_settings()
         storage_root = entry('data', tarfile.DIRTYPE, mode=0o700, uid=10001)
         storage_file = entry('data/object', uid=10001)
         archive(path, [storage_root, storage_file])
@@ -96,7 +148,7 @@ def main():
             [entry('data/hard', tarfile.LNKTYPE, 'data/object', uid=10001)],
             [entry('data/device', tarfile.CHRTYPE, uid=10001)],
             [entry('data/suid', mode=0o4600, uid=10001)], [entry('data/foreign', uid=1000)],
-            [entry('gitea/wrong-root', uid=10001)],
+            [entry(top+'/wrong-root', uid=10001)],
         ]:
             archive(path, [storage_root, *rows])
             denied(lambda: recovery.validate_volume(path, rustfs=True))
@@ -152,7 +204,7 @@ def main():
         denied(lambda: recovery.run([sys.executable, '-c', 'import sys; sys.stdout.buffer.write(b"x"*(2<<20))'],
                                     output=bounded, limit=1 << 20))
         assert bounded.stat().st_size <= 1 << 20
-    print('PASS: nested archive paths/links/duplicates/types/owners/modes/local RustFS/source bindings and private-file boundaries')
+    print('PASS: Forgejo single-volume archive paths/links/duplicates/types/owners/modes/app.ini references, FORGEJO__ setting decoding/conflicts, local RustFS/source bindings and private-file boundaries')
 
 
 if __name__ == '__main__':

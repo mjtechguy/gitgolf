@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check raw stdio cancellation against a disposable HTTP fixture, not Gitea.
+"""Check raw stdio cancellation against a disposable HTTP fixture, not Forgejo.
 
 Exercises both advertised revisions and the bounded stdio input boundary.
 The fixture holds a read until the client closes its socket, making a response
@@ -61,7 +61,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.server.api_token:
                 assert not self.headers.get('Cookie')
                 assert self.path == prefix + "RepositoryService/ListRepositories"
-            elif self.path == prefix + "SessionService/LoginWithGiteaToken":
+            elif self.path == prefix + "SessionService/LoginWithForgeToken":
                 assert body == {"token": self.server.token}
                 self.reply({"user": {"id": "1"}}, cookie=True)
                 return
@@ -107,7 +107,7 @@ def check(binary, version, case="cancel", api_token=False):
     env = {name: value for name, value in os.environ.items()
            if name in ("PATH", "HOME", "TMPDIR", "SYSTEMROOT")}
     env['GOLF_URL'] = fixture.origin
-    env['GOLF_API_TOKEN' if api_token else 'GOLF_GITEA_TOKEN'] = fixture.token
+    env['GOLF_API_TOKEN' if api_token else 'GOLF_FORGE_TOKEN'] = fixture.token
     process = subprocess.Popen([str(binary), "mcp"], stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     messages = queue.Queue()

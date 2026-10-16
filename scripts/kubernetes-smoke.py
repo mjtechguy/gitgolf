@@ -117,7 +117,7 @@ def main():
         return True
 
     def forgejo_admin(*command):
-        return kube('exec', name + '-forgejo-0', '--', 'forgejo', '--config', '/etc/gitea/app.ini', 'admin', 'user', *command)
+        return kube('exec', name + '-forgejo-0', '--', 'forgejo', '--config', '/etc/gitea/app.ini', 'admin', 'user', *command)  # Helm's Forgejo config path (upstream name)
 
     forwards = []
 
@@ -172,7 +172,7 @@ def main():
         print(f'PASS: preflight for {args.context}: loopback API, reachable nodes, storage class '
               f'{args.storage_class or "(cluster default)"} and free loopback ports; nothing was created', flush=True)
         return
-    smoke.GOLF, smoke.GITEA = 'http://localhost:8086', 'http://localhost:3006'
+    smoke.GOLF, smoke.FORGE = 'http://localhost:8086', 'http://localhost:3006'
     users, installed, created = [], [], False
     with tempfile.TemporaryDirectory(prefix='golf-kubernetes-smoke-', dir='/tmp') as directory:
         path = Path(directory)
@@ -193,7 +193,7 @@ def main():
             values = {'image': {'repository': repo, 'tag': tag, 'pullPolicy': 'IfNotPresent'},
                       'forge': {'kind': 'forgejo', 'instanceID': str(uuid.uuid4())},
                       'publicURL': smoke.GOLF, 'allowInsecureCookies': True, 'existingSecret': 'golf-existing', 'replicaCount': 2,
-                      'forgejo': {'publicURL': smoke.GITEA + '/'},
+                      'forgejo': {'publicURL': smoke.FORGE + '/'},
                       'networkPolicy': {'enabled': True, 'forgejoIngressFrom': [peer], 'postgresIngressFrom': [peer]}}
             if args.storage_class:
                 values['forgejo']['persistence'] = {'storageClass': args.storage_class}
@@ -271,7 +271,7 @@ def main():
                 assert smoke.rpc(local_session, 'SessionService/LoginWithPassword', {'username': username, 'password': enrollment['password']})['user']['login'] == username
                 smoke.rpc(local_session, 'SessionService/Logout')
                 session = smoke.client()
-                assert smoke.rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})['user']['login'] == username
+                assert smoke.rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})['user']['login'] == username
                 credentials[label] = (username, token, session)
             alice_name, alice_token, alice = credentials['alice']
             _, _, bob = credentials['bob']
@@ -282,7 +282,7 @@ def main():
             reference = {'owner': alice_name, 'name': repository['name']}
             assert not any(item['fullName'] == full_name for item in smoke.rpc(bob, 'RepositoryService/ListRepositories').get('repositories', []))
             smoke.rpc(bob, 'RepositoryService/GetRepository', {'repository': reference}, expected=404)
-            smoke.request(smoke.client(), 'GET', smoke.GITEA + '/api/v1/repos/' + full_name, expected=404)
+            smoke.request(smoke.client(), 'GET', smoke.FORGE + '/api/v1/repos/' + full_name, expected=404)
             work = path / 'work'
             work.mkdir()
             run('git', 'init', '-b', 'main', cwd=work)
@@ -296,7 +296,7 @@ def main():
             askpass.chmod(0o700)
             git_env = {**os.environ, 'GIT_ASKPASS': str(askpass), 'GIT_TERMINAL_PROMPT': '0',
                        'GOLF_CHECK_USER': alice_name, 'GOLF_CHECK_TOKEN': alice_token}
-            remote_url = smoke.GITEA + '/' + full_name + '.git'
+            remote_url = smoke.FORGE + '/' + full_name + '.git'
             run('git', '-c', 'credential.helper=', 'push', remote_url, 'main', env=git_env, cwd=work)
             smoke.wait_for_push(alice_token, full_name)
             clone = path / 'clone'
@@ -310,7 +310,7 @@ def main():
             print('PASS: real Kubernetes Git push/clone, private immutable source, CLI and cross-user/anonymous denial', flush=True)
 
             extra_alice = smoke.client()
-            smoke.rpc(extra_alice, 'SessionService/LoginWithGiteaToken', {'token': alice_token})
+            smoke.rpc(extra_alice, 'SessionService/LoginWithForgeToken', {'token': alice_token})
             extra_id = next(row['id'] for row in smoke.rpc(extra_alice, 'SessionService/ListSessions')['sessions'] if row.get('current'))
             caller_id = next(row['id'] for row in smoke.rpc(alice, 'SessionService/ListSessions')['sessions'] if row.get('current'))
             bob_id = next(row['id'] for row in smoke.rpc(bob, 'SessionService/ListSessions')['sessions'] if row.get('current'))
@@ -357,7 +357,7 @@ def main():
             print('PASS: encrypted session, exact Git commit and source survive all workload pod replacements', flush=True)
 
             external_values = {**values, 'replicaCount': 1, 'publicURL': 'http://localhost:8087',
-                               'forgejo': {'enabled': False, 'publicURL': smoke.GITEA + '/',
+                               'forgejo': {'enabled': False, 'publicURL': smoke.FORGE + '/',
                                          'externalURL': f'http://{name}-forgejo:3000', 'qualifiedVersion': '15.0.9'},
                                'postgresql': {'enabled': False},
                                'networkPolicy': {'enabled': True, 'externalEgress': [
@@ -374,7 +374,7 @@ def main():
             smoke.GOLF = 'http://localhost:8087'
             smoke.ready()
             external_session = smoke.client()
-            assert smoke.rpc(external_session, 'SessionService/LoginWithGiteaToken', {'token': alice_token})['user']['login'] == alice_name
+            assert smoke.rpc(external_session, 'SessionService/LoginWithForgeToken', {'token': alice_token})['user']['login'] == alice_name
             assert smoke.content(external_session, reference, revision, nested_path)['file']['content'] == text
             assert not objects('statefulset', 'app.kubernetes.io/instance=' + external)
             assert len(objects('statefulset', 'app.kubernetes.io/component=forgejo')) == 1

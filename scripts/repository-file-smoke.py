@@ -31,7 +31,7 @@ def main():
         for role in ('owner','writer','reader','outsider'):
             name=prefix+'-'+role;smoke.admin('create','--username',name,'--email',name+'@example.invalid','--random-password','--must-change-password=false');users.append(name)
             token=smoke.admin('generate-access-token','--username',name,'--token-name',prefix,'--scopes','write:user,write:repository,write:issue','--raw')
-            session=smoke.client();actor=smoke.rpc(session,'SessionService/LoginWithGiteaToken',{'token':token})['user'];actors.append((name,token,session,actor['id']))
+            session=smoke.client();actor=smoke.rpc(session,'SessionService/LoginWithForgeToken',{'token':token})['user'];actors.append((name,token,session,actor['id']))
         name,token,owner,_=actors[0];repo={'owner':name,'name':'files'}
         native=smoke.provider(token,'POST','user/repos',{'name':repo['name'],'private':True,'auto_init':True},expected=201);base='repos/'+native['full_name'];branch=native['default_branch'];smoke.wait_for_push(token,native['full_name'])
         for actor,permission in ((actors[1],'write'),(actors[2],'read')):smoke.provider(token,'PUT',base+'/collaborators/'+actor[0],{'permission':permission},expected=204)
@@ -100,7 +100,7 @@ def main():
             except BaseException:errors.append('session_cleanup')
         report['ownedSessionsLoggedOut']='session_cleanup' not in errors
         for name in reversed(users):
-            try:smoke.admin('delete','--username',name,'--purge');smoke.request(smoke.client(),'GET',smoke.GITEA+'/api/v1/users/'+name,expected=404)
+            try:smoke.admin('delete','--username',name,'--purge');smoke.request(smoke.client(),'GET',smoke.FORGE+'/api/v1/users/'+name,expected=404)
             except BaseException:errors.append('user_cleanup')
         report['ownedUsersPurged']='user_cleanup' not in errors;report['cleanupErrors']=errors
         if errors:report['passed']=False

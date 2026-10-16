@@ -16,7 +16,7 @@ import tempfile
 import uuid
 
 sys.dont_write_bytecode = True
-from smoke import GITEA, GOLF, ROOT, admin, client, command, provider, ready, rpc, wait_for_push
+from smoke import FORGE, GOLF, ROOT, admin, client, command, provider, ready, rpc, wait_for_push
 
 STAGE = 'prerequisites'
 
@@ -31,10 +31,10 @@ def main():
     ready()
     if container := os.environ.get('GOLF_SMOKE_FORGE_CONTAINER'):
         assert command('docker', 'exec', container, 'printenv', 'FORGEJO__actions__ENABLED').lower() == 'false'
-        assert provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'
+        assert provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
     else:
-        assert command('docker', 'compose', 'exec', '-T', 'gitea', 'printenv', 'GITEA__actions__ENABLED').lower() == 'false'
-        assert provider('', 'GET', 'version')['version'] == '1.27.3'
+        assert command('docker', 'compose', 'exec', '-T', 'forgejo', 'printenv', 'FORGEJO__actions__ENABLED').lower() == 'false'
+        assert provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
     capabilities = rpc(client(), 'CapabilityService/ListCapabilities')['capabilities']
     assert next(item for item in capabilities if item['id'] == 'pipelines')['state'] == 'CAPABILITY_STATE_DISABLED'
     prefix = 'golf-workflows-' + secrets.token_hex(4)
@@ -49,7 +49,7 @@ def main():
             token = admin('generate-access-token', '--username', name, '--token-name', prefix,
                           '--scopes', 'write:user,write:repository' if role == 'owner' else 'read:user,read:repository', '--raw')
             session = client(); sessions.append(session)
-            rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})
+            rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})
             actors.append((name, token, session))
         owner_name, owner_token, owner = actors[0]
         reader_name, _, reader = actors[1]
@@ -68,10 +68,10 @@ def main():
         with tempfile.TemporaryDirectory(prefix='golf-workflow-source-') as temporary:
             work = Path(temporary); work.chmod(0o700)
             hooks = work/'empty-hooks'; hooks.mkdir()
-            env = {k: v for k, v in os.environ.items() if not k.startswith(('GIT_', 'GOLF_', 'GITEA_', 'GITHUB_', 'GITLAB_'))}
+            env = {k: v for k, v in os.environ.items() if not k.startswith(('GIT_', 'GOLF_', 'FORGEJO_', 'GITHUB_', 'GITLAB_'))}
             env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null', GIT_TERMINAL_PROMPT='0', GIT_LFS_SKIP_SMUDGE='1')
             auth = base64.b64encode((owner_name+':'+owner_token).encode()).decode()
-            env.update(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='http.'+GITEA+'/.extraHeader', GIT_CONFIG_VALUE_0='Authorization: Basic '+auth)
+            env.update(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='http.'+FORGE+'/.extraHeader', GIT_CONFIG_VALUE_0='Authorization: Basic '+auth)
 
             def git(*args):
                 result = subprocess.run(['git', '-c', 'credential.helper=', '-c', 'core.hooksPath='+str(hooks),
@@ -99,7 +99,7 @@ def main():
             (work/'.github/workflows/link.yml').symlink_to('../../.gitlab-ci.yml')
             git('add', '.github', '.gitlab-ci.yml', '.gitlab-ci.yaml'); git('commit', '-m', 'Workflow source qualification')
             original = git('rev-parse', 'HEAD')
-            git('remote', 'add', 'origin', GITEA+'/'+repository+'.git'); git('push', 'origin', 'main')
+            git('remote', 'add', 'origin', FORGE+'/'+repository+'.git'); git('push', 'origin', 'main')
             wait_for_push(owner_token, repository)
             stage('actual pinned source discovery, blob identity and three inspection outcomes')
             result = inspect()
@@ -139,7 +139,7 @@ def main():
             provider(owner_token, 'DELETE', 'repos/'+repository+'/collaborators/'+reader_name, expected=204)
             inspect(original, reader, expected=404)
             narrow_token = admin('generate-access-token', '--username', owner_name, '--token-name', prefix+'-narrow', '--scopes', 'read:user', '--raw')
-            narrow = client(); sessions.append(narrow); rpc(narrow, 'SessionService/LoginWithGiteaToken', {'token': narrow_token})
+            narrow = client(); sessions.append(narrow); rpc(narrow, 'SessionService/LoginWithForgeToken', {'token': narrow_token})
             inspect(session=narrow, expected=403)
             rpc(owner, procedure, {'repository': key}, headers={'Origin': 'https://other.invalid'}, expected=403)
             delegated = rpc(owner, 'ApiCredentialService/CreateApiCredential', {'label': 'No workflow browser access'})['token']

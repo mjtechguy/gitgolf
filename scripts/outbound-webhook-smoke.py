@@ -36,7 +36,7 @@ METHODS = ('ListRepositoryWebhooks', 'SaveRepositoryWebhook',
            'RedeliverRepositoryWebhook')
 STAGE = 'initialization'
 LIMIT = 4 << 20
-NATIVE_IMAGE = 'gitea/gitea:1.27.3-rootless'
+NATIVE_IMAGE = 'codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'
 PG_IMAGE = 'postgres:18.4-alpine3.24'
 CA_CONFIG = '''[req]
 distinguished_name=ca_subject
@@ -229,7 +229,7 @@ def main():
         self_check(stack); return
     if not args.image or not args.sink_image or not re.fullmatch(r'[0-9a-f]{40}', args.source_commit or ''):
         parser.error('Actual qualification requires --image, --sink-image and exact --source-commit')
-    if not all((stack/p).is_file() for p in ('compose.yaml', 'deploy/compose/compose.webhooks.yaml', 'deploy/postgres/init.sh')):
+    if not all((stack/p).is_file() for p in ('compose.yaml', 'deploy/compose/compose.webhooks.yaml', 'deploy/postgres/forgejo-init.sh')):
         parser.error('Combined webhook source/overlay is required')
     screens = args.screenshots.resolve() if args.screenshots else None
     if screens:
@@ -238,7 +238,7 @@ def main():
         if not (stack/'web/node_modules/playwright/index.mjs').is_file():
             parser.error('Actual browser proof needs existing local Playwright')
         screens.mkdir(parents=True, exist_ok=True, mode=0o700); screens.chmod(0o700)
-    environment = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_', 'GITEA_', 'POSTGRES_', 'COMPOSE_', 'OTEL_', 'AWS_', 'RUSTFS_')) and k not in ('DATABASE_URL', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'SSL_CERT_FILE', 'SSL_CERT_DIR')}
+    environment = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_', 'FORGEJO_', 'POSTGRES_', 'COMPOSE_', 'OTEL_', 'AWS_', 'RUSTFS_')) and k not in ('DATABASE_URL', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'SSL_CERT_FILE', 'SSL_CERT_DIR')}
     environment['COMPOSE_DISABLE_ENV_FILE'] = 'true'
     def run(*command, payload=None, timeout=120):
         result = subprocess.run(command, cwd=stack, env=environment, input=payload, capture_output=True, text=True, timeout=timeout)
@@ -258,8 +258,8 @@ def main():
     spec = importlib.util.spec_from_file_location('webhook_helpers', stack/'scripts/observability-smoke.py')
     helpers = importlib.util.module_from_spec(spec); spec.loader.exec_module(helpers)
     ports = helpers.free_ports(2)
-    previous = smoke.GOLF, smoke.GITEA
-    smoke.GOLF, smoke.GITEA = f'http://127.0.0.1:{ports[0]}', f'http://127.0.0.1:{ports[1]}'
+    previous = smoke.GOLF, smoke.FORGE
+    smoke.GOLF, smoke.FORGE = f'http://127.0.0.1:{ports[0]}', f'http://127.0.0.1:{ports[1]}'
     project = 'golf-webhook-proof-'+secrets.token_hex(5)
     existing = [json.loads(line) for line in run('docker', 'network', 'ls', '--format', '{{json .ID}}').splitlines()]
     networks = [json.loads(run('docker', 'network', 'inspect', identifier))[0] for identifier in existing]
@@ -292,7 +292,7 @@ def main():
         (fixture/'ca.key').chmod(0o600); (fixture/'server.key').chmod(0o600); (fixture/'ca.crt').chmod(0o644)
         policy = json.dumps([{'origin':'https://receiver.golf.test', 'addresses':[sink_ip], 'path_prefix':prefix},
                              {'origin':'https://receiver-bad.golf.test', 'addresses':[sink_ip], 'path_prefix':prefix}])
-        values = {name:secrets.token_hex(24) for name in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')}
+        values = {name:secrets.token_hex(24) for name in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(), GOLF_PUBLIC_URL=smoke.GOLF, GOLF_WEBHOOK_EGRESS_POLICY=policy)
         env_file, override = directory/'proof.env', directory/'proof.yaml'
         private_write(env_file, ''.join(name+"='"+value+"'\n" for name,value in values.items()))
@@ -302,12 +302,12 @@ def main():
     pull_policy: never
     mem_limit: 768m
     cpus: 1
-  gitea:
+  forgejo:
     image: {images['native']}
     pull_policy: never
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
     mem_limit: 512m
     cpus: 1
   golf:
@@ -356,7 +356,7 @@ networks:
         def command(*arguments, payload=None, timeout=120):
             return run(*compose,*arguments,payload=None if payload is None else json.dumps(payload),timeout=timeout)
         def admin(*arguments):
-            return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*arguments)
+            return command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*arguments)  # Forgejo's upstream path
         def rpc(role, method, body=None, expected=200, extra=None):
             return smoke.rpc(actors[role]['session'], method, body, expected=expected, headers=extra)
         def call(role, method, body=None, expected=200, extra=None):
@@ -407,9 +407,9 @@ networks:
         try:
             stage('fresh core and owned HTTPS receiver; consumer intentionally stopped')
             started=True
-            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf','receiver',timeout=180)
+            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','forgejo','golf','receiver',timeout=180)
             smoke.ready()
-            assert smoke.provider('','GET','version')['version']=='1.27.3'
+            assert smoke.provider('','GET','version')['version']=='15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
             until(lambda: (state_dir/'receipts.json').is_file())
             stage('ordinary native actors and managed local-account enrollment')
             for role in ('owner','admin','reader','outsider'):
@@ -438,7 +438,7 @@ networks:
             smoke.rpc(smoke.client(),SERVICE+METHODS[0],{'target':target},expected=403,headers={'Authorization':'Bearer '+delegation['token']})
             rpc('admin','ApiCredentialService/RevokeApiCredential',{'credentialId':delegation['credential']['id']})
             token_session=smoke.client()
-            smoke.rpc(token_session,'SessionService/LoginWithGiteaToken',{'token':actors['admin']['token']})
+            smoke.rpc(token_session,'SessionService/LoginWithForgeToken',{'token':actors['admin']['token']})
             try:
                 observed=target_receipt(smoke.rpc(token_session,SERVICE+METHODS[0],{'target':target}),target)
                 assert not observed.get('backgroundAuthorizationSupported')
@@ -495,7 +495,7 @@ networks:
             command('stop','webhook-worker');pending,_=queue(sub)
             if screens:
                 stage('actual served settings and live native-admin revocation')
-                browser_config={'golf':smoke.GOLF,'native':smoke.GITEA,'repository':repository['owner']+'/'+repository['name'],'email':actors['admin']['name']+'@example.invalid','username':actors['admin']['name'],'password':actors['admin']['password'],'ownerToken':actors['owner']['token'],'endpoint':endpoint,'key':key,'prefix':prefix,'screenshots':str(screens),'runtime':baseline}
+                browser_config={'golf':smoke.GOLF,'native':smoke.FORGE,'repository':repository['owner']+'/'+repository['name'],'email':actors['admin']['name']+'@example.invalid','username':actors['admin']['name'],'password':actors['admin']['password'],'ownerToken':actors['owner']['token'],'endpoint':endpoint,'key':key,'prefix':prefix,'screenshots':str(screens),'runtime':baseline}
                 # Worker must run for the browser's explicit test, while the pending
                 # no-send proof needs a fresh queue immediately before revocation.
                 command('start','webhook-worker');terminal(sub,pending)
@@ -555,7 +555,7 @@ networks:
                 except Exception:cleanup_errors.append('fresh compose teardown')
                 try:assert not command('ps','-aq')
                 except Exception:cleanup_errors.append('fresh container absence')
-            smoke.GOLF,smoke.GITEA=previous
+            smoke.GOLF,smoke.FORGE=previous
             results['cleanupComplete']=not cleanup_errors
             if screens:private_write(screens/'manifest.json',json.dumps(results,indent=2)+'\n')
             assert not cleanup_errors,'Owned cleanup incomplete; fixed categories only'

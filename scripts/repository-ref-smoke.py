@@ -35,7 +35,7 @@ def main():
             users.append(name)
             token = smoke.admin('generate-access-token', '--username', name, '--token-name', prefix, '--scopes', 'write:user,write:repository,write:issue', '--raw')
             session = smoke.client()
-            identity = smoke.rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})['user']
+            identity = smoke.rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})['user']
             actors.append((name, token, session, identity['id']))
         name, token, owner, _ = actors[0]
         repo = {'owner': name, 'name': 'refs'}
@@ -121,7 +121,7 @@ def main():
         for name in reversed(users):
             try:
                 smoke.admin('delete', '--username', name, '--purge')
-                smoke.request(smoke.client(), 'GET', smoke.GITEA+'/api/v1/users/'+name, expected=404)
+                smoke.request(smoke.client(), 'GET', smoke.FORGE+'/api/v1/users/'+name, expected=404)
             except BaseException:
                 errors.append('user_cleanup')
         report['ownedUsersPurged'] = 'user_cleanup' not in errors

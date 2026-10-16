@@ -16,7 +16,7 @@ import tempfile
 import urllib.parse
 
 sys.dont_write_bytecode = True
-from smoke import ROOT, GOLF, GITEA, admin, client, command, commit, provider, ready, rpc, wait_for_push
+from smoke import ROOT, GOLF, FORGE, admin, client, command, commit, provider, ready, rpc, wait_for_push
 spec=importlib.util.spec_from_file_location('organization_smoke',ROOT/'scripts/organizations-smoke.py')
 helpers=importlib.util.module_from_spec(spec);spec.loader.exec_module(helpers)
 
@@ -28,7 +28,7 @@ try{
  let input='';for await(const part of process.stdin)input+=part;config=JSON.parse(input);input='';
  browser=await chromium.launch();context=await browser.newContext({viewport:{width:1280,height:900},permissions:['clipboard-read','clipboard-write']});
  const headers={Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'};
- check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithGiteaToken',{headers,data:{token:config.readerToken}})).status()===200);
+ check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithForgeToken',{headers,data:{token:config.readerToken}})).status()===200);
  const page=await context.newPage();const errors=[];page.on('pageerror',()=>errors.push(true));
  const source=config.golf+'/'+config.repository+'/blob/'+config.ref+'/'+config.path.split('/').map(encodeURIComponent).join('/');
  stage='native directory latest change';await page.goto(config.golf+'/'+config.repository+'/tree/'+config.ref+'/src');
@@ -57,26 +57,26 @@ try{
   await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.commit-list>li').length===20);
   await page.getByRole('link',{name:'Back to source',exact:true}).click();await page.locator('.numbered-source').waitFor();
  }
- stage='live repository revocation';check((await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.reader,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);
+ stage='live repository revocation';check((await context.request.delete(config.forge+'/api/v1/repos/'+config.repository+'/collaborators/'+config.reader,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);
  await page.getByRole('alert').waitFor({timeout:15000});check(await page.locator('.numbered-source,.source-action-menu').count()===0);check(errors.length===0);
  stage='owner full-page issue creation';
  check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/Logout',{headers,data:{}})).status()===200);
- check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithGiteaToken',{headers,data:{token:config.ownerToken}})).status()===200);
+ check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithForgeToken',{headers,data:{token:config.ownerToken}})).status()===200);
  await page.goto(config.golf+'/'+config.repository+'/issues/new');const editor=page.getByRole('region',{name:'New issue',exact:true});await editor.waitFor();check(await page.getByRole('dialog').count()===0);
  await editor.getByLabel('Issue title',{exact:true}).fill('Native full-page issue proof');
  const body='## Actual issue\n\nExpected full-page editor.\n\n```ts\nconst safe = true;\n```';await editor.getByLabel('Description, plain text',{exact:true}).fill(body);await editor.getByRole('button',{name:'Preview Markdown',exact:true}).click();await page.getByLabel('Draft Markdown preview',{exact:true}).waitFor();
  for(const theme of ['dark','light'])for(const width of [1280,390]){await page.setViewportSize({width,height:900});const toggle=page.getByRole('button',{name:'Switch to '+theme+' theme',exact:true});if(await toggle.count())await toggle.click();check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(config.screenshots,'native-issue-create-'+theme+'-'+width+'.png')});}
  await editor.getByRole('button',{name:'Write',exact:true}).click();await editor.getByRole('button',{name:'Create issue',exact:true}).click();await page.waitForURL(new RegExp('/issues/[1-9][0-9]*'));
  await page.locator('#issue-detail-title').waitFor();check((await page.locator('#issue-detail-title').textContent()).startsWith('Native full-page issue proof')); const number=Number(new URL(page.url()).pathname.split('/').pop());
- const receipt=await context.request.get(config.gitea+'/api/v1/repos/'+config.repository+'/issues/'+number,{headers:{Authorization:'token '+config.ownerToken}});check(receipt.status()===200);const actual=await receipt.json();check(actual.title==='Native full-page issue proof'&&actual.body===body);
+ const receipt=await context.request.get(config.forge+'/api/v1/repos/'+config.repository+'/issues/'+number,{headers:{Authorization:'token '+config.ownerToken}});check(receipt.status()===200);const actual=await receipt.json();check(actual.title==='Native full-page issue proof'&&actual.body===body);
  console.log('PASS: actual latest-change rows, source/tree/range links, copy/download exact text, path pagination/reload, both themes/mobile, revoked-access cleanup and native full-page issue creation/readback');
 }catch{console.error('Path history browser failed at '+stage+'; private diagnostics withheld');process.exitCode=1;}
 finally{if(context&&config)try{check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/Logout',{headers:{Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'},data:{}})).status()===200);}catch{console.error('Browser logout failed');process.exitCode=1;}await browser?.close();}
 '''
 
 def mcp_history(binary, credential, api, full, ref, path, expected):
- env={k:v for k,v in os.environ.items() if k not in {'GOLF_API_TOKEN','GOLF_GITEA_TOKEN','GOLF_URL','MCPGODEBUG'}}
- env['GOLF_API_TOKEN' if api else 'GOLF_GITEA_TOKEN']=credential
+ env={k:v for k,v in os.environ.items() if k not in {'GOLF_API_TOKEN','GOLF_FORGE_TOKEN','GOLF_URL','MCPGODEBUG'}}
+ env['GOLF_API_TOKEN' if api else 'GOLF_FORGE_TOKEN']=credential
  process=subprocess.Popen([str(binary),'--url',GOLF,'mcp'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env)
  def send(value):process.stdin.write((json.dumps(value)+'\n').encode());process.stdin.flush()
  def receive(identity):
@@ -107,7 +107,7 @@ def main():
    name=prefix+'-'+role
    admin('create','--username',name,'--email',name+'@example.invalid','--random-password','--random-password-length','32','--must-change-password=false');users.append(name)
    token=admin('generate-access-token','--username',name,'--token-name',prefix,'--scopes','write:user,write:repository'+(',write:issue' if role=='owner' else ''),'--raw').strip()
-   session=client();rpc(session,'SessionService/LoginWithGiteaToken',{'token':token});sessions.append(session);actors[role]=(name,token,session)
+   session=client();rpc(session,'SessionService/LoginWithForgeToken',{'token':token});sessions.append(session);actors[role]=(name,token,session)
   owner,token,session=actors['owner'];reader,reader_token,reader_session=actors['reader'];outsider,outsider_token,outsider_session=actors['outsider']
   repo=provider(token,'POST','user/repos',{'name':'history','private':True},201);key={'owner':owner,'name':'history'};full=owner+'/history';repo_id=str(repo['id'])
   path='src/[literal]* 世界.ts';magic=':(glob)*'
@@ -120,7 +120,7 @@ def main():
    expected=command('git','log','--format=%H',ref,'--',':(literal)'+path,cwd=work).splitlines();assert len(expected)==63
    (work/'src/literal-decoy.ts').write_text('decoy-only change\n');command('git','add','.',cwd=work);advanced=commit(work,'Decoy should not appear in file history')
    askpass=Path(directory)/'askpass.py';askpass.write_text('#!/usr/bin/env python3\nimport os,sys\nprint(os.environ["GOLF_CHECK_USER"] if "Username" in sys.argv[1] else os.environ["GOLF_CHECK_TOKEN"])\n');askpass.chmod(0o700)
-   env={**os.environ,'GIT_ASKPASS':str(askpass),'GIT_TERMINAL_PROMPT':'0','GOLF_CHECK_USER':owner,'GOLF_CHECK_TOKEN':token};command('git','-c','credential.helper=','push',GITEA+'/'+full+'.git','main',env=env,cwd=work);wait_for_push(token,full)
+   env={**os.environ,'GIT_ASKPASS':str(askpass),'GIT_TERMINAL_PROMPT':'0','GOLF_CHECK_USER':owner,'GOLF_CHECK_TOKEN':token};command('git','-c','credential.helper=','push',FORGE+'/'+full+'.git','main',env=env,cwd=work);wait_for_push(token,full)
    for limit in [1,20,100]:
     actual=[];page=1
     while True:
@@ -147,7 +147,7 @@ def main():
    finally:rpc(session,'ApiCredentialService/RevokeApiCredential',{'credentialId':issued['credential']['id']})
    print('PASS: native literal Unicode/glob/leading-colon paths, file/directory order, 1/20/100 page sizes, pinned ref, CLI, PAT/bearer MCP and private denials')
    screenshots=ROOT/'.tmp/path-history-smoke';screenshots.mkdir(exist_ok=True)
-   proof=subprocess.run(['node','--input-type=module','-e',BROWSER],cwd=ROOT,input=json.dumps({'golf':GOLF,'gitea':GITEA,'repository':full,'reader':reader,'readerToken':reader_token,'ownerToken':token,'ref':ref,'path':path,'text':text,'screenshots':str(screenshots)}),capture_output=True,text=True,timeout=120)
+   proof=subprocess.run(['node','--input-type=module','-e',BROWSER],cwd=ROOT,input=json.dumps({'golf':GOLF,'forge':FORGE,'repository':full,'reader':reader,'readerToken':reader_token,'ownerToken':token,'ref':ref,'path':path,'text':text,'screenshots':str(screenshots)}),capture_output=True,text=True,timeout=120)
    for line in proof.stdout.splitlines():print(line)
    for line in proof.stderr.splitlines():
     if line.startswith('Path history browser failed at ') or line=='Browser logout failed':print(line)

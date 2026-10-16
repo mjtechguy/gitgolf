@@ -12,10 +12,10 @@ function bound(body) { check(body.repositoryId === config.repositoryId && body.o
 function fields(team) { return JSON.stringify([team.id, team.name, team.description || '', team.permission, Object.entries(team.unitPermissions || {}).sort(([a],[b]) => a.localeCompare(b)), team.includesAllRepositories || false, team.visibility]); }
 async function nativeAssociation(wanted) {
   stage += ' · independent native association/config readback';
-  const response = await context.request.get(config.gitea+'/api/v1/repos/'+config.repository+'/teams', { headers:{Authorization:'token '+config.ownerToken} });
+  const response = await context.request.get(config.forge+'/api/v1/repos/'+config.repository+'/teams', { headers:{Authorization:'token '+config.ownerToken} });
   check(response.status() === 200 && !response.headers()['link']); const rows = await response.json(); check(Array.isArray(rows) && rows.length <= 500);
   check(rows.some(row => String(row.id) === config.teamId) === wanted);
-  const selected = await context.request.get(config.gitea+'/api/v1/teams/'+config.teamId, { headers:{Authorization:'token '+config.ownerToken} }); check(selected.status() === 200);
+  const selected = await context.request.get(config.forge+'/api/v1/teams/'+config.teamId, { headers:{Authorization:'token '+config.ownerToken} }); check(selected.status() === 200);
   const team = await selected.json(); check(String(team.id) === config.teamId && String(team.organization.id) === config.ownerId && team.name === config.teamName && typeof team.includes_all_repositories === 'boolean' && !team.includes_all_repositories && typeof team.units_map === 'object' && team.units_map !== null);
   return JSON.stringify([team.id,team.name,team.description,team.permission,team.units_map,team.visibility,team.includes_all_repositories]);
 }

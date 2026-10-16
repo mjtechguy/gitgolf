@@ -18,7 +18,7 @@ import urllib.request
 import re
 
 sys.dont_write_bytecode = True
-from smoke import GOLF, GITEA, ROOT, admin, client, command, commit, provider, ready, rpc, wait_for_push
+from smoke import GOLF, FORGE, ROOT, admin, client, command, commit, provider, ready, rpc, wait_for_push
 spec = importlib.util.spec_from_file_location('organization_smoke', ROOT/'scripts/organizations-smoke.py')
 helpers = importlib.util.module_from_spec(spec); spec.loader.exec_module(helpers)
 
@@ -88,7 +88,7 @@ try {
  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();await page.setViewportSize({width:390,height:844});
  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.screenshot({path:join(config.screenshots,'commit-diff-light-mobile.png')});
- stage='provider membership revocation';const removed=await context.request.delete(config.gitea+'/api/v1/repos/'+config.owner+'/diffs/collaborators/'+config.member,
+ stage='provider membership revocation';const removed=await context.request.delete(config.forge+'/api/v1/repos/'+config.owner+'/diffs/collaborators/'+config.member,
  {headers:{Authorization:'token '+config.ownerToken}});check(removed.status()===204);
  await page.getByRole('alert').waitFor({timeout:15000});
  check(await diff.count()===0);check(errors.length===0);
@@ -117,7 +117,7 @@ def main():
             admin('create','--username',name,'--email',name+'@example.invalid','--random-password',
                   '--random-password-length','32','--must-change-password=false'); users.append(name)
             token=admin('generate-access-token','--username',name,'--token-name',prefix,'--scopes',scopes,'--raw').strip()
-            session=client();rpc(session,'SessionService/LoginWithGiteaToken',{'token':token});sessions.append(session)
+            session=client();rpc(session,'SessionService/LoginWithForgeToken',{'token':token});sessions.append(session)
             if role=='owner': owner,owner_token,owner_name=session,token,name
             else: member,member_token,member_name=session,token,name
         rpc(owner,'RepositoryService/CreateRepository',{'name':'diffs','private':True})
@@ -161,13 +161,13 @@ def main():
             command('git','add','.',cwd=work);invalid_utf8=commit(work,'Invalid UTF8 fixture');command('git','checkout','main',cwd=work)
             askpass=path/'askpass.py';askpass.write_text('#!/usr/bin/env python3\nimport os,sys\nprint(os.environ["GOLF_CHECK_USER"] if "Username" in sys.argv[1] else os.environ["GOLF_CHECK_TOKEN"])\n');askpass.chmod(0o700)
             env={**os.environ,'GIT_ASKPASS':str(askpass),'GIT_TERMINAL_PROMPT':'0','GOLF_CHECK_USER':owner_name,'GOLF_CHECK_TOKEN':owner_token}
-            command('git','-c','credential.helper=','push',GITEA+'/'+full_name+'.git','main','side','large-diff','control-diff','nonutf8-diff',env=env,cwd=work)
+            command('git','-c','credential.helper=','push',FORGE+'/'+full_name+'.git','main','side','large-diff','control-diff','nonutf8-diff',env=env,cwd=work)
             wait_for_push(owner_token,full_name)
             initial=diff(root);assert initial['commit']['sha']==root and initial['base']=='COMMIT_DIFF_BASE_ROOT'
             assert not initial.get('parentCommitIds') and not initial.get('baseCommitId') and 'commit '+root in initial['rawDiff']
             (work/'forward.txt').write_text('Advance main after selecting the immutable root diff\n')
             command('git','add','.',cwd=work);advanced=commit(work,'Advance main after diff snapshot')
-            command('git','-c','credential.helper=','push',GITEA+'/'+full_name+'.git','main',env=env,cwd=work)
+            command('git','-c','credential.helper=','push',FORGE+'/'+full_name+'.git','main',env=env,cwd=work)
             assert provider(owner_token,'GET','repos/'+full_name+'/branches/main')['commit']['id']==advanced
             changed=diff(edited);assert changed['baseCommitId']==root and changed['parentCommitIds']==[root]
             assert changed['base']=='COMMIT_DIFF_BASE_FIRST_PARENT'
@@ -177,7 +177,7 @@ def main():
             assert 'side.txt' in merged['rawDiff'] and 'diff --git a/README.md' not in merged['rawDiff']
             assert not diff(empty).get('rawDiff') and not diff(empty).get('byteSize')
             assert diff(root)==initial, 'Advancing refs changed an exact commit selection'
-            request=urllib.request.Request(GITEA+'/api/v1/repos/'+full_name+'/git/commits/'+root+'.diff',headers={'Authorization':'token '+owner_token})
+            request=urllib.request.Request(FORGE+'/api/v1/repos/'+full_name+'/git/commits/'+root+'.diff',headers={'Authorization':'token '+owner_token})
             with urllib.request.urlopen(request,timeout=15) as response:
                 assert response.status==200 and response.read().decode()==initial['rawDiff']
                 print('Native diff Content-Type: '+response.headers.get('Content-Type','(absent)'))
@@ -188,7 +188,7 @@ def main():
                 diff(value,expected=400)
             diff('f'*40,expected=404);diff(root,member,404);diff(root,client(),401)
             narrow_token=admin('generate-access-token','--username',owner_name,'--token-name',prefix+'-narrow','--scopes','read:user','--raw').strip()
-            narrow=client();rpc(narrow,'SessionService/LoginWithGiteaToken',{'token':narrow_token});sessions.append(narrow)
+            narrow=client();rpc(narrow,'SessionService/LoginWithForgeToken',{'token':narrow_token});sessions.append(narrow)
             diff(root,narrow,403)
             print('PASS: root/first-parent merge, empty, text/rename/delete/binary/symlink/gitlink output, byte bounds, exact IDs and private/scope denial')
             if binary:
@@ -203,7 +203,7 @@ def main():
             assert diff(root,member)['commit']['sha']==root
             screenshots=ROOT/'.tmp/commit-diff-smoke';screenshots.mkdir(parents=True,exist_ok=True)
             result=subprocess.run(['node','--input-type=module','-e',BROWSER],cwd=ROOT,text=True,capture_output=True,timeout=90,
-                input=json.dumps({'golf':GOLF,'gitea':GITEA,'owner':owner_name,'member':member_name,
+                input=json.dumps({'golf':GOLF,'forge':FORGE,'owner':owner_name,'member':member_name,
                                  'memberToken':member_token,'ownerToken':owner_token,'root':root,'merge':merge,'screenshots':str(screenshots)}))
             if result.returncode:
                 for line in result.stderr.splitlines():

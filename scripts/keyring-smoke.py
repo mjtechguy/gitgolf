@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Qualify operator key rotation with isolated PostgreSQL and real Gitea PATs.
+"""Qualify operator key rotation with isolated PostgreSQL and real Forgejo PATs.
 
-Requires the local Compose Gitea and a built bin/golf-server. Creates and removes
+Requires the local Compose Forgejo and a built bin/golf-server. Creates and removes
 its own database/container and provider user. Normal Golf/.env are untouched.
 OAuth verification here covers a pending PKCE attempt, not a token exchange.
 """
@@ -45,15 +45,15 @@ def main():
     # Do not inherit an operator's real keys or optional OAuth application.
     for name in ['GOLF_ENCRYPTION_KEY', 'GOLF_ENCRYPTION_KEYS', 'GOLF_ACTIVE_ENCRYPTION_KEY']:
         env.pop(name, None)
-    env.update(GOLF_ENCRYPTION_KEY=legacy, GITEA_URL=smoke.GITEA,
-               GITEA_PUBLIC_URL=smoke.GITEA, GITEA_OAUTH_CLIENT_ID=prefix,
-               GITEA_OAUTH_CLIENT_SECRET=secrets.token_urlsafe(32),
+    env.update(GOLF_ENCRYPTION_KEY=legacy, GOLF_FORGE_URL=smoke.FORGE,
+               GOLF_FORGE_PUBLIC_URL=smoke.FORGE, GOLF_FORGE_OAUTH_CLIENT_ID=prefix,
+               GOLF_FORGE_OAUTH_CLIENT_SECRET=secrets.token_urlsafe(32),
                GOLF_ALLOW_INSECURE_COOKIES='true', GOLF_WEB_DIR=str(smoke.ROOT/'web/dist'))
     original_url = smoke.GOLF
     smoke.GOLF = 'http://127.0.0.1:'+str(port())
     env.update(GOLF_PUBLIC_URL=smoke.GOLF, GOLF_LISTEN_ADDR=urlparse(smoke.GOLF).netloc)
     process, created_db, created_user = None, False, False
-    forbidden = [password, legacy, next_key, env['GITEA_OAUTH_CLIENT_SECRET']]
+    forbidden = [password, legacy, next_key, env['GOLF_FORGE_OAUTH_CLIENT_SECRET']]
 
     def run(command, expected=0, input_text=None):
         result = subprocess.run(command, cwd=smoke.ROOT, env=env, text=True,
@@ -120,10 +120,10 @@ def main():
             start(log)
             sessions = [smoke.client() for _ in range(3)]
             for session in sessions:
-                smoke.rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})
+                smoke.rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})
             original_sessions = smoke.rpc(sessions[0], 'SessionService/ListSessions')
             pending = smoke.client()
-            authorization = smoke.rpc(pending, 'SessionService/BeginGiteaOAuth')['authorizationUrl']
+            authorization = smoke.rpc(pending, 'SessionService/BeginForgeOAuth')['authorizationUrl']
             state = parse_qs(urlparse(authorization).query)['state'][0]
             assert sql('SELECT count(*) FROM golf_oauth_attempts;') == '1'
             session_snapshot = sql("SELECT session_id,encode(token_hash,'hex'),encode(encrypted_token,'hex'),expires_at,credential_kind FROM golf_sessions ORDER BY session_id;")
@@ -148,7 +148,7 @@ def main():
             start(log)
             assert smoke.rpc(sessions[0], 'SessionService/ListSessions') == original_sessions
             new = smoke.client()
-            smoke.rpc(new, 'SessionService/LoginWithGiteaToken', {'token': token})
+            smoke.rpc(new, 'SessionService/LoginWithForgeToken', {'token': token})
             partial = operator('rotate', '--batch-size', '1', '--max-batches', '1', state='partial')
             assert partial['rotated_sessions'] == 1 and partial['batches'] == 1
             stop(); start(log)
@@ -165,7 +165,7 @@ def main():
             for session in sessions+[new]:
                 smoke.rpc(session, 'SessionService/GetSession')
             # A denied callback still authenticates and consumes the rotated verifier.
-            with pending.open(smoke.GOLF+'/auth/gitea/callback?'+urlencode({'state': state, 'error': 'access_denied'}), timeout=15) as response:
+            with pending.open(smoke.GOLF+'/auth/forgejo/callback?'+urlencode({'state': state, 'error': 'access_denied'}), timeout=15) as response:
                 response.read()
             assert sql('SELECT count(*) FROM golf_oauth_attempts;') == '0'
             stop()

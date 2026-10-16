@@ -40,7 +40,7 @@ def main():
     parser.add_argument('--image', required=True, help='already-built current Golf image')
     args = parser.parse_args()
     environment = {key: value for key, value in os.environ.items()
-        if not key.startswith(('GOLF_', 'GITEA_', 'OTEL_', 'POSTGRES_', 'COMPOSE_')) and key != 'DATABASE_URL'}
+        if not key.startswith(('GOLF_', 'FORGEJO_', 'OTEL_', 'POSTGRES_', 'COMPOSE_')) and key != 'DATABASE_URL'}
     forbidden = []
 
     def run(*arguments, payload=None, success=True, timeout=120):
@@ -54,27 +54,27 @@ def main():
     assert image.startswith('sha256:')
     print('Golf image: ' + image, flush=True)
     project = 'golf-api-proof-' + secrets.token_hex(5)
-    golf_port, gitea_port = helpers.free_ports(2)
-    original_urls = smoke.GOLF, smoke.GITEA
-    smoke.GOLF, smoke.GITEA = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{gitea_port}'
+    golf_port, forge_port = helpers.free_ports(2)
+    original_urls = smoke.GOLF, smoke.FORGE
+    smoke.GOLF, smoke.FORGE = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{forge_port}'
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory = Path(temporary).resolve(); directory.chmod(0o700)
         env_file, override = directory/'core.env', directory/'proof.yaml'
-        values = {name: secrets.token_hex(24) for name in ['POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD']}
+        values = {name: secrets.token_hex(24) for name in ['POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'FORGEJO_DB_PASSWORD']} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),
             GOLF_PUBLIC_URL=smoke.GOLF, GOLF_ENCRYPTION_KEYS='', GOLF_ACTIVE_ENCRYPTION_KEY='',
-            GITEA_PUBLIC_URL='', GITEA_OAUTH_CLIENT_ID='', GITEA_OAUTH_CLIENT_SECRET='')
-        forbidden.extend(value for key, value in values.items() if value and key != 'GOLF_PUBLIC_URL')
+            GOLF_FORGE_PUBLIC_URL='', GOLF_FORGE_OAUTH_CLIENT_ID='', GOLF_FORGE_OAUTH_CLIENT_SECRET='')
+        forbidden.extend(value for key, value in values.items() if value and key not in ('GOLF_PUBLIC_URL', 'GOLF_FORGE_INSTANCE_ID'))
         helpers.private_write(env_file, ''.join(key+'='+value+'\n' for key,value in values.items()))
         helpers.private_write(override, f'''services:
   golf:
     image: {image}
     pull_policy: never
     ports: !override ["127.0.0.1:{golf_port}:8080"]
-  gitea:
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
-    ports: !override ["127.0.0.1:{gitea_port}:3000"]
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
+    ports: !override ["127.0.0.1:{forge_port}:3000"]
 ''')
         compose = ['docker', 'compose', '-p', project, '--env-file', str(env_file),
             '-f', str(ROOT/'compose.yaml'), '-f', str(override)]
@@ -83,7 +83,7 @@ def main():
             return run(*compose, *arguments, **kwargs)
 
         def admin(*arguments):
-            return command('exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini',
+            return command('exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini',  # Forgejo's upstream path
                 'admin', 'user', *arguments).strip()
 
         def operator(action, payload, success=True):
@@ -109,7 +109,7 @@ def main():
             started = True
             command('up', '-d', '--no-build', '--wait', '--wait-timeout', '120', timeout=180)
             smoke.ready()
-            assert smoke.provider('', 'GET', 'version')['version'] == '1.27.3'
+            assert smoke.provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
             assert json.loads(run('docker', 'inspect', project+'-golf-1'))[0]['Image'] == image
             native_names = ['disable-'+secrets.token_hex(5) for _ in range(3)]
             tokens = []
@@ -127,8 +127,8 @@ def main():
             target,_=login(names[1],passwords[1]);second_target,_=login(names[1],passwords[1])
             target_delegate=smoke.rpc(target,'ApiCredentialService/CreateApiCredential',{'label':'Dependent target credential'})['token']
             forbidden.append(target_delegate)
-            pat=smoke.client();smoke.rpc(pat,'SessionService/LoginWithGiteaToken',{'token':tokens[1]})
-            pat_actor=smoke.client();smoke.rpc(pat_actor,'SessionService/LoginWithGiteaToken',{'token':tokens[0]})
+            pat=smoke.client();smoke.rpc(pat,'SessionService/LoginWithForgeToken',{'token':tokens[1]})
+            pat_actor=smoke.client();smoke.rpc(pat_actor,'SessionService/LoginWithForgeToken',{'token':tokens[0]})
             accounts=smoke.rpc(actor,'InstanceAdminService/ListLocalAccounts')['accounts']
             target_account=next(row for row in accounts if row['username']==names[1])
             actor_account=next(row for row in accounts if row['username']==names[0])
@@ -191,7 +191,7 @@ def main():
             command('restart','golf');smoke.ready();login(names[0],passwords[0],429)
             print('PASS: actual disposable-core admin password step-up, ordinary target CAS/disable, atomic actor audit, session/delegation revocation, administrator/PAT/bearer/Origin denial, restart and shared durable throttle; native account and independent PAT remain authorized',flush=True)
         finally:
-            smoke.GOLF,smoke.GITEA=original_urls
+            smoke.GOLF,smoke.FORGE=original_urls
             if started:command('down','--volumes','--remove-orphans','--timeout','10')
             for resource,action in [('container','ls'),('volume','ls'),('network','ls')]:
                 extra=['-a'] if resource=='container' else []

@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -129,7 +130,7 @@ def main():
     args.output.mkdir(parents=True,exist_ok=False,mode=0o700);args.output.chmod(0o700);OUTPUT=args.output.resolve(strict=True)
     record(status='running',helperSha256=helper_sha,helperSourceSha256=hashlib.sha256((ROOT/'scripts/managed-git-native/main.go').read_bytes()).hexdigest(),expectedSource=expected_source,launcherSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
     signal.signal(signal.SIGTERM,interrupt);signal.signal(signal.SIGINT,interrupt)
-    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_','GIT_')) and k not in ['DATABASE_URL','SSH_AUTH_SOCK','SSH_ASKPASS'] and k.lower() not in ['http_proxy','https_proxy','all_proxy','no_proxy']}
+    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_','GIT_')) and k not in ['DATABASE_URL','SSH_AUTH_SOCK','SSH_ASKPASS'] and k.lower() not in ['http_proxy','https_proxy','all_proxy','no_proxy']}
     def run(*command,payload=None,raw=None,timeout=180,expected=0,cwd=stack,env=None):
         require(not(payload is not None and raw is not None),'ambiguous_stdin')
         result=subprocess.run(command,input=json.dumps(payload).encode() if payload is not None else raw,cwd=cwd,env=environment if env is None else env,capture_output=True,timeout=timeout)
@@ -139,7 +140,7 @@ def main():
     core=json.loads(run('docker','image','inspect',args.image))[0]
     require(helper_bytes[5]==1 and int.from_bytes(helper_bytes[18:20],'little')==({'amd64':62,'arm64':183}.get(core.get('Architecture'))),'helper_architecture')
     require(core['Id']==expected_image and core['Config'].get('Labels',{}).get('org.opencontainers.image.revision')==expected_source,'image_source_binding')
-    native=json.loads(run('docker','image','inspect','gitea/gitea:1.27.3-rootless'))[0]
+    native=json.loads(run('docker','image','inspect','codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'))[0]
     database=json.loads(run('docker','image','inspect','postgres:18.4-alpine3.24'))[0]
     space=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',core['Id'],'-Pk','/').decode()
     require(int(space.strip().splitlines()[-1].split()[3])>=2*1024*1024,'disk_reserve_below_2gib')
@@ -163,23 +164,23 @@ def main():
         for path in (tls/'server.key',tls/'server.crt',tls/'ca.crt'):path.chmod(0o444)
         context=ssl.create_default_context(cafile=str(tls/'ca.crt'));context.minimum_version=ssl.TLSVersion.TLSv1_3
         env_file,overlay=directory/'core.env',directory/'proof.yaml'
-        values={k:secrets.token_hex(24) for k in ['POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD']}
+        values={k:secrets.token_hex(24) for k in ['POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD']} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=browser,GOLF_PUSH_CI_ENABLED='false')
         private_write(env_file,''.join(k+'='+v+'\n' for k,v in values.items()))
         private_write(overlay,f'''services:
   postgres:
     image: {database['Id']}
     pull_policy: never
-  gitea:
+  forgejo:
     image: {native['Id']}
     pull_policy: never
     ports: !reset []
     environment:
-      GITEA__server__ROOT_URL: http://gitea:3000/
-      GITEA__server__DISABLE_SSH: 'true'
-      GITEA__server__START_SSH_SERVER: 'false'
-      GITEA__actions__ENABLED: 'false'
-      GITEA__repository__DEFAULT_BRANCH: main
+      FORGEJO__server__ROOT_URL: http://forgejo:3000/
+      FORGEJO__server__DISABLE_SSH: 'true'
+      FORGEJO__server__START_SSH_SERVER: 'false'
+      FORGEJO__actions__ENABLED: 'false'
+      FORGEJO__repository__DEFAULT_BRANCH: main
   golf:
     image: {core['Id']}
     pull_policy: never
@@ -199,7 +200,7 @@ def main():
 ''')
         compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(stack/'compose.yaml'),'-f',str(overlay)]
         def command(*args,**kwargs):return run(*compose,*args,**kwargs)
-        def admin(*args):return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*args).decode().strip()
+        def admin(*args):return command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*args).decode().strip()  # Forgejo's upstream path
         def operator(action,payload):
             result=json.loads(command('exec','-T','golf','golf','local-account',action,payload=payload));require(result.get('state')=='complete','operator_receipt');return result['result']
         def native_call(token,method,path,body=None,expected=200):
@@ -229,10 +230,10 @@ def main():
             value=json.loads(run('docker','inspect',container))[0]
             return {'containerId':container,'imageReference':value['Image'],'configuredImage':value['Config']['Image'],'composeConfigHash':value['Config']['Labels']['com.docker.compose.config-hash']}
         def topology():
-            container=command('ps','-q','gitea').decode().strip();row=json.loads(run('docker','inspect',container))[0]
+            container=command('ps','-q','forgejo').decode().strip();row=json.loads(run('docker','inspect',container))[0]
             require(not row['HostConfig'].get('PortBindings'),'native_public_ports_present')
             native_env=dict(v.split('=',1) for v in row['Config']['Env'] if '=' in v)
-            require(native_env.get('GITEA__server__DISABLE_SSH')=='true' and native_env.get('GITEA__server__START_SSH_SERVER')=='false' and native_env.get('GITEA__actions__ENABLED')=='false','native_topology_configuration')
+            require(native_env.get('FORGEJO__server__DISABLE_SSH')=='true' and native_env.get('FORGEJO__server__START_SSH_SERVER')=='false' and native_env.get('FORGEJO__actions__ENABLED')=='false','native_topology_configuration')
             return {'nativePublicBindingsAbsent':True,'nativeSSHDisabled':True,'nativeActionsDisabled':True,'nativeContainerId':container,'nativeImageReference':row['Image']}
         def git_http(secret,route,expected=200,payload=None,method='GET',headers=None,insecure=False):
             auth=base64.b64encode(('golf:'+secret).encode()).decode()
@@ -253,8 +254,8 @@ def main():
             return result.stdout
         try:
             stage('fresh private-native stack and actual direct TLS')
-            started=True;command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf');ready()
-            initial_runtime=runtime();require(initial_runtime['imageReference']==core['Id'] and initial_runtime['configuredImage']==core['Id'],'runtime_image_binding');require(native_call('','GET','version')['version']=='1.27.3','native_version')
+            started=True;command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','forgejo','golf');ready()
+            initial_runtime=runtime();require(initial_runtime['imageReference']==core['Id'] and initial_runtime['configuredImage']==core['Id'],'runtime_image_binding');require(native_call('','GET','version')['version']=='15.0.9+gitea-1.22.0','native_version')  # Forgejo's upstream version string
             with context.wrap_socket(socket.create_connection(('127.0.0.1',tls_port),timeout=5),server_hostname='127.0.0.1') as connection:require(connection.version()=='TLSv1.3','actual_tls_version')
             # Wrong endpoint name remains refused, never an insecure TLS override.
             try:

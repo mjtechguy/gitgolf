@@ -69,7 +69,7 @@ class Fixture:
         self.secret_obj('rustfs-auth', {'RUSTFS_ACCESS_KEY': self.access, 'RUSTFS_SECRET_KEY': self.secret})
         self.secret_obj('backup-auth', {'ACCESS_KEY_ID': self.access, 'ACCESS_SECRET_KEY': self.secret, 'REGION': 'us-east-1'})
         self.secret_obj('rustfs-tls', {'rustfs_cert.pem': (self.path / 'tls.crt').read_text(), 'rustfs_key.pem': (self.path / 'tls.key').read_text(), 'ca.crt': (self.path / 'tls.crt').read_text()})
-        for role in ['golf', 'gitea']:
+        for role in ['golf', 'forgejo']:
             self.secret_obj(role + '-auth', {'username': role, 'password': secrets.token_urlsafe(32)}, 'kubernetes.io/basic-auth')
         run(['git', '-c', 'advice.detachedHead=false', 'clone', '--quiet', '--depth', '1', '--branch', '1.0.0', 'https://github.com/rustfs/rustfs.git', self.path / 'rustfs'])
         assert run(['git', '-C', self.path / 'rustfs', 'rev-parse', 'HEAD']).strip() == 'd47f54bfb2f39f48bd1adda334bd27e151fe85b8'
@@ -107,7 +107,7 @@ else:
             forward.wait(timeout=10)
 
     def render_cluster(self, restore=False):
-        options = ['storage.storageClass=local-path', 'storage.size=2Gi', 'golfAuthSecret=golf-auth', 'giteaAuthSecret=gitea-auth', 'backup.existingSecret=backup-auth', 'backup.endpointURL=https://rustfs-svc.golf-proof.svc:9000', 'backup.endpointCASecret=rustfs-tls', 'resources.requests.cpu=100m', 'resources.requests.memory=256Mi']
+        options = ['storage.storageClass=local-path', 'storage.size=2Gi', 'golfAuthSecret=golf-auth', 'forgejoAuthSecret=forgejo-auth', 'backup.existingSecret=backup-auth', 'backup.endpointURL=https://rustfs-svc.golf-proof.svc:9000', 'backup.endpointCASecret=rustfs-tls', 'resources.requests.cpu=100m', 'resources.requests.memory=256Mi']
         if restore:
             options += ['clusterName=golf-restored', 'backup.objectStoreName=golf-restored-backups', 'backup.destinationPath=s3://golf-cnpg-proof/restored/', 'recovery.enabled=true', 'recovery.sourceObjectStore=golf-backups', 'recovery.sourceServerName=golf-db']
         else:
@@ -121,10 +121,10 @@ else:
 
     def ready(self, name):
         wait(lambda: self.get('cluster', name).get('status', {}).get('readyInstances') == 3, name + ' three native instances ready', 600)
-        wait(lambda: self.get('database', name + '-gitea').get('status', {}).get('applied', False), name + ' native Gitea database applied')
+        wait(lambda: self.get('database', name + '-forgejo').get('status', {}).get('applied', False), name + ' native Forgejo database applied')
 
     def qualify_clients(self):
-        for role, other in [('golf', 'gitea'), ('gitea', 'golf')]:
+        for role, other in [('golf', 'forgejo'), ('forgejo', 'golf')]:
             command = f"psql 'host=golf-db-rw.golf-proof.svc dbname={role} user={role} sslmode=verify-full sslrootcert=/trust/ca.crt' -At -v ON_ERROR_STOP=1 -c 'SELECT current_user' && if psql 'host=golf-db-rw.golf-proof.svc dbname={other} user={role} sslmode=verify-full sslrootcert=/trust/ca.crt' -At -c 'SELECT 1'; then exit 1; fi"
             self.apply({'apiVersion': 'batch/v1', 'kind': 'Job', 'metadata': {'name': 'client-' + role}, 'spec': {'backoffLimit': 0, 'template': {'spec': {'restartPolicy': 'Never', 'containers': [{'name': 'client', 'image': 'ghcr.io/cloudnative-pg/postgresql:18.6-standard-trixie@sha256:f89a40f4d74aa6e0900917eaf6299b125a6382eb02fd4ee5d46f55bcbf7e5726', 'command': ['/bin/sh', '-ec', command], 'env': [{'name': 'PGPASSWORD', 'valueFrom': {'secretKeyRef': {'name': role + '-auth', 'key': 'password'}}}], 'volumeMounts': [{'name': 'ca', 'mountPath': '/trust', 'readOnly': True}]}], 'volumes': [{'name': 'ca', 'secret': {'secretName': 'golf-db-ca'}}]}}}})
             wait(lambda: self.get('job', 'client-' + role).get('status', {}).get('succeeded', 0) == 1, role + ' verify-full TLS login and cross-database refusal')
@@ -132,15 +132,15 @@ else:
     def qualify(self):
         self.ready('golf-db')
         self.qualify_clients()
-        assert self.sql('golf-db', 'postgres', "SELECT rolname||':'||rolsuper||':'||rolcreatedb||':'||rolcreaterole FROM pg_roles WHERE rolname IN ('golf','gitea') ORDER BY rolname") == 'gitea:false:false:false\ngolf:false:false:false'
-        for db in ['golf', 'gitea']:
+        assert self.sql('golf-db', 'postgres', "SELECT rolname||':'||rolsuper||':'||rolcreatedb||':'||rolcreaterole FROM pg_roles WHERE rolname IN ('golf','forgejo') ORDER BY rolname") == 'forgejo:false:false:false\ngolf:false:false:false'
+        for db in ['golf', 'forgejo']:
             assert self.sql('golf-db', 'postgres', f"SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname='{db}'") == db
             self.sql('golf-db', db, "CREATE TABLE golf_platform_probe(value text PRIMARY KEY); INSERT INTO golf_platform_probe VALUES ('before-backup')")
         assert int(self.sql('golf-db', 'postgres', "SELECT count(*) FROM pg_stat_replication WHERE sync_state IN ('sync','quorum')")) >= 1
         print('PASS: distinct native database owners, narrow roles and synchronous standby', flush=True)
         self.apply({'apiVersion': 'postgresql.cnpg.io/v1', 'kind': 'Backup', 'metadata': {'name': 'golf-proof-base'}, 'spec': {'cluster': {'name': 'golf-db'}, 'method': 'plugin', 'pluginConfiguration': {'name': 'barman-cloud.cloudnative-pg.io'}}})
         wait(lambda: self.get('backup', 'golf-proof-base').get('status', {}).get('phase') == 'completed', 'Barman physical base backup against RustFS', 600)
-        for db in ['golf', 'gitea']:
+        for db in ['golf', 'forgejo']:
             self.sql('golf-db', db, "INSERT INTO golf_platform_probe VALUES ('after-backup')")
         segment = self.sql('golf-db', 'postgres', 'SELECT pg_walfile_name(pg_current_wal_lsn())')
         assert len(segment) == 24 and all(c in '0123456789ABCDEF' for c in segment)
@@ -149,7 +149,7 @@ else:
         self.bucket_operation('inspect')
         self.render_cluster(restore=True)
         self.ready('golf-restored')
-        for db in ['golf', 'gitea']:
+        for db in ['golf', 'forgejo']:
             assert self.sql('golf-restored', db, 'SELECT value FROM golf_platform_probe ORDER BY value') == 'after-backup\nbefore-backup'
         print('PASS: fresh CNPG restore contains both databases plus changes after base backup', flush=True)
 

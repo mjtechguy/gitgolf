@@ -38,12 +38,12 @@ def main():
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.chmod(output, 0o700)
     worker = 'golf-git-job-proof-' + secrets.token_hex(5)
-    receipt = {'passed': False, 'complete': False, 'worker': worker, 'scope': 'Owned native Git HTTP/TLS fixture and actual ExecuteGit/maintained engine; no Golf/Gitea enrollment, job checkout token/origin, remote actions, unchanged Requests CI or activation', 'jobDiskQuota': True, 'failures': []}
+    receipt = {'passed': False, 'complete': False, 'worker': worker, 'scope': 'Owned native Git HTTP/TLS fixture and actual ExecuteGit/maintained engine; no Golf/Forgejo enrollment, job checkout token/origin, remote actions, unchanged Requests CI or activation', 'jobDiskQuota': True, 'failures': []}
     registry = None
     tagged = []
     phase = 'preflight'
     # Remove provider/control environment and credentials from all subprocesses.
-    environment = {k: v for k, v in os.environ.items() if not k.startswith(('GOLF_', 'GITEA_', 'AWS_', 'CF_', 'CLOUDFLARE_', 'OTEL_', 'POSTGRES_', 'COMPOSE_')) and k not in ('DATABASE_URL', 'DOCKER_CONTEXT', 'DOCKER_HOST', 'DOCKER_CONFIG')}
+    environment = {k: v for k, v in os.environ.items() if not k.startswith(('GOLF_', 'FORGEJO_', 'AWS_', 'CF_', 'CLOUDFLARE_', 'OTEL_', 'POSTGRES_', 'COMPOSE_')) and k not in ('DATABASE_URL', 'DOCKER_CONTEXT', 'DOCKER_HOST', 'DOCKER_CONFIG')}
     config = output/'docker-config'
     config.mkdir(mode=0o700)
     try:

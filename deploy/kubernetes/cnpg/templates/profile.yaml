@@ -3,8 +3,8 @@
 {{- if lt (int .Values.instances) 3 -}}{{ fail "Production CNPG requires at least three instances" }}{{- end -}}
 {{- $_ := required "storage.storageClass must explicitly select your CSI class" .Values.storage.storageClass -}}
 {{- $_ := required "golfAuthSecret must reference a precreated basic-auth Secret" .Values.golfAuthSecret -}}
-{{- $_ := required "giteaAuthSecret must reference a separate precreated basic-auth Secret" .Values.giteaAuthSecret -}}
-{{- if eq .Values.golfAuthSecret .Values.giteaAuthSecret -}}{{ fail "Golf and Gitea require distinct auth Secrets" }}{{- end -}}
+{{- $_ := required "forgejoAuthSecret must reference a separate precreated basic-auth Secret" .Values.forgejoAuthSecret -}}
+{{- if eq .Values.golfAuthSecret .Values.forgejoAuthSecret -}}{{ fail "Golf and Forgejo require distinct auth Secrets" }}{{- end -}}
 {{- if or (not (hasPrefix "ghcr.io/cloudnative-pg/postgresql:" .Values.imageName)) (hasSuffix ":latest" .Values.imageName) -}}{{ fail "An explicitly pinned CNPG PostgreSQL operand image is required" }}{{- end -}}
 {{- if .Values.backup.enabled -}}
 {{- $_ := required "backup.destinationPath must be a dedicated S3 prefix" .Values.backup.destinationPath -}}
@@ -48,9 +48,9 @@ spec:
     # required local/replication rules remain under operator ownership.
     pg_hba:
       - hostssl golf golf all scram-sha-256
-      - hostssl gitea gitea all scram-sha-256
+      - hostssl forgejo forgejo all scram-sha-256
       - host all golf all reject
-      - host all gitea all reject
+      - host all forgejo all reject
   {{- if .Values.recovery.enabled }}
   bootstrap:
     recovery:
@@ -77,7 +77,7 @@ spec:
   {{- end }}
   managed:
     roles:
-      - name: gitea
+      - name: forgejo
         ensure: present
         login: true
         superuser: false
@@ -87,7 +87,7 @@ spec:
         bypassrls: false
         connectionLimit: 60
         passwordSecret:
-          name: {{ .Values.giteaAuthSecret | quote }}
+          name: {{ .Values.forgejoAuthSecret | quote }}
   {{- if .Values.backup.enabled }}
   plugins:
     - name: barman-cloud.cloudnative-pg.io
@@ -100,10 +100,10 @@ spec:
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
-  name: {{ $name }}-gitea
+  name: {{ $name }}-forgejo
 spec:
-  name: gitea
-  owner: gitea
+  name: forgejo
+  owner: forgejo
   cluster: {name: {{ $name }}}
   databaseReclaimPolicy: retain
   ensure: present

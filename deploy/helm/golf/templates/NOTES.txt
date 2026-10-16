@@ -36,6 +36,7 @@ Add the same --kubeconfig/--context you used for Helm to every kubectl command.
 3. Enroll the first account. Registration is disabled: create a Forgejo user
    with its administrator CLI, then enroll it in Golf with a separate password:
 {{ if .Values.forgejo.enabled }}
+{{- /* /etc/gitea/app.ini is the Forgejo image's upstream config path. */}}
   kubectl -n {{ $ns }} exec {{ $golf }}-forgejo-0 -- forgejo --config /etc/gitea/app.ini \
     admin user create --username golf-owner --email owner@example.com --admin \
     --random-password --must-change-password=false

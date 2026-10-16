@@ -20,7 +20,7 @@ import urllib.request
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-GITEA_IMAGE = 'gitea/gitea:1.27.3-rootless'
+FORGEJO_IMAGE = 'codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'
 PYTHON_IMAGE = 'python:3.12-alpine'
 POSTGRES_IMAGE = 'postgres:18.4-alpine3.24'
 
@@ -126,7 +126,7 @@ def qualify(port):
         directory = Path(temporary)
         environment = directory / 'runtime.env'
         with os.fdopen(os.open(environment, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as output:
-            for key in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD'):
+            for key in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'FORGEJO_DB_PASSWORD'):
                 output.write(key + '=' + secrets.token_urlsafe(32) + '\n')
         host = 'localhost:' + str(port)
         base = 'http://' + host
@@ -137,21 +137,21 @@ def qualify(port):
         intent_path.write_text(json.dumps(intent))
         spec = {'services': {
             'postgres': {'image': POSTGRES_IMAGE, 'networks': ['private'],
-                'environment': {key: '${' + key + '}' for key in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD')},
-                'volumes': ['postgres-data:/var/lib/postgresql', str(ROOT / 'deploy/postgres/init.sh') + ':/docker-entrypoint-initdb.d/01-golf.sh:ro'],
+                'environment': {key: '${' + key + '}' for key in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'FORGEJO_DB_PASSWORD')},
+                'volumes': ['postgres-data:/var/lib/postgresql', str(ROOT / 'deploy/postgres/forgejo-init.sh') + ':/docker-entrypoint-initdb.d/01-golf.sh:ro'],
                 'healthcheck': {'test': ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres'], 'interval': '2s', 'timeout': '3s', 'retries': 45}},
-            'provider': {'image': GITEA_IMAGE, 'networks': ['private'],
+            'provider': {'image': FORGEJO_IMAGE, 'networks': ['private'],
                 'environment': {
-                    'GITEA__database__DB_TYPE': 'postgres', 'GITEA__database__HOST': 'postgres:5432',
-                    'GITEA__database__NAME': 'gitea', 'GITEA__database__USER': 'gitea', 'GITEA__database__PASSWD': '${GITEA_DB_PASSWORD}',
-                    'GITEA__server__ROOT_URL': base + '/', 'GITEA__server__PUBLIC_URL_DETECTION': 'never',
-                    'GITEA__server__DISABLE_SSH': 'true', 'GITEA__server__START_SSH_SERVER': 'false',
-                    'GITEA__server__LFS_START_SERVER': 'false', 'GITEA__security__INSTALL_LOCK': 'true',
-                    'GITEA__security__DISABLE_GIT_HOOKS': 'true', 'GITEA__service__DISABLE_REGISTRATION': 'true',
-                    'GITEA__actions__ENABLED': 'false', 'GITEA__mirror__ENABLED': 'false', 'GITEA__mirror__DISABLE_NEW_PULL': 'true',
-                    'GITEA__mirror__DISABLE_NEW_PUSH': 'true', 'GITEA__cron_0x2E_mirror_sync__ENABLED': 'false',
-                    'GITEA__repository__ENABLE_PUSH_CREATE_USER': 'false', 'GITEA__repository__ENABLE_PUSH_CREATE_ORG': 'false'},
-                'volumes': ['gitea-data:/var/lib/gitea', 'gitea-config:/etc/gitea'],
+                    'FORGEJO__database__DB_TYPE': 'postgres', 'FORGEJO__database__HOST': 'postgres:5432',
+                    'FORGEJO__database__NAME': 'forgejo', 'FORGEJO__database__USER': 'forgejo', 'FORGEJO__database__PASSWD': '${FORGEJO_DB_PASSWORD}',
+                    'FORGEJO__server__ROOT_URL': base + '/', 'FORGEJO__server__PUBLIC_URL_DETECTION': 'never',
+                    'FORGEJO__server__DISABLE_SSH': 'true', 'FORGEJO__server__START_SSH_SERVER': 'false',
+                    'FORGEJO__server__LFS_START_SERVER': 'false', 'FORGEJO__security__INSTALL_LOCK': 'true',
+                    'FORGEJO__security__DISABLE_GIT_HOOKS': 'true', 'FORGEJO__service__DISABLE_REGISTRATION': 'true',
+                    'FORGEJO__actions__ENABLED': 'false', 'FORGEJO__mirror__ENABLED': 'false', 'FORGEJO__mirror__DISABLE_NEW_PULL': 'true',
+                    'FORGEJO__mirror__DISABLE_NEW_PUSH': 'true', 'FORGEJO__cron_0x2E_mirror_sync__ENABLED': 'false',
+                    'FORGEJO__repository__ENABLE_PUSH_CREATE_USER': 'false', 'FORGEJO__repository__ENABLE_PUSH_CREATE_ORG': 'false'},
+                'volumes': ['forgejo-data:/var/lib/gitea'],  # Forgejo's upstream data path
                 'depends_on': {'postgres': {'condition': 'service_healthy'}}},
             'broker': {'image': PYTHON_IMAGE, 'networks': ['private', 'client'],
                 'command': ['python', '/fixture/classifier.py'],
@@ -160,12 +160,12 @@ def qualify(port):
                             str(intent_path) + ':/fixture/intent.json:ro'],
                 'read_only': True, 'cap_drop': ['ALL'], 'security_opt': ['no-new-privileges:true']}},
             'networks': {'private': {'internal': True}, 'client': {}},
-            'volumes': {'postgres-data': {}, 'gitea-data': {}, 'gitea-config': {}}}
+            'volumes': {'postgres-data': {}, 'forgejo-data': {}}}
         compose_path = directory / 'compose.json'
         compose_path.write_text(json.dumps(spec))
         compose = ['docker', 'compose', '-p', project, '--env-file', str(environment), '-f', str(compose_path)]
         def admin(*args):
-            return command(*compose, 'exec', '-T', 'provider', 'gitea', '--config', '/etc/gitea/app.ini', 'admin', 'user', *args)
+            return command(*compose, 'exec', '-T', 'provider', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *args)  # Forgejo's upstream path
         private = project + '_private'
         client = project + '_client'
         try:
@@ -173,20 +173,20 @@ def qualify(port):
             deadline = time.monotonic() + 90
             while True:
                 try:
-                    if native_call(private, '/api/v1/version')['version'] == '1.27.3':
+                    if native_call(private, '/api/v1/version')['version'] == '15.0.9+gitea-1.22.0':  # Forgejo's upstream version string
                         break
                 except (AssertionError, ValueError):
                     pass
                 assert time.monotonic() < deadline, 'Disposable native startup timed out'
                 time.sleep(0.5)
-            for image in (GITEA_IMAGE, POSTGRES_IMAGE, PYTHON_IMAGE):
+            for image in (FORGEJO_IMAGE, POSTGRES_IMAGE, PYTHON_IMAGE):
                 receipt = json.loads(command('docker', 'image', 'inspect', image))[0]
                 print('IMAGE: ' + image + ' ' + receipt['Id'] + ' ' + ','.join(receipt.get('RepoDigests', [])), flush=True)
             print('TOOLCHAIN: ' + command('git', '--version'), flush=True)
             configuration = configparser.ConfigParser(interpolation=None)
             try:
-                # Gitea's INI has root keys before its first named section.
-                configuration.read_string('[DEFAULT]\n' + command(*compose, 'exec', '-T', 'provider', 'cat', '/etc/gitea/app.ini'))
+                # Forgejo's INI has root keys before its first named section.
+                configuration.read_string('[DEFAULT]\n' + command(*compose, 'exec', '-T', 'provider', 'cat', '/var/lib/gitea/custom/conf/app.ini'))  # Forgejo's upstream path
             except configparser.Error:
                 raise AssertionError('Private fixture configuration could not be parsed') from None
             for section, key, enabled in (('server', 'DISABLE_SSH', True),
@@ -219,7 +219,7 @@ def qualify(port):
             while True:
                 try:
                     version = json.loads(request(base, '/api/v1/version', token))
-                    assert version['version'] == '1.27.3'
+                    assert version['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
                     break
                 except (OSError, AssertionError):
                     pass

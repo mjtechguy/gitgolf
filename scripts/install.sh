@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
-FORGEJO_CONFIG=/var/lib/gitea/custom/conf/app.ini
+FORGEJO_CONFIG=/var/lib/gitea/custom/conf/app.ini  # Forgejo's upstream path
 TOKEN_SCOPES=write:user,write:repository,read:issue,read:organization
 DEFAULT_USERNAME=golf-admin
 DEFAULT_EMAIL=admin@localhost.localdomain

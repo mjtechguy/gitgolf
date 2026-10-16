@@ -17,7 +17,7 @@ function receipt(value, intent) {
   check(Number.isFinite(Date.parse(value.createdAt)) && Number.isFinite(Date.parse(value.updatedAt)));
 }
 async function native(archived) {
-  const response = await context.request.get(config.gitea+'/api/v1/repos/'+config.repository, { headers: { Authorization: 'token '+config.ownerToken } });
+  const response = await context.request.get(config.forge+'/api/v1/repos/'+config.repository, { headers: { Authorization: 'token '+config.ownerToken } });
   check(response.status() === 200); const row = await response.json();
   check(String(row.id) === config.repositoryId && String(row.owner.id) === config.ownerId && row.archived === archived && row.has_actions === false);
   return row;

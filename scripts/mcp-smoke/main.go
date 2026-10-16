@@ -32,7 +32,7 @@ import (
 )
 
 type fixture struct {
-	Binary, Golf, Gitea, OwnerToken, ReaderToken, NarrowToken, OutsiderToken           string
+	Binary, Golf, Forge, OwnerToken, ReaderToken, NarrowToken, OutsiderToken           string
 	Reader, Repository, RepositoryID, Revision, FilePath, FileContent                  string
 	Organization, TeamID, OrgRepositoryID, ReviewID, CreationKey, CreationRepositoryID string
 	IssueMutationKey, CommentMutationKey, CommentID, CommentBody                       string
@@ -88,11 +88,11 @@ func (b *boundedDiagnostic) Write(p []byte) (int, error) {
 func connect(ctx context.Context, origin, token, version string, api bool) (*mcp.ClientSession, func(), *exec.Cmd) {
 	cmd := exec.Command(cfg.Binary, "--url", origin, "mcp")
 	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, "GOLF_GITEA_TOKEN=") && !strings.HasPrefix(entry, "GOLF_API_TOKEN=") && !strings.HasPrefix(entry, "GOLF_URL=") && !strings.HasPrefix(entry, "MCPGODEBUG=") {
+		if !strings.HasPrefix(entry, "GOLF_FORGE_TOKEN=") && !strings.HasPrefix(entry, "GOLF_API_TOKEN=") && !strings.HasPrefix(entry, "GOLF_URL=") && !strings.HasPrefix(entry, "MCPGODEBUG=") {
 			cmd.Env = append(cmd.Env, entry)
 		}
 	}
-	variable := "GOLF_GITEA_TOKEN="
+	variable := "GOLF_FORGE_TOKEN="
 	if api {
 		variable = "GOLF_API_TOKEN="
 	}
@@ -402,7 +402,7 @@ func issueAPI(client *http.Client) (string, string) {
 
 func nativeCLI(ctx context.Context, token string, api, stdin, failure bool, resource ...string) {
 	args := []string{"--url", cfg.Golf}
-	flag, variable := "--token-stdin", "GOLF_GITEA_TOKEN="
+	flag, variable := "--token-stdin", "GOLF_FORGE_TOKEN="
 	if api {
 		flag, variable = "--api-token-stdin", "GOLF_API_TOKEN="
 	}
@@ -415,7 +415,7 @@ func nativeCLI(ctx context.Context, token string, api, stdin, failure bool, reso
 	args = append(args, resource...)
 	command := exec.CommandContext(ctx, cfg.Binary, args...)
 	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, "GOLF_GITEA_TOKEN=") && !strings.HasPrefix(entry, "GOLF_API_TOKEN=") && !strings.HasPrefix(entry, "GOLF_URL=") {
+		if !strings.HasPrefix(entry, "GOLF_FORGE_TOKEN=") && !strings.HasPrefix(entry, "GOLF_API_TOKEN=") && !strings.HasPrefix(entry, "GOLF_URL=") {
 			command.Env = append(command.Env, entry)
 		}
 	}
@@ -487,7 +487,7 @@ func bearerQualification(ctx context.Context, control *http.Client, baseline []s
 	func() {
 		jar, _ := cookiejar.New(nil)
 		source := &http.Client{Jar: jar, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-		rpc(source, "SessionService/LoginWithGiteaToken", object{"token": cfg.ReaderToken})
+		rpc(source, "SessionService/LoginWithForgeToken", object{"token": cfg.ReaderToken})
 		defer rpc(source, "SessionService/Logout", object{})
 		sourceToken, _ := issueAPI(source)
 		session, closeSession, _ := connect(ctx, cfg.Golf, sourceToken, "2026-07-28", true)
@@ -511,7 +511,7 @@ func run() (err error) {
 		}
 	}()
 	check(json.NewDecoder(io.LimitReader(os.Stdin, 65537)).Decode(&cfg) == nil)
-	for _, origin := range []string{cfg.Golf, cfg.Gitea} {
+	for _, origin := range []string{cfg.Golf, cfg.Forge} {
 		u, parseErr := url.Parse(origin)
 		check(parseErr == nil && u.Scheme == "http" && u.User == nil && u.Path == "" && u.RawQuery == "" && u.Fragment == "" && u.Port() != "")
 		check(u.Hostname() == "localhost" || net.ParseIP(u.Hostname()).IsLoopback())
@@ -521,7 +521,7 @@ func run() (err error) {
 	defer cancel()
 	jar, _ := cookiejar.New(nil)
 	control := &http.Client{Jar: jar, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	rpc(control, "SessionService/LoginWithGiteaToken", object{"token": cfg.ReaderToken})
+	rpc(control, "SessionService/LoginWithForgeToken", object{"token": cfg.ReaderToken})
 	defer rpc(control, "SessionService/Logout", object{})
 	baseline := sessionIDs(control)
 	phase("native discussion CLI reads with one temporary session per command")
@@ -604,7 +604,7 @@ func run() (err error) {
 	}
 	phase("revocation in the existing MCP process")
 	native := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	httpJSON(native, "DELETE", cfg.Gitea+"/api/v1/repos/"+cfg.Repository+"/collaborators/"+cfg.Reader, nil, map[string]string{"Authorization": "token " + cfg.OwnerToken}, 204)
+	httpJSON(native, "DELETE", cfg.Forge+"/api/v1/repos/"+cfg.Repository+"/collaborators/"+cfg.Reader, nil, map[string]string{"Authorization": "token " + cfg.OwnerToken}, 204)
 	denied(ctx, modern, "golf_repo_view", object{"repository": cfg.Repository}, "not_found")
 	denied(ctx, modern, "golf_repo_overview", object{"repository": cfg.Repository}, "not_found")
 	denied(ctx, modern, "golf_repo_contents", object{"repository": cfg.Repository, "ref": cfg.Revision, "path": cfg.FilePath}, "not_found")
@@ -615,7 +615,7 @@ func run() (err error) {
 		denied(ctx, bearer, "golf_repo_contents", object{"repository": cfg.Repository, "ref": cfg.Revision, "path": cfg.FilePath}, "not_found")
 		denied(ctx, bearer, "golf_issue_comments", object{"repository": cfg.Repository, "number": cfg.Issue}, "not_found")
 	}
-	httpJSON(native, "DELETE", cfg.Gitea+"/api/v1/orgs/"+cfg.Organization+"/members/"+cfg.Reader, nil, map[string]string{"Authorization": "token " + cfg.OwnerToken}, 204)
+	httpJSON(native, "DELETE", cfg.Forge+"/api/v1/orgs/"+cfg.Organization+"/members/"+cfg.Reader, nil, map[string]string{"Authorization": "token " + cfg.OwnerToken}, 204)
 	denied(ctx, modern, "golf_org_view", object{"organization": cfg.Organization}, "not_found")
 	if bearer != nil {
 		denied(ctx, bearer, "golf_org_view", object{"organization": cfg.Organization}, "not_found")

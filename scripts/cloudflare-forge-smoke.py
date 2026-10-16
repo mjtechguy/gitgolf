@@ -767,7 +767,7 @@ def main():
         branches = rpc('ListBranches', {'repository': key, 'repositoryId': repository['id']})
         if not any(b['name'] == 'main' and b['commitId'] == commit for b in branches.get('branches', [])):
             raise RuntimeError('Native branch identity differs')
-        cli_environment = {k: v for k, v in environment.items() if k not in ['GOLF_API_TOKEN', 'GOLF_GITEA_TOKEN', 'GOLF_NATIVE_TOKEN', 'GOLF_URL']}
+        cli_environment = {k: v for k, v in environment.items() if k not in ['GOLF_API_TOKEN', 'GOLF_FORGE_TOKEN', 'GOLF_NATIVE_TOKEN', 'GOLF_URL']}
         cli_environment['GOLF_NATIVE_TOKEN'] = owner
         if demo:
             cli_environment.update(GOLF_ACCESS_CLIENT_ID=machine['client_id'], GOLF_ACCESS_CLIENT_SECRET=machine['client_secret'])

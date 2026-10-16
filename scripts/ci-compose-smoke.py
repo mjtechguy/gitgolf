@@ -48,7 +48,7 @@ def main():
     workflow_dir = '.forgejo/workflows'
     def action_path(name): return workflow_dir + "/" + name
 
-    environment = {key:value for key,value in os.environ.items() if not key.startswith(('GOLF_','GITEA_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','RUSTFS_','AWS_')) and key!='DATABASE_URL'}
+    environment = {key:value for key,value in os.environ.items() if not key.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','RUSTFS_','AWS_')) and key!='DATABASE_URL'}
     def run(*command, payload=None, timeout=180):
         result = subprocess.run(command, input=None if payload is None else json.dumps(payload).encode(), cwd=ROOT, env=environment, capture_output=True, timeout=timeout)
         assert result.returncode == 0, 'Private subprocess failed; diagnostics withheld'
@@ -71,8 +71,8 @@ def main():
         print('PASS: Docker VM has at least 2 GiB available before fresh-stack startup.', flush=True)
     project = 'golf-ci-proof-'+secrets.token_hex(5)
     golf_port, native_port = helpers.free_ports(2)
-    previous = smoke.GOLF, smoke.GITEA
-    smoke.GOLF, smoke.GITEA = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{native_port}'
+    previous = smoke.GOLF, smoke.FORGE
+    smoke.GOLF, smoke.FORGE = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{native_port}'
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory = Path(temporary); directory.chmod(0o700)
         key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
@@ -91,7 +91,7 @@ def main():
     ports: !override ["127.0.0.1:{golf_port}:8080"]
   {forge}:
     environment:
-      {forge.upper()}__server__ROOT_URL: {smoke.GITEA}/
+      {forge.upper()}__server__ROOT_URL: {smoke.FORGE}/
     ports: !override ["127.0.0.1:{native_port}:3000"]
   runner:
     image: {worker}
@@ -109,7 +109,7 @@ def main():
             return {'containerImageReference':observed['Image'], 'resolvedLocalImageId':core,
                     'composeConfigHash':observed['Config']['Labels']['com.docker.compose.config-hash'],
                     'suppliedImageReference':args.image}
-        def admin(*arguments): return command('exec','-T',forge,forge,'--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*arguments).strip()
+        def admin(*arguments): return command('exec','-T',forge,forge,'--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*arguments).strip()  # Forgejo's upstream path
         def rpc(method,body=None,expected=200,code=None): return smoke.rpc(session,method,body,expected=expected,code=code)
         def wait_run(identifier,state=None):
             deadline=time.monotonic()+90
@@ -334,7 +334,7 @@ def main():
                 except Exception:pass
             raise
         finally:
-            smoke.GOLF,smoke.GITEA=previous
+            smoke.GOLF,smoke.FORGE=previous
             if started:
                 command('down','--volumes','--remove-orphans',timeout=180)
                 for arguments in [('ps','-aq'),('volume','ls','-q'),('network','ls','-q')]:assert not run('docker',*arguments,'--filter','label=com.docker.compose.project='+project).strip()

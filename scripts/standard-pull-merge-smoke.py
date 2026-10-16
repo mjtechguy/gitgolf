@@ -174,7 +174,7 @@ def main():
         r=subprocess.run(argv,cwd=stack,input=None if payload is None else json.dumps(payload),text=True,capture_output=True,timeout=60)
         assert r.returncode==0 and len(r.stdout)+len(r.stderr)<2<<20
         return r.stdout.strip()
-    def admin(*parts):return command(compose+['exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*parts])
+    def admin(*parts):return command(compose+['exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*parts])  # Forgejo's upstream path
     def operator(action,payload):
         r=json.loads(command(compose+['exec','-T','golf','/usr/local/bin/golf','local-account',action],payload));assert r['state']=='complete';return r['result']
     def rpc(actor,procedure,payload=None,status=200,code=None,extra=None):
@@ -213,7 +213,7 @@ def main():
         return {**m,'sourceRepository':{'owner':author['name'],'name':fork['name']},'sourceRepositoryId':str(fork['id']),'sourceOwnerId':str(fork['owner']['id'])}
     def original(actor,m,phase):return validate_receipt(common,rpc(actor,GET,status_request(m))['operation'],m,actor['id'],phase)
     try:
-        persist();runtime=runtime_now();manifest['runtimeBefore']=runtime;persist();assert common.request(common.client(),'GET',golf+'/readyz',None,{},200);assert api(None,'GET','version')['version']=='1.27.3'
+        persist();runtime=runtime_now();manifest['runtimeBefore']=runtime;persist();assert common.request(common.client(),'GET',golf+'/readyz',None,{},200);assert api(None,'GET','version')['version']=='15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
         stage='ordinary actors and managed enrollment'
         for role in ('owner','author','writer','reader'):
             name=prefix+'-'+role;a={'name':name,'created':False,'enrolled':False,'loggedIn':False,'session':common.client()};actors[role]=a

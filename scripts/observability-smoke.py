@@ -2,7 +2,7 @@
 """Qualify the optional monitoring overlay against a disposable native stack.
 
 Requires an already-built current Golf image. Creates an isolated Compose
-project, fresh databases/volumes and ordinary Gitea users, then removes all of
+project, fresh databases/volumes and ordinary Forgejo users, then removes all of
 them. Never restarts the normal development stack. Output contains stages only;
 raw logs, credentials, source and telemetry are inspected privately in memory.
 """
@@ -103,16 +103,16 @@ def main():
     parser.add_argument('--image', required=True, help='existing current Golf image tag or immutable ID')
     args = parser.parse_args()
     environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith(('GOLF_', 'GITEA_', 'OTEL_', 'POSTGRES_', 'COMPOSE_')) and key != 'DATABASE_URL'}
+                   if not key.startswith(('GOLF_', 'FORGEJO_', 'OTEL_', 'POSTGRES_', 'COMPOSE_')) and key != 'DATABASE_URL'}
     inspect = json.loads(run(['docker', 'image', 'inspect', args.image], environment))[0]
     image = inspect['Id']
     assert image.startswith('sha256:')
     print('Golf image: ' + image, flush=True)
     suffix = secrets.token_hex(5)
     project = 'golf-observe-' + suffix
-    golf_port, gitea_port, metrics_port, jaeger_port, prometheus_port, grafana_port = free_ports(6)
+    golf_port, forge_port, metrics_port, jaeger_port, prometheus_port, grafana_port = free_ports(6)
     smoke.GOLF = f'http://127.0.0.1:{golf_port}'
-    smoke.GITEA = f'http://127.0.0.1:{gitea_port}'
+    smoke.FORGE = f'http://127.0.0.1:{forge_port}'
     jaeger = f'http://127.0.0.1:{jaeger_port}'
     prometheus = f'http://127.0.0.1:{prometheus_port}'
     grafana = f'http://127.0.0.1:{grafana_port}'
@@ -140,11 +140,11 @@ def main():
             raise AssertionError('Initializer must never replace existing secrets')
         assert (secret_dir / 'monitoring.env').read_bytes() == original_env
         forbidden.extend([metrics_token, grafana_password])
-        values = {name: secrets.token_hex(24) for name in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD')}
+        values = {name: secrets.token_hex(24) for name in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(), GOLF_PUBLIC_URL=smoke.GOLF,
-                      GOLF_ENCRYPTION_KEYS='', GOLF_ACTIVE_ENCRYPTION_KEY='', GITEA_PUBLIC_URL='',
-                      GITEA_OAUTH_CLIENT_ID='', GITEA_OAUTH_CLIENT_SECRET='')
-        forbidden.extend(value for value in values.values() if value and value != smoke.GOLF)
+                      GOLF_ENCRYPTION_KEYS='', GOLF_ACTIVE_ENCRYPTION_KEY='', GOLF_FORGE_PUBLIC_URL='',
+                      GOLF_FORGE_OAUTH_CLIENT_ID='', GOLF_FORGE_OAUTH_CLIENT_SECRET='')
+        forbidden.extend(value for value in values.values() if value and value not in (smoke.GOLF, values['GOLF_FORGE_INSTANCE_ID']))
         env_file = directory / 'core.env'
         private_write(env_file, ''.join(key + '=' + value + '\n' for key, value in values.items()))
         override = directory / 'proof.yaml'
@@ -153,10 +153,10 @@ def main():
     image: {image}
     pull_policy: never
     ports: !override ["127.0.0.1:{golf_port}:8080", "127.0.0.1:{metrics_port}:9090"]
-  gitea:
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
-    ports: !override ["127.0.0.1:{gitea_port}:3000"]
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
+    ports: !override ["127.0.0.1:{forge_port}:3000"]
   jaeger:
     ports: !override ["127.0.0.1:{jaeger_port}:16686"]
   prometheus:
@@ -171,7 +171,7 @@ def main():
             return run([*compose, *arguments], environment, timeout)
 
         def admin(*arguments):
-            return command('exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini', 'admin', 'user', *arguments).strip()
+            return command('exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *arguments).strip()  # Forgejo's upstream path
 
         def rpc(session, procedure, payload=None, expected=200, extra=None):
             headers = {'Origin': smoke.GOLF, 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', **(extra or {})}
@@ -205,9 +205,9 @@ def main():
             return list(groups.values())
 
         try:
-            stage('render and start isolated pinned monitoring / PostgreSQL / Gitea / Golf')
+            stage('render and start isolated pinned monitoring / PostgreSQL / Forgejo / Golf')
             rendered = json.loads(command('config', '--format', 'json'))
-            assert set(rendered['services']) == {'golf', 'gitea', 'postgres', 'jaeger', 'prometheus', 'grafana'}
+            assert set(rendered['services']) == {'golf', 'forgejo', 'postgres', 'jaeger', 'prometheus', 'grafana'}
             assert not rendered['services']['postgres'].get('ports')
             for service in rendered['services'].values():
                 assert all(binding['host_ip'] == '127.0.0.1' for binding in service.get('ports', []))
@@ -220,7 +220,7 @@ def main():
             until(lambda: http(jaeger + '/api/v3/services'))
             until(lambda: http(prometheus + '/-/ready'))
             until(lambda: http(grafana + '/api/health'))
-            assert smoke.request(smoke.client(), 'GET', smoke.GITEA + '/api/v1/version')['version'] == '1.27.3'
+            assert smoke.request(smoke.client(), 'GET', smoke.FORGE + '/api/v1/version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
             command('exec', '-T', 'prometheus', 'promtool', 'check', 'config', '/etc/prometheus/prometheus.yml')
 
             stage('private metrics listener, authenticated scrape and provisioned Grafana dashboard')
@@ -258,7 +258,7 @@ def main():
                 forbidden.extend([token, name])
                 session = smoke.client()
                 sessions.append(session)
-                identity, _ = rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})
+                identity, _ = rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})
                 assert identity['user']['login'] == name
                 for handler in session.handlers:
                     if hasattr(handler, 'cookiejar'):
@@ -294,7 +294,7 @@ def main():
             rpc(smoke.client(), 'RepositoryService/GetContents', {'repository': repository, 'ref': commit}, expected=401)
             http(smoke.GOLF + '/api/unknown-' + secret_path, expected=404)
 
-            stage('same-trace API / real Gitea client / PostgreSQL spans and correlated JSON logs')
+            stage('same-trace API / real Forgejo client / PostgreSQL spans and correlated JSON logs')
             def matching_trace():
                 for trace in traces():
                     for span in trace['spans']:
@@ -305,7 +305,7 @@ def main():
             selected, parent = until(matching_trace)
             assert parent['name'] == 'HTTP /rpc/golf.v1.RepositoryService/GetContents'
             kinds = {span['name'] for span in selected['spans']}
-            assert {'gitea.request', 'postgres.query'} <= kinds
+            assert {'forge.request', 'postgres.query'} <= kinds
             for span in selected['spans']:
                 if span['spanId'] != parent['spanId']:
                     assert span['parentSpanId'] == parent['spanId']
@@ -316,9 +316,9 @@ def main():
 
             stage('native metric families, bounded labels and exported-data privacy canaries')
             for expression in ('golf_http_requests_total{status="200"}', 'golf_http_requests_total{status="401"}',
-                               'golf_http_requests_total{status="404"}', 'golf_gitea_requests_total',
+                               'golf_http_requests_total{status="404"}', 'golf_forge_requests_total',
                                'golf_database_queries_total{outcome="success"}', 'golf_telemetry_trace_exports_total{outcome="success"}',
-                               'golf_http_request_duration_seconds_count', 'golf_gitea_request_duration_seconds_count',
+                               'golf_http_request_duration_seconds_count', 'golf_forge_request_duration_seconds_count',
                                'golf_database_query_duration_seconds_count'):
                 until(lambda expression=expression: positive('sum(' + expression + ')'))
             series = query('{__name__=~"golf_.*"}')

@@ -9,14 +9,14 @@ import { chromium, request } from '@playwright/test';
 const targetIndex = process.argv.indexOf('--target');
 if (targetIndex < 0 || !process.argv[targetIndex + 1]) throw new Error('A disposable target file is required.');
 const target = JSON.parse(await readFile(process.argv[targetIndex + 1], 'utf8'));
-const golf = new URL(target.golf), forge = new URL(target.gitea);
-if (!target.project?.startsWith('golf-api-proof-') || !target.container?.startsWith(`${target.project}-gitea-`) || golf.hostname !== '127.0.0.1' || forge.hostname !== '127.0.0.1' || ['8080', '3001'].includes(golf.port) || ['8080', '3001'].includes(forge.port)) throw new Error('Only an isolated qualification target is allowed.');
+const golf = new URL(target.golf), forge = new URL(target.forge);
+if (!target.project?.startsWith('golf-api-proof-') || !target.container?.startsWith(`${target.project}-forgejo-`) || golf.hostname !== '127.0.0.1' || forge.hostname !== '127.0.0.1' || ['8080', '3001'].includes(golf.port) || ['8080', '3001'].includes(forge.port)) throw new Error('Only an isolated qualification target is allowed.');
 const artifacts = resolve('.tmp/issues-browser');
 await mkdir(artifacts, { recursive: true, mode: 0o700 });
 const username = `golf-ui-${randomBytes(5).toString('hex')}`;
 let created = false, browser, context, native, phase = 'fixture creation', failed = false;
 function require(condition) { if (!condition) throw new Error('Qualification assertion failed.'); }
-function admin(...args) { return execFileSync('docker', ['exec', '--user', '1000:1000', target.container, 'gitea', 'admin', 'user', ...args], { encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
+function admin(...args) { return execFileSync('docker', ['exec', '--user', '1000:1000', target.container, 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', ...args], { encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] }).trim(); } // Forgejo's upstream path
 function stage(value) { phase = value; console.log(`Checking: ${value}`); }
 async function rpc(client, service, method, data = {}, expected = 200) {
   const response = await client.post(`${golf.origin}/rpc/golf.v1.${service}/${method}`, { data, headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Origin: golf.origin }, timeout: 10_000 });
@@ -48,7 +48,7 @@ try {
   const listPath = `/repositories/${username}/discussion?view=issues`;
   const pending = () => page.evaluate(() => Object.entries(sessionStorage).filter(([key]) => key.startsWith('golf.issue-intent.')));
   stage('native sign-in, issue creation, immutable target and literal body');
-  await rpc(context.request, 'SessionService', 'LoginWithGiteaToken', { token: pat });
+  await rpc(context.request, 'SessionService', 'LoginWithForgeToken', { token: pat });
   await page.goto(golf.origin + listPath);
   await page.getByRole('button', { name: 'New issue', exact: true }).waitFor();
   stage('branded workspace/source with loaded fonts, narrow and zoom-equivalent reflow');

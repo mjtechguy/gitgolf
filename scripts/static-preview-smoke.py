@@ -155,7 +155,7 @@ def main():
     assert not output.exists() and (stack/'web/node_modules/playwright/index.mjs').is_file()
     assert 'rpc PrepareStaticDeployment(' in (stack/'api/golf/v1/golf.proto').read_text()
     output.mkdir(mode=0o700, parents=True); output.chmod(0o700)
-    environment = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_','GIT_')) and k!='DATABASE_URL' and k.lower() not in ('http_proxy','https_proxy','all_proxy','no_proxy')}
+    environment = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_','GIT_')) and k!='DATABASE_URL' and k.lower() not in ('http_proxy','https_proxy','all_proxy','no_proxy')}
     forbidden, actors, cleanup = [], {}, []
     manifest = {'passed':False,'complete':False,'proofKind':'actual-static-preview067','sourceRevision':args.source_revision,
                 'storageMode':'saved-rustfs-profile' if args.rustfs else 'postgres', 'checks':{},
@@ -212,8 +212,8 @@ def main():
     for argv in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):
         assert not execute('docker',*argv,'--filter','label=com.docker.compose.project='+project)
     ports = helpers.free_ports(6 if args.rustfs else 5)
-    previous = smoke.GOLF, smoke.GITEA
-    smoke.GOLF, smoke.GITEA = f'https://localhost:{ports[2]}', f'http://127.0.0.1:{ports[1]}'
+    previous = smoke.GOLF, smoke.FORGE
+    smoke.GOLF, smoke.FORGE = f'https://localhost:{ports[2]}', f'http://127.0.0.1:{ports[1]}'
     preview_base = f'https://preview.localhost:{ports[4]}'
     started, passed, proxy_ready, bootstrap_created = False, False, False, False
     record(project=project,images=images,binarySha256=binaries,helperRevision=execute('git','rev-parse','HEAD'),proxyBinarySha256=binary_sha)
@@ -233,7 +233,7 @@ def main():
         for file in (ca,cert,key): file.chmod(0o444)
         context = ssl.create_default_context(cafile=str(ca)); context.minimum_version=ssl.TLSVersion.TLSv1_3
         worker_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
-        values = {k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')}
+        values = {k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,
                       GOLF_RUNNER_KEY=worker_key,GOLF_RUNNER_KEYS=json.dumps({'local-docker':worker_key}),GOLF_RUNNER_IMAGES=json.dumps({'linux':artifact.IMAGE}),
                       GOLF_RUNNER_JOB_IMAGE=artifact.IMAGE,GOLF_RUNNER_APPROVED_IMAGES=json.dumps([artifact.IMAGE]),
@@ -245,11 +245,11 @@ def main():
         helpers.private_write(directory/'proof.env',''.join(k+"='"+v+"'\n" for k,v in values.items()))
         overlay = {'services':{
             'golf':{'image':images['golf'],'pull_policy':'never','mem_limit':'384m','environment':{
-                'GITEA_URL':'http://native-qualification-proxy:8081','GOLF_ALLOW_INSECURE_COOKIES':'false','GOLF_ACTIONS_ENGINE_CATALOG':artifact.act.CATALOG,
+                'GOLF_FORGE_URL':'http://native-qualification-proxy:8081','GOLF_ALLOW_INSECURE_COOKIES':'false','GOLF_ACTIONS_ENGINE_CATALOG':artifact.act.CATALOG,
                 'GOLF_PREVIEW_TLS_LISTEN_ADDR':':8444','GOLF_PREVIEW_TLS_CERT_FILE':'/run/golf/internal-tls/server.crt','GOLF_PREVIEW_TLS_KEY_FILE':'/run/golf/internal-tls/server.key','GOLF_PREVIEW_BASE_URL':preview_base},
                 'depends_on':{native_proxy.SERVICE_NAME:{'condition':'service_started'}}},
-            'gitea':{'image':images['native'],'pull_policy':'never','mem_limit':'512m','environment':{
-                'GITEA__server__ROOT_URL':smoke.GITEA+'/','GITEA__server__DISABLE_SSH':'true','GITEA__server__START_SSH_SERVER':'false','GITEA__actions__ENABLED':'false'}},
+            'forgejo':{'image':images['native'],'pull_policy':'never','mem_limit':'512m','environment':{
+                'FORGEJO__server__ROOT_URL':smoke.FORGE+'/','FORGEJO__server__DISABLE_SSH':'true','FORGEJO__server__START_SSH_SERVER':'false','FORGEJO__actions__ENABLED':'false'}},
             'postgres':{'image':images['postgres'],'pull_policy':'never','mem_limit':'768m','command':['postgres','-c','max_wal_size=64MB','-c','min_wal_size=32MB','-c','checkpoint_timeout=30s']},
             'runner':{'image':images['runner'],'pull_policy':'never'},'runner-daemon':{'image':images['daemon'],'pull_policy':'never','mem_limit':'1024m'},
             'runner-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'},'runner-actions-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'},
@@ -259,10 +259,10 @@ def main():
         helpers.private_write(directory/'ports.yaml',f'''services:
   golf:
     ports: !override ["127.0.0.1:{ports[0]}:8080", "127.0.0.1:{ports[2]}:8443", "127.0.0.1:{ports[4]}:8444"]
-  gitea:
+  forgejo:
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
   postgres:
-    volumes: !override ["{stack/'deploy/postgres/init.sh'}:/docker-entrypoint-initdb.d/01-golf.sh:ro"]
+    volumes: !override ["{stack/'deploy/postgres/forgejo-init.sh'}:/docker-entrypoint-initdb.d/01-golf.sh:ro"]
     tmpfs: ["/var/lib/postgresql:size=1073741824,mode=0700,uid=70,gid=70"]
 ''')
         compose = ['docker','compose','--project-directory',str(stack),'-p',project,'--env-file',str(directory/'proof.env')]
@@ -271,7 +271,7 @@ def main():
         if args.rustfs: compose += ['-f',str(stack/'deploy/compose/compose.storage.yaml')]
         compose += ['-f',str(directory/'services.json'),'-f',str(directory/'ports.yaml')]
         def command(*argv,**kw): return execute(*compose,*argv,**kw)
-        def admin(*argv): return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*argv)
+        def admin(*argv): return command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*argv)  # Forgejo's upstream path
         def operator(action, payload):
             value=json.loads(command('exec','-T','golf','golf','local-account',action,payload=payload)); assert value['state']=='complete'; return value
         def client(): return urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPSHandler(context=context),urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
@@ -401,7 +401,7 @@ def main():
             assert result['connection']['id']==connection['id']; return connection
         try:
             stage('fresh stack and private CA/name/TLS1.3 proofs')
-            started=True; command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf',native_proxy.SERVICE_NAME,'runner-daemon')
+            started=True; command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','forgejo','golf',native_proxy.SERVICE_NAME,'runner-daemon')
             proxy.ready(); proxy_ready=True
             helpers.until(lambda:smoke.request(client(),'GET',smoke.GOLF+'/readyz'),45)
             for port,name in ((ports[2],'localhost'),(ports[4],'00000000-0000-4000-8000-000000000000.preview.localhost')):
@@ -434,7 +434,7 @@ def main():
                 return rows
             record(seedReceipt=helpers.until(seeded,args.seed_wait_seconds))
             stage('independent native actors and managed secure sessions')
-            # Gitea promotes its first user. Keep that independent bootstrap out
+            # Forgejo promotes its first user. Keep that independent bootstrap out
             # of the ordinary deployer's role, as the shared native recipes do.
             admin('create','--username',project+'-bootstrap','--email',project+'-bootstrap@example.invalid','--random-password','--must-change-password=false','--admin')
             bootstrap_created=True
@@ -574,8 +574,8 @@ def main():
             smoke.provider(owner['token'],'PUT',base+'/collaborators/'+actors['reader']['name'],{'permission':'read'},expected=204)
             fresh=open_preview(first); assert preview(first,cookie=fresh)[0]==artifact.EXPECTED['dist/index.html']
             rpc('reader','SessionService/Logout'); preview(first,cookie=fresh,expected=404); login('reader')
-            owner_view=open_preview(first,'owner'); command('stop','gitea'); preview(first,cookie=owner_view,expected=404)
-            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','90','gitea')
+            owner_view=open_preview(first,'owner'); command('stop','forgejo'); preview(first,cookie=owner_view,expected=404)
+            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','90','forgejo')
             helpers.until(lambda:smoke.provider(owner['token'],'GET','version'),45)
             check('currentRead',roleRevocationDenied=True,parentLogoutDenied=True,providerOutageNoPrivateBytes=True)
             stage('configured certificate identity drift withholds original target')
@@ -674,7 +674,7 @@ def main():
                 after=snapshot(); helpers.private_write(output/'foreign-after.json',json.dumps(after,indent=2))
                 diff=notifications.foreign_diff(before,after); record(foreignComparison=diff); assert diff['identityUnchanged']
             except Exception: cleanup.append('foreign-identity')
-            smoke.GOLF,smoke.GITEA=previous
+            smoke.GOLF,smoke.FORGE=previous
             record(passed=passed,complete=passed and not cleanup,cleanupPassed=not cleanup,cleanupFailures=cleanup,lastStage=STAGE,bootstrap={'independentNativeOnly':bootstrap_created,'disposedWithOwnedVolume':started and 'owned-stack' not in cleanup})
             if not manifest.get('originalFailure'): assert not cleanup
     assert passed

@@ -16,7 +16,7 @@ import shlex
 import subprocess
 import tempfile
 
-from smoke import GOLF, GITEA, ROOT, admin, client, command, commit, pages, provider, ready, rpc, wait_for_push
+from smoke import GOLF, FORGE, ROOT, admin, client, command, commit, pages, provider, ready, rpc, wait_for_push
 
 
 def git(work, env, *args, fail=False):
@@ -39,12 +39,12 @@ def main():
             token = admin('generate-access-token', '--username', name, '--token-name', prefix,
                           '--scopes', 'write:user,write:repository', '--raw')
             session = client(); sessions.append(session)
-            rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})
+            rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})
             actors.append((name, token, session))
         name, token, owner = actors[0]
         outsider = actors[1][2]
         repo = rpc(owner, 'RepositoryService/CreateRepository', {'name': 'private', 'private': True})['repository']
-        assert repo['cloneUrl'] == GITEA+'/'+repo['fullName']+'.git', 'Clone URL must use the public Git origin'
+        assert repo['cloneUrl'] == FORGE+'/'+repo['fullName']+'.git', 'Clone URL must use the public Git origin'
         repository = {'owner': name, 'name': 'private'}
         keys = []
         with tempfile.TemporaryDirectory(prefix='golf-ssh-proof-') as directory:
@@ -61,7 +61,7 @@ def main():
             rpc(outsider, 'GitAccessService/DeleteSSHKey', {'keyId': keys[0]['id']}, expected=404)
             read_token = admin('generate-access-token', '--username', name, '--token-name', prefix+'-read', '--scopes', 'read:user', '--raw')
             read_session = client(); sessions.append(read_session)
-            rpc(read_session, 'SessionService/LoginWithGiteaToken', {'token': read_token})
+            rpc(read_session, 'SessionService/LoginWithForgeToken', {'token': read_token})
             rpc(read_session, 'GitAccessService/AddSSHKey', {'title': 'Denied', 'publicKey': (root/'key-0.pub').read_text()}, expected=403)
             rpc(owner, 'GitAccessService/AddSSHKey', {'title': 'Private key rejected', 'publicKey': (root/'key-0').read_text()}, expected=400)
             rpc(owner, 'GitAccessService/AddSSHKey', {'title': 'Duplicate', 'publicKey': (root/'key-0.pub').read_text()}, expected=400, code='failed_precondition')
