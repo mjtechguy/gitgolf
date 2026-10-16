@@ -246,9 +246,10 @@ export async function landAPI(db, env, person, row, request, body, ctx) {
     const limit = body.limit ?? 20;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > landLimits.list) invalid(`Ask for 1 to ${landLimits.list} land operations.`);
     if (body.number !== undefined && (!Number.isSafeInteger(body.number) || body.number < 1)) invalid('Filter by a pull request number.');
+    // Newest started first, the order of the (repository_id,created_at) index; one row past the limit says whether older ones exist.
     const { results } = await db.prepare(`${select} WHERE l.repository_id=?${body.number === undefined ? '' : ' AND l.number=?'} ORDER BY l.created_at DESC,l.id DESC LIMIT ?`)
-      .bind(row.id, ...(body.number === undefined ? [] : [body.number]), limit).all();
-    return { repositoryId: String(row.id), operations: results.map(wireLand), limit };
+      .bind(row.id, ...(body.number === undefined ? [] : [body.number]), limit + 1).all();
+    return { repositoryId: String(row.id), operations: results.slice(0, limit).map(wireLand), limit, more: results.length > limit };
   }
   if (body.action === 'get') {
     if (!uuidOK(body.id)) invalid('Name the land operation by its ID.');

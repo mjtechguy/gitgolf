@@ -181,7 +181,13 @@ test('a writer lands; refusals are named; reads list and get; only browser sessi
   assert.equal(capabilities.find(c => c.id === 'repository.agentic-landing').state, 'CAPABILITY_STATE_READY');
   // Reads: list (newest first, optional number filter) and get; a reader can read.
   const list = await f.call('/native/land/read', { action: 'list', limit: 10 }, 'carol');
-  assert.equal(list.status, 200); assert.equal(list.operations.length, 1); assert.equal(list.operations[0].id, done.operation.id);
+  assert.equal(list.status, 200); assert.equal(list.operations.length, 1); assert.equal(list.operations[0].id, done.operation.id); assert.equal(list.more, false);
+  // `more` only when an older operation is left out: newest started first, whatever was updated last.
+  assert.equal((await f.call('/native/land/read', { action: 'list', limit: 1 })).more, false);
+  f.sql.exec(`INSERT INTO land_operations(id,repository_id,pull_request_id,number,trigger,actor_id,state,created_at,updated_at) SELECT '${crypto.randomUUID()}',repository_id,pull_request_id,number,'person',actor_id,'BLOCKED','2000-01-01T00:00:00Z','2999-01-01T00:00:00Z' FROM land_operations WHERE id='${done.operation.id}'`);
+  const capped = await f.call('/native/land/read', { action: 'list', limit: 1 });
+  assert.deepEqual([capped.operations.map(o => o.id), capped.more], [[done.operation.id], true]);
+  f.sql.exec(`DELETE FROM land_operations WHERE created_at='2000-01-01T00:00:00Z'`);
   assert.equal((await f.call('/native/land/read', { action: 'list', number: 99 })).operations.length, 0);
   assert.equal((await f.call('/native/land/read', { action: 'list', limit: 101 })).status, 400);
   assert.equal((await f.call('/native/land/read', { action: 'get', id: done.operation.id })).operation.landedCommitId, f.head('main'));
