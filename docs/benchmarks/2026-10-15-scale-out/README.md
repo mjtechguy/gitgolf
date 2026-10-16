@@ -122,3 +122,12 @@ Deployed between them:
 - The cause is not established.
 
 **Landing:** 11 of 49 pull requests in `s2h` still did not land within 15 minutes. That is the next thing to measure, with the `golf.land_soon_skipped` tail running.
+
+## Landing: the last 20 % (2026-10-16, 23:54–00:23 UTC)
+
+- **Diagnosis run `s2i`** (S7 only, 16 agents, 5 min): 36 of 48 pull requests landed.
+  - The 12 others had a passing check, and the live landing evaluation said `land`.
+  - They had no land operation at all.
+- **Cause:** `landSoon` listed open pull requests in the sweep's fixed order, limited to 200, and the repository had 359 open (most of them stale bench pull requests). Every stuck one ranked 206–326.
+- **Fix (#143):** a targeted pass starts from the branches at its commit.
+- **After the deploy, `s2j`** (the same run): **71 of 71 landed, p50 5.9 s, p95 11.5 s.**
