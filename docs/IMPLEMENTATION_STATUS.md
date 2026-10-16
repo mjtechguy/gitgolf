@@ -1,5 +1,21 @@
 # Golf implementation status
 
+
+## 2026-10-16: Agent pull requests land: 71 of 71 on hosted
+
+- **Fixes, all merged and deployed:**
+  - **#139:** the stateless Worker's isolate object cache.
+  - **#140:** a missing resource's error screen no longer refetches when the tab becomes visible.
+  - **#141:** runner pool caps and runner shares (schema 52, migrated on hosted).
+  - **#143:** targeted landing reaches its pull request however many are open.
+- **Measured at about 60 agents (`s2h`):** every Git and Source API operation succeeded. `open_pull_request` p50 2.0 s, CI reports 0.7 s, Workspace admission p95 0.8 s.
+- **Measured with S7 alone, 16 agents (`s2j`):** 71 of 71 pull requests landed, p50 5.9 s. Before #143, 36 of 48 landed.
+- **Data:** [benchmarks/2026-10-15-scale-out](benchmarks/2026-10-15-scale-out/README.md).
+- **Open:**
+  - one unexplained `open_pull_request` 503 in `s2j`;
+  - the `s2f` 503s, which did not recur;
+  - 359 stale open bench pull requests in `mj/agent-bench-3`.
+
 ## 2026-10-15 — Scale-out S5 slice 2: self-hosted pool caps and organization and repository runner shares (schema 52, not on hosted)
 
 [`SCALE_OUT_PLAN.md`](SCALE_OUT_PLAN.md) S5, second slice; details in [`RUNNER_CAPACITY.md`](RUNNER_CAPACITY.md). Built and tested locally.
