@@ -27,7 +27,7 @@ async function backend(page: Page) {
     const failure = state.failures[method];
     if (failure) {
       if (failure === 'unauthenticated') state.signedIn = false;
-      return reject(route, failure, failure === 'permission_denied' ? 'Organization browsing requires read:organization and provider permission.' : failure === 'unavailable' ? 'Gitea is temporarily unavailable.' : 'Organization or team not found or inaccessible.');
+      return reject(route, failure, failure === 'permission_denied' ? 'Organization browsing requires read:organization and provider permission.' : failure === 'unavailable' ? 'Forgejo is temporarily unavailable.' : 'Organization or team not found or inaccessible.');
     }
     if (state.login !== 'alex') return reject(route, 'not_found', 'Organization or team not found or inaccessible.');
     if (method === 'ListOrganizations') {
@@ -150,7 +150,7 @@ test('organization scope, provider outage and genuine empty memberships remain d
   await expect(page.getByRole('heading', { name: 'No organization memberships returned.' })).toHaveCount(0);
   state.failures.ListOrganizations = 'unavailable';
   await page.getByRole('button', { name: 'Try again' }).click();
-  await expect(page.getByRole('alert')).toHaveText('Gitea is temporarily unavailable.');
+  await expect(page.getByRole('alert')).toHaveText('Forgejo is temporarily unavailable.');
   delete state.failures.ListOrganizations;
   state.empty = true;
   await page.getByRole('button', { name: 'Try again' }).click();

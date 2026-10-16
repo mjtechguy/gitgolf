@@ -133,7 +133,7 @@ func TestRunnerControlTransportDrainRevokePostgres(t *testing.T) {
 		f.server.ServeHTTP(w, r)
 		return w
 	}
-	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture", IsInstanceAdmin: true}); e != nil {
+	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture", IsInstanceAdmin: true}); e != nil {
 		t.Fatal(e)
 	}
 	admin, e := f.server.loginLocalSession(t.Context(), "alice", localTestPassword, "")
@@ -243,7 +243,7 @@ func TestRunnerControlLockSerializesClaimPostgres(t *testing.T) {
 		t.Fatal("claim bypassed worker lock")
 	case <-time.After(50 * time.Millisecond):
 	}
-	if _, e = tx.Exec(`INSERT INTO golf_runner_controls(forge_url,runner_id,state,version) VALUES($1,'fixture','revoked',1)`, f.server.config.GiteaURL); e != nil {
+	if _, e = tx.Exec(`INSERT INTO golf_runner_controls(forge_url,runner_id,state,version) VALUES($1,'fixture','revoked',1)`, f.server.config.ForgeURL); e != nil {
 		t.Fatal(e)
 	}
 	if e = tx.Commit(); e != nil {
@@ -279,7 +279,7 @@ func TestRunnerControlRepositoryBindingPoliciesPostgres(t *testing.T) {
 	// The shared repository read guard requires the native canonical link.
 	f.row.HTMLURL = "https://forge.invalid/alice/example"
 	f.enable(t)
-	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
+	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
 		t.Fatal(e)
 	}
 	local, e := f.server.loginLocalSession(t.Context(), "alice", localTestPassword, "")

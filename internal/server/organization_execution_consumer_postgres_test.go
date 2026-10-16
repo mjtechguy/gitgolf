@@ -35,7 +35,7 @@ func organizationExecutionConsumerFixture(t *testing.T) (*organizationExecutionF
 	if e = f.db.QueryRow(`SELECT user_id FROM golf_sessions WHERE token_hash=$1`, hash).Scan(&user); e != nil {
 		t.Fatal(e)
 	}
-	run := workflowRunRecord{ID: uuid.NewString(), ForgeURL: f.s.config.GiteaURL, RepositoryID: 9007199254740993, OwnerID: 73, UserID: user, OrganizationOwned: true, CommitID: strings.Repeat("a", 40), BlobID: strings.Repeat("b", 40), SourceSHA256: strings.Repeat("c", 64), EngineCatalog: runner.ActionsCatalog, WorkflowPath: runWorkflowPath, Origin: "push", EventRef: "refs/heads/main"}
+	run := workflowRunRecord{ID: uuid.NewString(), ForgeURL: f.s.config.ForgeURL, RepositoryID: 9007199254740993, OwnerID: 73, UserID: user, OrganizationOwned: true, CommitID: strings.Repeat("a", 40), BlobID: strings.Repeat("b", 40), SourceSHA256: strings.Repeat("c", 64), EngineCatalog: runner.ActionsCatalog, WorkflowPath: runWorkflowPath, Origin: "push", EventRef: "refs/heads/main"}
 	refs := []executionReference{{ID: id, Version: "1", Scope: "organization", OrganizationID: "73"}}
 	encoded, _ := json.Marshal(refs)
 	bindingID := uuid.NewString()

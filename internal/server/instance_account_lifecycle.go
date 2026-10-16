@@ -96,7 +96,7 @@ func (s *Server) adminAccountLifecycle(ctx context.Context, header http.Header, 
 	q := database.New(s.db)
 	var target database.GetAdminAccountTargetRow
 	if !creating {
-		target, err = q.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: accountID, ForgeURL: s.config.GiteaURL})
+		target, err = q.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: accountID, ForgeURL: s.config.ForgeURL})
 		if errors.Is(err, sql.ErrNoRows) {
 			return empty, errResourceNotFound
 		}
@@ -144,10 +144,10 @@ func (s *Server) adminAccountLifecycle(ctx context.Context, header http.Header, 
 	defer tx.Rollback()
 	locked := q.WithTx(tx)
 	if creating {
-		if err := locked.EnsureLoginUser(ctx, database.EnsureLoginUserParams{ForgeURL: s.config.GiteaURL, ForgeUserID: native.ID, Login: native.Login, FullName: native.FullName, AvatarURL: native.AvatarURL}); err != nil {
+		if err := locked.EnsureLoginUser(ctx, database.EnsureLoginUserParams{ForgeURL: s.config.ForgeURL, ForgeUserID: native.ID, Login: native.Login, FullName: native.FullName, AvatarURL: native.AvatarURL}); err != nil {
 			return empty, errStorageUnavailable
 		}
-		target.UserID, err = locked.GetLifecycleNativeUser(ctx, database.GetLifecycleNativeUserParams{ForgeURL: s.config.GiteaURL, ForgeUserID: native.ID})
+		target.UserID, err = locked.GetLifecycleNativeUser(ctx, database.GetLifecycleNativeUserParams{ForgeURL: s.config.ForgeURL, ForgeUserID: native.ID})
 		if err != nil {
 			return empty, errStorageUnavailable
 		}
@@ -190,14 +190,14 @@ func (s *Server) adminAccountLifecycle(ctx context.Context, header http.Header, 
 			return empty, errAdminAccountConflict
 		}
 	}
-	if _, err := locked.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL}); err != nil {
+	if _, err := locked.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.ForgeURL}); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return empty, errUnauthenticated
 		}
 		return empty, errStorageUnavailable
 	}
 	checkActor := func() error {
-		current, err := locked.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		current, err := locked.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if errors.Is(err, sql.ErrNoRows) {
 			return errUnauthenticated
 		}
@@ -251,7 +251,7 @@ func (s *Server) adminAccountLifecycle(ctx context.Context, header http.Header, 
 	if err != nil {
 		return empty, errStorageUnavailable
 	}
-	updated, err := locked.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: account.ID, ForgeURL: s.config.GiteaURL})
+	updated, err := locked.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: account.ID, ForgeURL: s.config.ForgeURL})
 	if err != nil {
 		return empty, errStorageUnavailable
 	}

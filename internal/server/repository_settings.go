@@ -48,7 +48,7 @@ func wireRepositorySettings(row forgeRepositorySettings, key repositoryKey) (*go
 	if err := projectGeneralSettings(row, settings); err != nil {
 		return nil, err
 	}
-	// This detects stale forms before dispatch; Gitea PATCH does not provide a
+	// This detects stale forms before dispatch; Forgejo's PATCH does not provide a
 	// qualified atomic compare-and-swap. Never use this hash as a security lock.
 	data, _ := json.Marshal(struct {
 		ID, OwnerID                                  int64

@@ -251,9 +251,9 @@ func (s *Server) loadExecutionPolicy(ctx context.Context, q *database.Queries, a
 	var row database.GolfExecutionPolicy
 	var err error
 	if lock {
-		row, err = q.LockExecutionPolicy(ctx, database.LockExecutionPolicyParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID})
+		row, err = q.LockExecutionPolicy(ctx, database.LockExecutionPolicyParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID})
 	} else {
-		row, err = q.GetExecutionPolicy(ctx, database.GetExecutionPolicyParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID})
+		row, err = q.GetExecutionPolicy(ctx, database.GetExecutionPolicyParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID})
 	}
 	state := executionPolicyState{Scope: a.Scope, ScopeID: a.ID, OwnerID: a.OwnerID, Mode: "disabled", Repositories: map[int64]int64{}}
 	if errors.Is(err, sql.ErrNoRows) {
@@ -269,14 +269,14 @@ func (s *Server) loadExecutionPolicy(ctx context.Context, q *database.Queries, a
 	state.ManualDispatchEnabled = row.ManualDispatchEnabled
 	state.PushAllowed = row.PushAllowed
 	state.AllowAllWorkflows = row.AllowAllWorkflows
-	selected, err := q.ListExecutionPolicyRepositories(ctx, database.ListExecutionPolicyRepositoriesParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID})
+	selected, err := q.ListExecutionPolicyRepositories(ctx, database.ListExecutionPolicyRepositoriesParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID})
 	if err != nil {
 		return state, errStorageUnavailable
 	}
 	for _, repo := range selected {
 		state.Repositories[repo.RepositoryID] = repo.OwnerID
 	}
-	state.Workflows, err = q.ListExecutionPolicyWorkflows(ctx, database.ListExecutionPolicyWorkflowsParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID})
+	state.Workflows, err = q.ListExecutionPolicyWorkflows(ctx, database.ListExecutionPolicyWorkflowsParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID})
 	if err != nil {
 		return state, errStorageUnavailable
 	}
@@ -417,14 +417,14 @@ func (s *Server) UpdateExecutionPolicy(ctx context.Context, req *connect.Request
 		}
 		return s.withManagedSession(ctx, value, token, func(q *database.Queries, actor database.LockManagedSessionRow, hash []byte) error {
 			if a.Scope == "instance" {
-				if _, err = q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL}); err != nil {
+				if _, err = q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL}); err != nil {
 					if errors.Is(err, sql.ErrNoRows) {
 						return errUnauthenticated
 					}
 					return errStorageUnavailable
 				}
 			}
-			if err = q.EnsureExecutionPolicy(ctx, database.EnsureExecutionPolicyParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID, OwnerID: a.OwnerID}); err != nil {
+			if err = q.EnsureExecutionPolicy(ctx, database.EnsureExecutionPolicyParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID, OwnerID: a.OwnerID}); err != nil {
 				return errStorageUnavailable
 			}
 			old, err := s.loadExecutionPolicy(ctx, q, a, true)
@@ -434,27 +434,27 @@ func (s *Server) UpdateExecutionPolicy(ctx context.Context, req *connect.Request
 			if old.Revision != expected {
 				return errExecutionPolicyConflict
 			}
-			updated, err := q.UpdateExecutionPolicy(ctx, database.UpdateExecutionPolicyParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID, ExpectedRevision: expected, OwnerID: a.OwnerID, Mode: mode, ManualDispatchEnabled: m.ManualDispatchEnabled, PushAllowed: m.PushAllowed, AllowAllWorkflows: m.AllowAllWorkflows})
+			updated, err := q.UpdateExecutionPolicy(ctx, database.UpdateExecutionPolicyParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID, ExpectedRevision: expected, OwnerID: a.OwnerID, Mode: mode, ManualDispatchEnabled: m.ManualDispatchEnabled, PushAllowed: m.PushAllowed, AllowAllWorkflows: m.AllowAllWorkflows})
 			if err != nil {
 				return errStorageUnavailable
 			}
-			if err = q.DeleteExecutionPolicyRepositories(ctx, database.DeleteExecutionPolicyRepositoriesParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID}); err != nil {
+			if err = q.DeleteExecutionPolicyRepositories(ctx, database.DeleteExecutionPolicyRepositoriesParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID}); err != nil {
 				return errStorageUnavailable
 			}
-			if err = q.DeleteExecutionPolicyWorkflows(ctx, database.DeleteExecutionPolicyWorkflowsParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID}); err != nil {
+			if err = q.DeleteExecutionPolicyWorkflows(ctx, database.DeleteExecutionPolicyWorkflowsParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID}); err != nil {
 				return errStorageUnavailable
 			}
 			for id, owner := range selected {
-				if err = q.AddExecutionPolicyRepository(ctx, database.AddExecutionPolicyRepositoryParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID, RepositoryID: id, OwnerID: owner}); err != nil {
+				if err = q.AddExecutionPolicyRepository(ctx, database.AddExecutionPolicyRepositoryParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID, RepositoryID: id, OwnerID: owner}); err != nil {
 					return errStorageUnavailable
 				}
 			}
 			for _, path := range m.WorkflowPaths {
-				if err = q.AddExecutionPolicyWorkflow(ctx, database.AddExecutionPolicyWorkflowParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID, WorkflowPath: path}); err != nil {
+				if err = q.AddExecutionPolicyWorkflow(ctx, database.AddExecutionPolicyWorkflowParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID, WorkflowPath: path}); err != nil {
 					return errStorageUnavailable
 				}
 			}
-			if err = q.AppendExecutionPolicyEvent(ctx, database.AppendExecutionPolicyEventParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID, Revision: updated.Revision, RevocationEpoch: updated.RevocationEpoch, ActorUserID: actor.UserID, ActorSessionID: actor.SessionID, Mode: mode, ManualDispatchEnabled: m.ManualDispatchEnabled, PushAllowed: m.PushAllowed, AllowAllWorkflows: m.AllowAllWorkflows, SelectedRepositoryCount: int32(len(selected)), WorkflowCount: int32(len(m.WorkflowPaths))}); err != nil {
+			if err = q.AppendExecutionPolicyEvent(ctx, database.AppendExecutionPolicyEventParams{ForgeURL: s.config.ForgeURL, Scope: a.Scope, ScopeID: a.ID, Revision: updated.Revision, RevocationEpoch: updated.RevocationEpoch, ActorUserID: actor.UserID, ActorSessionID: actor.SessionID, Mode: mode, ManualDispatchEnabled: m.ManualDispatchEnabled, PushAllowed: m.PushAllowed, AllowAllWorkflows: m.AllowAllWorkflows, SelectedRepositoryCount: int32(len(selected)), WorkflowCount: int32(len(m.WorkflowPaths))}); err != nil {
 				return errStorageUnavailable
 			}
 			state, err := s.loadExecutionPolicy(ctx, q, a, false)

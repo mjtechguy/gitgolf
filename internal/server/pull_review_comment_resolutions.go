@@ -212,10 +212,10 @@ func wireReplyID(id int64) string {
 	return ""
 }
 func (s *Server) lockReviewComment(ctx context.Context, tx *sql.Tx, id int64) (context.Context, error) {
-	if _, e := tx.ExecContext(ctx, `SELECT golf_review_comment_lock($1,$2)`, s.config.GiteaURL, id); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_review_comment_lock($1,$2)`, s.config.ForgeURL, id); e != nil {
 		return nil, errStorageUnavailable
 	}
-	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, id, tx}), nil
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, id, tx}), nil
 }
 func (s *Server) advanceReviewComment(ctx context.Context, session string, token forgeCredential, r reviewCommentRecord, phase string) (reviewCommentRecord, error) {
 	actor, e := s.currentUser(ctx, token)
@@ -297,7 +297,7 @@ func (s *Server) GetPullReviewCommentOperation(ctx context.Context, req *connect
 	var r reviewCommentRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanReviewComment(s.db.QueryRowContext(ctx, `SELECT `+reviewCommentColumns+` FROM golf_pull_review_comment_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanReviewComment(s.db.QueryRowContext(ctx, `SELECT `+reviewCommentColumns+` FROM golf_pull_review_comment_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -360,7 +360,7 @@ func (s *Server) SubmitPullReviewCommentInteraction(ctx context.Context, req *co
 		if e != nil {
 			return e
 		}
-		r, e = scanReviewComment(tx.QueryRowContext(held, `SELECT `+reviewCommentColumns+` FROM golf_pull_review_comment_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanReviewComment(tx.QueryRowContext(held, `SELECT `+reviewCommentColumns+` FROM golf_pull_review_comment_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(fingerprint, r.Fingerprint) {
 				return errRepositoryAccessConflict
@@ -370,7 +370,7 @@ func (s *Server) SubmitPullReviewCommentInteraction(ctx context.Context, req *co
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanReviewComment(tx.QueryRowContext(held, `INSERT INTO golf_pull_review_comment_operations(user_id,forge_url,actor_id,operation_id,repository_id,original,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING `+reviewCommentColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, repoID, reviewCommentBytes(m), fingerprint))
+		r, e = scanReviewComment(tx.QueryRowContext(held, `INSERT INTO golf_pull_review_comment_operations(user_id,forge_url,actor_id,operation_id,repository_id,original,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING `+reviewCommentColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, repoID, reviewCommentBytes(m), fingerprint))
 		fresh = e == nil
 		return e
 	})

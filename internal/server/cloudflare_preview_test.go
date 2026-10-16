@@ -92,7 +92,7 @@ func cloudflarePreviewProducerFixture(t *testing.T) (*workflowRunFixture, loginR
 	t.Helper()
 	f := newWorkflowRunFixture(t, ".gitlab-ci.yml")
 	f.row.HTMLURL = "https://forge.invalid/alice/example"
-	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
+	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
 		t.Fatal(e)
 	}
 	l, e := f.server.loginLocalSession(t.Context(), "alice", localTestPassword, "")

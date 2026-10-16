@@ -166,7 +166,7 @@ func (s *Server) confirmInfrastructureAdmin(ctx context.Context, value string, c
 	if err != nil {
 		return empty, err
 	}
-	row, err := database.New(s.db).GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	row, err := database.New(s.db).GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return empty, errUnauthenticated
 	}
@@ -196,7 +196,7 @@ func (s *Server) infrastructureAdminTransaction(ctx context.Context, value strin
 	if err != nil {
 		return err
 	}
-	identity, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.GiteaURL})
+	identity, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return errUnauthenticated
 	}
@@ -213,11 +213,11 @@ func (s *Server) infrastructureAdminTransaction(ctx context.Context, value strin
 	if !account.IsInstanceAdmin || account.DisabledAt.Valid || account.PasswordHash != initial.PasswordHash || account.CredentialVersion != initial.CredentialVersion {
 		return errUnauthenticated
 	}
-	if _, err = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL}); err != nil {
+	if _, err = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.ForgeURL}); err != nil {
 		return errUnauthenticated
 	}
 	check := func() error {
-		current, e := q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		current, e := q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if errors.Is(e, sql.ErrNoRows) {
 			return errUnauthenticated
 		}

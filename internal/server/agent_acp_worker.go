@@ -17,7 +17,7 @@ import (
 // handing them off. Any lost acknowledgement closes it; claims are never replayed.
 func (s *Server) managedACPJob(ctx context.Context, t agentTaskRecord, r codexRecord, worker, attempt string, j *runner.AgentJob) (func(), error) {
 	var fileTools bool
-	if e := s.db.QueryRowContext(ctx, `SELECT acp_file_tools FROM golf_agent_worker_presence WHERE forge_url=$1 AND worker_id=$2 AND acp_image=$3 AND acp_version=$4 AND last_seen>clock_timestamp()-interval '30 seconds'`, s.config.GiteaURL, worker, s.config.ReviewImage, runner.ManagedACPVersion).Scan(&fileTools); e != nil {
+	if e := s.db.QueryRowContext(ctx, `SELECT acp_file_tools FROM golf_agent_worker_presence WHERE forge_url=$1 AND worker_id=$2 AND acp_image=$3 AND acp_version=$4 AND last_seen>clock_timestamp()-interval '30 seconds'`, s.config.ForgeURL, worker, s.config.ReviewImage, runner.ManagedACPVersion).Scan(&fileTools); e != nil {
 		return nil, errCodexUnavailable
 	}
 	err := s.conversationGuard(ctx, t, r, worker, attempt, func(tx *sql.Tx) error {
@@ -238,7 +238,7 @@ func (s *Server) claimAgentCommand(ctx context.Context, t agentTaskRecord, r cod
 		}
 		sum := sha256.Sum256([]byte(text))
 		m := &golfv1.SubmitAgentCommandRequest{}
-		if !bytesEqual(sum[:], digest) || !bytesEqual(binding, conversationBinding(t, s.config.GiteaURL, attempt, seq, []byte(text))) || json.Unmarshal([]byte(text), m) != nil || m.RequestId != id || m.TaskId != t.ID || m.AttemptId != attempt {
+		if !bytesEqual(sum[:], digest) || !bytesEqual(binding, conversationBinding(t, s.config.ForgeURL, attempt, seq, []byte(text))) || json.Unmarshal([]byte(text), m) != nil || m.RequestId != id || m.TaskId != t.ID || m.AttemptId != attempt {
 			return errStorageUnavailable
 		}
 		if _, e = tx.ExecContext(ctx, `UPDATE golf_agent_commands SET state='claimed' WHERE task_id=$1 AND attempt_id=$2 AND request_id=$3 AND state='queued'`, t.ID, attempt, id); e != nil {

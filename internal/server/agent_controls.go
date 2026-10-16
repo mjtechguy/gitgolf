@@ -42,7 +42,7 @@ func (s *Server) agentACPAvailable(ctx context.Context) bool {
 		return false
 	}
 	var ready bool
-	_ = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_agent_worker_presence WHERE forge_url=$1 AND acp_image=$2 AND acp_version=$3 AND last_seen>clock_timestamp()-interval '30 seconds')`, s.config.GiteaURL, s.config.ReviewImage, runner.ManagedACPVersion).Scan(&ready)
+	_ = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_agent_worker_presence WHERE forge_url=$1 AND acp_image=$2 AND acp_version=$3 AND last_seen>clock_timestamp()-interval '30 seconds')`, s.config.ForgeURL, s.config.ReviewImage, runner.ManagedACPVersion).Scan(&ready)
 	return ready
 }
 func (s *Server) GetAgentControl(ctx context.Context, req *connect.Request[golfv1.GetAgentControlRequest]) (*connect.Response[golfv1.GetAgentControlResponse], error) {
@@ -242,13 +242,13 @@ func (s *Server) SubmitAgentCommand(ctx context.Context, req *connect.Request[go
 		if tx.QueryRowContext(ctx, `SELECT last_sequence FROM golf_agent_conversations WHERE task_id=$1 AND attempt_id=$2`, t.ID, t.Attempt).Scan(&sequence) != nil {
 			return errStorageUnavailable
 		}
-		binding := conversationBinding(t, s.config.GiteaURL, t.Attempt, sequence, raw)
+		binding := conversationBinding(t, s.config.ForgeURL, t.Attempt, sequence, raw)
 		cipher, key, e := s.keyring.seal(conversationContentDomain, string(raw), binding)
 		if e != nil {
 			return e
 		}
 		content := uuid.NewString()
-		_, e = tx.ExecContext(ctx, `INSERT INTO golf_agent_conversation_contents(id,task_id,attempt_id,forge_url,repository_id,user_id,sequence,encrypted_content,content_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, content, t.ID, t.Attempt, s.config.GiteaURL, t.RepositoryID, t.UserID, sequence, cipher, binding, key)
+		_, e = tx.ExecContext(ctx, `INSERT INTO golf_agent_conversation_contents(id,task_id,attempt_id,forge_url,repository_id,user_id,sequence,encrypted_content,content_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, content, t.ID, t.Attempt, s.config.ForgeURL, t.RepositoryID, t.UserID, sequence, cipher, binding, key)
 		if e != nil {
 			return errStorageUnavailable
 		}

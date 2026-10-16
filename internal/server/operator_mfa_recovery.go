@@ -67,7 +67,7 @@ func ResetOperatorLocalMFA(ctx context.Context, db *sql.DB, keys *Keyring, forge
 	if e != nil {
 		return empty, errCredentialUnavailable
 	}
-	s := &Server{db: db, keyring: keys, config: Config{GiteaURL: forgeURL}, client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	s := &Server{db: db, keyring: keys, config: Config{ForgeURL: forgeURL}, client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	native, e := s.currentUser(ctx, forgeCredential{Kind: "pat", Token: token})
 	if e != nil || native.ID != nativeID {
 		return empty, errors.New("The current native identity could not be verified; reconcile the mapped credential before recovery.")

@@ -55,14 +55,14 @@ func (s *Server) agentAvailable(ctx context.Context) bool {
 		return false
 	}
 	var ready bool
-	_ = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_agent_worker_presence WHERE forge_url=$1 AND image=$2 AND last_seen>clock_timestamp()-interval '30 seconds')`, s.config.GiteaURL, s.config.AgentImage).Scan(&ready)
+	_ = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_agent_worker_presence WHERE forge_url=$1 AND image=$2 AND last_seen>clock_timestamp()-interval '30 seconds')`, s.config.ForgeURL, s.config.AgentImage).Scan(&ready)
 	return ready
 }
 func (s *Server) taskRecord(ctx context.Context, id string) (agentTaskRecord, error) {
 	if !creationKey.MatchString(id) {
 		return agentTaskRecord{}, invalid("Select a task ID.")
 	}
-	v, e := scanAgentTask(s.db.QueryRowContext(ctx, `SELECT `+agentTaskColumns+` FROM golf_agent_tasks WHERE id=$1 AND forge_url=$2`, id, s.config.GiteaURL))
+	v, e := scanAgentTask(s.db.QueryRowContext(ctx, `SELECT `+agentTaskColumns+` FROM golf_agent_tasks WHERE id=$1 AND forge_url=$2`, id, s.config.ForgeURL))
 	if errors.Is(e, sql.ErrNoRows) {
 		return v, errResourceNotFound
 	}
@@ -92,7 +92,7 @@ func (s *Server) agentPolicyFingerprint(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, a codexActor, repoID, ownerID int64) (string, error) {
 	var raw []byte
-	e := q.QueryRowContext(ctx, `SELECT COALESCE(jsonb_agg(jsonb_build_array(scope,scope_id,owner_id,revision,config) ORDER BY scope,scope_id),'[]'::jsonb)::text FROM golf_agent_usage_settings WHERE forge_url=$1 AND ((scope='instance' AND scope_id='instance') OR (scope='repository' AND scope_id=$2) OR (scope='organization' AND scope_id=$3) OR (scope='personal' AND scope_id=$4))`, s.config.GiteaURL, strconv.FormatInt(repoID, 10), strconv.FormatInt(ownerID, 10), strconv.FormatInt(a.UserID, 10)).Scan(&raw)
+	e := q.QueryRowContext(ctx, `SELECT COALESCE(jsonb_agg(jsonb_build_array(scope,scope_id,owner_id,revision,config) ORDER BY scope,scope_id),'[]'::jsonb)::text FROM golf_agent_usage_settings WHERE forge_url=$1 AND ((scope='instance' AND scope_id='instance') OR (scope='repository' AND scope_id=$2) OR (scope='organization' AND scope_id=$3) OR (scope='personal' AND scope_id=$4))`, s.config.ForgeURL, strconv.FormatInt(repoID, 10), strconv.FormatInt(ownerID, 10), strconv.FormatInt(a.UserID, 10)).Scan(&raw)
 	if e != nil {
 		return "", errStorageUnavailable
 	}
@@ -204,7 +204,7 @@ func (s *Server) CreateAgentTask(ctx context.Context, req *connect.Request[golfv
 	sum := sha256.Sum256(input)
 	var priorID string
 	var priorHash []byte
-	e = s.db.QueryRowContext(ctx, `SELECT id::text,input_hash FROM golf_agent_tasks WHERE forge_url=$1 AND user_id=$2 AND idempotency_key=$3`, s.config.GiteaURL, a.UserID, m.IdempotencyKey).Scan(&priorID, &priorHash)
+	e = s.db.QueryRowContext(ctx, `SELECT id::text,input_hash FROM golf_agent_tasks WHERE forge_url=$1 AND user_id=$2 AND idempotency_key=$3`, s.config.ForgeURL, a.UserID, m.IdempotencyKey).Scan(&priorID, &priorHash)
 	if e == nil {
 		if !bytesEqual(priorHash, sum[:]) {
 			return nil, rpcError(errExecutionPolicyConflict)
@@ -268,12 +268,12 @@ func (s *Server) CreateAgentTask(ctx context.Context, req *connect.Request[golfv
 		if e := s.agentFence(ctx, tx, a, r, mustID(auth.ID), auth.OwnerID, fingerprint); e != nil {
 			return e
 		}
-		_, e := tx.ExecContext(ctx, `INSERT INTO golf_agent_tasks(id,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,config,policy_fingerprint,idempotency_key,input_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) ON CONFLICT(forge_url,user_id,idempotency_key) DO NOTHING`, id, s.config.GiteaURL, mustID(auth.ID), auth.OwnerID, key.Owner, key.Name, a.UserID, a.NativeID, a.Hash, r.ID, r.Version, commit, source, raw, fingerprint, m.IdempotencyKey, sum[:])
+		_, e := tx.ExecContext(ctx, `INSERT INTO golf_agent_tasks(id,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,config,policy_fingerprint,idempotency_key,input_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) ON CONFLICT(forge_url,user_id,idempotency_key) DO NOTHING`, id, s.config.ForgeURL, mustID(auth.ID), auth.OwnerID, key.Owner, key.Name, a.UserID, a.NativeID, a.Hash, r.ID, r.Version, commit, source, raw, fingerprint, m.IdempotencyKey, sum[:])
 		if e != nil {
 			return errStorageUnavailable
 		}
 		var old []byte
-		e = tx.QueryRowContext(ctx, `SELECT id::text,input_hash FROM golf_agent_tasks WHERE forge_url=$1 AND user_id=$2 AND idempotency_key=$3`, s.config.GiteaURL, a.UserID, m.IdempotencyKey).Scan(&id, &old)
+		e = tx.QueryRowContext(ctx, `SELECT id::text,input_hash FROM golf_agent_tasks WHERE forge_url=$1 AND user_id=$2 AND idempotency_key=$3`, s.config.ForgeURL, a.UserID, m.IdempotencyKey).Scan(&id, &old)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -310,7 +310,7 @@ func (s *Server) agentFence(ctx context.Context, tx *sql.Tx, a codexActor, r cod
 	// Shared policy locks serialize configuration changes against admission and
 	// publication. Missing rows are protected by the common advisory scope fence.
 	for _, key := range []string{"instance/instance", "organization/" + strconv.FormatInt(ownerID, 10), "repository/" + strconv.FormatInt(repoID, 10), "personal/" + strconv.FormatInt(a.UserID, 10)} {
-		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.GiteaURL+"/agent-policy/"+key); e != nil {
+		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.ForgeURL+"/agent-policy/"+key); e != nil {
 			return errStorageUnavailable
 		}
 	}
@@ -322,7 +322,7 @@ func (s *Server) agentFence(ctx context.Context, tx *sql.Tx, a codexActor, r cod
 		return errExecutionPolicyConflict
 	}
 	var allowed bool
-	e = tx.QueryRowContext(ctx, `SELECT state='CONNECTED' AND version=$2 AND (scope='PERSONAL' AND user_id=$3 OR scope='INSTANCE' AND EXISTS(SELECT 1 FROM golf_codex_connection_access WHERE connection_id=$1 AND user_id=$3)) FROM golf_codex_connections WHERE id=$1 AND forge_url=$4 FOR UPDATE`, r.ID, r.Version, a.UserID, s.config.GiteaURL).Scan(&allowed)
+	e = tx.QueryRowContext(ctx, `SELECT state='CONNECTED' AND version=$2 AND (scope='PERSONAL' AND user_id=$3 OR scope='INSTANCE' AND EXISTS(SELECT 1 FROM golf_codex_connection_access WHERE connection_id=$1 AND user_id=$3)) FROM golf_codex_connections WHERE id=$1 AND forge_url=$4 FOR UPDATE`, r.ID, r.Version, a.UserID, s.config.ForgeURL).Scan(&allowed)
 	if e != nil || !allowed {
 		return errCodexConflict
 	}
@@ -344,7 +344,7 @@ func (s *Server) ListAgentTasks(ctx context.Context, req *connect.Request[golfv1
 	if after != "" && !creationKey.MatchString(after) {
 		return nil, rpcError(invalid("Invalid task cursor."))
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT `+agentTaskColumns+` FROM golf_agent_tasks WHERE forge_url=$1 AND user_id=$2 AND repository_id=$3 AND owner_id=$4 AND ($5='' OR (created_at,id)<(SELECT created_at,id FROM golf_agent_tasks WHERE id=NULLIF($5,'')::uuid AND forge_url=$1 AND user_id=$2 AND repository_id=$3 AND owner_id=$4)) ORDER BY created_at DESC,id DESC LIMIT 26`, s.config.GiteaURL, a.UserID, mustID(auth.ID), auth.OwnerID, after)
+	rows, e := s.db.QueryContext(ctx, `SELECT `+agentTaskColumns+` FROM golf_agent_tasks WHERE forge_url=$1 AND user_id=$2 AND repository_id=$3 AND owner_id=$4 AND ($5='' OR (created_at,id)<(SELECT created_at,id FROM golf_agent_tasks WHERE id=NULLIF($5,'')::uuid AND forge_url=$1 AND user_id=$2 AND repository_id=$3 AND owner_id=$4)) ORDER BY created_at DESC,id DESC LIMIT 26`, s.config.ForgeURL, a.UserID, mustID(auth.ID), auth.OwnerID, after)
 	if e != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}

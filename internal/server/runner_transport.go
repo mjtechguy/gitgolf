@@ -136,7 +136,7 @@ func (s *Server) runnerRunAuthority(ctx context.Context, run workflowRunRecord) 
 	if err != nil {
 		return err
 	}
-	row, err := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: run.SessionHash, ForgeURL: s.config.GiteaURL})
+	row, err := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: run.SessionHash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return errUnauthenticated
 	}
@@ -185,7 +185,7 @@ func (s *Server) runnerPolicyFence(ctx context.Context, tx *sql.Tx, run workflow
 		event = "push"
 	} else if run.Origin == "manual" {
 		q := database.New(s.db).WithTx(tx)
-		actor, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: run.SessionHash, ForgeURL: s.config.GiteaURL})
+		actor, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: run.SessionHash, ForgeURL: s.config.ForgeURL})
 		if errors.Is(err, sql.ErrNoRows) {
 			return errUnauthenticated
 		}
@@ -195,7 +195,7 @@ func (s *Server) runnerPolicyFence(ctx context.Context, tx *sql.Tx, run workflow
 		if actor.ID != run.UserID {
 			return errUnauthenticated
 		}
-		_, err = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: run.SessionHash, ForgeURL: s.config.GiteaURL})
+		_, err = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: run.SessionHash, ForgeURL: s.config.ForgeURL})
 		if errors.Is(err, sql.ErrNoRows) {
 			return errUnauthenticated
 		}
@@ -310,18 +310,18 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO golf_runner_presence(forge_url,runner_id) VALUES($1,$2) ON CONFLICT(forge_url,runner_id) DO UPDATE SET last_seen=clock_timestamp()`, s.config.GiteaURL, id); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO golf_runner_presence(forge_url,runner_id) VALUES($1,$2) ON CONFLICT(forge_url,runner_id) DO UPDATE SET last_seen=clock_timestamp()`, s.config.ForgeURL, id); err != nil {
 		runnerFail(w, 503)
 		return
 	}
 	// Never replay an expired attempt automatically: a worker may have executed
 	// commands before losing contact. Its result credential is fenced permanently.
-	_, err := s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='lost',version=version+1,finished_at=clock_timestamp(),reason='Runner lease expired; no automatic retry.',lease_token_hash=NULL WHERE forge_url=$1 AND state='running' AND lease_expires_at<=clock_timestamp()`, s.config.GiteaURL)
+	_, err := s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='lost',version=version+1,finished_at=clock_timestamp(),reason='Runner lease expired; no automatic retry.',lease_token_hash=NULL WHERE forge_url=$1 AND state='running' AND lease_expires_at<=clock_timestamp()`, s.config.ForgeURL)
 	if err != nil {
 		runnerFail(w, 503)
 		return
 	}
-	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND state='queued' AND engine_catalog=ANY($2) AND ($3 OR NOT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=golf_workflow_runs.id)) AND ($5 OR NOT(plan ? 'artifactPaths')) AND golf_runner_pool_candidate(forge_url,id,$4) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL, catalogs, secureBroker, id, artifactConsumer))
+	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND state='queued' AND engine_catalog=ANY($2) AND ($3 OR NOT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=golf_workflow_runs.id)) AND ($5 OR NOT(plan ? 'artifactPaths')) AND golf_runner_pool_candidate(forge_url,id,$4) ORDER BY created_at,id LIMIT 1`, s.config.ForgeURL, catalogs, secureBroker, id, artifactConsumer))
 	if errors.Is(err, sql.ErrNoRows) {
 		w.WriteHeader(204)
 		return
@@ -459,7 +459,7 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 	token := base64.RawURLEncoding.EncodeToString(raw)
 	hash := sha256.Sum256([]byte(token))
 	attempt := hex.EncodeToString(raw[:16])
-	result, err := tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='running',version=version+1,started_at=clock_timestamp(),runner_id=$2,attempt_id=$3,lease_token_hash=$4,lease_expires_at=clock_timestamp()+interval '45 seconds' WHERE id=$1 AND forge_url=$5 AND state='queued'`, run.ID, id, attempt, hash[:], s.config.GiteaURL)
+	result, err := tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='running',version=version+1,started_at=clock_timestamp(),runner_id=$2,attempt_id=$3,lease_token_hash=$4,lease_expires_at=clock_timestamp()+interval '45 seconds' WHERE id=$1 AND forge_url=$5 AND state='queued'`, run.ID, id, attempt, hash[:], s.config.ForgeURL)
 	if err != nil {
 		runnerFail(w, 503)
 		return
@@ -584,7 +584,7 @@ func isRunnerAuthorityDenied(err error) bool {
 // Refuse only the original inspected queued admission; a competing claim,
 // cancellation or changed source version is never overwritten by a loser.
 func (s *Server) rejectRunnerPoolRun(ctx context.Context, run workflowRunRecord) error {
-	_, e := s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason='Runner placement or pool configuration changed; explicitly dispatch new work.' WHERE id=$1::uuid AND forge_url=$2 AND state='queued' AND version=$3 AND repository_id=$4 AND owner_id=$5 AND commit_id=$6 AND blob_id=$7 AND source_sha256=$8 AND runner_pool_id IS NOT DISTINCT FROM $9::uuid AND runner_pool_version IS NOT DISTINCT FROM $10 AND runner_placement_version=$11`, run.ID, s.config.GiteaURL, run.Version, run.RepositoryID, run.OwnerID, run.CommitID, run.BlobID, run.SourceSHA256, run.RunnerPlacement.PoolID, run.RunnerPlacement.PoolVersion, run.RunnerPlacement.PlacementVersion)
+	_, e := s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason='Runner placement or pool configuration changed; explicitly dispatch new work.' WHERE id=$1::uuid AND forge_url=$2 AND state='queued' AND version=$3 AND repository_id=$4 AND owner_id=$5 AND commit_id=$6 AND blob_id=$7 AND source_sha256=$8 AND runner_pool_id IS NOT DISTINCT FROM $9::uuid AND runner_pool_version IS NOT DISTINCT FROM $10 AND runner_placement_version=$11`, run.ID, s.config.ForgeURL, run.Version, run.RepositoryID, run.OwnerID, run.CommitID, run.BlobID, run.SourceSHA256, run.RunnerPlacement.PoolID, run.RunnerPlacement.PoolVersion, run.RunnerPlacement.PlacementVersion)
 	if e != nil {
 		return errStorageUnavailable
 	}
@@ -592,7 +592,7 @@ func (s *Server) rejectRunnerPoolRun(ctx context.Context, run workflowRunRecord)
 }
 
 func (s *Server) rejectQueuedRun(ctx context.Context, id, reason string) {
-	_, _ = s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason=$2 WHERE id=$1 AND forge_url=$3 AND state='queued'`, id, reason, s.config.GiteaURL)
+	_, _ = s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason=$2 WHERE id=$1 AND forge_url=$3 AND state='queued'`, id, reason, s.config.ForgeURL)
 }
 
 func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
@@ -616,7 +616,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND attempt_id=$3 AND lease_token_hash=$4 AND state='running' AND lease_expires_at>clock_timestamp()`, s.config.GiteaURL, id, attempt, hash[:]))
+	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND attempt_id=$3 AND lease_token_hash=$4 AND state='running' AND lease_expires_at>clock_timestamp()`, s.config.ForgeURL, id, attempt, hash[:]))
 	if err != nil {
 		runnerFail(w, 403)
 		return
@@ -813,7 +813,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	err = tx.QueryRowContext(ctx, `SELECT state FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2 AND runner_id=$3 AND attempt_id=$4 AND lease_token_hash=$5 AND lease_expires_at>clock_timestamp() FOR UPDATE`, run.ID, s.config.GiteaURL, id, attempt, hash[:]).Scan(&state)
+	err = tx.QueryRowContext(ctx, `SELECT state FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2 AND runner_id=$3 AND attempt_id=$4 AND lease_token_hash=$5 AND lease_expires_at>clock_timestamp() FOR UPDATE`, run.ID, s.config.ForgeURL, id, attempt, hash[:]).Scan(&state)
 	if err != nil || state != "running" {
 		runnerFail(w, 403)
 		return
@@ -1056,7 +1056,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 func (s *Server) cancelRunnerAttempt(ctx context.Context, id, reason string) {
-	_, _ = s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',reason=$2,version=version+1,finished_at=clock_timestamp(),lease_token_hash=NULL WHERE id=$1 AND forge_url=$3 AND state='running'`, id, reason, s.config.GiteaURL)
+	_, _ = s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',reason=$2,version=version+1,finished_at=clock_timestamp(),lease_token_hash=NULL WHERE id=$1 AND forge_url=$3 AND state='running'`, id, reason, s.config.ForgeURL)
 }
 func runnerLogText(value string) bool {
 	return !bytes.ContainsRune([]byte(value), '\x00') && strings.ToValidUTF8(value, "") == value
@@ -1084,11 +1084,11 @@ func (s *Server) runnerRecover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.GiteaURL+"/runner/"+id); err != nil {
+	if _, err = tx.ExecContext(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.ForgeURL+"/runner/"+id); err != nil {
 		runnerFail(w, 503)
 		return
 	}
-	_, err = tx.ExecContext(r.Context(), `UPDATE golf_workflow_runs SET state='lost',version=version+1,finished_at=clock_timestamp(),reason='Operator recovered worker; no automatic retry.',lease_token_hash=NULL WHERE forge_url=$1 AND runner_id=$2 AND state='running'`, s.config.GiteaURL, id)
+	_, err = tx.ExecContext(r.Context(), `UPDATE golf_workflow_runs SET state='lost',version=version+1,finished_at=clock_timestamp(),reason='Operator recovered worker; no automatic retry.',lease_token_hash=NULL WHERE forge_url=$1 AND runner_id=$2 AND state='running'`, s.config.ForgeURL, id)
 	if err != nil || tx.Commit() != nil {
 		runnerFail(w, 503)
 		return

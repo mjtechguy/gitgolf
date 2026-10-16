@@ -36,8 +36,8 @@ func BindForgeInstallation(ctx context.Context, db *sql.DB, c Config) error {
 		if occupied {
 			return errors.New("forge installation requires a fresh destination database")
 		}
-		_, err = tx.ExecContext(ctx, "INSERT INTO golf_forge_installation(singleton,kind,origin,instance_id,workflow_directories) VALUES(true,$1,$2,$3,$4)", c.ForgeKind, c.GiteaURL, c.ForgeInstanceID, c.GiteaWorkflowDirs)
-	} else if err == nil && (kind != c.ForgeKind || origin != c.GiteaURL || identity != c.ForgeInstanceID || directories != c.GiteaWorkflowDirs) {
+		_, err = tx.ExecContext(ctx, "INSERT INTO golf_forge_installation(singleton,kind,origin,instance_id,workflow_directories) VALUES(true,$1,$2,$3,$4)", c.ForgeKind, c.ForgeURL, c.ForgeInstanceID, c.ForgeWorkflowDirs)
+	} else if err == nil && (kind != c.ForgeKind || origin != c.ForgeURL || identity != c.ForgeInstanceID || directories != c.ForgeWorkflowDirs) {
 		return errors.New("forge installation or workflow selection changed; migration and workflow re-admission required")
 	}
 	if err != nil {

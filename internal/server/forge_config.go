@@ -7,47 +7,28 @@ import (
 	"github.com/mjtechguy/golf-git/internal/workflowpath"
 )
 
-// NormalizeForgeConfig resolves internal storage/API field names before provider access.
+// NormalizeForgeConfig applies defaults and validates the Forgejo configuration
+// before any provider access. Forgejo is the only supported portable forge.
 func NormalizeForgeConfig(c Config) (Config, error) {
 	if c.ForgeKind == "" {
 		c.ForgeKind = "forgejo"
 	}
 	if c.ForgeKind != "forgejo" {
-		return c, errors.New("GOLF_FORGE_KIND must be forgejo")
+		return c, errors.New("GOLF_FORGE_KIND must be forgejo; Golf's portable backend is Forgejo")
 	}
-	for _, alias := range []struct {
-		current, legacy *string
-		name            string
-	}{
-		{&c.ForgeURL, &c.GiteaURL, "URL"},
-		{&c.ForgePublicURL, &c.GiteaPublicURL, "PUBLIC_URL"},
-		{&c.ForgeOAuthClientID, &c.GiteaOAuthClientID, "OAUTH_CLIENT_ID"},
-		{&c.ForgeOAuthClientSecret, &c.GiteaOAuthClientSecret, "OAUTH_CLIENT_SECRET"},
-		{&c.ForgeWorkflowDirs, &c.GiteaWorkflowDirs, "WORKFLOW_DIRS"},
-	} {
-		if *alias.current != "" && *alias.legacy != "" && *alias.current != *alias.legacy {
-			return c, errors.New("conflicting forge configuration aliases: " + alias.name)
-		}
-		if *alias.current != "" {
-			*alias.legacy = *alias.current
-		}
+	if c.ForgeURL == "" {
+		c.ForgeURL = "http://forgejo:3000"
 	}
-	if c.GiteaURL == "" {
-		c.GiteaURL = "http://" + c.ForgeKind + ":3000"
+	if c.ForgeWorkflowDirs == "" {
+		c.ForgeWorkflowDirs = workflowpath.ForgejoDirectories
 	}
-	if c.GiteaWorkflowDirs == "" {
-		c.GiteaWorkflowDirs = workflowpath.ForgejoDirectories
-	}
-	dirs, err := workflowpath.Directories(c.GiteaWorkflowDirs)
+	dirs, err := workflowpath.Directories(c.ForgeWorkflowDirs)
 	if err != nil {
 		return c, err
 	}
-	c.GiteaWorkflowDirs = strings.Join(dirs, ",")
+	c.ForgeWorkflowDirs = strings.Join(dirs, ",")
 	if !forgeInstanceID.MatchString(c.ForgeInstanceID) {
 		return c, errors.New("Forgejo requires GOLF_FORGE_INSTANCE_ID: a stable, unique lowercase UUID for this installation")
-	}
-	if c.ForgeInstanceID != "" && !forgeInstanceID.MatchString(c.ForgeInstanceID) {
-		return c, errors.New("GOLF_FORGE_INSTANCE_ID must be a lowercase UUID")
 	}
 	return c, nil
 }
@@ -60,5 +41,5 @@ func (s *Server) forgeLabel() string {
 // its own contract and native behavior receipts before readiness can pass.
 func supportedForgeVersion(kind, version string) bool {
 	version = strings.TrimPrefix(version, "v")
-	return kind == "forgejo" && (version == "15.0.9" || version == "15.0.9+gitea-1.22.0")
+	return kind == "forgejo" && (version == "15.0.9" || version == forgejoReportedVersion)
 }

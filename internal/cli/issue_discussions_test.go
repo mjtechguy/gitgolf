@@ -24,7 +24,7 @@ func TestIssueCommentsBindsIdentitiesWithinOneAuthority(t *testing.T) {
 				repository := golfv1connect.RepositoryServiceGetRepositoryProcedure
 				issue := golfv1connect.RepositoryServiceGetIssueProcedure
 				comments := golfv1connect.RepositoryServiceListIssueCommentsProcedure
-				login, logout := golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLogoutProcedure
+				login, logout := golfv1connect.SessionServiceLoginWithForgeTokenProcedure, golfv1connect.SessionServiceLogoutProcedure
 				token := "private-discussion-token"
 				if bearer {
 					token = fixtureAPIToken

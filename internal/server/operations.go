@@ -31,7 +31,7 @@ func (s *Server) GetOperationsDashboard(ctx context.Context, req *connect.Reques
 		out.Services = append(out.Services, &golfv1.OperationsServiceStatus{Id: d.id, Label: d.label, State: state, Source: "Golf readiness probe", CheckedAt: stamp, Detail: detail})
 	}
 	if s.config.ForgeInstanceID != "" {
-		out.Notices = append(out.Notices, "Forge installation: "+s.config.ForgeKind+" / "+s.config.ForgeInstanceID+"; workflow selection: "+s.config.GiteaWorkflowDirs)
+		out.Notices = append(out.Notices, "Forge installation: "+s.config.ForgeKind+" / "+s.config.ForgeInstanceID+"; workflow selection: "+s.config.ForgeWorkflowDirs)
 	}
 	metricsState, traceState := "disabled", "disabled"
 	if s.config.Telemetry != nil {

@@ -55,23 +55,23 @@ func organizationCreationPermits(mode string, selected []int64, isAdmin bool, us
 	return false
 }
 func (s *Server) organizationCreationPolicy(ctx context.Context, q *database.Queries, actor database.LockManagedSessionRow, hash []byte) (*golfv1.OrganizationCreationPolicy, error) {
-	row, err := q.LockOrganizationCreationPolicy(ctx, s.config.GiteaURL)
+	row, err := q.LockOrganizationCreationPolicy(ctx, s.config.ForgeURL)
 	missing := errors.Is(err, sql.ErrNoRows)
 	if missing {
-		row = database.GolfOrganizationCreationPolicy{ForgeURL: s.config.GiteaURL, Mode: "administrators_only"}
+		row = database.GolfOrganizationCreationPolicy{ForgeURL: s.config.ForgeURL, Mode: "administrators_only"}
 	} else if err != nil {
 		return nil, errStorageUnavailable
 	}
 	var selected []int64
 	if !missing {
-		selected, err = q.ListOrganizationCreationSelections(ctx, s.config.GiteaURL)
+		selected, err = q.ListOrganizationCreationSelections(ctx, s.config.ForgeURL)
 		if err != nil {
 			return nil, errStorageUnavailable
 		}
 	}
 	admin := false
 	if actor.CredentialKind == "local" {
-		_, err = q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		_, err = q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if err == nil {
 			admin = true
 		} else if !errors.Is(err, sql.ErrNoRows) {
@@ -137,16 +137,16 @@ func (s *Server) UpdateOrganizationCreationPolicy(ctx context.Context, req *conn
 	}
 	var result *golfv1.OrganizationCreationPolicy
 	err = s.withManagedSession(ctx, value, token, func(q *database.Queries, actor database.LockManagedSessionRow, hash []byte) error {
-		if _, err := q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL}); err != nil {
+		if _, err := q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL}); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return errUnauthenticated
 			}
 			return errStorageUnavailable
 		}
-		if err := q.EnsureOrganizationCreationPolicy(ctx, s.config.GiteaURL); err != nil {
+		if err := q.EnsureOrganizationCreationPolicy(ctx, s.config.ForgeURL); err != nil {
 			return errStorageUnavailable
 		}
-		current, err := q.LockOrganizationCreationPolicy(ctx, s.config.GiteaURL)
+		current, err := q.LockOrganizationCreationPolicy(ctx, s.config.ForgeURL)
 		if err != nil {
 			return errStorageUnavailable
 		}
@@ -154,26 +154,26 @@ func (s *Server) UpdateOrganizationCreationPolicy(ctx context.Context, req *conn
 			return errOrganizationCreationPolicyConflict
 		}
 		for id := range selected {
-			if _, err := q.GetOrganizationCreationCandidate(ctx, database.GetOrganizationCreationCandidateParams{ID: id, ForgeURL: s.config.GiteaURL}); err != nil {
+			if _, err := q.GetOrganizationCreationCandidate(ctx, database.GetOrganizationCreationCandidateParams{ID: id, ForgeURL: s.config.ForgeURL}); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return invalid("Selected user IDs must belong to this Golf forge.")
 				}
 				return errStorageUnavailable
 			}
 		}
-		updated, err := q.UpdateOrganizationCreationPolicy(ctx, database.UpdateOrganizationCreationPolicyParams{ForgeURL: s.config.GiteaURL, Mode: mode, Revision: expected})
+		updated, err := q.UpdateOrganizationCreationPolicy(ctx, database.UpdateOrganizationCreationPolicyParams{ForgeURL: s.config.ForgeURL, Mode: mode, Revision: expected})
 		if err != nil {
 			return errStorageUnavailable
 		}
-		if err = q.DeleteOrganizationCreationSelections(ctx, s.config.GiteaURL); err != nil {
+		if err = q.DeleteOrganizationCreationSelections(ctx, s.config.ForgeURL); err != nil {
 			return errStorageUnavailable
 		}
 		for id := range selected {
-			if err = q.AddOrganizationCreationSelection(ctx, database.AddOrganizationCreationSelectionParams{ForgeURL: s.config.GiteaURL, UserID: id}); err != nil {
+			if err = q.AddOrganizationCreationSelection(ctx, database.AddOrganizationCreationSelectionParams{ForgeURL: s.config.ForgeURL, UserID: id}); err != nil {
 				return errStorageUnavailable
 			}
 		}
-		if err = q.AppendOrganizationCreationPolicyEvent(ctx, database.AppendOrganizationCreationPolicyEventParams{ForgeURL: s.config.GiteaURL, Revision: updated.Revision, RevocationEpoch: updated.RevocationEpoch, ActorUserID: actor.UserID, ActorSessionID: actor.SessionID, Mode: mode, SelectedUserCount: int32(len(selected))}); err != nil {
+		if err = q.AppendOrganizationCreationPolicyEvent(ctx, database.AppendOrganizationCreationPolicyEventParams{ForgeURL: s.config.ForgeURL, Revision: updated.Revision, RevocationEpoch: updated.RevocationEpoch, ActorUserID: actor.UserID, ActorSessionID: actor.SessionID, Mode: mode, SelectedUserCount: int32(len(selected))}); err != nil {
 			return errStorageUnavailable
 		}
 		result, err = s.organizationCreationPolicy(ctx, q, actor, hash)

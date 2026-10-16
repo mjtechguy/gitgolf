@@ -45,7 +45,7 @@ func TestNativeCredentialModeIsExplicitAndDoesNotBroadenPortableCredentials(t *t
 		env  map[string]string
 	}{
 		{[]string{"issue", "create", "--input", path}, map[string]string{"GOLF_API_TOKEN": token}},
-		{[]string{"repo", "list"}, map[string]string{"GOLF_NATIVE_TOKEN": token, "GOLF_GITEA_TOKEN": "private-pat"}},
+		{[]string{"repo", "list"}, map[string]string{"GOLF_NATIVE_TOKEN": token, "GOLF_FORGE_TOKEN": "private-pat"}},
 		{[]string{"repo", "list"}, map[string]string{"GOLF_NATIVE_TOKEN": token, "GOLF_API_TOKEN": fixtureAPIToken}},
 		{[]string{"mcp"}, map[string]string{"GOLF_NATIVE_TOKEN": token}},
 	} {

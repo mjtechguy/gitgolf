@@ -117,7 +117,7 @@ func (f *notificationFixture) subscribe(t *testing.T) *golfv1.RepositoryEmailSub
 }
 func (f *notificationFixture) event(t *testing.T, topic string) {
 	t.Helper()
-	if _, e := f.db.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) VALUES($1,$2,$3,0)`, f.s.config.GiteaURL, int64(9007199254740993), topic); e != nil {
+	if _, e := f.db.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) VALUES($1,$2,$3,0)`, f.s.config.ForgeURL, int64(9007199254740993), topic); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -187,7 +187,7 @@ func TestNotificationOutboxLogoutAndPrivateExclusionPostgres(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	_, e = tx.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) VALUES($1,$2,'source',0)`, f.s.config.GiteaURL, int64(9007199254740993))
+	_, e = tx.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) VALUES($1,$2,'source',0)`, f.s.config.ForgeURL, int64(9007199254740993))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -195,7 +195,7 @@ func TestNotificationOutboxLogoutAndPrivateExclusionPostgres(t *testing.T) {
 	if _, e = f.s.claimEmail(t.Context()); !errors.Is(e, sql.ErrNoRows) {
 		t.Fatal("rolled-back activity queued mail")
 	}
-	if _, e = f.db.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) VALUES($1,$2,'agents',42)`, f.s.config.GiteaURL, int64(9007199254740993)); e != nil {
+	if _, e = f.db.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) VALUES($1,$2,'agents',42)`, f.s.config.ForgeURL, int64(9007199254740993)); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = f.s.claimEmail(t.Context()); !errors.Is(e, sql.ErrNoRows) {
@@ -642,16 +642,16 @@ func TestNotificationTransferRequiresNewConsentPostgres(t *testing.T) {
 func TestNotificationWorkerDoesNotClaimForeignForgePostgres(t *testing.T) {
 	f := newNotificationFixture(t)
 	request := f.verification(t)
-	originalURL := f.s.config.GiteaURL
-	f.s.config.GiteaURL = "https://other.invalid"
-	defer func() { f.s.config.GiteaURL = originalURL }()
+	originalURL := f.s.config.ForgeURL
+	f.s.config.ForgeURL = "https://other.invalid"
+	defer func() { f.s.config.ForgeURL = originalURL }()
 	if _, e := f.s.claimEmail(t.Context()); !errors.Is(e, sql.ErrNoRows) {
 		t.Fatal("foreign worker claimed another forge", e)
 	}
 	if f.delivery(t, request.DeliveryId).State != "queued" {
 		t.Fatal("foreign worker cancelled another forge")
 	}
-	f.s.config.GiteaURL = originalURL
+	f.s.config.ForgeURL = originalURL
 	if got := f.claim(t); got.ID != request.DeliveryId {
 		t.Fatal("own worker missed queued message")
 	}

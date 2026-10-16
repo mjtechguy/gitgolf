@@ -391,7 +391,7 @@ func TestCodexAuditFailureRollsBackAndDisableWaitPostgres(t *testing.T) {
 	done := make(chan *httptest.ResponseRecorder, 1)
 	go func() { done <- codexCall(f.s, login, "RefreshCodexConnection", `{"expectedVersion":"`+version+`"}`) }()
 	waitCodexMarker(t, marker+".entered")
-	if _, e := ManageLocalAccount(context.Background(), f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "alice"}); e != nil {
+	if _, e := ManageLocalAccount(context.Background(), f.db, f.s.keyring, f.s.config.ForgeURL, "disable", LocalAccountInput{Username: "alice"}); e != nil {
 		t.Fatal(e)
 	}
 	os.WriteFile(marker+".resume", nil, 0600)

@@ -90,7 +90,7 @@ func TestGolfUserAccessLifecyclePostgres(t *testing.T) {
 	oauth := f.session(t, "bob", "oauth")
 	delegate := issueApiCredential(t, apiManagementClient(t, f, pat), "suspended read", 0)
 	grantID := uuid.NewString()
-	if _, e := f.db.Exec(`INSERT INTO golf_automation_grants(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,sponsor_user_id,sponsor_native_user_id,expires_at,idempotency_key,input_hash,branches,workflow_paths) VALUES($1,$2,7,84,'bob','project',false,$3,84,clock_timestamp()+interval '1 hour',$4,$5,'["main"]','[".github/workflows/check.yml"]')`, grantID, f.s.config.GiteaURL, bob.UserID, uuid.NewString(), make([]byte, 32)); e != nil {
+	if _, e := f.db.Exec(`INSERT INTO golf_automation_grants(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,sponsor_user_id,sponsor_native_user_id,expires_at,idempotency_key,input_hash,branches,workflow_paths) VALUES($1,$2,7,84,'bob','project',false,$3,84,clock_timestamp()+interval '1 hour',$4,$5,'["main"]','[".github/workflows/check.yml"]')`, grantID, f.s.config.ForgeURL, bob.UserID, uuid.NewString(), make([]byte, 32)); e != nil {
 		t.Fatal(e)
 	}
 	input := accessInput(bob, "0", true)
@@ -307,7 +307,7 @@ func TestGolfUserAccessPasswordEnrollmentSeparatePostgres(t *testing.T) {
 // all other supported API/Git/OAuth behavior stays on the original HTTP handler.
 func accessAdminProvider(t *testing.T, s *Server, beforeToken func()) loginResult {
 	t.Helper()
-	original, _ := url.Parse(s.config.GiteaURL)
+	original, _ := url.Parse(s.config.ForgeURL)
 	proxy := httputil.NewSingleHostReverseProxy(original)
 	facade := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/user" && r.Header.Get("Authorization") == "token bob-management-token" {
@@ -321,7 +321,7 @@ func accessAdminProvider(t *testing.T, s *Server, beforeToken func()) loginResul
 		proxy.ServeHTTP(w, r)
 	}))
 	t.Cleanup(facade.Close)
-	s.config.GiteaURL = facade.URL
+	s.config.ForgeURL = facade.URL
 	if _, e := ManageLocalAccount(t.Context(), s.db, s.keyring, facade.URL, "create", LocalAccountInput{Username: "bob", Password: localTestPassword, ForgeToken: "bob-management-token", IsInstanceAdmin: true}); e != nil {
 		t.Fatal("fixture admin enrollment", e)
 	}
@@ -491,7 +491,7 @@ func TestGolfUserAccessInactiveAdministratorPostgres(t *testing.T) {
 	bob := enrollLocal(t, f, "bob", true)
 	admin := localLogin(t, f, "alice")
 	pat := f.session(t, "bob", "pat")
-	disabled, e := ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "bob"})
+	disabled, e := ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.ForgeURL, "disable", LocalAccountInput{Username: "bob"})
 	if e != nil || !disabled.Disabled {
 		t.Fatal("supported operator local disable", e)
 	}

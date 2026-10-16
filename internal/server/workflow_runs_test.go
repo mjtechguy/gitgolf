@@ -272,7 +272,7 @@ func (f *workflowRunFixture) enable(t *testing.T) {
 		name, id string
 		owner    int64
 	}{{"instance", "instance", 0}, {"repository", strconv.FormatInt(f.row.ID, 10), 42}} {
-		_, err := f.server.db.ExecContext(t.Context(), `INSERT INTO golf_execution_policies(forge_url,scope,scope_id,owner_id,mode,manual_dispatch_enabled,allow_all_workflows,revision,revocation_epoch) VALUES($1,$2,$3,$4,'all',true,true,1,1) ON CONFLICT(forge_url,scope,scope_id) DO UPDATE SET mode='all',manual_dispatch_enabled=true,allow_all_workflows=true,revision=golf_execution_policies.revision+1,revocation_epoch=golf_execution_policies.revocation_epoch+1`, f.server.config.GiteaURL, scope.name, scope.id, scope.owner)
+		_, err := f.server.db.ExecContext(t.Context(), `INSERT INTO golf_execution_policies(forge_url,scope,scope_id,owner_id,mode,manual_dispatch_enabled,allow_all_workflows,revision,revocation_epoch) VALUES($1,$2,$3,$4,'all',true,true,1,1) ON CONFLICT(forge_url,scope,scope_id) DO UPDATE SET mode='all',manual_dispatch_enabled=true,allow_all_workflows=true,revision=golf_execution_policies.revision+1,revocation_epoch=golf_execution_policies.revocation_epoch+1`, f.server.config.ForgeURL, scope.name, scope.id, scope.owner)
 		if err != nil {
 			t.Fatal(err)
 		}

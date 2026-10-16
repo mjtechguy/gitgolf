@@ -90,13 +90,13 @@ func TestRecoveryAgentQuarantinePreservesOriginalJournalPostgres(t *testing.T) {
 		t.Fatal("fixture original command")
 	}
 	digest := sha256.Sum256(command)
-	commandBinding := conversationBinding(f.t, s.config.GiteaURL, f.attempt, 4, command)
+	commandBinding := conversationBinding(f.t, s.config.ForgeURL, f.attempt, 4, command)
 	commandCipher, commandKey, e := s.keyring.seal(conversationContentDomain, string(command), commandBinding)
 	if e != nil {
 		t.Fatal("fixture encrypted original command")
 	}
 	content := uuid.NewString()
-	if _, e = s.db.Exec(`INSERT INTO golf_agent_conversation_contents(id,task_id,attempt_id,forge_url,repository_id,user_id,sequence,encrypted_content,content_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,4,$7,$8,$9)`, content, f.t.ID, f.attempt, s.config.GiteaURL, f.t.RepositoryID, f.t.UserID, commandCipher, commandBinding, commandKey); e != nil {
+	if _, e = s.db.Exec(`INSERT INTO golf_agent_conversation_contents(id,task_id,attempt_id,forge_url,repository_id,user_id,sequence,encrypted_content,content_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,4,$7,$8,$9)`, content, f.t.ID, f.attempt, s.config.ForgeURL, f.t.RepositoryID, f.t.UserID, commandCipher, commandBinding, commandKey); e != nil {
 		t.Fatal("fixture retained command content", e)
 	}
 	if _, e = s.db.Exec(`INSERT INTO golf_agent_commands(task_id,attempt_id,request_id,kind,input_hash,content_id) VALUES($1,$2,$3,'permission',$4,$5)`, f.t.ID, f.attempt, request.RequestId, digest[:], content); e != nil {
@@ -110,7 +110,7 @@ func TestRecoveryAgentQuarantinePreservesOriginalJournalPostgres(t *testing.T) {
 	if _, e = s.db.Exec(`INSERT INTO golf_agent_native_sends(task_id,attempt_id,input_id,kind,input_hash) VALUES($1,$2,'initial','prompt',$3)`, f.t.ID, f.attempt, nativeDigest[:]); e != nil {
 		t.Fatal("fixture retained native-send exclusion", e)
 	}
-	if _, e = s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version,acp_file_tools) VALUES($1,'worker',$2,$2,$3,true)`, s.config.GiteaURL, image, runner.ManagedACPVersion); e != nil {
+	if _, e = s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version,acp_file_tools) VALUES($1,'worker',$2,$2,$3,true)`, s.config.ForgeURL, image, runner.ManagedACPVersion); e != nil {
 		t.Fatal("fixture copied qualified worker receipt", e)
 	}
 	retained := func() string {
@@ -137,7 +137,7 @@ func TestRecoveryAgentQuarantinePreservesOriginalJournalPostgres(t *testing.T) {
 	if e = s.db.QueryRow(`SELECT state='claimed' FROM golf_agent_commands WHERE task_id=$1 AND attempt_id=$2 AND request_id=$3`, f.t.ID, f.attempt, request.RequestId).Scan(&claimed); e != nil || !claimed {
 		t.Fatal("copied command remained dispatchable", e)
 	}
-	if e = s.db.QueryRow(`SELECT image=$2 AND acp_image='' AND acp_version='' AND NOT acp_file_tools FROM golf_agent_worker_presence WHERE forge_url=$1 AND worker_id='worker'`, s.config.GiteaURL, image).Scan(&receiptCleared); e != nil || !receiptCleared {
+	if e = s.db.QueryRow(`SELECT image=$2 AND acp_image='' AND acp_version='' AND NOT acp_file_tools FROM golf_agent_worker_presence WHERE forge_url=$1 AND worker_id='worker'`, s.config.ForgeURL, image).Scan(&receiptCleared); e != nil || !receiptCleared {
 		t.Fatal("copied native/file-tool receipt remained usable", e)
 	}
 	if original != retained() {

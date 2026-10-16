@@ -27,7 +27,7 @@ func (s *Server) recoveryEmailAuthority90(ctx context.Context, d emailDelivery) 
 		return nil
 	}
 	var current bool
-	e := s.db.QueryRowContext(ctx, `SELECT ch.purpose='verification' OR (ch.confirmed_at IS NULL AND ch.expires_at>clock_timestamp() AND ch.attempts<5 AND EXISTS(SELECT 1 FROM golf_password_recovery_enrollments er JOIN golf_email_contacts c ON c.user_id=er.user_id JOIN golf_local_accounts a ON a.id=er.local_account_id AND a.user_id=er.user_id JOIN golf_users u ON u.id=er.user_id WHERE er.user_id=ch.user_id AND er.enabled AND er.version=ch.password_recovery_enrollment_version AND er.local_account_id=c.local_account_id AND er.native_user_id=u.forge_user_id AND er.native_user_id=c.native_user_id AND er.credential_version=a.credential_version AND er.credential_version=c.credential_version AND er.contact_version=c.version AND c.version=ch.contact_version AND c.verified_at IS NOT NULL AND c.suppression='' AND a.disabled_at IS NULL AND u.forge_url=$2)) FROM golf_email_challenges ch WHERE ch.id=$1 AND ch.user_id=$3`, d.ChallengeID, s.config.GiteaURL, d.UserID).Scan(&current)
+	e := s.db.QueryRowContext(ctx, `SELECT ch.purpose='verification' OR (ch.confirmed_at IS NULL AND ch.expires_at>clock_timestamp() AND ch.attempts<5 AND EXISTS(SELECT 1 FROM golf_password_recovery_enrollments er JOIN golf_email_contacts c ON c.user_id=er.user_id JOIN golf_local_accounts a ON a.id=er.local_account_id AND a.user_id=er.user_id JOIN golf_users u ON u.id=er.user_id WHERE er.user_id=ch.user_id AND er.enabled AND er.version=ch.password_recovery_enrollment_version AND er.local_account_id=c.local_account_id AND er.native_user_id=u.forge_user_id AND er.native_user_id=c.native_user_id AND er.credential_version=a.credential_version AND er.credential_version=c.credential_version AND er.contact_version=c.version AND c.version=ch.contact_version AND c.verified_at IS NOT NULL AND c.suppression='' AND a.disabled_at IS NULL AND u.forge_url=$2)) FROM golf_email_challenges ch WHERE ch.id=$1 AND ch.user_id=$3`, d.ChallengeID, s.config.ForgeURL, d.UserID).Scan(&current)
 	if e != nil || !current {
 		return errEmailRevoked
 	}
@@ -73,7 +73,7 @@ func (s *Server) recoveryAccount90(ctx context.Context, tx database.DBTX, user i
 	e = tx.QueryRowContext(ctx, `SELECT u.id,u.forge_user_id,a.id,a.credential_version,a.email,c.version,er.version,a.username,a.encrypted_forge_token,a.credential_binding,a.credential_key_id,c.mailbox_hash
  FROM golf_users u JOIN golf_local_accounts a ON a.user_id=u.id JOIN golf_email_contacts c ON c.user_id=u.id AND c.local_account_id=a.id AND c.native_user_id=u.forge_user_id AND c.credential_version=a.credential_version
  JOIN golf_password_recovery_enrollments er ON er.user_id=u.id AND er.local_account_id=a.id AND er.native_user_id=u.forge_user_id AND er.credential_version=a.credential_version AND er.contact_version=c.version AND er.enabled
- WHERE u.id=$1 AND u.forge_url=$2 AND a.disabled_at IS NULL AND c.verified_at IS NOT NULL AND c.suppression='' AND NOT EXISTS(SELECT 1 FROM golf_user_access WHERE user_id=u.id AND suspended)`, user, s.config.GiteaURL).Scan(&a.UserID, &a.NativeID, &a.LocalID, &a.CredentialVersion, &a.Email, &a.ContactVersion, &a.EnrollmentVersion, &a.Username, &cipher, &binding, &key, &mailbox)
+ WHERE u.id=$1 AND u.forge_url=$2 AND a.disabled_at IS NULL AND c.verified_at IS NOT NULL AND c.suppression='' AND NOT EXISTS(SELECT 1 FROM golf_user_access WHERE user_id=u.id AND suspended)`, user, s.config.ForgeURL).Scan(&a.UserID, &a.NativeID, &a.LocalID, &a.CredentialVersion, &a.Email, &a.ContactVersion, &a.EnrollmentVersion, &a.Username, &cipher, &binding, &key, &mailbox)
 	if e != nil {
 		return a, e
 	}
@@ -105,7 +105,7 @@ func (s *Server) RequestPasswordRecovery(ctx context.Context, req *connect.Reque
 	}
 	defer tx.Rollback()
 	var user int64
-	e = tx.QueryRowContext(ctx, `SELECT u.id FROM golf_users u JOIN golf_local_accounts a ON a.user_id=u.id WHERE u.forge_url=$1 AND a.email=$2 FOR UPDATE OF u`, s.config.GiteaURL, email).Scan(&user)
+	e = tx.QueryRowContext(ctx, `SELECT u.id FROM golf_users u JOIN golf_local_accounts a ON a.user_id=u.id WHERE u.forge_url=$1 AND a.email=$2 FOR UPDATE OF u`, s.config.ForgeURL, email).Scan(&user)
 	if errors.Is(e, sql.ErrNoRows) {
 		return response, nil
 	}
@@ -236,7 +236,7 @@ func (s *Server) CompletePasswordRecovery(ctx context.Context, req *connect.Requ
 	if e != nil || actor.ID != latest.NativeID {
 		return fail()
 	}
-	consumed, e := tx.ExecContext(ctx, `UPDATE golf_email_challenges ch SET confirmed_at=clock_timestamp() WHERE ch.id=$1 AND ch.purpose='password_recovery' AND ch.user_id=$2 AND ch.contact_version=$3 AND ch.confirmed_at IS NULL AND ch.expires_at>clock_timestamp() AND ch.attempts<=5 AND ch.code_hash=$4 AND EXISTS(SELECT 1 FROM golf_email_contacts c JOIN golf_local_accounts a ON a.id=c.local_account_id JOIN golf_users u ON u.id=c.user_id WHERE c.user_id=ch.user_id AND c.version=ch.contact_version AND c.verified_at IS NOT NULL AND c.suppression='' AND c.mailbox_hash=$5 AND a.disabled_at IS NULL AND a.credential_version=c.credential_version AND a.id=$6 AND u.forge_url=$7 AND u.forge_user_id=c.native_user_id AND EXISTS(SELECT 1 FROM golf_password_recovery_enrollments er WHERE er.user_id=u.id AND er.local_account_id=a.id AND er.native_user_id=u.forge_user_id AND er.credential_version=a.credential_version AND er.contact_version=c.version AND er.version=$8 AND er.enabled))`, id, user, contactVersion, expected, emailHash(latest.Email), latest.LocalID, s.config.GiteaURL, enrollmentVersion)
+	consumed, e := tx.ExecContext(ctx, `UPDATE golf_email_challenges ch SET confirmed_at=clock_timestamp() WHERE ch.id=$1 AND ch.purpose='password_recovery' AND ch.user_id=$2 AND ch.contact_version=$3 AND ch.confirmed_at IS NULL AND ch.expires_at>clock_timestamp() AND ch.attempts<=5 AND ch.code_hash=$4 AND EXISTS(SELECT 1 FROM golf_email_contacts c JOIN golf_local_accounts a ON a.id=c.local_account_id JOIN golf_users u ON u.id=c.user_id WHERE c.user_id=ch.user_id AND c.version=ch.contact_version AND c.verified_at IS NOT NULL AND c.suppression='' AND c.mailbox_hash=$5 AND a.disabled_at IS NULL AND a.credential_version=c.credential_version AND a.id=$6 AND u.forge_url=$7 AND u.forge_user_id=c.native_user_id AND EXISTS(SELECT 1 FROM golf_password_recovery_enrollments er WHERE er.user_id=u.id AND er.local_account_id=a.id AND er.native_user_id=u.forge_user_id AND er.credential_version=a.credential_version AND er.contact_version=c.version AND er.version=$8 AND er.enabled))`, id, user, contactVersion, expected, emailHash(latest.Email), latest.LocalID, s.config.ForgeURL, enrollmentVersion)
 	if e != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}

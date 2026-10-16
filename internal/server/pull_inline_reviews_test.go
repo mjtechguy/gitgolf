@@ -41,7 +41,7 @@ func newInlineReviewFixture(t *testing.T) *inlineReviewFixture {
 	base := newPrivateDraftFixture(t)
 	f := &inlineReviewFixture{privateDraftFixture: base, author: 99, entered: make(chan struct{}, 1), resume: make(chan struct{})}
 	f.effect.Store("")
-	old, _ := url.Parse(base.s.config.GiteaURL)
+	old, _ := url.Parse(base.s.config.ForgeURL)
 	proxy := httputil.NewSingleHostReverseProxy(old)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/repos/alice/private/pulls/7" {
@@ -84,9 +84,9 @@ func newInlineReviewFixture(t *testing.T) *inlineReviewFixture {
 	t.Cleanup(provider.Close)
 	t.Cleanup(func() { close(f.resume) })
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL = provider.URL
-	config.GiteaOAuthClientID = "fixture-client"
-	config.GiteaOAuthClientSecret = "fixture-secret"
+	config.ForgePublicURL = provider.URL
+	config.ForgeOAuthClientID = "fixture-client"
+	config.ForgeOAuthClientSecret = "fixture-secret"
 	var err error
 	f.s, err = New(config, f.db)
 	if err != nil {
@@ -667,7 +667,7 @@ func TestInlineReviewDelayedReservationGenerationPostgres(t *testing.T) {
 			// Commit an actual 036 mutation in the held owner transaction, then release
 			// publication. This is the same production acceptance routine used by Save.
 			q := database.New(f.db).WithTx(tx)
-			d, e := q.GetReviewDraft(t.Context(), database.GetReviewDraftParams{ID: uuid.MustParse(m.DraftId), UserID: user, ForgeURL: f.s.config.GiteaURL, RepositoryID: 11, PullRequestID: 9007199254740993})
+			d, e := q.GetReviewDraft(t.Context(), database.GetReviewDraftParams{ID: uuid.MustParse(m.DraftId), UserID: user, ForgeURL: f.s.config.ForgeURL, RepositoryID: 11, PullRequestID: 9007199254740993})
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -706,12 +706,12 @@ func TestInlineReviewDelayedReservationGenerationPostgres(t *testing.T) {
 
 func (f *inlineReviewFixture) seedBot(t *testing.T, legacy bool) string {
 	t.Helper()
-	account, err := ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "pull-pat"})
+	account, err := ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "pull-pat"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	reviewer, run := uuid.NewString(), uuid.NewString()
-	_, err = f.db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','private',$3,42,$4,1,42,'{}',true,clock_timestamp()+interval '1 hour')`, reviewer, f.s.config.GiteaURL, account.UserID, account.ID)
+	_, err = f.db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','private',$3,42,$4,1,42,'{}',true,clock_timestamp()+interval '1 hour')`, reviewer, f.s.config.ForgeURL, account.UserID, account.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -740,7 +740,7 @@ func TestInlineReviewSharedFamilyExclusionPostgres(t *testing.T) {
 		}
 		run := f.seedBot(t, false)
 		digest := sha256.Sum256([]byte("bot"))
-		_, err := f.db.Exec(`INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,11,9007199254740993,7,42,$3,'reserved')`, run, f.s.config.GiteaURL, digest[:])
+		_, err := f.db.Exec(`INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,11,9007199254740993,7,42,$3,'reserved')`, run, f.s.config.ForgeURL, digest[:])
 		if !errors.Is(reviewAdmissionError(err), errInlineReviewBlocked) {
 			t.Fatal("bot bypassed inline uncertainty", err)
 		}
@@ -756,7 +756,7 @@ func TestInlineReviewSharedFamilyExclusionPostgres(t *testing.T) {
 		overall := f.overall(m, saved)
 		digest := sha256.Sum256([]byte("overall"))
 		err := f.s.withManagedSession(t.Context(), session.Value, forgeCredential{Kind: "pat", Token: "pull-pat"}, func(q *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
-			_, err := q.ReservePullReviewMutation(t.Context(), database.ReservePullReviewMutationParams{UserID: caller.UserID, ForgeURL: f.s.config.GiteaURL, IdempotencyKey: overall.IdempotencyKey, PayloadFingerprint: digest[:], BodyFingerprint: digest[:], RepositoryID: 11, RepositoryOwner: "alice", RepositoryName: "private", PullRequestID: 9007199254740993, Number: 7, ExpectedRevision: overall.ExpectedRevision, BaseCommitID: overall.BaseCommitId, HeadCommitID: overall.HeadCommitId, ReviewState: "COMMENT"})
+			_, err := q.ReservePullReviewMutation(t.Context(), database.ReservePullReviewMutationParams{UserID: caller.UserID, ForgeURL: f.s.config.ForgeURL, IdempotencyKey: overall.IdempotencyKey, PayloadFingerprint: digest[:], BodyFingerprint: digest[:], RepositoryID: 11, RepositoryOwner: "alice", RepositoryName: "private", PullRequestID: 9007199254740993, Number: 7, ExpectedRevision: overall.ExpectedRevision, BaseCommitID: overall.BaseCommitId, HeadCommitID: overall.HeadCommitId, ReviewState: "COMMENT"})
 			return err
 		})
 		if err != nil {
@@ -777,7 +777,7 @@ func TestInlineReviewSharedFamilyExclusionPostgres(t *testing.T) {
 			run := f.seedBot(t, legacy)
 			if !legacy {
 				digest := sha256.Sum256([]byte("bot"))
-				_, err := f.db.Exec(`INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,11,9007199254740993,7,42,$3,'reserved')`, run, f.s.config.GiteaURL, digest[:])
+				_, err := f.db.Exec(`INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,11,9007199254740993,7,42,$3,'reserved')`, run, f.s.config.ForgeURL, digest[:])
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -805,7 +805,7 @@ func TestInlineReviewConcurrentBotGatePostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if _, err = tx.Exec(`INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,11,9007199254740993,7,42,$3,'reserved')`, run, f.s.config.GiteaURL, digest[:]); err != nil {
+	if _, err = tx.Exec(`INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,11,9007199254740993,7,42,$3,'reserved')`, run, f.s.config.ForgeURL, digest[:]); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
@@ -909,7 +909,7 @@ func TestInlineReviewRetainedEncryptionAndGuardsPostgres(t *testing.T) {
 	if err = f.db.QueryRow("SELECT user_id FROM golf_inline_review_mutations").Scan(&user); err != nil {
 		t.Fatal(err)
 	}
-	d, err := q.GetReviewDraft(t.Context(), database.GetReviewDraftParams{ID: uuid.MustParse(m.DraftId), UserID: user, ForgeURL: f.s.config.GiteaURL, RepositoryID: 11, PullRequestID: 9007199254740993})
+	d, err := q.GetReviewDraft(t.Context(), database.GetReviewDraftParams{ID: uuid.MustParse(m.DraftId), UserID: user, ForgeURL: f.s.config.ForgeURL, RepositoryID: 11, PullRequestID: 9007199254740993})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1098,7 +1098,7 @@ func TestInlineReviewQualifiedActivityPostgres(t *testing.T) {
 					t.Fatal(err)
 				}
 				count++
-				if forge != f.s.config.GiteaURL || repo != 11 || recipient != 0 || topic != "pulls" {
+				if forge != f.s.config.ForgeURL || repo != 11 || recipient != 0 || topic != "pulls" {
 					t.Fatal("qualified activity crossed tenant/topic scope")
 				}
 			}
@@ -1122,7 +1122,7 @@ func TestInlineReviewOverallQualifiedActivityPostgres(t *testing.T) {
 	var user, id int64
 	if err := f.s.withManagedSession(t.Context(), session.Value, forgeCredential{Kind: "pat", Token: "pull-pat"}, func(q *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		user = caller.UserID
-		row, e := q.ReservePullReviewMutation(t.Context(), database.ReservePullReviewMutationParams{UserID: user, ForgeURL: f.s.config.GiteaURL, IdempotencyKey: overall.IdempotencyKey, PayloadFingerprint: digest[:], BodyFingerprint: digest[:], RepositoryID: 11, RepositoryOwner: "alice", RepositoryName: "private", PullRequestID: 9007199254740993, Number: 7, ExpectedRevision: overall.ExpectedRevision, BaseCommitID: overall.BaseCommitId, HeadCommitID: overall.HeadCommitId, ReviewState: "COMMENT"})
+		row, e := q.ReservePullReviewMutation(t.Context(), database.ReservePullReviewMutationParams{UserID: user, ForgeURL: f.s.config.ForgeURL, IdempotencyKey: overall.IdempotencyKey, PayloadFingerprint: digest[:], BodyFingerprint: digest[:], RepositoryID: 11, RepositoryOwner: "alice", RepositoryName: "private", PullRequestID: 9007199254740993, Number: 7, ExpectedRevision: overall.ExpectedRevision, BaseCommitID: overall.BaseCommitId, HeadCommitID: overall.HeadCommitId, ReviewState: "COMMENT"})
 		id = row.ID
 		return e
 	}); err != nil {
@@ -1137,21 +1137,21 @@ func TestInlineReviewOverallQualifiedActivityPostgres(t *testing.T) {
 	}
 	count(0)
 	q := database.New(f.db)
-	if _, err := q.RecordPullReviewReceipt(t.Context(), database.RecordPullReviewReceiptParams{ObservedReviewID: 881, UserID: user, ForgeURL: f.s.config.GiteaURL, MutationID: id}); err != nil {
+	if _, err := q.RecordPullReviewReceipt(t.Context(), database.RecordPullReviewReceiptParams{ObservedReviewID: 881, UserID: user, ForgeURL: f.s.config.ForgeURL, MutationID: id}); err != nil {
 		t.Fatal(err)
 	}
 	count(0)
-	if _, err := q.CompletePullReviewMutation(t.Context(), database.CompletePullReviewMutationParams{State: "SUCCEEDED", UserID: user, ForgeURL: f.s.config.GiteaURL, MutationID: id}); err != nil {
+	if _, err := q.CompletePullReviewMutation(t.Context(), database.CompletePullReviewMutationParams{State: "SUCCEEDED", UserID: user, ForgeURL: f.s.config.ForgeURL, MutationID: id}); err != nil {
 		t.Fatal(err)
 	}
 	count(1)
-	if _, err := q.CompletePullReviewMutation(t.Context(), database.CompletePullReviewMutationParams{State: "SUCCEEDED", UserID: user, ForgeURL: f.s.config.GiteaURL, MutationID: id}); err == nil {
+	if _, err := q.CompletePullReviewMutation(t.Context(), database.CompletePullReviewMutationParams{State: "SUCCEEDED", UserID: user, ForgeURL: f.s.config.ForgeURL, MutationID: id}); err == nil {
 		t.Fatal("terminal replay rewrote overall effect")
 	}
 	count(1)
 	var forge, topic string
 	var repo, recipient int64
-	if err := f.db.QueryRow("SELECT forge_url,repository_id,recipient_user_id,topic FROM golf_repository_activity").Scan(&forge, &repo, &recipient, &topic); err != nil || forge != f.s.config.GiteaURL || repo != 11 || recipient != 0 || topic != "pulls" {
+	if err := f.db.QueryRow("SELECT forge_url,repository_id,recipient_user_id,topic FROM golf_repository_activity").Scan(&forge, &repo, &recipient, &topic); err != nil || forge != f.s.config.ForgeURL || repo != 11 || recipient != 0 || topic != "pulls" {
 		t.Fatal("overall event wrong scope", err)
 	}
 }
@@ -1191,7 +1191,7 @@ func TestInlineReviewSemanticRefusalBoundaryPostgres(t *testing.T) {
 		m := &golfv1.PublishPullRequestReviewDraftRequest{Target: in.Target, DraftId: in.DraftId, ExpectedVersion: saved.CurrentVersion, ExpectedTargetGeneration: saved.TargetGeneration, ComparisonId: saved.Draft.Comparison.Id, OperationId: uuid.NewString(), Decision: golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_COMMENT}
 		run := f.seedBot(t, false)
 		digest := sha256.Sum256([]byte("pending publisher"))
-		if _, err := f.db.Exec(`INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,11,9007199254740993,7,42,$3,'reserved')`, run, f.s.config.GiteaURL, digest[:]); err != nil {
+		if _, err := f.db.Exec(`INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,11,9007199254740993,7,42,$3,'reserved')`, run, f.s.config.ForgeURL, digest[:]); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m)); connect.CodeOf(err) != connect.CodeFailedPrecondition {

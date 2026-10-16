@@ -63,7 +63,7 @@ func (s *Server) forgeRequest(ctx context.Context, method, path, accept string, 
 		}
 		body = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, s.config.GiteaURL+"/api/v1"+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, s.config.ForgeURL+"/api/v1"+path, body)
 	if err != nil {
 		return nil, err
 	}

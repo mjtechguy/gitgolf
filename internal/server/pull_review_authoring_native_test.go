@@ -45,8 +45,8 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 		t.Fatal("invalid owned review fixture")
 	}
 	config := testConfig(in.URL)
-	config.GiteaPublicURL = in.URL
-	config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = "fixture-client", "fixture-secret"
+	config.ForgePublicURL = in.URL
+	config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = "fixture-client", "fixture-secret"
 	s, e := New(config, testDatabase(t))
 	if e != nil {
 		t.Fatal("review server initialization")

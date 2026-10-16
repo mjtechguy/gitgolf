@@ -47,7 +47,7 @@ func TestWikiReadsPostgres(t *testing.T) {
 	for _, mode := range []string{"", "ambiguous-empty", "large", "bad-base64", "unknown-count", "wiki-unit-denied", "late-unit-denied", "changed", "wrong-slug"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newReleasePublicationFixture(t)
-			target, _ := url.Parse(f.s.config.GiteaURL)
+			target, _ := url.Parse(f.s.config.ForgeURL)
 			proxy := httputil.NewSingleHostReverseProxy(target)
 			var reads atomic.Int32
 			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +90,7 @@ func TestWikiReadsPostgres(t *testing.T) {
 			}))
 			t.Cleanup(provider.Close)
 			config := f.s.config
-			config.GiteaURL, config.GiteaPublicURL = provider.URL, provider.URL
+			config.ForgeURL, config.ForgePublicURL = provider.URL, provider.URL
 			var e error
 			f.s, e = New(config, f.db)
 			if e != nil {

@@ -125,9 +125,9 @@ func (s *Server) advanceReviewMutation(ctx context.Context, r database.GolfPullR
 	var updated database.GolfPullReviewMutation
 	if observed > 0 {
 		phase = "RECEIPT"
-		updated, err = q.RecordPullReviewReceipt(ctx, database.RecordPullReviewReceiptParams{MutationID: r.ID, UserID: r.UserID, ForgeURL: s.config.GiteaURL, ObservedReviewID: observed})
+		updated, err = q.RecordPullReviewReceipt(ctx, database.RecordPullReviewReceiptParams{MutationID: r.ID, UserID: r.UserID, ForgeURL: s.config.ForgeURL, ObservedReviewID: observed})
 	} else {
-		updated, err = q.CompletePullReviewMutation(ctx, database.CompletePullReviewMutationParams{MutationID: r.ID, UserID: r.UserID, ForgeURL: s.config.GiteaURL, State: state, FailureCode: failure})
+		updated, err = q.CompletePullReviewMutation(ctx, database.CompletePullReviewMutationParams{MutationID: r.ID, UserID: r.UserID, ForgeURL: s.config.ForgeURL, State: state, FailureCode: failure})
 	}
 	if err != nil {
 		return r, errStorageUnavailable
@@ -148,7 +148,7 @@ func (s *Server) getPullReviewMutation(ctx context.Context, session string, toke
 	var r database.GolfPullReviewMutation
 	err := s.withManagedSession(ctx, session, token, func(q *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		var err error
-		r, err = q.GetPullReviewMutation(ctx, database.GetPullReviewMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key})
+		r, err = q.GetPullReviewMutation(ctx, database.GetPullReviewMutationParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: key})
 		if errors.Is(err, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -231,9 +231,9 @@ func (s *Server) CreatePullRequestReview(ctx context.Context, req *connect.Reque
 	dispatch := false
 	err = s.withManagedSession(ctx, session, token, func(q *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		var err error
-		record, err = q.ReservePullReviewMutation(ctx, database.ReservePullReviewMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: m.IdempotencyKey, PayloadFingerprint: fingerprint[:], BodyFingerprint: bodyHash[:], RepositoryID: repoID, RepositoryOwner: key.Owner, RepositoryName: key.Name, PullRequestID: pullID, Number: int64(m.Number), ExpectedRevision: m.ExpectedRevision, BaseCommitID: m.BaseCommitId, HeadCommitID: m.HeadCommitId, ReviewState: state})
+		record, err = q.ReservePullReviewMutation(ctx, database.ReservePullReviewMutationParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: m.IdempotencyKey, PayloadFingerprint: fingerprint[:], BodyFingerprint: bodyHash[:], RepositoryID: repoID, RepositoryOwner: key.Owner, RepositoryName: key.Name, PullRequestID: pullID, Number: int64(m.Number), ExpectedRevision: m.ExpectedRevision, BaseCommitID: m.BaseCommitId, HeadCommitID: m.HeadCommitId, ReviewState: state})
 		if errors.Is(err, sql.ErrNoRows) {
-			record, err = q.GetPullReviewMutation(ctx, database.GetPullReviewMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: m.IdempotencyKey})
+			record, err = q.GetPullReviewMutation(ctx, database.GetPullReviewMutationParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: m.IdempotencyKey})
 			if err != nil {
 				return errStorageUnavailable
 			}

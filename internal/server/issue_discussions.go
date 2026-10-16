@@ -44,7 +44,7 @@ func discussionText(value string, limit int) bool {
 	return len(value) <= limit && utf8.ValidString(value) && strings.IndexFunc(value, func(r rune) bool { return unicode.IsControl(r) && r != '\t' && r != '\n' && r != '\r' }) < 0
 }
 
-// Gitea's issue_url is an HTML URL despite its schema comment. The origin may
+// Forgejo's issue_url is an HTML URL despite its schema comment. The origin may
 // differ for internal/public requests. Bind escaped paths and explicit fragment,
 // never follow provider URLs or treat a display URL as an immutable issue ID.
 func discussionURL(value, repoURL, suffix, fragment string) bool {

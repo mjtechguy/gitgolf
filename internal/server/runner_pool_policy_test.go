@@ -35,7 +35,7 @@ func runnerPoolTestClaim(ctx context.Context, s *Server, id, worker string) (boo
 		return false, e
 	}
 	hash := sha256.Sum256([]byte(id + worker))
-	_, e = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='running',version=version+1,started_at=clock_timestamp(),runner_id=$3,attempt_id=$4,lease_token_hash=$5,lease_expires_at=clock_timestamp()+interval '45 seconds' WHERE forge_url=$1 AND id=$2::uuid AND state='queued'`, s.config.GiteaURL, id, worker, fmt.Sprintf("%x", hash[:16]), hash[:])
+	_, e = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='running',version=version+1,started_at=clock_timestamp(),runner_id=$3,attempt_id=$4,lease_token_hash=$5,lease_expires_at=clock_timestamp()+interval '45 seconds' WHERE forge_url=$1 AND id=$2::uuid AND state='queued'`, s.config.ForgeURL, id, worker, fmt.Sprintf("%x", hash[:16]), hash[:])
 	if e != nil {
 		return false, e
 	}
@@ -248,7 +248,7 @@ func TestRunnerPoolPlacementLockSerializesChangePostgres(t *testing.T) {
 		t.Fatal("claim skipped placement serialization")
 	case <-time.After(50 * time.Millisecond):
 	}
-	_, e = tx.Exec(`UPDATE golf_repository_runner_placements SET pool_id=NULL,selected_pool_version=NULL,version=version+1 WHERE forge_url=$1 AND repository_id=$2`, f.server.config.GiteaURL, f.row.ID)
+	_, e = tx.Exec(`UPDATE golf_repository_runner_placements SET pool_id=NULL,selected_pool_version=NULL,version=version+1 WHERE forge_url=$1 AND repository_id=$2`, f.server.config.ForgeURL, f.row.ID)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -296,7 +296,7 @@ func TestRunnerPoolRevocationLockRechecksCurrentControlPostgres(t *testing.T) {
 		t.Fatal("claim skipped worker lock")
 	case <-time.After(50 * time.Millisecond):
 	}
-	if _, e = tx.Exec(`INSERT INTO golf_runner_controls(forge_url,runner_id,state,version) VALUES($1,'fixture','revoked',1)`, f.server.config.GiteaURL); e != nil {
+	if _, e = tx.Exec(`INSERT INTO golf_runner_controls(forge_url,runner_id,state,version) VALUES($1,'fixture','revoked',1)`, f.server.config.ForgeURL); e != nil {
 		t.Fatal(e)
 	}
 	if e = tx.Commit(); e != nil {

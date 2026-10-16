@@ -56,7 +56,7 @@ func reviewerPayloadFingerprint(input reviewerPublicationInput) []byte {
 }
 func (s *Server) reviewerEffectClear(ctx context.Context, p reviewerRecord, number uint32, pullID int64) error {
 	var blocked bool
-	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_reviewer_runs r JOIN golf_reviewers v ON v.id=r.reviewer_id WHERE v.forge_url=$1 AND v.repository_id=$2 AND r.publisher_id=$3 AND r.pull_number=$4 AND r.legacy_effect_block) OR EXISTS(SELECT 1 FROM golf_reviewer_publications WHERE forge_url=$1 AND repository_id=$2 AND publisher_id=$3 AND pull_request_id=$5 AND state IN ('reserved','dispatch_unknown'))`, s.config.GiteaURL, p.RepoID, p.PublisherID, number, pullID).Scan(&blocked)
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_reviewer_runs r JOIN golf_reviewers v ON v.id=r.reviewer_id WHERE v.forge_url=$1 AND v.repository_id=$2 AND r.publisher_id=$3 AND r.pull_number=$4 AND r.legacy_effect_block) OR EXISTS(SELECT 1 FROM golf_reviewer_publications WHERE forge_url=$1 AND repository_id=$2 AND publisher_id=$3 AND pull_request_id=$5 AND state IN ('reserved','dispatch_unknown'))`, s.config.ForgeURL, p.RepoID, p.PublisherID, number, pullID).Scan(&blocked)
 	if err != nil {
 		return errStorageUnavailable
 	}
@@ -73,12 +73,12 @@ func (s *Server) reserveReviewerPublication(ctx context.Context, p reviewerRecor
 	defer tx.Rollback()
 	// An advisory transaction lock covers the legacy number-bound exclusions as
 	// well as the exact-ID unique index. No timeout releases accepted uncertainty.
-	lock := s.config.GiteaURL + "/review-publication/" + strconv.FormatInt(r.RepositoryID, 10) + "/" + strconv.FormatInt(r.PublisherID, 10) + "/" + strconv.FormatInt(r.Number, 10)
+	lock := s.config.ForgeURL + "/review-publication/" + strconv.FormatInt(r.RepositoryID, 10) + "/" + strconv.FormatInt(r.PublisherID, 10) + "/" + strconv.FormatInt(r.Number, 10)
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, lock); err != nil {
 		return false, err
 	}
 	var blocked bool
-	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_reviewer_runs r JOIN golf_reviewers v ON v.id=r.reviewer_id WHERE v.forge_url=$1 AND v.repository_id=$2 AND r.publisher_id=$3 AND r.pull_number=$4 AND r.legacy_effect_block) OR EXISTS(SELECT 1 FROM golf_reviewer_publications WHERE forge_url=$1 AND repository_id=$2 AND publisher_id=$3 AND pull_request_id=$5 AND state IN ('reserved','dispatch_unknown'))`, s.config.GiteaURL, r.RepositoryID, r.PublisherID, r.Number, r.PullID).Scan(&blocked)
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_reviewer_runs r JOIN golf_reviewers v ON v.id=r.reviewer_id WHERE v.forge_url=$1 AND v.repository_id=$2 AND r.publisher_id=$3 AND r.pull_number=$4 AND r.legacy_effect_block) OR EXISTS(SELECT 1 FROM golf_reviewer_publications WHERE forge_url=$1 AND repository_id=$2 AND publisher_id=$3 AND pull_request_id=$5 AND state IN ('reserved','dispatch_unknown'))`, s.config.ForgeURL, r.RepositoryID, r.PublisherID, r.Number, r.PullID).Scan(&blocked)
 	if err != nil {
 		return false, err
 	}
@@ -101,7 +101,7 @@ func (s *Server) reserveReviewerPublication(ctx context.Context, p reviewerRecor
 	if n != 1 {
 		return false, errExecutionPolicyConflict
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,$3,$4,$5,$6,$7,'reserved')`, r.ID, s.config.GiteaURL, r.RepositoryID, r.PullID, r.Number, r.PublisherID, reviewerPayloadFingerprint(input))
+	_, err = tx.ExecContext(ctx, `INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,$3,$4,$5,$6,$7,'reserved')`, r.ID, s.config.ForgeURL, r.RepositoryID, r.PullID, r.Number, r.PublisherID, reviewerPayloadFingerprint(input))
 	if err != nil {
 		return false, reviewAdmissionError(err)
 	}

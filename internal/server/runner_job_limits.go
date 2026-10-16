@@ -42,7 +42,7 @@ func (s *Server) ensureInstanceRunnerLimits(ctx context.Context) error {
 	if s.db == nil {
 		return nil
 	}
-	_, e := s.db.ExecContext(ctx, `INSERT INTO golf_instance_runner_limits(forge_url,version,cpu_millis,memory_bytes,pids,timeout_seconds,actor_user_id) VALUES($1,0,1000,268435456,64,900,0) ON CONFLICT(forge_url) DO NOTHING`, s.config.GiteaURL)
+	_, e := s.db.ExecContext(ctx, `INSERT INTO golf_instance_runner_limits(forge_url,version,cpu_millis,memory_bytes,pids,timeout_seconds,actor_user_id) VALUES($1,0,1000,268435456,64,900,0) ON CONFLICT(forge_url) DO NOTHING`, s.config.ForgeURL)
 	if e != nil {
 		return errStorageUnavailable
 	}
@@ -59,7 +59,7 @@ func (s *Server) instanceRunnerLimits(ctx context.Context, q runnerLimitReader, 
 	if shared {
 		query += ` FOR SHARE`
 	}
-	if e := q.QueryRowContext(ctx, query, s.config.GiteaURL).Scan(&r.Limits.CPUMillis, &r.Limits.MemoryBytes, &r.Limits.Pids, &r.Limits.TimeoutSeconds, &r.Version, &r.Updated); e != nil || r.Limits.Validate() != nil || r.Version < 0 {
+	if e := q.QueryRowContext(ctx, query, s.config.ForgeURL).Scan(&r.Limits.CPUMillis, &r.Limits.MemoryBytes, &r.Limits.Pids, &r.Limits.TimeoutSeconds, &r.Version, &r.Updated); e != nil || r.Limits.Validate() != nil || r.Version < 0 {
 		return r, errStorageUnavailable
 	}
 	return r, nil
@@ -114,7 +114,7 @@ func (s *Server) SetInstanceRunnerLimits(ctx context.Context, req *connect.Reque
 	// Generation edit never locks active runs/pools/placements. Future consumers detect
 	// the changed immutable generation and cancel; this is not instant host quiescence.
 	e = s.infrastructureAdminTransaction(ctx, value, initial, func(tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, `UPDATE golf_instance_runner_limits SET version=version+1,cpu_millis=$3,memory_bytes=$4,pids=$5,timeout_seconds=$6,actor_user_id=$7,updated_at=clock_timestamp() WHERE forge_url=$1 AND version=$2 RETURNING `+runnerLimitsColumns+`,version,updated_at`, s.config.GiteaURL, v, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds, initial.UserID)
+		row := tx.QueryRowContext(ctx, `UPDATE golf_instance_runner_limits SET version=version+1,cpu_millis=$3,memory_bytes=$4,pids=$5,timeout_seconds=$6,actor_user_id=$7,updated_at=clock_timestamp() WHERE forge_url=$1 AND version=$2 RETURNING `+runnerLimitsColumns+`,version,updated_at`, s.config.ForgeURL, v, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds, initial.UserID)
 		e := row.Scan(&result.Limits.CPUMillis, &result.Limits.MemoryBytes, &result.Limits.Pids, &result.Limits.TimeoutSeconds, &result.Version, &result.Updated)
 		if errors.Is(e, sql.ErrNoRows) {
 			return errRunnerPoolConflict
@@ -122,7 +122,7 @@ func (s *Server) SetInstanceRunnerLimits(ctx context.Context, req *connect.Reque
 		if e != nil {
 			return errStorageUnavailable
 		}
-		_, e = tx.ExecContext(ctx, `INSERT INTO golf_instance_runner_limit_audit(forge_url,version,actor_user_id,cpu_millis,memory_bytes,pids,timeout_seconds) VALUES($1,$2,$3,$4,$5,$6,$7)`, s.config.GiteaURL, result.Version, initial.UserID, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds)
+		_, e = tx.ExecContext(ctx, `INSERT INTO golf_instance_runner_limit_audit(forge_url,version,actor_user_id,cpu_millis,memory_bytes,pids,timeout_seconds) VALUES($1,$2,$3,$4,$5,$6,$7)`, s.config.ForgeURL, result.Version, initial.UserID, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -166,7 +166,7 @@ func (s *Server) runnerResourceFence(ctx context.Context, tx *sql.Tx, r workflow
 	var owner, version int64
 	var selected sql.NullString
 	var a runner.JobLimits
-	e = tx.QueryRowContext(ctx, `SELECT owner_id,version,pool_id::text,`+runnerLimitsColumns+` FROM golf_repository_runner_placements WHERE forge_url=$1 AND repository_id=$2`, s.config.GiteaURL, r.RepositoryID).Scan(&owner, &version, &selected, &a.CPUMillis, &a.MemoryBytes, &a.Pids, &a.TimeoutSeconds)
+	e = tx.QueryRowContext(ctx, `SELECT owner_id,version,pool_id::text,`+runnerLimitsColumns+` FROM golf_repository_runner_placements WHERE forge_url=$1 AND repository_id=$2`, s.config.ForgeURL, r.RepositoryID).Scan(&owner, &version, &selected, &a.CPUMillis, &a.MemoryBytes, &a.Pids, &a.TimeoutSeconds)
 	if errors.Is(e, sql.ErrNoRows) {
 		version = 0
 	} else if e != nil {
@@ -184,7 +184,7 @@ func (s *Server) runnerResourceFence(ctx context.Context, tx *sql.Tx, r workflow
 		var pv int64
 		var state string
 		var enabled bool
-		e = tx.QueryRowContext(ctx, `SELECT version,state,repository_assignment_enabled,`+runnerLimitsColumns+` FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.GiteaURL, selected.String).Scan(&pv, &state, &enabled, &p.CPUMillis, &p.MemoryBytes, &p.Pids, &p.TimeoutSeconds)
+		e = tx.QueryRowContext(ctx, `SELECT version,state,repository_assignment_enabled,`+runnerLimitsColumns+` FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.ForgeURL, selected.String).Scan(&pv, &state, &enabled, &p.CPUMillis, &p.MemoryBytes, &p.Pids, &p.TimeoutSeconds)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -226,7 +226,7 @@ func (s *Server) runnerResourceObservation(ctx context.Context, r workflowRunRec
 }
 
 func (s *Server) rejectRunnerResourcesRun(ctx context.Context, r workflowRunRecord) error {
-	_, e := s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason=$4,cancel_requested=true WHERE forge_url=$1 AND id=$2::uuid AND version=$3 AND state='queued' AND repository_id=$5 AND owner_id=$6 AND commit_id=$7 AND source_sha256=$8 AND resource_bound=$9 AND resource_instance_version=$10`, s.config.GiteaURL, r.ID, r.Version, errRunnerResourcesStale.Error(), r.RepositoryID, r.OwnerID, r.CommitID, r.SourceSHA256, r.ResourceBound, r.ResourceInstanceVersion)
+	_, e := s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason=$4,cancel_requested=true WHERE forge_url=$1 AND id=$2::uuid AND version=$3 AND state='queued' AND repository_id=$5 AND owner_id=$6 AND commit_id=$7 AND source_sha256=$8 AND resource_bound=$9 AND resource_instance_version=$10`, s.config.ForgeURL, r.ID, r.Version, errRunnerResourcesStale.Error(), r.RepositoryID, r.OwnerID, r.CommitID, r.SourceSHA256, r.ResourceBound, r.ResourceInstanceVersion)
 	if e != nil {
 		return errStorageUnavailable
 	}
@@ -234,7 +234,7 @@ func (s *Server) rejectRunnerResourcesRun(ctx context.Context, r workflowRunReco
 }
 
 func (s *Server) cancelRunnerResourceAttempt(ctx context.Context, id string) error {
-	_, e := s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',reason=$2,version=version+1,finished_at=clock_timestamp(),cancel_requested=true,lease_token_hash=NULL WHERE id=$1::uuid AND forge_url=$3 AND state='running'`, id, errRunnerResourcesStale.Error(), s.config.GiteaURL)
+	_, e := s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',reason=$2,version=version+1,finished_at=clock_timestamp(),cancel_requested=true,lease_token_hash=NULL WHERE id=$1::uuid AND forge_url=$3 AND state='running'`, id, errRunnerResourcesStale.Error(), s.config.ForgeURL)
 	if e != nil {
 		return errStorageUnavailable
 	}

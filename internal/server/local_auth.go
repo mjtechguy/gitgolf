@@ -172,11 +172,11 @@ func (s *Server) loginLocalSession(ctx context.Context, username, password, oldV
 	var row database.GetLocalAccountRow
 	var err error
 	if isEmail {
-		alias, lookupErr := q.GetLocalAccountByEmail(ctx, database.GetLocalAccountByEmailParams{Email: sql.NullString{String: email, Valid: true}, ForgeURL: s.config.GiteaURL})
+		alias, lookupErr := q.GetLocalAccountByEmail(ctx, database.GetLocalAccountByEmailParams{Email: sql.NullString{String: email, Valid: true}, ForgeURL: s.config.ForgeURL})
 		err = lookupErr
 		row = database.GetLocalAccountRow(alias)
 	} else {
-		row, err = q.GetLocalAccount(ctx, database.GetLocalAccountParams{Username: username, ForgeURL: s.config.GiteaURL})
+		row, err = q.GetLocalAccount(ctx, database.GetLocalAccountParams{Username: username, ForgeURL: s.config.ForgeURL})
 	}
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return loginResult{}, errStorageUnavailable
@@ -243,7 +243,7 @@ func (s *Server) localSessionUser(ctx context.Context, value string, user User) 
 	if s.db == nil {
 		return User{}, errStorageUnavailable
 	}
-	row, err := database.New(s.db).LocalSessionAuthority(ctx, database.LocalSessionAuthorityParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	row, err := database.New(s.db).LocalSessionAuthority(ctx, database.LocalSessionAuthorityParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, errUnauthenticated
 	}
@@ -322,7 +322,7 @@ func ManageLocalAccount(ctx context.Context, db *sql.DB, keys *Keyring, forgeURL
 	}
 	var native User
 	if action == "create" || action == "enable" {
-		s := &Server{config: Config{GiteaURL: forgeURL}, client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+		s := &Server{config: Config{ForgeURL: forgeURL}, client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 		native, err = s.currentUser(ctx, forgeCredential{Kind: "pat", Token: input.ForgeToken})
 		if err != nil {
 			return LocalAccountResult{}, errors.New("The mapped forge token could not be verified.")

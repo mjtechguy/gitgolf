@@ -21,13 +21,13 @@ type runnerPoolBinding struct {
 }
 
 func (s *Server) lockRunnerPlacement(ctx context.Context, tx *sql.Tx, repo int64) error {
-	if _, e := tx.ExecContext(ctx, `SELECT golf_runner_placement_lock($1,$2)`, s.config.GiteaURL, repo); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_runner_placement_lock($1,$2)`, s.config.ForgeURL, repo); e != nil {
 		return errStorageUnavailable
 	}
 	return nil
 }
 func (s *Server) lockRunnerPool(ctx context.Context, tx *sql.Tx, id string) error {
-	if _, e := tx.ExecContext(ctx, `SELECT golf_runner_pool_lock($1,$2::uuid)`, s.config.GiteaURL, id); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_runner_pool_lock($1,$2::uuid)`, s.config.ForgeURL, id); e != nil {
 		return errStorageUnavailable
 	}
 	return nil
@@ -41,7 +41,7 @@ func (s *Server) runnerPoolAdmission(ctx context.Context, tx *sql.Tx, repo, owne
 	}
 	var storedOwner, version int64
 	var id sql.NullString
-	e := tx.QueryRowContext(ctx, `SELECT owner_id,version,pool_id::text FROM golf_repository_runner_placements WHERE forge_url=$1 AND repository_id=$2`, s.config.GiteaURL, repo).Scan(&storedOwner, &version, &id)
+	e := tx.QueryRowContext(ctx, `SELECT owner_id,version,pool_id::text FROM golf_repository_runner_placements WHERE forge_url=$1 AND repository_id=$2`, s.config.ForgeURL, repo).Scan(&storedOwner, &version, &id)
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil
 	}
@@ -59,7 +59,7 @@ func (s *Server) runnerPoolAdmission(ctx context.Context, tx *sql.Tx, repo, owne
 	}
 	var runtime, state string
 	var enabled bool
-	e = tx.QueryRowContext(ctx, `SELECT runtime,state,repository_assignment_enabled FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.GiteaURL, id.String).Scan(&runtime, &state, &enabled)
+	e = tx.QueryRowContext(ctx, `SELECT runtime,state,repository_assignment_enabled FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.ForgeURL, id.String).Scan(&runtime, &state, &enabled)
 	if e != nil {
 		return errStorageUnavailable
 	}
@@ -72,7 +72,7 @@ func (s *Server) runnerPoolRunBinding(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, id string) (runnerPoolBinding, error) {
 	var r runnerPoolBinding
-	e := q.QueryRowContext(ctx, `SELECT runner_pool_id::text,runner_pool_version,runner_placement_version FROM golf_workflow_runs WHERE forge_url=$1 AND id=$2::uuid`, s.config.GiteaURL, id).Scan(&r.PoolID, &r.PoolVersion, &r.PlacementVersion)
+	e := q.QueryRowContext(ctx, `SELECT runner_pool_id::text,runner_pool_version,runner_placement_version FROM golf_workflow_runs WHERE forge_url=$1 AND id=$2::uuid`, s.config.ForgeURL, id).Scan(&r.PoolID, &r.PoolVersion, &r.PlacementVersion)
 	if e != nil {
 		return r, errStorageUnavailable
 	}
@@ -113,7 +113,7 @@ func (s *Server) runnerPoolClaimFence(ctx context.Context, tx *sql.Tx, r workflo
 		return false, e
 	}
 	var membership sql.NullString
-	e = tx.QueryRowContext(ctx, `SELECT pool_id::text FROM golf_runner_pool_workers WHERE forge_url=$1 AND runner_id=$2`, s.config.GiteaURL, worker).Scan(&membership)
+	e = tx.QueryRowContext(ctx, `SELECT pool_id::text FROM golf_runner_pool_workers WHERE forge_url=$1 AND runner_id=$2`, s.config.ForgeURL, worker).Scan(&membership)
 	if e != nil && !errors.Is(e, sql.ErrNoRows) {
 		return false, errStorageUnavailable
 	}
@@ -122,7 +122,7 @@ func (s *Server) runnerPoolClaimFence(ctx context.Context, tx *sql.Tx, r workflo
 	}
 	var owner, version int64
 	var current sql.NullString
-	e = tx.QueryRowContext(ctx, `SELECT owner_id,version,pool_id::text FROM golf_repository_runner_placements WHERE forge_url=$1 AND repository_id=$2`, s.config.GiteaURL, r.RepositoryID).Scan(&owner, &version, &current)
+	e = tx.QueryRowContext(ctx, `SELECT owner_id,version,pool_id::text FROM golf_repository_runner_placements WHERE forge_url=$1 AND repository_id=$2`, s.config.ForgeURL, r.RepositoryID).Scan(&owner, &version, &current)
 	if errors.Is(e, sql.ErrNoRows) {
 		owner = r.OwnerID
 		version = 0
@@ -140,7 +140,7 @@ func (s *Server) runnerPoolClaimFence(ctx context.Context, tx *sql.Tx, r workflo
 		if e = s.lockRunnerPool(ctx, tx, b.PoolID.String); e != nil {
 			return false, e
 		}
-		e = tx.QueryRowContext(ctx, `SELECT version,runtime,state,repository_assignment_enabled,max_parallel_attempts FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.GiteaURL, b.PoolID.String).Scan(&configVersion, &runtime, &poolState, &enabled, &capacity)
+		e = tx.QueryRowContext(ctx, `SELECT version,runtime,state,repository_assignment_enabled,max_parallel_attempts FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.ForgeURL, b.PoolID.String).Scan(&configVersion, &runtime, &poolState, &enabled, &capacity)
 		if e != nil {
 			return false, errStorageUnavailable
 		}
@@ -151,7 +151,7 @@ func (s *Server) runnerPoolClaimFence(ctx context.Context, tx *sql.Tx, r workflo
 			return false, nil
 		}
 	}
-	locked, e := scanWorkflowRun(tx.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND id=$2::uuid FOR UPDATE`, s.config.GiteaURL, r.ID))
+	locked, e := scanWorkflowRun(tx.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND id=$2::uuid FOR UPDATE`, s.config.ForgeURL, r.ID))
 	if e != nil {
 		return false, errStorageUnavailable
 	}
@@ -162,7 +162,7 @@ func (s *Server) runnerPoolClaimFence(ctx context.Context, tx *sql.Tx, r workflo
 		return false, errRunnerPoolStale
 	}
 	var busy bool
-	e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND state='running')`, s.config.GiteaURL, worker).Scan(&busy)
+	e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND state='running')`, s.config.ForgeURL, worker).Scan(&busy)
 	if e != nil {
 		return false, errStorageUnavailable
 	}
@@ -171,7 +171,7 @@ func (s *Server) runnerPoolClaimFence(ctx context.Context, tx *sql.Tx, r workflo
 	}
 	if b.PoolID.Valid {
 		var active int64
-		e = tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_workflow_runs WHERE forge_url=$1 AND runner_pool_id=$2::uuid AND state='running'`, s.config.GiteaURL, b.PoolID.String).Scan(&active)
+		e = tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_workflow_runs WHERE forge_url=$1 AND runner_pool_id=$2::uuid AND state='running'`, s.config.ForgeURL, b.PoolID.String).Scan(&active)
 		if e != nil {
 			return false, errStorageUnavailable
 		}

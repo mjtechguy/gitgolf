@@ -220,7 +220,7 @@ func TestCloudflareResourceOperationsPostgres(t *testing.T) {
 		if r := infrastructureRequest(f.server, l, "ProvisionCloudflareEnvironmentResources", different); r.Code == 200 || a.writeCount() != 2 {
 			t.Fatal("changed input adopted original operation")
 		}
-		foreign := f.server.config.GiteaURL
+		foreign := f.server.config.ForgeURL
 		var count int
 		if e := f.server.db.QueryRow(`SELECT count(*) FROM golf_cloudflare_resource_events`).Scan(&count); e != nil || count < 6 {
 			t.Fatal("dispatch or acknowledgement omitted from journal")
@@ -325,7 +325,7 @@ func TestCloudflareResourceOperationsPostgres(t *testing.T) {
 
 // Real Cloudflare D1/R2 calls through Golf's authenticated encrypted-profile and
 // native repository/environment consumer. Native identity is controlled, not a
-// real Gitea deployment. The wrapper owns account-scoped credentials and checks
+// real native forge deployment. The wrapper owns account-scoped credentials and checks
 // independent provider absence; no Workers/AI/preview capability is implied.
 func TestCloudflareResourceLive(t *testing.T) {
 	if os.Getenv("GOLF_CF_PRODUCT_LIVE") != "1" {

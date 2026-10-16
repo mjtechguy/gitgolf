@@ -5394,27 +5394,27 @@ func (x *CompletePasswordMFARequest) GetCode() string {
 	return ""
 }
 
-type LoginWithGiteaTokenRequest struct {
+type LoginWithForgeTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *LoginWithGiteaTokenRequest) Reset() {
-	*x = LoginWithGiteaTokenRequest{}
+func (x *LoginWithForgeTokenRequest) Reset() {
+	*x = LoginWithForgeTokenRequest{}
 	mi := &file_golf_v1_golf_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LoginWithGiteaTokenRequest) String() string {
+func (x *LoginWithForgeTokenRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LoginWithGiteaTokenRequest) ProtoMessage() {}
+func (*LoginWithForgeTokenRequest) ProtoMessage() {}
 
-func (x *LoginWithGiteaTokenRequest) ProtoReflect() protoreflect.Message {
+func (x *LoginWithForgeTokenRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_golf_v1_golf_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -5426,39 +5426,39 @@ func (x *LoginWithGiteaTokenRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LoginWithGiteaTokenRequest.ProtoReflect.Descriptor instead.
-func (*LoginWithGiteaTokenRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use LoginWithForgeTokenRequest.ProtoReflect.Descriptor instead.
+func (*LoginWithForgeTokenRequest) Descriptor() ([]byte, []int) {
 	return file_golf_v1_golf_proto_rawDescGZIP(), []int{31}
 }
 
-func (x *LoginWithGiteaTokenRequest) GetToken() string {
+func (x *LoginWithForgeTokenRequest) GetToken() string {
 	if x != nil {
 		return x.Token
 	}
 	return ""
 }
 
-type LoginWithGiteaTokenResponse struct {
+type LoginWithForgeTokenResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *LoginWithGiteaTokenResponse) Reset() {
-	*x = LoginWithGiteaTokenResponse{}
+func (x *LoginWithForgeTokenResponse) Reset() {
+	*x = LoginWithForgeTokenResponse{}
 	mi := &file_golf_v1_golf_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LoginWithGiteaTokenResponse) String() string {
+func (x *LoginWithForgeTokenResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LoginWithGiteaTokenResponse) ProtoMessage() {}
+func (*LoginWithForgeTokenResponse) ProtoMessage() {}
 
-func (x *LoginWithGiteaTokenResponse) ProtoReflect() protoreflect.Message {
+func (x *LoginWithForgeTokenResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_golf_v1_golf_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -5470,12 +5470,12 @@ func (x *LoginWithGiteaTokenResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LoginWithGiteaTokenResponse.ProtoReflect.Descriptor instead.
-func (*LoginWithGiteaTokenResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use LoginWithForgeTokenResponse.ProtoReflect.Descriptor instead.
+func (*LoginWithForgeTokenResponse) Descriptor() ([]byte, []int) {
 	return file_golf_v1_golf_proto_rawDescGZIP(), []int{32}
 }
 
-func (x *LoginWithGiteaTokenResponse) GetUser() *User {
+func (x *LoginWithForgeTokenResponse) GetUser() *User {
 	if x != nil {
 		return x.User
 	}
@@ -7229,7 +7229,7 @@ type GetCommitDiffResponse struct {
 	// Empty for root commits; otherwise the first parent, including merges.
 	BaseCommitId string         `protobuf:"bytes,3,opt,name=base_commit_id,json=baseCommitId,proto3" json:"base_commit_id,omitempty"`
 	Base         CommitDiffBase `protobuf:"varint,4,opt,name=base,proto3,enum=golf.v1.CommitDiffBase" json:"base,omitempty"`
-	// Native Gitea output, including root-commit preamble. UTF-8, at most 512 KiB;
+	// Native Forgejo output, including root-commit preamble. UTF-8, at most 512 KiB;
 	// never silently truncated. This is not a parsed patch or merge evidence.
 	RawDiff       string `protobuf:"bytes,5,opt,name=raw_diff,json=rawDiff,proto3" json:"raw_diff,omitempty"`
 	ByteSize      uint32 `protobuf:"varint,6,opt,name=byte_size,json=byteSize,proto3" json:"byte_size,omitempty"`
@@ -12440,7 +12440,7 @@ func (*GetAuthenticationOptionsRequest) Descriptor() ([]byte, []int) {
 
 type GetAuthenticationOptionsResponse struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
-	GiteaOauthEnabled    bool                   `protobuf:"varint,1,opt,name=gitea_oauth_enabled,json=giteaOauthEnabled,proto3" json:"gitea_oauth_enabled,omitempty"`
+	ForgeOauthEnabled    bool                   `protobuf:"varint,1,opt,name=forge_oauth_enabled,json=forgeOauthEnabled,proto3" json:"forge_oauth_enabled,omitempty"`
 	ProviderLabel        string                 `protobuf:"bytes,2,opt,name=provider_label,json=providerLabel,proto3" json:"provider_label,omitempty"`
 	Scopes               []string               `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	LocalPasswordEnabled bool                   `protobuf:"varint,4,opt,name=local_password_enabled,json=localPasswordEnabled,proto3" json:"local_password_enabled,omitempty"`
@@ -12478,9 +12478,9 @@ func (*GetAuthenticationOptionsResponse) Descriptor() ([]byte, []int) {
 	return file_golf_v1_golf_proto_rawDescGZIP(), []int{131}
 }
 
-func (x *GetAuthenticationOptionsResponse) GetGiteaOauthEnabled() bool {
+func (x *GetAuthenticationOptionsResponse) GetForgeOauthEnabled() bool {
 	if x != nil {
-		return x.GiteaOauthEnabled
+		return x.ForgeOauthEnabled
 	}
 	return false
 }
@@ -12506,26 +12506,26 @@ func (x *GetAuthenticationOptionsResponse) GetLocalPasswordEnabled() bool {
 	return false
 }
 
-type BeginGiteaOAuthRequest struct {
+type BeginForgeOAuthRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BeginGiteaOAuthRequest) Reset() {
-	*x = BeginGiteaOAuthRequest{}
+func (x *BeginForgeOAuthRequest) Reset() {
+	*x = BeginForgeOAuthRequest{}
 	mi := &file_golf_v1_golf_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BeginGiteaOAuthRequest) String() string {
+func (x *BeginForgeOAuthRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BeginGiteaOAuthRequest) ProtoMessage() {}
+func (*BeginForgeOAuthRequest) ProtoMessage() {}
 
-func (x *BeginGiteaOAuthRequest) ProtoReflect() protoreflect.Message {
+func (x *BeginForgeOAuthRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_golf_v1_golf_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -12537,32 +12537,32 @@ func (x *BeginGiteaOAuthRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BeginGiteaOAuthRequest.ProtoReflect.Descriptor instead.
-func (*BeginGiteaOAuthRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use BeginForgeOAuthRequest.ProtoReflect.Descriptor instead.
+func (*BeginForgeOAuthRequest) Descriptor() ([]byte, []int) {
 	return file_golf_v1_golf_proto_rawDescGZIP(), []int{132}
 }
 
-type BeginGiteaOAuthResponse struct {
+type BeginForgeOAuthResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	AuthorizationUrl string                 `protobuf:"bytes,1,opt,name=authorization_url,json=authorizationUrl,proto3" json:"authorization_url,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
-func (x *BeginGiteaOAuthResponse) Reset() {
-	*x = BeginGiteaOAuthResponse{}
+func (x *BeginForgeOAuthResponse) Reset() {
+	*x = BeginForgeOAuthResponse{}
 	mi := &file_golf_v1_golf_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BeginGiteaOAuthResponse) String() string {
+func (x *BeginForgeOAuthResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BeginGiteaOAuthResponse) ProtoMessage() {}
+func (*BeginForgeOAuthResponse) ProtoMessage() {}
 
-func (x *BeginGiteaOAuthResponse) ProtoReflect() protoreflect.Message {
+func (x *BeginForgeOAuthResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_golf_v1_golf_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -12574,12 +12574,12 @@ func (x *BeginGiteaOAuthResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BeginGiteaOAuthResponse.ProtoReflect.Descriptor instead.
-func (*BeginGiteaOAuthResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use BeginForgeOAuthResponse.ProtoReflect.Descriptor instead.
+func (*BeginForgeOAuthResponse) Descriptor() ([]byte, []int) {
 	return file_golf_v1_golf_proto_rawDescGZIP(), []int{133}
 }
 
-func (x *BeginGiteaOAuthResponse) GetAuthorizationUrl() string {
+func (x *BeginForgeOAuthResponse) GetAuthorizationUrl() string {
 	if x != nil {
 		return x.AuthorizationUrl
 	}
@@ -59802,9 +59802,9 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x14challenge_expires_at\x18\x03 \x01(\tR\x12challengeExpiresAt\"0\n" +
 	"\x1aCompletePasswordMFARequest\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\"2\n" +
-	"\x1aLoginWithGiteaTokenRequest\x12\x14\n" +
+	"\x1aLoginWithForgeTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"@\n" +
-	"\x1bLoginWithGiteaTokenResponse\x12!\n" +
+	"\x1bLoginWithForgeTokenResponse\x12!\n" +
 	"\x04user\x18\x01 \x01(\v2\r.golf.v1.UserR\x04user\"\x13\n" +
 	"\x11GetSessionRequest\"7\n" +
 	"\x12GetSessionResponse\x12!\n" +
@@ -60439,12 +60439,12 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x0fruntime_profile\x18\x02 \x01(\tR\x0eruntimeProfile\"!\n" +
 	"\x1fGetAuthenticationOptionsRequest\"\xc7\x01\n" +
 	" GetAuthenticationOptionsResponse\x12.\n" +
-	"\x13gitea_oauth_enabled\x18\x01 \x01(\bR\x11giteaOauthEnabled\x12%\n" +
+	"\x13forge_oauth_enabled\x18\x01 \x01(\bR\x11forgeOauthEnabled\x12%\n" +
 	"\x0eprovider_label\x18\x02 \x01(\tR\rproviderLabel\x12\x16\n" +
 	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x124\n" +
 	"\x16local_password_enabled\x18\x04 \x01(\bR\x14localPasswordEnabled\"\x18\n" +
-	"\x16BeginGiteaOAuthRequest\"F\n" +
-	"\x17BeginGiteaOAuthResponse\x12+\n" +
+	"\x16BeginForgeOAuthRequest\"F\n" +
+	"\x17BeginForgeOAuthResponse\x12+\n" +
 	"\x11authorization_url\x18\x01 \x01(\tR\x10authorizationUrl\"\xb2\x01\n" +
 	"\fOrganization\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -65317,10 +65317,10 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"4PULL_REVIEW_AUTHORING_KIND_APPEND_FROM_PRIVATE_DRAFT\x10\b2\xf8\x06\n" +
 	"\x0eSessionService\x12o\n" +
 	"\x18GetAuthenticationOptions\x12(.golf.v1.GetAuthenticationOptionsRequest\x1a).golf.v1.GetAuthenticationOptionsResponse\x12T\n" +
-	"\x0fBeginGiteaOAuth\x12\x1f.golf.v1.BeginGiteaOAuthRequest\x1a .golf.v1.BeginGiteaOAuthResponse\x12Z\n" +
+	"\x0fBeginForgeOAuth\x12\x1f.golf.v1.BeginForgeOAuthRequest\x1a .golf.v1.BeginForgeOAuthResponse\x12Z\n" +
 	"\x11LoginWithPassword\x12!.golf.v1.LoginWithPasswordRequest\x1a\".golf.v1.LoginWithPasswordResponse\x12`\n" +
 	"\x13CompletePasswordMFA\x12#.golf.v1.CompletePasswordMFARequest\x1a$.golf.v1.CompletePasswordMFAResponse\x12`\n" +
-	"\x13LoginWithGiteaToken\x12#.golf.v1.LoginWithGiteaTokenRequest\x1a$.golf.v1.LoginWithGiteaTokenResponse\x12E\n" +
+	"\x13LoginWithForgeToken\x12#.golf.v1.LoginWithForgeTokenRequest\x1a$.golf.v1.LoginWithForgeTokenResponse\x12E\n" +
 	"\n" +
 	"GetSession\x12\x1a.golf.v1.GetSessionRequest\x1a\x1b.golf.v1.GetSessionResponse\x12K\n" +
 	"\fListSessions\x12\x1c.golf.v1.ListSessionsRequest\x1a\x1d.golf.v1.ListSessionsResponse\x12N\n" +
@@ -65770,8 +65770,8 @@ var file_golf_v1_golf_proto_goTypes = []any{
 	(*LoginWithPasswordRequest)(nil),                         // 89: golf.v1.LoginWithPasswordRequest
 	(*LoginWithPasswordResponse)(nil),                        // 90: golf.v1.LoginWithPasswordResponse
 	(*CompletePasswordMFARequest)(nil),                       // 91: golf.v1.CompletePasswordMFARequest
-	(*LoginWithGiteaTokenRequest)(nil),                       // 92: golf.v1.LoginWithGiteaTokenRequest
-	(*LoginWithGiteaTokenResponse)(nil),                      // 93: golf.v1.LoginWithGiteaTokenResponse
+	(*LoginWithForgeTokenRequest)(nil),                       // 92: golf.v1.LoginWithForgeTokenRequest
+	(*LoginWithForgeTokenResponse)(nil),                      // 93: golf.v1.LoginWithForgeTokenResponse
 	(*GetSessionRequest)(nil),                                // 94: golf.v1.GetSessionRequest
 	(*GetSessionResponse)(nil),                               // 95: golf.v1.GetSessionResponse
 	(*SessionInfo)(nil),                                      // 96: golf.v1.SessionInfo
@@ -65871,8 +65871,8 @@ var file_golf_v1_golf_proto_goTypes = []any{
 	(*ListCapabilitiesResponse)(nil),                         // 190: golf.v1.ListCapabilitiesResponse
 	(*GetAuthenticationOptionsRequest)(nil),                  // 191: golf.v1.GetAuthenticationOptionsRequest
 	(*GetAuthenticationOptionsResponse)(nil),                 // 192: golf.v1.GetAuthenticationOptionsResponse
-	(*BeginGiteaOAuthRequest)(nil),                           // 193: golf.v1.BeginGiteaOAuthRequest
-	(*BeginGiteaOAuthResponse)(nil),                          // 194: golf.v1.BeginGiteaOAuthResponse
+	(*BeginForgeOAuthRequest)(nil),                           // 193: golf.v1.BeginForgeOAuthRequest
+	(*BeginForgeOAuthResponse)(nil),                          // 194: golf.v1.BeginForgeOAuthResponse
 	(*Organization)(nil),                                     // 195: golf.v1.Organization
 	(*OrganizationTeam)(nil),                                 // 196: golf.v1.OrganizationTeam
 	(*ListOrganizationsRequest)(nil),                         // 197: golf.v1.ListOrganizationsRequest
@@ -66524,7 +66524,7 @@ var file_golf_v1_golf_proto_depIdxs = []int32{
 	86,   // 23: golf.v1.UpdateRepositoryTopicsRequest.repository:type_name -> golf.v1.RepositoryKey
 	77,   // 24: golf.v1.UpdateRepositoryTopicsResponse.settings:type_name -> golf.v1.RepositorySettings
 	84,   // 25: golf.v1.LoginWithPasswordResponse.user:type_name -> golf.v1.User
-	84,   // 26: golf.v1.LoginWithGiteaTokenResponse.user:type_name -> golf.v1.User
+	84,   // 26: golf.v1.LoginWithForgeTokenResponse.user:type_name -> golf.v1.User
 	84,   // 27: golf.v1.GetSessionResponse.user:type_name -> golf.v1.User
 	87,   // 28: golf.v1.ListSessionsRequest.page:type_name -> golf.v1.PageRequest
 	96,   // 29: golf.v1.ListSessionsResponse.sessions:type_name -> golf.v1.SessionInfo
@@ -67404,10 +67404,10 @@ var file_golf_v1_golf_proto_depIdxs = []int32{
 	814,  // 903: golf.v1.GetOperationsDashboardResponse.metrics:type_name -> golf.v1.OperationsMetric
 	13,   // 904: golf.v1.OrganizationTeam.UnitPermissionsEntry.value:type_name -> golf.v1.TeamPermission
 	191,  // 905: golf.v1.SessionService.GetAuthenticationOptions:input_type -> golf.v1.GetAuthenticationOptionsRequest
-	193,  // 906: golf.v1.SessionService.BeginGiteaOAuth:input_type -> golf.v1.BeginGiteaOAuthRequest
+	193,  // 906: golf.v1.SessionService.BeginForgeOAuth:input_type -> golf.v1.BeginForgeOAuthRequest
 	89,   // 907: golf.v1.SessionService.LoginWithPassword:input_type -> golf.v1.LoginWithPasswordRequest
 	91,   // 908: golf.v1.SessionService.CompletePasswordMFA:input_type -> golf.v1.CompletePasswordMFARequest
-	92,   // 909: golf.v1.SessionService.LoginWithGiteaToken:input_type -> golf.v1.LoginWithGiteaTokenRequest
+	92,   // 909: golf.v1.SessionService.LoginWithForgeToken:input_type -> golf.v1.LoginWithForgeTokenRequest
 	94,   // 910: golf.v1.SessionService.GetSession:input_type -> golf.v1.GetSessionRequest
 	97,   // 911: golf.v1.SessionService.ListSessions:input_type -> golf.v1.ListSessionsRequest
 	99,   // 912: golf.v1.SessionService.RevokeSession:input_type -> golf.v1.RevokeSessionRequest
@@ -67688,10 +67688,10 @@ var file_golf_v1_golf_proto_depIdxs = []int32{
 	807,  // 1187: golf.v1.PackagePublicationService.DownloadGenericPackageFile:input_type -> golf.v1.DownloadGenericPackageFileRequest
 	809,  // 1188: golf.v1.MirrorObservationService.GetMirrorSyncObservation:input_type -> golf.v1.GetMirrorSyncObservationRequest
 	192,  // 1189: golf.v1.SessionService.GetAuthenticationOptions:output_type -> golf.v1.GetAuthenticationOptionsResponse
-	194,  // 1190: golf.v1.SessionService.BeginGiteaOAuth:output_type -> golf.v1.BeginGiteaOAuthResponse
+	194,  // 1190: golf.v1.SessionService.BeginForgeOAuth:output_type -> golf.v1.BeginForgeOAuthResponse
 	90,   // 1191: golf.v1.SessionService.LoginWithPassword:output_type -> golf.v1.LoginWithPasswordResponse
 	762,  // 1192: golf.v1.SessionService.CompletePasswordMFA:output_type -> golf.v1.CompletePasswordMFAResponse
-	93,   // 1193: golf.v1.SessionService.LoginWithGiteaToken:output_type -> golf.v1.LoginWithGiteaTokenResponse
+	93,   // 1193: golf.v1.SessionService.LoginWithForgeToken:output_type -> golf.v1.LoginWithForgeTokenResponse
 	95,   // 1194: golf.v1.SessionService.GetSession:output_type -> golf.v1.GetSessionResponse
 	98,   // 1195: golf.v1.SessionService.ListSessions:output_type -> golf.v1.ListSessionsResponse
 	100,  // 1196: golf.v1.SessionService.RevokeSession:output_type -> golf.v1.RevokeSessionResponse

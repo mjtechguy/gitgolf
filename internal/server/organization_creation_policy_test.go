@@ -164,10 +164,10 @@ func TestOrganizationCreationNativePostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	q := database.New(db)
-	if err = q.EnsureOrganizationCreationPolicy(t.Context(), s.config.GiteaURL); err != nil {
+	if err = q.EnsureOrganizationCreationPolicy(t.Context(), s.config.ForgeURL); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = q.UpdateOrganizationCreationPolicy(t.Context(), database.UpdateOrganizationCreationPolicyParams{ForgeURL: s.config.GiteaURL, Mode: "all_users", Revision: 0}); err != nil {
+	if _, err = q.UpdateOrganizationCreationPolicy(t.Context(), database.UpdateOrganizationCreationPolicyParams{ForgeURL: s.config.ForgeURL, Mode: "all_users", Revision: 0}); err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.WithValue(t.Context(), sessionTokenKey{}, forgeCredential{Kind: "pat", Token: "fixture"})
@@ -197,7 +197,7 @@ func TestOrganizationCreationNativePostgres(t *testing.T) {
 		t.Fatal("native receipt/readback", err)
 	}
 	revoke = func() {
-		if _, err := q.UpdateOrganizationCreationPolicy(t.Context(), database.UpdateOrganizationCreationPolicyParams{ForgeURL: s.config.GiteaURL, Mode: "administrators_only", Revision: 1}); err != nil {
+		if _, err := q.UpdateOrganizationCreationPolicy(t.Context(), database.UpdateOrganizationCreationPolicyParams{ForgeURL: s.config.ForgeURL, Mode: "administrators_only", Revision: 1}); err != nil {
 			t.Error(err)
 		}
 	}
@@ -210,7 +210,7 @@ func TestOrganizationCreationNativePostgres(t *testing.T) {
 }
 
 func TestOrganizationCreationBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

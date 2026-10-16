@@ -19,7 +19,7 @@ func (r *Runtime) OperationsMetrics() ([]*golfv1.OperationsMetric, error) {
 	definitions := []struct{ id, label, name string }{
 		{"http.requests", "HTTP requests", "golf_http_requests_total"},
 		{"http.errors", "HTTP server errors", "golf_http_requests_total"},
-		{"gitea.requests", "Gitea requests", "golf_gitea_requests_total"},
+		{"forge.requests", "Forgejo requests", "golf_forge_requests_total"},
 		{"database.queries", "Database queries", "golf_database_queries_total"},
 		{"traces.failures", "Failed trace export batches", "golf_telemetry_trace_exports_total"},
 	}
@@ -62,7 +62,7 @@ func (r *Runtime) OperationsMetrics() ([]*golfv1.OperationsMetric, error) {
 	}
 	for _, d := range []struct{ id, label, name string }{
 		{"http", "HTTP handler", "golf_http_request_duration_seconds"},
-		{"gitea", "Gitea response headers", "golf_gitea_request_duration_seconds"},
+		{"forge", "Forgejo response headers", "golf_forge_request_duration_seconds"},
 		{"database", "Database operation", "golf_database_query_duration_seconds"},
 	} {
 		buckets := map[float64]uint64{}

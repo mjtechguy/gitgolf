@@ -340,7 +340,7 @@ func TestRunnerGitPreparationReadAndLateRevocationPostgres(t *testing.T) {
 						}
 					}
 					if late == "policy-revision" {
-						if _, err := f.server.db.ExecContext(t.Context(), `UPDATE golf_execution_policies SET revision=revision+1 WHERE forge_url=$1 AND scope='instance'`, f.server.config.GiteaURL); err != nil {
+						if _, err := f.server.db.ExecContext(t.Context(), `UPDATE golf_execution_policies SET revision=revision+1 WHERE forge_url=$1 AND scope='instance'`, f.server.config.ForgeURL); err != nil {
 							t.Fatal(err)
 						}
 					}

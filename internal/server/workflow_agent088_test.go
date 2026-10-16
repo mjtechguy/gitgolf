@@ -41,7 +41,7 @@ func workflowAgent088AuthorityFixture(t *testing.T, mode string) {
 	s.config.ReviewImage = "sha256:" + strings.Repeat("d", 64)
 	s.config.ActionsEngineCatalog = runner.ActionsAgentCatalog
 	f.r.ID = uuid.NewString()
-	if _, e := s.db.Exec(`INSERT INTO golf_codex_connections(id,user_id,forge_url,harness,provider,auth_method,state,name) VALUES($1,$2,$3,'opencode','opencode-go','apiKey','CONNECTED','Workflow native account')`, f.r.ID, f.t.UserID, s.config.GiteaURL); e != nil {
+	if _, e := s.db.Exec(`INSERT INTO golf_codex_connections(id,user_id,forge_url,harness,provider,auth_method,state,name) VALUES($1,$2,$3,'opencode','opencode-go','apiKey','CONNECTED','Workflow native account')`, f.r.ID, f.t.UserID, s.config.ForgeURL); e != nil {
 		t.Fatal(e)
 	}
 	if _, e := s.db.Exec(`INSERT INTO golf_agent_model_catalogs(connection_id,connection_version,models) VALUES($1,1,'[{"id":"opencode-go/model","name":"Native model","reasoning":[]}]')`, f.r.ID); e != nil {
@@ -52,22 +52,22 @@ func workflowAgent088AuthorityFixture(t *testing.T, mode string) {
 		scope, id string
 		owner     int64
 	}{{"instance", "instance", 0}, {"repository", "11", 42}, {"personal", strconv.FormatInt(f.t.UserID, 10), f.t.UserID}} {
-		if _, e := s.db.Exec(`INSERT INTO golf_agent_usage_settings(forge_url,scope,scope_id,owner_id,config,revision) VALUES($1,$2,$3,$4,$5,1)`, s.config.GiteaURL, v.scope, v.id, v.owner, config); e != nil {
+		if _, e := s.db.Exec(`INSERT INTO golf_agent_usage_settings(forge_url,scope,scope_id,owner_id,config,revision) VALUES($1,$2,$3,$4,$5,1)`, s.config.ForgeURL, v.scope, v.id, v.owner, config); e != nil {
 			t.Fatal(e)
 		}
 	}
-	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version) VALUES($1,'worker',$2,$3,$4)`, s.config.GiteaURL, s.config.AgentImage, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
+	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version) VALUES($1,'worker',$2,$3,$4)`, s.config.ForgeURL, s.config.AgentImage, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
 		t.Fatal(e)
 	}
 	poolID := uuid.NewString()
 	if poolRace {
-		if _, e := s.db.Exec(`INSERT INTO golf_runner_pools(forge_url,id,name,runtime,state,max_parallel_attempts,repository_assignment_enabled,version,actor_user_id) VALUES($1,$2,'Agent fixture','local-docker','active',1,true,1,$3)`, s.config.GiteaURL, poolID, f.t.UserID); e != nil {
+		if _, e := s.db.Exec(`INSERT INTO golf_runner_pools(forge_url,id,name,runtime,state,max_parallel_attempts,repository_assignment_enabled,version,actor_user_id) VALUES($1,$2,'Agent fixture','local-docker','active',1,true,1,$3)`, s.config.ForgeURL, poolID, f.t.UserID); e != nil {
 			t.Fatal(e)
 		}
-		if _, e := s.db.Exec(`INSERT INTO golf_repository_runner_placements(forge_url,repository_id,owner_id,version,pool_id,selected_pool_version,actor_user_id) VALUES($1,11,42,1,$2,1,$3)`, s.config.GiteaURL, poolID, f.t.UserID); e != nil {
+		if _, e := s.db.Exec(`INSERT INTO golf_repository_runner_placements(forge_url,repository_id,owner_id,version,pool_id,selected_pool_version,actor_user_id) VALUES($1,11,42,1,$2,1,$3)`, s.config.ForgeURL, poolID, f.t.UserID); e != nil {
 			t.Fatal(e)
 		}
-		if _, e := s.db.Exec(`INSERT INTO golf_runner_pool_workers(forge_url,runner_id,pool_id) VALUES($1,'fixture',$2)`, s.config.GiteaURL, poolID); e != nil {
+		if _, e := s.db.Exec(`INSERT INTO golf_runner_pool_workers(forge_url,runner_id,pool_id) VALUES($1,'fixture',$2)`, s.config.ForgeURL, poolID); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -91,7 +91,7 @@ func workflowAgent088AuthorityFixture(t *testing.T, mode string) {
 	if e = tx.Commit(); e != nil {
 		t.Fatal(e)
 	}
-	_, e = s.db.Exec(`INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash) VALUES($1,$2,11,42,'alice','example',false,$3,$4,$5,$6,$7,1,$8,$9,$10,$11,$12,$13)`, runID, s.config.GiteaURL, f.t.UserID, f.t.Hash, f.t.Commit, runWorkflowPath, workflowTestBlob(workflow), plan, source, sha, epochs, uuid.NewString(), bytes.Repeat([]byte{9}, 32))
+	_, e = s.db.Exec(`INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash) VALUES($1,$2,11,42,'alice','example',false,$3,$4,$5,$6,$7,1,$8,$9,$10,$11,$12,$13)`, runID, s.config.ForgeURL, f.t.UserID, f.t.Hash, f.t.Commit, runWorkflowPath, workflowTestBlob(workflow), plan, source, sha, epochs, uuid.NewString(), bytes.Repeat([]byte{9}, 32))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -236,7 +236,7 @@ func workflowAgent088AuthorityFixture(t *testing.T, mode string) {
 		}
 		// Exercise the same versioned Golf metadata transition under the same
 		// pool lock as SaveRunnerPool, without taking a second actor lock.
-		if _, e = edit.ExecContext(ctx, `UPDATE golf_runner_pools SET cpu_millis=500,version=version+1 WHERE forge_url=$1 AND id=$2`, s.config.GiteaURL, poolID); e != nil {
+		if _, e = edit.ExecContext(ctx, `UPDATE golf_runner_pools SET cpu_millis=500,version=version+1 WHERE forge_url=$1 AND id=$2`, s.config.ForgeURL, poolID); e != nil {
 			t.Fatal(e)
 		}
 		if e = edit.Commit(); e != nil {

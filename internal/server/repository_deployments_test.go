@@ -205,7 +205,7 @@ func previewQualifiedArtifact(t *testing.T, f *workflowRunFixture, l loginResult
 func deploymentActivityCount(t *testing.T, f *workflowRunFixture) int {
 	t.Helper()
 	var count int
-	if e := f.server.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id=0 AND topic='actions'", f.server.config.GiteaURL, f.row.ID).Scan(&count); e != nil {
+	if e := f.server.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id=0 AND topic='actions'", f.server.config.ForgeURL, f.row.ID).Scan(&count); e != nil {
 		t.Fatal(e)
 	}
 	return count
@@ -213,7 +213,7 @@ func deploymentActivityCount(t *testing.T, f *workflowRunFixture) int {
 func TestStaticDeploymentActivationReplayAndRevocationPostgres(t *testing.T) {
 	f := newWorkflowRunFixture(t, ".gitlab-ci.yml")
 	f.row.HTMLURL = "https://forge.invalid/alice/example"
-	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
+	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
 		t.Fatal(e)
 	}
 	l, e := f.server.loginLocalSession(t.Context(), "alice", localTestPassword, "")
@@ -312,7 +312,7 @@ func (w *previewResponseRecorder) SetWriteDeadline(v time.Time) error { w.deadli
 func TestStaticPreviewAccessSessionAndEnvironmentPostgres(t *testing.T) {
 	f := newWorkflowRunFixture(t, ".gitlab-ci.yml")
 	f.row.HTMLURL = "https://forge.invalid/alice/example"
-	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
+	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
 		t.Fatal(e)
 	}
 	l, e := f.server.loginLocalSession(t.Context(), "alice", localTestPassword, "")

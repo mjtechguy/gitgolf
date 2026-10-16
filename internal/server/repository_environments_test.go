@@ -344,7 +344,7 @@ func TestEnvironmentAuthorityAfterWaitPostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer held.Rollback()
-	if _, e = held.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-environments/'||$2::bigint::text,0))`, f.server.config.GiteaURL, f.row.ID); e != nil {
+	if _, e = held.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-environments/'||$2::bigint::text,0))`, f.server.config.ForgeURL, f.row.ID); e != nil {
 		t.Fatal(e)
 	}
 	result := make(chan error, 1)
@@ -385,7 +385,7 @@ func TestEnvironmentSQLBindingsPostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	var v database.GolfRepositoryEnvironmentVersion
-	v, e := database.New(f.server.db).GetRepositoryEnvironment(t.Context(), database.GetRepositoryEnvironmentParams{ForgeURL: f.server.config.GiteaURL, ID: uuid.MustParse(m.EnvironmentId), RepositoryID: f.row.ID, OwnerID: 42})
+	v, e := database.New(f.server.db).GetRepositoryEnvironment(t.Context(), database.GetRepositoryEnvironmentParams{ForgeURL: f.server.config.ForgeURL, ID: uuid.MustParse(m.EnvironmentId), RepositoryID: f.row.ID, OwnerID: 42})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -505,7 +505,7 @@ func TestEnvironmentConfiguredIdentitiesPostgres(t *testing.T) {
 func TestEnvironmentIndependentAdministratorCreatorLockPostgres(t *testing.T) {
 	f := newWorkflowRunFixture(t)
 	f.row.HTMLURL = "https://forge.invalid/alice/example"
-	upstream, e := url.Parse(f.server.config.GiteaURL)
+	upstream, e := url.Parse(f.server.config.ForgeURL)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -552,12 +552,12 @@ func TestEnvironmentIndependentAdministratorCreatorLockPostgres(t *testing.T) {
 	}))
 	t.Cleanup(provider.Close)
 	config := f.server.config
-	config.GiteaURL = provider.URL
+	config.ForgeURL = provider.URL
 	f.server, e = New(config, f.server.db)
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture", IsInstanceAdmin: true}); e != nil {
+	if _, e = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture", IsInstanceAdmin: true}); e != nil {
 		t.Fatal(e)
 	}
 	creatorLogin, e := f.server.loginLocalSession(t.Context(), "alice", localTestPassword, "")
@@ -571,7 +571,7 @@ func TestEnvironmentIndependentAdministratorCreatorLockPostgres(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "bob", Password: localTestPassword, ForgeToken: secondCredential}); e != nil {
+	if _, e = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "bob", Password: localTestPassword, ForgeToken: secondCredential}); e != nil {
 		t.Fatal(e)
 	}
 	secondLogin, e := f.server.loginLocalSession(t.Context(), "bob", localTestPassword, "")
@@ -579,10 +579,10 @@ func TestEnvironmentIndependentAdministratorCreatorLockPostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	var creatorGolfID, secondGolfID int64
-	if e = f.server.db.QueryRow(`SELECT creator_user_id FROM golf_repository_environment_versions WHERE forge_url=$1 AND environment_id=$2 AND version=1`, f.server.config.GiteaURL, initial.EnvironmentId).Scan(&creatorGolfID); e != nil {
+	if e = f.server.db.QueryRow(`SELECT creator_user_id FROM golf_repository_environment_versions WHERE forge_url=$1 AND environment_id=$2 AND version=1`, f.server.config.ForgeURL, initial.EnvironmentId).Scan(&creatorGolfID); e != nil {
 		t.Fatal(e)
 	}
-	if e = f.server.db.QueryRow(`SELECT id FROM golf_users WHERE forge_url=$1 AND forge_user_id=43`, f.server.config.GiteaURL).Scan(&secondGolfID); e != nil || creatorGolfID == secondGolfID {
+	if e = f.server.db.QueryRow(`SELECT id FROM golf_users WHERE forge_url=$1 AND forge_user_id=43`, f.server.config.ForgeURL).Scan(&secondGolfID); e != nil || creatorGolfID == secondGolfID {
 		t.Fatal("actors must be independent", e)
 	}
 	held, e := f.server.db.BeginTx(t.Context(), nil)
@@ -590,7 +590,7 @@ func TestEnvironmentIndependentAdministratorCreatorLockPostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer held.Rollback()
-	if _, e = held.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-environments/'||$2::bigint::text,0))`, f.server.config.GiteaURL, f.row.ID); e != nil {
+	if _, e = held.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-environments/'||$2::bigint::text,0))`, f.server.config.ForgeURL, f.row.ID); e != nil {
 		t.Fatal(e)
 	}
 	type outcome struct {
@@ -622,7 +622,7 @@ func TestEnvironmentIndependentAdministratorCreatorLockPostgres(t *testing.T) {
 	var editorPID int
 	for time.Now().Before(deadline) {
 		var n int
-		e = f.server.db.QueryRow(`SELECT count(*),coalesce(min(pid),0) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND classid=((hashtextextended($1||'/repository-environments/'||$2::bigint::text,0)>>32)&4294967295)::oid AND objid=(hashtextextended($1||'/repository-environments/'||$2::bigint::text,0)&4294967295)::oid AND objsubid=1`, f.server.config.GiteaURL, f.row.ID).Scan(&n, &editorPID)
+		e = f.server.db.QueryRow(`SELECT count(*),coalesce(min(pid),0) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND classid=((hashtextextended($1||'/repository-environments/'||$2::bigint::text,0)>>32)&4294967295)::oid AND objid=(hashtextextended($1||'/repository-environments/'||$2::bigint::text,0)&4294967295)::oid AND objsubid=1`, f.server.config.ForgeURL, f.row.ID).Scan(&n, &editorPID)
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -683,10 +683,10 @@ func TestEnvironmentIndependentAdministratorCreatorLockPostgres(t *testing.T) {
 		t.Fatal("creator's original version must fail CAS after serialized edit", competing.err)
 	}
 	var versions, operations int
-	if e = f.server.db.QueryRow(`SELECT count(*) FROM golf_repository_environment_versions WHERE forge_url=$1 AND environment_id=$2`, f.server.config.GiteaURL, initial.EnvironmentId).Scan(&versions); e != nil {
+	if e = f.server.db.QueryRow(`SELECT count(*) FROM golf_repository_environment_versions WHERE forge_url=$1 AND environment_id=$2`, f.server.config.ForgeURL, initial.EnvironmentId).Scan(&versions); e != nil {
 		t.Fatal(e)
 	}
-	if e = f.server.db.QueryRow(`SELECT count(*) FROM golf_repository_environment_operations WHERE forge_url=$1 AND environment_id=$2`, f.server.config.GiteaURL, initial.EnvironmentId).Scan(&operations); e != nil || versions != 2 || operations != 2 {
+	if e = f.server.db.QueryRow(`SELECT count(*) FROM golf_repository_environment_operations WHERE forge_url=$1 AND environment_id=$2`, f.server.config.ForgeURL, initial.EnvironmentId).Scan(&operations); e != nil || versions != 2 || operations != 2 {
 		t.Fatal("competing actor created a duplicate version/receipt", versions, operations, e)
 	}
 }

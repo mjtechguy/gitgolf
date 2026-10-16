@@ -93,7 +93,7 @@ func runnerPoolRPCError(e error) error {
 	return infrastructureRPCError(e)
 }
 func (s *Server) poolWorkers(ctx context.Context, tx *sql.Tx, id string) ([]string, error) {
-	rows, e := tx.QueryContext(ctx, `SELECT runner_id FROM golf_runner_pool_workers WHERE forge_url=$1 AND pool_id=$2::uuid ORDER BY runner_id`, s.config.GiteaURL, id)
+	rows, e := tx.QueryContext(ctx, `SELECT runner_id FROM golf_runner_pool_workers WHERE forge_url=$1 AND pool_id=$2::uuid ORDER BY runner_id`, s.config.ForgeURL, id)
 	if e != nil {
 		return nil, errStorageUnavailable
 	}
@@ -116,7 +116,7 @@ func (s *Server) poolInventory(ctx context.Context, tx *sql.Tx, admin bool) ([]*
 	if e != nil {
 		return nil, e
 	}
-	rows, e := tx.QueryContext(ctx, `SELECT `+runnerPoolColumns+` FROM golf_runner_pools WHERE forge_url=$1 ORDER BY name,id`, s.config.GiteaURL)
+	rows, e := tx.QueryContext(ctx, `SELECT `+runnerPoolColumns+` FROM golf_runner_pools WHERE forge_url=$1 ORDER BY name,id`, s.config.ForgeURL)
 	if e != nil {
 		return nil, errStorageUnavailable
 	}
@@ -143,7 +143,7 @@ func (s *Server) poolInventory(ctx context.Context, tx *sql.Tx, admin bool) ([]*
 		w := poolWire(r, ids, policy.Limits)
 		if admin {
 			var count int64
-			if tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_workflow_runs WHERE forge_url=$1 AND runner_pool_id=$2::uuid AND state='running'`, s.config.GiteaURL, r.ID).Scan(&count) != nil {
+			if tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_workflow_runs WHERE forge_url=$1 AND runner_pool_id=$2::uuid AND state='running'`, s.config.ForgeURL, r.ID).Scan(&count) != nil {
 				return nil, errStorageUnavailable
 			}
 			v := strconv.FormatInt(count, 10)
@@ -208,10 +208,10 @@ func (s *Server) SaveRunnerPool(ctx context.Context, req *connect.Request[golfv1
 	}
 	var result *golfv1.RunnerPool
 	e = s.infrastructureAdminTransaction(ctx, value, initial, func(tx *sql.Tx) error {
-		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.GiteaURL+"/runner-pool-catalog"); e != nil {
+		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.ForgeURL+"/runner-pool-catalog"); e != nil {
 			return errStorageUnavailable
 		}
-		old, e := scanRunnerPool(tx.QueryRowContext(ctx, `SELECT `+runnerPoolColumns+` FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.GiteaURL, m.Id))
+		old, e := scanRunnerPool(tx.QueryRowContext(ctx, `SELECT `+runnerPoolColumns+` FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.ForgeURL, m.Id))
 		fresh := errors.Is(e, errResourceNotFound)
 		if e != nil && !fresh {
 			return e
@@ -257,7 +257,7 @@ func (s *Server) SaveRunnerPool(ctx context.Context, req *connect.Request[golfv1
 				return invalid("A terminally revoked worker cannot join a pool.")
 			}
 			var other string
-			e = tx.QueryRowContext(ctx, `SELECT pool_id::text FROM golf_runner_pool_workers WHERE forge_url=$1 AND runner_id=$2`, s.config.GiteaURL, id).Scan(&other)
+			e = tx.QueryRowContext(ctx, `SELECT pool_id::text FROM golf_runner_pool_workers WHERE forge_url=$1 AND runner_id=$2`, s.config.ForgeURL, id).Scan(&other)
 			if e != nil && !errors.Is(e, sql.ErrNoRows) {
 				return errStorageUnavailable
 			}
@@ -266,7 +266,7 @@ func (s *Server) SaveRunnerPool(ctx context.Context, req *connect.Request[golfv1
 			}
 			if errors.Is(e, sql.ErrNoRows) {
 				var busy bool
-				if tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND state='running')`, s.config.GiteaURL, id).Scan(&busy) != nil {
+				if tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND state='running')`, s.config.ForgeURL, id).Scan(&busy) != nil {
 					return errStorageUnavailable
 				}
 				if busy {
@@ -277,7 +277,7 @@ func (s *Server) SaveRunnerPool(ctx context.Context, req *connect.Request[golfv1
 		for _, id := range prior {
 			if !wanted[id] {
 				var busy bool
-				if tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND state='running')`, s.config.GiteaURL, id).Scan(&busy) != nil {
+				if tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND state='running')`, s.config.ForgeURL, id).Scan(&busy) != nil {
 					return errStorageUnavailable
 				}
 				if busy {
@@ -286,7 +286,7 @@ func (s *Server) SaveRunnerPool(ctx context.Context, req *connect.Request[golfv1
 			}
 		}
 		var nameUsed bool
-		if tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_runner_pools WHERE forge_url=$1 AND name=$2 AND id<>$3::uuid)`, s.config.GiteaURL, m.Name, m.Id).Scan(&nameUsed) != nil {
+		if tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_runner_pools WHERE forge_url=$1 AND name=$2 AND id<>$3::uuid)`, s.config.ForgeURL, m.Name, m.Id).Scan(&nameUsed) != nil {
 			return errStorageUnavailable
 		}
 		if nameUsed {
@@ -294,7 +294,7 @@ func (s *Server) SaveRunnerPool(ctx context.Context, req *connect.Request[golfv1
 		}
 		if fresh {
 			var count int
-			if tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_runner_pools WHERE forge_url=$1`, s.config.GiteaURL).Scan(&count) != nil {
+			if tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_runner_pools WHERE forge_url=$1`, s.config.ForgeURL).Scan(&count) != nil {
 				return errStorageUnavailable
 			}
 			if count >= 20 {
@@ -318,13 +318,13 @@ func (s *Server) SaveRunnerPool(ctx context.Context, req *connect.Request[golfv1
 				return invalid("Pool ceilings cannot exceed the current instance ceilings.")
 			}
 		}
-		r, e := scanRunnerPool(tx.QueryRowContext(ctx, `INSERT INTO golf_runner_pools(forge_url,id,name,version,runtime,state,max_parallel_attempts,repository_assignment_enabled,actor_user_id,cpu_millis,memory_bytes,pids,timeout_seconds) VALUES($1,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(forge_url,id) DO UPDATE SET name=excluded.name,version=excluded.version,state=excluded.state,max_parallel_attempts=excluded.max_parallel_attempts,repository_assignment_enabled=excluded.repository_assignment_enabled,actor_user_id=excluded.actor_user_id,cpu_millis=excluded.cpu_millis,memory_bytes=excluded.memory_bytes,pids=excluded.pids,timeout_seconds=excluded.timeout_seconds,updated_at=clock_timestamp() RETURNING `+runnerPoolColumns, s.config.GiteaURL, m.Id, m.Name, version+1, m.Runtime, runnerPoolState(m.State), m.MaxParallelAttempts, m.RepositoryAssignmentEnabled, initial.UserID, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds))
+		r, e := scanRunnerPool(tx.QueryRowContext(ctx, `INSERT INTO golf_runner_pools(forge_url,id,name,version,runtime,state,max_parallel_attempts,repository_assignment_enabled,actor_user_id,cpu_millis,memory_bytes,pids,timeout_seconds) VALUES($1,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(forge_url,id) DO UPDATE SET name=excluded.name,version=excluded.version,state=excluded.state,max_parallel_attempts=excluded.max_parallel_attempts,repository_assignment_enabled=excluded.repository_assignment_enabled,actor_user_id=excluded.actor_user_id,cpu_millis=excluded.cpu_millis,memory_bytes=excluded.memory_bytes,pids=excluded.pids,timeout_seconds=excluded.timeout_seconds,updated_at=clock_timestamp() RETURNING `+runnerPoolColumns, s.config.ForgeURL, m.Id, m.Name, version+1, m.Runtime, runnerPoolState(m.State), m.MaxParallelAttempts, m.RepositoryAssignmentEnabled, initial.UserID, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds))
 		if e != nil {
 			return e
 		}
 		for _, id := range prior {
 			if !wanted[id] {
-				if _, e = tx.ExecContext(ctx, `DELETE FROM golf_runner_pool_workers WHERE forge_url=$1 AND runner_id=$2 AND pool_id=$3::uuid`, s.config.GiteaURL, id, m.Id); e != nil {
+				if _, e = tx.ExecContext(ctx, `DELETE FROM golf_runner_pool_workers WHERE forge_url=$1 AND runner_id=$2 AND pool_id=$3::uuid`, s.config.ForgeURL, id, m.Id); e != nil {
 					return errStorageUnavailable
 				}
 			}
@@ -335,12 +335,12 @@ func (s *Server) SaveRunnerPool(ctx context.Context, req *connect.Request[golfv1
 		}
 		for _, id := range workers {
 			if !previous[id] {
-				if _, e = tx.ExecContext(ctx, `INSERT INTO golf_runner_pool_workers(forge_url,runner_id,pool_id) VALUES($1,$2,$3::uuid)`, s.config.GiteaURL, id, m.Id); e != nil {
+				if _, e = tx.ExecContext(ctx, `INSERT INTO golf_runner_pool_workers(forge_url,runner_id,pool_id) VALUES($1,$2,$3::uuid)`, s.config.ForgeURL, id, m.Id); e != nil {
 					return errStorageUnavailable
 				}
 			}
 		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO golf_runner_pool_audit(forge_url,pool_id,version,actor_user_id,name,state,max_parallel_attempts,repository_assignment_enabled,worker_ids,cpu_millis,memory_bytes,pids,timeout_seconds) VALUES($1,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, s.config.GiteaURL, m.Id, r.Version, initial.UserID, r.Name, r.State, r.Capacity, r.Enabled, workers, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds); e != nil {
+		if _, e = tx.ExecContext(ctx, `INSERT INTO golf_runner_pool_audit(forge_url,pool_id,version,actor_user_id,name,state,max_parallel_attempts,repository_assignment_enabled,worker_ids,cpu_millis,memory_bytes,pids,timeout_seconds) VALUES($1,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, s.config.ForgeURL, m.Id, r.Version, initial.UserID, r.Name, r.State, r.Capacity, r.Enabled, workers, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds); e != nil {
 			return errStorageUnavailable
 		}
 		result = poolWire(r, workers, policy.Limits)
@@ -361,7 +361,7 @@ func (s *Server) placementRecord(ctx context.Context, tx *sql.Tx, key repository
 	var owner, version int64
 	var id sql.NullString
 	var poolVersion sql.NullInt64
-	e = tx.QueryRowContext(ctx, `SELECT owner_id,version,pool_id::text,selected_pool_version,cpu_millis,memory_bytes,pids,timeout_seconds FROM golf_repository_runner_placements WHERE forge_url=$1 AND repository_id=$2`, s.config.GiteaURL, a.RepositoryId).Scan(&owner, &version, &id, &poolVersion, &configured.CPUMillis, &configured.MemoryBytes, &configured.Pids, &configured.TimeoutSeconds)
+	e = tx.QueryRowContext(ctx, `SELECT owner_id,version,pool_id::text,selected_pool_version,cpu_millis,memory_bytes,pids,timeout_seconds FROM golf_repository_runner_placements WHERE forge_url=$1 AND repository_id=$2`, s.config.ForgeURL, a.RepositoryId).Scan(&owner, &version, &id, &poolVersion, &configured.CPUMillis, &configured.MemoryBytes, &configured.Pids, &configured.TimeoutSeconds)
 	if errors.Is(e, sql.ErrNoRows) {
 		return w, nil
 	}
@@ -381,7 +381,7 @@ func (s *Server) placementRecord(ctx context.Context, tx *sql.Tx, key repository
 		w.PoolId = id.String
 		w.PoolVersion = strconv.FormatInt(poolVersion.Int64, 10)
 		w.LegacyUnbound = false
-		p, e := scanRunnerPool(tx.QueryRowContext(ctx, `SELECT `+runnerPoolColumns+` FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.GiteaURL, id.String))
+		p, e := scanRunnerPool(tx.QueryRowContext(ctx, `SELECT `+runnerPoolColumns+` FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.ForgeURL, id.String))
 		if e != nil {
 			return nil, e
 		}
@@ -494,7 +494,7 @@ func (s *Server) SetRepositoryRunnerPlacement(ctx context.Context, req *connect.
 	e = s.withForgeCaller(ctx, value, token, func(caller User) error {
 		return s.workflowTransaction(ctx, value, caller.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte) error {
 			q := database.New(s.db).WithTx(tx)
-			current, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+			current, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 			if e != nil || !sameOwnSecurity(initial, current) {
 				return errUnauthenticated
 			}
@@ -533,7 +533,7 @@ func (s *Server) SetRepositoryRunnerPlacement(ctx context.Context, req *connect.
 				if e = s.lockRunnerPool(ctx, tx, m.PoolId); e != nil {
 					return e
 				}
-				p, e := scanRunnerPool(tx.QueryRowContext(ctx, `SELECT `+runnerPoolColumns+` FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.GiteaURL, m.PoolId))
+				p, e := scanRunnerPool(tx.QueryRowContext(ctx, `SELECT `+runnerPoolColumns+` FROM golf_runner_pools WHERE forge_url=$1 AND id=$2::uuid`, s.config.ForgeURL, m.PoolId))
 				if e != nil {
 					return e
 				}
@@ -563,10 +563,10 @@ func (s *Server) SetRepositoryRunnerPlacement(ctx context.Context, req *connect.
 					return invalid("Repository ceilings cannot exceed current instance/pool ceilings.")
 				}
 			}
-			if _, e = tx.ExecContext(ctx, `INSERT INTO golf_repository_runner_placements(forge_url,repository_id,owner_id,version,pool_id,selected_pool_version,actor_user_id,cpu_millis,memory_bytes,pids,timeout_seconds) VALUES($1,$2,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11) ON CONFLICT(forge_url,repository_id) DO UPDATE SET version=excluded.version,pool_id=excluded.pool_id,selected_pool_version=excluded.selected_pool_version,actor_user_id=excluded.actor_user_id,cpu_millis=excluded.cpu_millis,memory_bytes=excluded.memory_bytes,pids=excluded.pids,timeout_seconds=excluded.timeout_seconds,updated_at=clock_timestamp()`, s.config.GiteaURL, repo, owner, version+1, selected, selectedVersion, actor.UserID, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds); e != nil {
+			if _, e = tx.ExecContext(ctx, `INSERT INTO golf_repository_runner_placements(forge_url,repository_id,owner_id,version,pool_id,selected_pool_version,actor_user_id,cpu_millis,memory_bytes,pids,timeout_seconds) VALUES($1,$2,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11) ON CONFLICT(forge_url,repository_id) DO UPDATE SET version=excluded.version,pool_id=excluded.pool_id,selected_pool_version=excluded.selected_pool_version,actor_user_id=excluded.actor_user_id,cpu_millis=excluded.cpu_millis,memory_bytes=excluded.memory_bytes,pids=excluded.pids,timeout_seconds=excluded.timeout_seconds,updated_at=clock_timestamp()`, s.config.ForgeURL, repo, owner, version+1, selected, selectedVersion, actor.UserID, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds); e != nil {
 				return errStorageUnavailable
 			}
-			if _, e = tx.ExecContext(ctx, `INSERT INTO golf_runner_placement_audit(forge_url,repository_id,owner_id,version,actor_user_id,pool_id,selected_pool_version,cpu_millis,memory_bytes,pids,timeout_seconds) VALUES($1,$2,$3,$4,$5,$6::uuid,$7,$8,$9,$10,$11)`, s.config.GiteaURL, repo, owner, version+1, actor.UserID, selected, selectedVersion, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds); e != nil {
+			if _, e = tx.ExecContext(ctx, `INSERT INTO golf_runner_placement_audit(forge_url,repository_id,owner_id,version,actor_user_id,pool_id,selected_pool_version,cpu_millis,memory_bytes,pids,timeout_seconds) VALUES($1,$2,$3,$4,$5,$6::uuid,$7,$8,$9,$10,$11)`, s.config.ForgeURL, repo, owner, version+1, actor.UserID, selected, selectedVersion, limits.CPUMillis, limits.Memory(), limits.Pids, limits.TimeoutSeconds); e != nil {
 				return errStorageUnavailable
 			}
 			after, e := s.readRepositoryAccess(ctx, token, key, caller)

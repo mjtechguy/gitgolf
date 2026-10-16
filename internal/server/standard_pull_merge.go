@@ -133,7 +133,7 @@ func (s *Server) standardMergeAuthority(ctx context.Context, session string, tok
 func (s *Server) ownStandardMerge(ctx context.Context, session string, token forgeCredential, id string) (r standardMergeRecord, e error) {
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanStandardMerge(s.db.QueryRowContext(ctx, `SELECT `+standardMergeColumns+` FROM golf_standard_pull_merges WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, id))
+		r, e = scanStandardMerge(s.db.QueryRowContext(ctx, `SELECT `+standardMergeColumns+` FROM golf_standard_pull_merges WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, id))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -373,10 +373,10 @@ func (s *Server) SubmitStandardPullMerge(ctx context.Context, req *connect.Reque
 		if e != nil {
 			return e
 		}
-		if _, e = tx.ExecContext(held, `SELECT golf_standard_pull_merge_lock($1,$2,$3)`, s.config.GiteaURL, repoID, pullID); e != nil {
+		if _, e = tx.ExecContext(held, `SELECT golf_standard_pull_merge_lock($1,$2,$3)`, s.config.ForgeURL, repoID, pullID); e != nil {
 			return errStorageUnavailable
 		}
-		r, e = scanStandardMerge(tx.QueryRowContext(held, `SELECT `+standardMergeColumns+` FROM golf_standard_pull_merges WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanStandardMerge(tx.QueryRowContext(held, `SELECT `+standardMergeColumns+` FROM golf_standard_pull_merges WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(r.Fingerprint, fingerprint) {
 				return errRepositoryAccessConflict
@@ -386,7 +386,7 @@ func (s *Server) SubmitStandardPullMerge(ctx context.Context, req *connect.Reque
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanStandardMerge(tx.QueryRowContext(held, `INSERT INTO golf_standard_pull_merges(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,pull_request_id,number,expected_pull_revision,head_commit_id,observed_base_commit_id,source_ref,target_ref,input_fingerprint,source_repository_id,source_owner_id,source_repository_owner,source_repository_name,method) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING `+standardMergeColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, repoID, ownerID, key.Owner, key.Name, pullID, m.Selection.Number, m.ExpectedPullRevision, m.Selection.HeadCommitId, m.Selection.BaseCommitId, m.SourceRef, m.TargetRef, fingerprint, sourceID, sourceOwnerID, sourceKey.Owner, sourceKey.Name, standardPullMergeStoredMethod(m.Method)))
+		r, e = scanStandardMerge(tx.QueryRowContext(held, `INSERT INTO golf_standard_pull_merges(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,pull_request_id,number,expected_pull_revision,head_commit_id,observed_base_commit_id,source_ref,target_ref,input_fingerprint,source_repository_id,source_owner_id,source_repository_owner,source_repository_name,method) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING `+standardMergeColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, repoID, ownerID, key.Owner, key.Name, pullID, m.Selection.Number, m.ExpectedPullRevision, m.Selection.HeadCommitId, m.Selection.BaseCommitId, m.SourceRef, m.TargetRef, fingerprint, sourceID, sourceOwnerID, sourceKey.Owner, sourceKey.Name, standardPullMergeStoredMethod(m.Method)))
 		if e != nil {
 			var state interface{ SQLState() string }
 			if errors.As(e, &state) && state.SQLState() == "55000" {
@@ -430,7 +430,7 @@ func (s *Server) SubmitStandardPullMerge(ctx context.Context, req *connect.Reque
 		if e != nil {
 			return e
 		}
-		if _, e = tx.ExecContext(held, `SELECT golf_standard_pull_merge_lock($1,$2,$3)`, s.config.GiteaURL, repoID, pullID); e != nil {
+		if _, e = tx.ExecContext(held, `SELECT golf_standard_pull_merge_lock($1,$2,$3)`, s.config.ForgeURL, repoID, pullID); e != nil {
 			return errStorageUnavailable
 		}
 		if e = s.standardMergePreflight(held, session, token, m); e != nil {

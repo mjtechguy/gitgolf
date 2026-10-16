@@ -29,9 +29,9 @@ func TestForge086NativeActual(t *testing.T) {
 		t.Fatal("fixture invalid")
 	}
 	config := testConfig(f.Native)
-	config.GiteaPublicURL = f.Native
-	config.GiteaOAuthClientID = "owned-native086"
-	config.GiteaOAuthClientSecret = "owned-native086-secret"
+	config.ForgePublicURL = f.Native
+	config.ForgeOAuthClientID = "owned-native086"
+	config.ForgeOAuthClientSecret = "owned-native086-secret"
 	s, e := New(config, testDatabase(t))
 	if e != nil {
 		t.Fatal(e)
@@ -59,7 +59,7 @@ func TestForge086NativeActual(t *testing.T) {
 		return base.RoundTrip(r)
 	})
 	sessions, _, _, transport, origin := testRPCClients(t, s)
-	if _, e = sessions.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: f.Token})); e != nil {
+	if _, e = sessions.LoginWithForgeToken(t.Context(), connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: f.Token})); e != nil {
 		t.Fatal("owned login failed")
 	}
 	t.Cleanup(func() { sessions.Logout(context.Background(), connect.NewRequest(&golfv1.LogoutRequest{})) })

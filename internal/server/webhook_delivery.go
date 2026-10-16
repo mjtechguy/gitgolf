@@ -24,7 +24,7 @@ func (s *Server) webhookAuthority(ctx context.Context, id uuid.UUID, version, ep
 	var cipher, binding []byte
 	e := s.db.QueryRowContext(ctx, `SELECT s.sponsor_user_id,s.sponsor_native_id,s.repository_id,s.owner_id,s.local_account_id,a.credential_version,s.credential_version,a.encrypted_forge_token,a.credential_binding,a.credential_key_id,s.repository_owner,s.repository_name
  FROM golf_webhook_subscriptions s JOIN golf_local_accounts a ON a.id=s.local_account_id AND a.user_id=s.sponsor_user_id JOIN golf_users u ON u.id=a.user_id
- WHERE s.id=$1 AND s.forge_url=$2 AND u.forge_url=s.forge_url AND u.forge_user_id=s.sponsor_native_id AND s.version=$3 AND s.epoch=$4 AND s.enabled AND s.authorization_state='authorized' AND a.disabled_at IS NULL AND NOT EXISTS(SELECT 1 FROM golf_user_access ga WHERE ga.user_id=u.id AND ga.suspended)`, id, s.config.GiteaURL, version, epoch).Scan(&user, &native, &repo, &owner, &account, &currentVersion, &savedVersion, &cipher, &binding, &keyID, &ownerName, &repoName)
+ WHERE s.id=$1 AND s.forge_url=$2 AND u.forge_url=s.forge_url AND u.forge_user_id=s.sponsor_native_id AND s.version=$3 AND s.epoch=$4 AND s.enabled AND s.authorization_state='authorized' AND a.disabled_at IS NULL AND NOT EXISTS(SELECT 1 FROM golf_user_access ga WHERE ga.user_id=u.id AND ga.suspended)`, id, s.config.ForgeURL, version, epoch).Scan(&user, &native, &repo, &owner, &account, &currentVersion, &savedVersion, &cipher, &binding, &keyID, &ownerName, &repoName)
 	_ = account
 	if errors.Is(e, sql.ErrNoRows) || e == nil && currentVersion != savedVersion {
 		return forgeCredential{}, errWebhookRevoked
@@ -86,16 +86,16 @@ func (s *Server) claimWebhook(ctx context.Context) (database.GolfWebhookDelivery
  SELECT d.id,d.lease_id FROM golf_webhook_deliveries d JOIN golf_webhook_subscriptions s ON s.id=d.subscription_id WHERE s.forge_url=$1 AND d.state='sending' AND d.lease_until<=clock_timestamp() ORDER BY d.lease_until,d.id LIMIT 100 FOR UPDATE OF d SKIP LOCKED
  ), finished AS (
  UPDATE golf_webhook_attempts a SET completed_at=clock_timestamp(),outcome='lease_expired_uncertain' FROM expired x WHERE a.delivery_id=x.id AND a.lease_id=x.lease_id AND a.completed_at IS NULL RETURNING a.delivery_id
- ) UPDATE golf_webhook_deliveries d SET state=CASE WHEN d.attempts>=6 THEN 'failed' ELSE 'retrying' END,possible_duplicate=true,failure_code='lease_expired_uncertain',next_attempt_at=clock_timestamp(),completed_at=CASE WHEN d.attempts>=6 THEN clock_timestamp() ELSE NULL END FROM expired x WHERE d.id=x.id`, s.config.GiteaURL); e != nil {
+ ) UPDATE golf_webhook_deliveries d SET state=CASE WHEN d.attempts>=6 THEN 'failed' ELSE 'retrying' END,possible_duplicate=true,failure_code='lease_expired_uncertain',next_attempt_at=clock_timestamp(),completed_at=CASE WHEN d.attempts>=6 THEN clock_timestamp() ELSE NULL END FROM expired x WHERE d.id=x.id`, s.config.ForgeURL); e != nil {
 		return out, errStorageUnavailable
 	}
 	if _, e = tx.ExecContext(ctx, `WITH obsolete AS (
  SELECT d.id FROM golf_webhook_deliveries d JOIN golf_webhook_subscriptions s ON s.id=d.subscription_id WHERE s.forge_url=$1 AND d.state IN ('queued','retrying') AND (NOT s.enabled OR s.authorization_state<>'authorized' OR s.version<>d.subscription_version OR s.epoch<>d.epoch) ORDER BY d.id LIMIT 100 FOR UPDATE OF d SKIP LOCKED
- ) UPDATE golf_webhook_deliveries d SET state='cancelled',failure_code='authorization_or_configuration_changed',completed_at=clock_timestamp() FROM obsolete x WHERE d.id=x.id`, s.config.GiteaURL); e != nil {
+ ) UPDATE golf_webhook_deliveries d SET state='cancelled',failure_code='authorization_or_configuration_changed',completed_at=clock_timestamp() FROM obsolete x WHERE d.id=x.id`, s.config.ForgeURL); e != nil {
 		return out, errStorageUnavailable
 	}
 	var id uuid.UUID
-	e = tx.QueryRowContext(ctx, `SELECT d.id FROM golf_webhook_deliveries d JOIN golf_webhook_subscriptions s ON s.id=d.subscription_id WHERE s.forge_url=$1 AND d.state IN ('queued','retrying') AND d.attempts<6 AND d.next_attempt_at<=clock_timestamp() ORDER BY d.next_attempt_at,d.id LIMIT 1 FOR UPDATE OF d SKIP LOCKED`, s.config.GiteaURL).Scan(&id)
+	e = tx.QueryRowContext(ctx, `SELECT d.id FROM golf_webhook_deliveries d JOIN golf_webhook_subscriptions s ON s.id=d.subscription_id WHERE s.forge_url=$1 AND d.state IN ('queued','retrying') AND d.attempts<6 AND d.next_attempt_at<=clock_timestamp() ORDER BY d.next_attempt_at,d.id LIMIT 1 FOR UPDATE OF d SKIP LOCKED`, s.config.ForgeURL).Scan(&id)
 	if errors.Is(e, sql.ErrNoRows) {
 		if tx.Commit() != nil {
 			return out, errStorageUnavailable

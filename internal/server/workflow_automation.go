@@ -15,7 +15,7 @@ func (s *Server) automationRunCredential(ctx context.Context, run workflowRunRec
 	if run.Origin != "push" || !run.AutomationGrantID.Valid || !run.AutomationGrantRevision.Valid || !run.AutomationGrantEpoch.Valid || !run.AutomationCredentialVersion.Valid || !run.RepositoryEventID.Valid || len(run.SessionHash) != 0 {
 		return automationGrantRecord{}, forgeCredential{}, errUnauthenticated
 	}
-	g, err := scanAutomationGrant(s.db.QueryRowContext(ctx, `SELECT `+automationGrantColumns+` FROM golf_automation_grants WHERE id=$1 AND forge_url=$2 AND enabled AND expires_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM golf_local_accounts WHERE user_id=sponsor_user_id AND disabled_at IS NOT NULL)`, run.AutomationGrantID.String, s.config.GiteaURL))
+	g, err := scanAutomationGrant(s.db.QueryRowContext(ctx, `SELECT `+automationGrantColumns+` FROM golf_automation_grants WHERE id=$1 AND forge_url=$2 AND enabled AND expires_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM golf_local_accounts WHERE user_id=sponsor_user_id AND disabled_at IS NOT NULL)`, run.AutomationGrantID.String, s.config.ForgeURL))
 	if errors.Is(err, sql.ErrNoRows) {
 		return g, forgeCredential{}, errUnauthenticated
 	}
@@ -59,7 +59,7 @@ func automationRunMatchesGrant(run workflowRunRecord, g automationGrantRecord) b
 // then run. Native API calls and credential decryption happen outside SQL locks.
 func (s *Server) lockAutomationRunAuthority(ctx context.Context, tx *sql.Tx, run workflowRunRecord) error {
 	var nativeID int64
-	err := tx.QueryRowContext(ctx, `SELECT forge_user_id FROM golf_users WHERE id=$1 AND forge_url=$2 FOR UPDATE`, run.UserID, s.config.GiteaURL).Scan(&nativeID)
+	err := tx.QueryRowContext(ctx, `SELECT forge_user_id FROM golf_users WHERE id=$1 AND forge_url=$2 FOR UPDATE`, run.UserID, s.config.ForgeURL).Scan(&nativeID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errUnauthenticated
 	}
@@ -76,7 +76,7 @@ func (s *Server) lockAutomationRunAuthority(ctx context.Context, tx *sql.Tx, run
 	if disabled {
 		return errUnauthenticated
 	}
-	g, err := scanAutomationGrant(tx.QueryRowContext(ctx, `SELECT `+automationGrantColumns+` FROM golf_automation_grants WHERE id=$1 AND forge_url=$2 AND enabled AND expires_at>clock_timestamp() FOR UPDATE`, run.AutomationGrantID.String, s.config.GiteaURL))
+	g, err := scanAutomationGrant(tx.QueryRowContext(ctx, `SELECT `+automationGrantColumns+` FROM golf_automation_grants WHERE id=$1 AND forge_url=$2 AND enabled AND expires_at>clock_timestamp() FOR UPDATE`, run.AutomationGrantID.String, s.config.ForgeURL))
 	if errors.Is(err, sql.ErrNoRows) {
 		return errUnauthenticated
 	}

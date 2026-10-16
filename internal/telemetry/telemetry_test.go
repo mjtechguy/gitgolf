@@ -148,7 +148,7 @@ func TestCorrelatedOTLPHTTPAndPrivateDataOmission(t *testing.T) {
 		t.Fatal("root correlation is wrong")
 	}
 	for _, span := range spans {
-		if span.Name == "gitea.request" || span.Name == "postgres.query" {
+		if span.Name == "forge.request" || span.Name == "postgres.query" {
 			if !bytes.Equal(span.TraceId, parent.TraceId) || !bytes.Equal(span.ParentSpanId, parent.SpanId) || span.Status.Code != tracev1.Status_STATUS_CODE_ERROR {
 				t.Fatal("dependency span lost context or sanitized error status")
 			}

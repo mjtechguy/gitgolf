@@ -643,11 +643,11 @@ func TestIssueDiscussionRevocationAndCurrentAccessPostgres(t *testing.T) {
 }
 
 func TestIssueDiscussionURLBinding(t *testing.T) {
-	repo := "https://internal.invalid/gitea/alice/example"
-	if !discussionURL("https://public.invalid/gitea/alice/example/issues/1", repo, "/issues/1", "") {
+	repo := "https://internal.invalid/forge/alice/example"
+	if !discussionURL("https://public.invalid/forge/alice/example/issues/1", repo, "/issues/1", "") {
 		t.Fatal("legitimate configured origin distinction rejected")
 	}
-	for _, value := range []string{"https://public.invalid/gitea/alice/other/issues/1", "https://user:pass@public.invalid/gitea/alice/example/issues/1", "https://public.invalid/gitea/alice/example/issues/1?token=x", "https://public.invalid/gitea/alice/example/issues/%31", "https://public.invalid/gitea/alice/example/issues/1#wrong"} {
+	for _, value := range []string{"https://public.invalid/forge/alice/other/issues/1", "https://user:pass@public.invalid/forge/alice/example/issues/1", "https://public.invalid/forge/alice/example/issues/1?token=x", "https://public.invalid/forge/alice/example/issues/%31", "https://public.invalid/forge/alice/example/issues/1#wrong"} {
 		if discussionURL(value, repo, "/issues/1", "") {
 			t.Fatal("ambiguous/foreign path accepted")
 		}

@@ -42,7 +42,7 @@ func automaticRunFixture(t *testing.T) (*workflowRunFixture, workflowRunRecord, 
 	}
 	var event int64
 	connection := uuid.NewString()
-	if _, err = f.server.db.Exec(`INSERT INTO golf_repository_event_connections(id,forge_url,repository_id,owner_id,repository) VALUES($1,$2,$3,42,'alice/example')`, connection, f.server.config.GiteaURL, f.row.ID); err != nil {
+	if _, err = f.server.db.Exec(`INSERT INTO golf_repository_event_connections(id,forge_url,repository_id,owner_id,repository) VALUES($1,$2,$3,42,'alice/example')`, connection, f.server.config.ForgeURL, f.row.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = f.server.db.QueryRow(`INSERT INTO golf_repository_events(connection_id,delivery_id,payload_sha256,payload_bytes,event_type,ref,before_commit_id,after_commit_id,sender_id) VALUES($1,$2,$3,10,'push','refs/heads/main',$4,$5,84) RETURNING id`, connection, uuid.NewString(), strings.Repeat("e", 64), strings.Repeat("0", 40), f.commit).Scan(&event); err != nil {
@@ -230,11 +230,11 @@ func TestAutomationRunRunnerFencesPostgres(t *testing.T) {
 				exec(`UPDATE golf_automation_grants SET expires_at=created_at+interval '1 microsecond' WHERE id=$1`, grant.Id)
 			}
 			if scenario == "sponsor-disabled" {
-				_, err := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "fixture-sponsor", Email: "sponsor@example.invalid", Password: "a sufficiently long local password", ForgeToken: "run-fixture"})
+				_, err := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "fixture-sponsor", Email: "sponsor@example.invalid", Password: "a sufficiently long local password", ForgeToken: "run-fixture"})
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "disable", LocalAccountInput{Username: "fixture-sponsor"}); err != nil {
+				if _, err = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "disable", LocalAccountInput{Username: "fixture-sponsor"}); err != nil {
 					t.Fatal(err)
 				}
 			}

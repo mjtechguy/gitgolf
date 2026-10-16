@@ -316,7 +316,7 @@ func (s *Server) ListDiscussionTimeline(ctx context.Context, req *connect.Reques
 			if len(rows) > int(limit) {
 				return errForgeResponseTooLarge
 			}
-			// Gitea timeline X-Total-Count is the filtered page length, not a global total.
+			// The native timeline X-Total-Count is the filtered page length, not a global total.
 			// Offer another native page after every nonempty page; never claim a total.
 			count, err := strconv.Atoi(headers.Get("X-Total-Count"))
 			if err != nil || count != len(rows) {

@@ -30,7 +30,7 @@ func (s *Server) liveGitCredential(ctx context.Context, secret string) (gitCrede
 	if s.db == nil {
 		return gitCredentialRecord{}, errStorageUnavailable
 	}
-	c, e := scanGitCredential(s.db.QueryRowContext(ctx, `SELECT `+gitCredentialColumns+` FROM golf_git_credentials c WHERE c.token_hash=$1 AND c.forge_url=$2`, hash, s.config.GiteaURL))
+	c, e := scanGitCredential(s.db.QueryRowContext(ctx, `SELECT `+gitCredentialColumns+` FROM golf_git_credentials c WHERE c.token_hash=$1 AND c.forge_url=$2`, hash, s.config.ForgeURL))
 	if errors.Is(e, sql.ErrNoRows) {
 		return c, errUnauthenticated
 	}
@@ -52,7 +52,7 @@ func (s *Server) gitCredentialTransaction(ctx context.Context, c gitCredentialRe
 	}
 	defer tx.Rollback()
 	q := database.New(s.db).WithTx(tx)
-	actor, e := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: c.SourceHash, ForgeURL: s.config.GiteaURL})
+	actor, e := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: c.SourceHash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(e, sql.ErrNoRows) {
 		return errUnauthenticated
 	}
@@ -65,7 +65,7 @@ func (s *Server) gitCredentialTransaction(ctx context.Context, c gitCredentialRe
 	if actor.ID != c.UserID || actor.ForgeUserID != c.NativeUserID {
 		return errUnauthenticated
 	}
-	session, e := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: c.SourceHash, UserID: c.UserID, ForgeURL: s.config.GiteaURL})
+	session, e := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: c.SourceHash, UserID: c.UserID, ForgeURL: s.config.ForgeURL})
 	if errors.Is(e, sql.ErrNoRows) {
 		return errUnauthenticated
 	}
@@ -326,7 +326,7 @@ func (s *Server) forwardGit(ctx context.Context, incoming *http.Request, credent
 	if route.Advertisement {
 		suffix = "/" + route.Key.Owner + "/" + route.Key.Name + ".git/info/refs?service=" + route.Service
 	}
-	request, e := http.NewRequestWithContext(ctx, incoming.Method, strings.TrimRight(s.config.GiteaURL, "/")+suffix, bytes.NewReader(input))
+	request, e := http.NewRequestWithContext(ctx, incoming.Method, strings.TrimRight(s.config.ForgeURL, "/")+suffix, bytes.NewReader(input))
 	if e != nil {
 		return nil, errGitProtocol
 	}
@@ -440,7 +440,7 @@ func (s *Server) GetGitReceiveOutcome(ctx context.Context, req *connect.Request[
 	var created, updated time.Time
 	var accepted, rejected sql.NullInt64
 	e = s.workflowTransaction(ctx, s.cookieValue(req.Header()), actor.ID, func(tx *sql.Tx, caller database.LockManagedSessionRow, _ []byte) error {
-		e := tx.QueryRowContext(ctx, `SELECT id,repository_id,native_user_id,phase,command_count,accepted_count,rejected_count,created_at,updated_at FROM golf_git_receive_operations WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 AND user_id=$5`, req.Msg.OperationId, s.config.GiteaURL, req.Msg.RepositoryId, req.Msg.OwnerId, caller.UserID).Scan(&out.OperationId, &out.RepositoryId, &out.ActorId, &out.Phase, &out.CommandCount, &accepted, &rejected, &created, &updated)
+		e := tx.QueryRowContext(ctx, `SELECT id,repository_id,native_user_id,phase,command_count,accepted_count,rejected_count,created_at,updated_at FROM golf_git_receive_operations WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 AND user_id=$5`, req.Msg.OperationId, s.config.ForgeURL, req.Msg.RepositoryId, req.Msg.OwnerId, caller.UserID).Scan(&out.OperationId, &out.RepositoryId, &out.ActorId, &out.Phase, &out.CommandCount, &accepted, &rejected, &created, &updated)
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}

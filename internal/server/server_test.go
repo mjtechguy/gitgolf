@@ -29,7 +29,7 @@ import (
 )
 
 func testConfig(forgeURL string) Config {
-	return Config{PublicURL: "http://localhost:8080", GiteaURL: forgeURL, ForgeInstanceID: "ba09ae45-092f-4b4d-9e17-c6b848e5d95c", AllowInsecureCookies: true,
+	return Config{PublicURL: "http://localhost:8080", ForgeURL: forgeURL, ForgeInstanceID: "ba09ae45-092f-4b4d-9e17-c6b848e5d95c", AllowInsecureCookies: true,
 		EncryptionKey: base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))}
 }
 
@@ -44,11 +44,11 @@ func TestConfigurationBoundary(t *testing.T) {
 		{"insecure remote", func(c *Config) { c.PublicURL = "http://golf.example" }, false},
 		{"secure remote", func(c *Config) { c.PublicURL = "https://golf.example"; c.AllowInsecureCookies = false }, true},
 		{"short encryption key", func(c *Config) { c.EncryptionKey = "c2hvcnQ=" }, false},
-		{"credential in URL", func(c *Config) { c.GiteaURL = "https://user:secret@gitea.example" }, false},
+		{"credential in URL", func(c *Config) { c.ForgeURL = "https://user:secret@forgejo.example" }, false},
 		{"public URL query", func(c *Config) { c.PublicURL += "?unexpected=yes" }, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			config := testConfig("http://gitea:3000")
+			config := testConfig("http://forgejo:3000")
 			tt.change(&config)
 			_, err := New(config, nil)
 			if (err == nil) != tt.valid {
@@ -59,7 +59,7 @@ func TestConfigurationBoundary(t *testing.T) {
 }
 
 func TestOriginAndBodyBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea:3000"), nil)
+	s, err := New(testConfig("http://forgejo:3000"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestOriginAndBodyBoundary(t *testing.T) {
 		{"header injection", "http://localhost:8080", `{"token":"abc\r\ndef123"}`, "application/json", 400},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("POST", "/rpc"+golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, strings.NewReader(tt.body))
+			req := httptest.NewRequest("POST", "/rpc"+golfv1connect.SessionServiceLoginWithForgeTokenProcedure, strings.NewReader(tt.body))
 			req.Header.Set("Origin", tt.origin)
 			req.Header.Set("Content-Type", tt.contentType)
 			req.Header.Set("Connect-Protocol-Version", "1")
@@ -183,7 +183,7 @@ func testDatabaseAtVersion(t *testing.T, version int64) *sql.DB {
 }
 
 // This test uses a real PostgreSQL schema and only substitutes the external
-// Gitea HTTP boundary. The separate end-to-end smoke check uses real Gitea.
+// Forgejo HTTP boundary. The separate end-to-end smoke check uses real Forgejo.
 func TestSessionAndRepositoryWithPostgres(t *testing.T) {
 	db := testDatabase(t)
 	var revoked atomic.Bool
@@ -230,7 +230,7 @@ func TestSessionAndRepositoryWithPostgres(t *testing.T) {
 	if _, err := repositories.ListRepositories(ctx, connect.NewRequest(&golfv1.ListRepositoriesRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatal("anonymous access", err)
 	}
-	login, err := sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: "user-secret-token"}))
+	login, err := sessions.LoginWithForgeToken(ctx, connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: "user-secret-token"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestSessionAndRepositoryWithPostgres(t *testing.T) {
 	}
 	// Re-authentication invalidates the prior opaque session.
 	oldCookies := httpClient.Jar.Cookies(origin)
-	if _, err := sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: "user-secret-token"})); err != nil {
+	if _, err := sessions.LoginWithForgeToken(ctx, connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: "user-secret-token"})); err != nil {
 		t.Fatal(err)
 	}
 	for _, cookie := range oldCookies {

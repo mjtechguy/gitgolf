@@ -42,7 +42,7 @@ func TestReviewerIntentPostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	reviewer := uuid.NewString()
-	_, e := f.db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,'{}',true,clock_timestamp()+interval '1 day')`, reviewer, f.s.config.GiteaURL, user, local)
+	_, e := f.db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,'{}',true,clock_timestamp()+interval '1 day')`, reviewer, f.s.config.ForgeURL, user, local)
 	if e != nil {
 		t.Fatal(e)
 	}

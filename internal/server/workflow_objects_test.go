@@ -489,7 +489,7 @@ func TestWorkflowObjectActivationPostWaitAdminPostgres(t *testing.T) {
 	// The supported operator disable invalidates this local administrator session.
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
-	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "alice"}); err != nil {
+	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "disable", LocalAccountInput{Username: "alice"}); err != nil {
 		t.Fatal("remote probe blocked local administrator disable", err)
 	}
 	once.Do(func() { close(resume) })

@@ -211,10 +211,10 @@ func wireDiscussionResource(r discussionResourceRecord) *golfv1.DiscussionResour
 	return v
 }
 func (s *Server) lockDiscussionResource(ctx context.Context, tx *sql.Tx, id int64) (context.Context, error) {
-	if _, e := tx.ExecContext(ctx, `SELECT golf_discussion_resource_lock($1,$2)`, s.config.GiteaURL, id); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_discussion_resource_lock($1,$2)`, s.config.ForgeURL, id); e != nil {
 		return nil, errStorageUnavailable
 	}
-	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, id, tx}), nil
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, id, tx}), nil
 }
 func (s *Server) readResourceMilestone(ctx context.Context, token forgeCredential, base string, id int64) (*golfv1.DiscussionMilestone, error) {
 	var raw json.RawMessage
@@ -455,7 +455,7 @@ func (s *Server) GetDiscussionResourceOperation(ctx context.Context, req *connec
 	var r discussionResourceRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanDiscussionResource(s.db.QueryRowContext(ctx, `SELECT `+discussionResourceColumns+` FROM golf_discussion_resource_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, req.Msg.OperationId))
+		r, e = scanDiscussionResource(s.db.QueryRowContext(ctx, `SELECT `+discussionResourceColumns+` FROM golf_discussion_resource_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, req.Msg.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -494,13 +494,13 @@ func (s *Server) SubmitDiscussionResourceOperation(ctx context.Context, req *con
 	targetID, _ := discussionID(m.ResourceId)
 	issueID, _ := discussionID(m.IssueId)
 	k := keyFrom(m.Repository)
-	r := discussionResourceRecord{ActorID: actor.ID, RepositoryID: repoID, Owner: k.Owner, Name: k.Name, Kind: resourceKind(m.Kind), ResourceID: targetID, IssueID: issueID, Number: int64(m.Number), Pull: m.PullRequest, EngagementComment: m.ReactionComment, Revision: m.ExpectedRevision, OperationID: m.OperationId, Fingerprint: resourceFingerprint(m), ForgeURL: s.config.GiteaURL}
+	r := discussionResourceRecord{ActorID: actor.ID, RepositoryID: repoID, Owner: k.Owner, Name: k.Name, Kind: resourceKind(m.Kind), ResourceID: targetID, IssueID: issueID, Number: int64(m.Number), Pull: m.PullRequest, EngagementComment: m.ReactionComment, Revision: m.ExpectedRevision, OperationID: m.OperationId, Fingerprint: resourceFingerprint(m), ForgeURL: s.config.ForgeURL}
 	fresh := false
 	var previous discussionResourceRecord
 	exists := false
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		previous, e = scanDiscussionResource(s.db.QueryRowContext(ctx, `SELECT `+discussionResourceColumns+` FROM golf_discussion_resource_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		previous, e = scanDiscussionResource(s.db.QueryRowContext(ctx, `SELECT `+discussionResourceColumns+` FROM golf_discussion_resource_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return nil
 		}
@@ -550,7 +550,7 @@ func (s *Server) SubmitDiscussionResourceOperation(ctx context.Context, req *con
 		if e != nil {
 			return e
 		}
-		old, e := scanDiscussionResource(tx.QueryRowContext(held, `SELECT `+discussionResourceColumns+` FROM golf_discussion_resource_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		old, e := scanDiscussionResource(tx.QueryRowContext(held, `SELECT `+discussionResourceColumns+` FROM golf_discussion_resource_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(old.Fingerprint, r.Fingerprint) {
 				return errRepositoryAccessConflict

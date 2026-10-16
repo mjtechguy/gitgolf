@@ -95,7 +95,7 @@ func TestProtectionUnknownFencesManagedWritesPostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	digest, _ := protectionPayloadHash(map[string]string{"exact": "original"})
-	p := protectionDispatchPermit{id, user, actor, 9007199254740993, s.config.GiteaURL, http.MethodPatch, "/repos/alice/example/branch_protections/main", digest}
+	p := protectionDispatchPermit{id, user, actor, 9007199254740993, s.config.ForgeURL, http.MethodPatch, "/repos/alice/example/branch_protections/main", digest}
 	owned := context.WithValue(ctx, protectionDispatchPermitKey{}, p)
 	if e = s.protectionDispatchAllowed(owned, db, p.repository); e != nil {
 		t.Fatal("original own dispatch identity refused", e)

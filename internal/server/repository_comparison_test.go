@@ -94,9 +94,9 @@ func newComparisonFixture(t *testing.T) *pullMutationFixture {
 	}))
 	t.Cleanup(provider.Close)
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL = provider.URL
-	config.GiteaOAuthClientID = "fixture-client"
-	config.GiteaOAuthClientSecret = "fixture-secret"
+	config.ForgePublicURL = provider.URL
+	config.ForgeOAuthClientID = "fixture-client"
+	config.ForgeOAuthClientSecret = "fixture-secret"
 	var err error
 	f.s, err = New(config, f.db)
 	if err != nil {

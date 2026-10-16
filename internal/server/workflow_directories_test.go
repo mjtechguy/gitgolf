@@ -58,7 +58,7 @@ func TestActionsWorkflowDirectorySelection(t *testing.T) {
 			}))
 			defer provider.Close()
 			config := testConfig(provider.URL)
-			config.GiteaWorkflowDirs = tc.setting
+			config.ForgeWorkflowDirs = tc.setting
 			s, err := New(config, nil)
 			if err != nil {
 				t.Fatal(err)

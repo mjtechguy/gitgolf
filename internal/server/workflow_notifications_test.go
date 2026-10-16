@@ -59,7 +59,7 @@ func insertOutcomeRun(t *testing.T, f *webhookFixture, owner int64, attempt stri
 	t.Helper()
 	id := uuid.NewString()
 	_, e := f.db.Exec(`INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash,attempt_id)
- SELECT $1,$2,$3,$4,'alice','example',false,user_id,$5,$6,'.github/workflows/owned.yml',$6,1,'{}',$7,$8,'[]',$1,$5,$9 FROM golf_local_accounts WHERE id=$10`, id, f.s.config.GiteaURL, int64(9007199254740993), owner, bytes.Repeat([]byte{1}, 32), strings.Repeat("a", 40), []byte("source-sensitive-sentinel"), strings.Repeat("b", 64), attempt, f.localID)
+ SELECT $1,$2,$3,$4,'alice','example',false,user_id,$5,$6,'.github/workflows/owned.yml',$6,1,'{}',$7,$8,'[]',$1,$5,$9 FROM golf_local_accounts WHERE id=$10`, id, f.s.config.ForgeURL, int64(9007199254740993), owner, bytes.Repeat([]byte{1}, 32), strings.Repeat("a", 40), []byte("source-sensitive-sentinel"), strings.Repeat("b", 64), attempt, f.localID)
 	if e != nil {
 		t.Fatal("owned queued workflow", e)
 	}

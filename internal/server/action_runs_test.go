@@ -61,7 +61,7 @@ func newActionFixture(t *testing.T) *actionFixture {
 	f.mu.Lock()
 	f.row.ID = 11
 	f.mu.Unlock()
-	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture", IsInstanceAdmin: true}); e != nil {
+	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture", IsInstanceAdmin: true}); e != nil {
 		t.Fatal(e)
 	}
 	login, e := f.server.loginLocalSession(t.Context(), "alice", localTestPassword, "")
@@ -73,13 +73,13 @@ func newActionFixture(t *testing.T) *actionFixture {
 	if e = f.server.db.QueryRow(`SELECT user_id FROM golf_local_accounts WHERE username='alice'`).Scan(&x.user); e != nil {
 		t.Fatal(e)
 	}
-	if e = f.server.db.QueryRow(`INSERT INTO golf_users(forge_url,forge_user_id,login) VALUES($1,84,'bob') RETURNING id`, f.server.config.GiteaURL).Scan(&x.foreign); e != nil {
+	if e = f.server.db.QueryRow(`INSERT INTO golf_users(forge_url,forge_user_id,login) VALUES($1,84,'bob') RETURNING id`, f.server.config.ForgeURL).Scan(&x.foreign); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = f.server.db.Exec(`INSERT INTO golf_codex_connections(id,user_id,state,forge_url,harness,provider,name) VALUES($1,$2,'CONNECTED',$3,'codex','openai','fixture')`, x.connection, x.user, f.server.config.GiteaURL); e != nil {
+	if _, e = f.server.db.Exec(`INSERT INTO golf_codex_connections(id,user_id,state,forge_url,harness,provider,name) VALUES($1,$2,'CONNECTED',$3,'codex','openai','fixture')`, x.connection, x.user, f.server.config.ForgeURL); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = f.server.db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) SELECT $1,$2,11,42,'alice','example',$3,42,id,1,43,'{}',true,clock_timestamp()+interval '1 day' FROM golf_local_accounts WHERE username='alice'`, x.reviewer, f.server.config.GiteaURL, x.user); e != nil {
+	if _, e = f.server.db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) SELECT $1,$2,11,42,'alice','example',$3,42,id,1,43,'{}',true,clock_timestamp()+interval '1 day' FROM golf_local_accounts WHERE username='alice'`, x.reviewer, f.server.config.ForgeURL, x.user); e != nil {
 		t.Fatal(e)
 	}
 	return x
@@ -87,7 +87,7 @@ func newActionFixture(t *testing.T) *actionFixture {
 func (x *actionFixture) task(t *testing.T, id string, repo, user int64, at time.Time) {
 	t.Helper()
 	_, e := x.f.server.db.Exec(`INSERT INTO golf_agent_tasks(id,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,config,policy_fingerprint,idempotency_key,input_hash,created_at,summary,patch,attempt_id)
- VALUES($1,$2,$3,42,'alice','example',$4,42,$5,$6,1,$7,$8,$9,'fingerprint',$10,$11,$12,'private-task-summary','private-task-patch',$13)`, id, x.f.server.config.GiteaURL, repo, user, x.hash, x.connection, strings.Repeat("a", 40), []byte("private-task-archive"), []byte(`{"model_id":"actual-model","instructions":"private-instructions"}`), uuid.NewString(), bytes.Repeat([]byte{8}, 32), at, strings.Repeat("e", 32))
+ VALUES($1,$2,$3,42,'alice','example',$4,42,$5,$6,1,$7,$8,$9,'fingerprint',$10,$11,$12,'private-task-summary','private-task-patch',$13)`, id, x.f.server.config.ForgeURL, repo, user, x.hash, x.connection, strings.Repeat("a", 40), []byte("private-task-archive"), []byte(`{"model_id":"actual-model","instructions":"private-instructions"}`), uuid.NewString(), bytes.Repeat([]byte{8}, 32), at, strings.Repeat("e", 32))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -96,7 +96,7 @@ func (x *actionFixture) workflow(t *testing.T, id string, repo int64, path strin
 	t.Helper()
 	plan, _ := json.Marshal(workflowExecutionPlan{JobID: "actual-job", JobName: "Actual job", Steps: []workflowExecutionStep{{Name: "Actual step", Run: "private-command"}}})
 	_, e := x.f.server.db.Exec(`INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash,created_at,attempt_id)
- VALUES($1,$2,$3,42,'alice','example',false,$4,$5,$6,$7,$8,1,$9,$10,$11,'[]',$12,$13,$14,$15)`, id, x.f.server.config.GiteaURL, repo, x.user, x.hash, strings.Repeat("a", 40), path, strings.Repeat("b", 40), plan, []byte("private-workflow-archive"), strings.Repeat("c", 64), uuid.NewString(), bytes.Repeat([]byte{9}, 32), at, strings.Repeat("d", 32))
+ VALUES($1,$2,$3,42,'alice','example',false,$4,$5,$6,$7,$8,1,$9,$10,$11,'[]',$12,$13,$14,$15)`, id, x.f.server.config.ForgeURL, repo, x.user, x.hash, strings.Repeat("a", 40), path, strings.Repeat("b", 40), plan, []byte("private-workflow-archive"), strings.Repeat("c", 64), uuid.NewString(), bytes.Repeat([]byte{9}, 32), at, strings.Repeat("d", 32))
 	if e != nil {
 		t.Fatal(e)
 	}

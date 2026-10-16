@@ -21,7 +21,7 @@ import (
 var creationKey = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 // Fixed field order and no omitted fields give exact input fingerprints. The
-// description is sent to Gitea but only its digest remains in operation storage.
+// description is sent to Forgejo but only its digest remains in operation storage.
 type repositoryCreationInput struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -77,11 +77,11 @@ func (s *Server) createRepository(ctx context.Context, session string, credentia
 	err = s.withManagedSession(ctx, session, credential, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		var err error
 		record, err = queries.ReserveRepositoryCreation(ctx, database.ReserveRepositoryCreationParams{
-			UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key,
+			UserID: caller.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: key,
 			PayloadFingerprint: fingerprint[:], RequestedName: name, Private: *private,
 		})
 		if errors.Is(err, sql.ErrNoRows) {
-			record, err = queries.GetRepositoryCreation(ctx, database.GetRepositoryCreationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key})
+			record, err = queries.GetRepositoryCreation(ctx, database.GetRepositoryCreationParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: key})
 			if err != nil {
 				return errStorageUnavailable
 			}
@@ -172,7 +172,7 @@ func (s *Server) completeRepositoryCreation(ctx context.Context, record database
 	}
 	defer tx.Rollback()
 	queries := database.New(s.db).WithTx(tx)
-	params := database.CompleteRepositoryCreationParams{CreationID: record.ID, UserID: record.UserID, ForgeURL: s.config.GiteaURL, State: state, FailureCode: failure}
+	params := database.CompleteRepositoryCreationParams{CreationID: record.ID, UserID: record.UserID, ForgeURL: s.config.ForgeURL, State: state, FailureCode: failure}
 	if state == "SUCCEEDED" {
 		params.RepositoryID = sql.NullInt64{Int64: repo.ID, Valid: true}
 		params.RepositoryFullName = sql.NullString{String: repo.FullName, Valid: true}
@@ -197,7 +197,7 @@ func (s *Server) getRepositoryCreation(ctx context.Context, session string, cred
 	}
 	read := func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		var err error
-		record, err = queries.GetRepositoryCreation(ctx, database.GetRepositoryCreationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key})
+		record, err = queries.GetRepositoryCreation(ctx, database.GetRepositoryCreationParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: key})
 		if errors.Is(err, sql.ErrNoRows) {
 			return errResourceNotFound
 		}

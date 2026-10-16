@@ -27,7 +27,7 @@ func (s *Server) deletionBoundary(ctx context.Context, db database.DBTX, token f
 		return errDeletionBoundary
 	}
 	var qualified int
-	e := db.QueryRowContext(ctx, `SELECT 1 FROM golf_git_transport_profiles WHERE forge_url=$1 AND incarnation=$2 AND native_version='1.27.3' AND suspended_at IS NULL AND qualified_at<=clock_timestamp() AND qualifier_source_commit ~ '^[a-f0-9]{40}$' AND golf_image_digest ~ '^sha256:[a-f0-9]{64}$' AND native_image_digest ~ '^sha256:[a-f0-9]{64}$' AND native_runtime_id ~ '^[a-f0-9]{64}$' AND receipt_sha256 ~ '^[a-f0-9]{64}$' FOR SHARE`, s.config.GiteaURL, c.Incarnation).Scan(&qualified)
+	e := db.QueryRowContext(ctx, `SELECT 1 FROM golf_git_transport_profiles WHERE forge_url=$1 AND incarnation=$2 AND native_version='1.27.3' AND suspended_at IS NULL AND qualified_at<=clock_timestamp() AND qualifier_source_commit ~ '^[a-f0-9]{40}$' AND golf_image_digest ~ '^sha256:[a-f0-9]{64}$' AND native_image_digest ~ '^sha256:[a-f0-9]{64}$' AND native_runtime_id ~ '^[a-f0-9]{64}$' AND receipt_sha256 ~ '^[a-f0-9]{64}$' FOR SHARE`, s.config.ForgeURL, c.Incarnation).Scan(&qualified)
 	if errors.Is(e, sql.ErrNoRows) {
 		return errDeletionBoundary
 	}
@@ -71,7 +71,7 @@ func (s *Server) validateLifecyclePermit(ctx context.Context, db database.DBTX, 
 		}
 	}
 	var exact bool
-	if e := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_repository_lifecycle_operations WHERE forge_url=$1 AND repository_id=$2 AND user_id=$3 AND idempotency_key=$4 AND to_archived=$5 AND action=$6 AND phase='DISPATCH_UNKNOWN' AND ($6<>'delete' OR (owner_id=$7 AND expected_revision=$8 AND repository_owner=$9 AND repository_name=$10)))`, s.config.GiteaURL, row.ID, p.userID, p.key, p.archived, action, p.ownerID, p.revision, key.Owner, key.Name).Scan(&exact); e != nil {
+	if e := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_repository_lifecycle_operations WHERE forge_url=$1 AND repository_id=$2 AND user_id=$3 AND idempotency_key=$4 AND to_archived=$5 AND action=$6 AND phase='DISPATCH_UNKNOWN' AND ($6<>'delete' OR (owner_id=$7 AND expected_revision=$8 AND repository_owner=$9 AND repository_name=$10)))`, s.config.ForgeURL, row.ID, p.userID, p.key, p.archived, action, p.ownerID, p.revision, key.Owner, key.Name).Scan(&exact); e != nil {
 		return errStorageUnavailable
 	}
 	if !exact {
@@ -258,14 +258,14 @@ func (s *Server) DeleteRepository(ctx context.Context, req *connect.Request[golf
 	reserved := false
 	e = s.workflowTransaction(ctx, session, initial.ForgeUserID, func(tx *sql.Tx, c database.LockManagedSessionRow, hash []byte) error {
 		q := database.New(tx)
-		current, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		current, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if e != nil || !sameOwnSecurity(initial, current) {
 			return errUnauthenticated
 		}
-		if e = q.LockRepositoryLifecycle(ctx, database.LockRepositoryLifecycleParams{ForgeURL: s.config.GiteaURL, RepositoryID: repoID}); e != nil {
+		if e = q.LockRepositoryLifecycle(ctx, database.LockRepositoryLifecycleParams{ForgeURL: s.config.ForgeURL, RepositoryID: repoID}); e != nil {
 			return errStorageUnavailable
 		}
-		prior, priorErr := q.GetOwnRepositoryLifecycle(ctx, database.GetOwnRepositoryLifecycleParams{UserID: c.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: m.IdempotencyKey})
+		prior, priorErr := q.GetOwnRepositoryLifecycle(ctx, database.GetOwnRepositoryLifecycleParams{UserID: c.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: m.IdempotencyKey})
 		if priorErr == nil {
 			if !deletionMatches(prior, key, m.RepositoryId, m.OwnerId) || !bytes.Equal(prior.Fingerprint, fp) {
 				return errRepositorySettingsConflict
@@ -276,20 +276,20 @@ func (s *Server) DeleteRepository(ctx context.Context, req *connect.Request[golf
 		if !errors.Is(priorErr, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		active, e := q.CountRepositoryLifecycleActive(ctx, database.CountRepositoryLifecycleActiveParams{ForgeURL: s.config.GiteaURL, RepositoryID: repoID})
+		active, e := q.CountRepositoryLifecycleActive(ctx, database.CountRepositoryLifecycleActiveParams{ForgeURL: s.config.ForgeURL, RepositoryID: repoID})
 		if e != nil {
 			return errStorageUnavailable
 		}
-		blocked, e := q.RepositoryLifecycleBlocked(ctx, database.RepositoryLifecycleBlockedParams{ForgeURL: s.config.GiteaURL, RepositoryID: repoID})
+		blocked, e := q.RepositoryLifecycleBlocked(ctx, database.RepositoryLifecycleBlockedParams{ForgeURL: s.config.ForgeURL, RepositoryID: repoID})
 		if e != nil {
 			return errStorageUnavailable
 		}
 		if blocked {
 			return errLifecycleBlocked
 		}
-		record, e = q.ReserveRepositoryDeletion(ctx, database.ReserveRepositoryDeletionParams{UserID: c.UserID, ForgeURL: s.config.GiteaURL, ActorID: initial.ForgeUserID, IdempotencyKey: m.IdempotencyKey, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, ExpectedRevision: m.ExpectedRevision, FromArchived: observed.Archived, Fingerprint: fp, OwnerIsOrganization: org})
+		record, e = q.ReserveRepositoryDeletion(ctx, database.ReserveRepositoryDeletionParams{UserID: c.UserID, ForgeURL: s.config.ForgeURL, ActorID: initial.ForgeUserID, IdempotencyKey: m.IdempotencyKey, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, ExpectedRevision: m.ExpectedRevision, FromArchived: observed.Archived, Fingerprint: fp, OwnerIsOrganization: org})
 		if errors.Is(e, sql.ErrNoRows) {
-			record, e = q.GetOwnRepositoryLifecycle(ctx, database.GetOwnRepositoryLifecycleParams{UserID: c.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: m.IdempotencyKey})
+			record, e = q.GetOwnRepositoryLifecycle(ctx, database.GetOwnRepositoryLifecycleParams{UserID: c.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: m.IdempotencyKey})
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -302,7 +302,7 @@ func (s *Server) DeleteRepository(ctx context.Context, req *connect.Request[golf
 			return errStorageUnavailable
 		}
 		if active != 0 || observed.Revision != m.ExpectedRevision {
-			record, e = q.AdvanceRepositoryLifecycle(ctx, database.AdvanceRepositoryLifecycleParams{ID: record.ID, UserID: c.UserID, ForgeURL: s.config.GiteaURL, Phase: "REJECTED", FailureCode: "preflight_refused"})
+			record, e = q.AdvanceRepositoryLifecycle(ctx, database.AdvanceRepositoryLifecycleParams{ID: record.ID, UserID: c.UserID, ForgeURL: s.config.ForgeURL, Phase: "REJECTED", FailureCode: "preflight_refused"})
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -334,11 +334,11 @@ func (s *Server) DeleteRepository(ctx context.Context, req *connect.Request[golf
 			return errUnauthenticated
 		}
 		q := database.New(tx)
-		current, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		current, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if e != nil || !sameOwnSecurity(initial, current) {
 			return errUnauthenticated
 		}
-		if _, e = tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.GiteaURL, repoID); e != nil {
+		if _, e = tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.ForgeURL, repoID); e != nil {
 			return errStorageUnavailable
 		}
 		fresh, settings, e := s.readLifecycleNative(ctx, token, key)
@@ -355,7 +355,7 @@ func (s *Server) DeleteRepository(ctx context.Context, req *connect.Request[golf
 			return e
 		}
 		permit := lifecyclePermit{repositoryID: repoID, userID: record.UserID, key: record.IdempotencyKey, archived: record.ToArchived, delete: true, ownerID: ownerID, revision: record.ExpectedRevision}
-		held := context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, repoID, tx})
+		held := context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, repoID, tx})
 		held = context.WithValue(held, lifecyclePermitKey{}, permit)
 		base, _ := repositoryPath(key)
 		if _, e = s.forgeJSON(held, http.MethodDelete, base, token, nil, nil, http.StatusNoContent); e != nil {
@@ -366,11 +366,11 @@ func (s *Server) DeleteRepository(ctx context.Context, req *connect.Request[golf
 		if e = s.deletionOwner(ctx, token, record); e != nil {
 			return e
 		}
-		current, e = q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		current, e = q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if e != nil || !sameOwnSecurity(initial, current) {
 			return errUnauthenticated
 		}
-		record, e = q.AdvanceRepositoryLifecycle(ctx, database.AdvanceRepositoryLifecycleParams{ID: record.ID, UserID: c.UserID, ForgeURL: s.config.GiteaURL, Phase: "SUCCEEDED"})
+		record, e = q.AdvanceRepositoryLifecycle(ctx, database.AdvanceRepositoryLifecycleParams{ID: record.ID, UserID: c.UserID, ForgeURL: s.config.ForgeURL, Phase: "SUCCEEDED"})
 		if e != nil {
 			return errStorageUnavailable
 		}

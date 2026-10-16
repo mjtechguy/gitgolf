@@ -14,7 +14,7 @@ import (
 )
 
 func TestActivityBoundary(t *testing.T) {
-	s, e := New(testConfig("http://gitea.invalid"), nil)
+	s, e := New(testConfig("http://forgejo.invalid"), nil)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -52,11 +52,11 @@ func activityRequest(f *pullFixture, session loginResult, cursor string) *connec
 }
 func appendActivity(t *testing.T, f *pullFixture, repo, user int64, topic string) string {
 	t.Helper()
-	if _, e := f.db.Exec("SELECT golf_append_repository_activity($1,$2,$3,$4)", f.s.config.GiteaURL, repo, user, topic); e != nil {
+	if _, e := f.db.Exec("SELECT golf_append_repository_activity($1,$2,$3,$4)", f.s.config.ForgeURL, repo, user, topic); e != nil {
 		t.Fatal(e)
 	}
 	var id int64
-	if e := f.db.QueryRow("SELECT max(id) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2", f.s.config.GiteaURL, repo).Scan(&id); e != nil {
+	if e := f.db.QueryRow("SELECT max(id) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2", f.s.config.ForgeURL, repo).Scan(&id); e != nil {
 		t.Fatal(e)
 	}
 	return strconv.FormatInt(id, 10)
@@ -140,7 +140,7 @@ func TestActivityCommitOrderPostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer tx.Rollback()
-	if _, e = tx.ExecContext(ctx, "SELECT golf_append_repository_activity($1,11,0,'issues')", f.s.config.GiteaURL); e != nil {
+	if _, e = tx.ExecContext(ctx, "SELECT golf_append_repository_activity($1,11,0,'issues')", f.s.config.ForgeURL); e != nil {
 		t.Fatal(e)
 	}
 	var first int64
@@ -149,7 +149,7 @@ func TestActivityCommitOrderPostgres(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, e := f.db.ExecContext(ctx, "SELECT golf_append_repository_activity($1,11,0,'pulls')", f.s.config.GiteaURL)
+		_, e := f.db.ExecContext(ctx, "SELECT golf_append_repository_activity($1,11,0,'pulls')", f.s.config.ForgeURL)
 		done <- e
 	}()
 	select {
@@ -171,7 +171,7 @@ func TestActivityCommitOrderPostgres(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = rollback.Exec("SELECT golf_append_repository_activity($1,11,0,'source')", f.s.config.GiteaURL); e != nil {
+	if _, e = rollback.Exec("SELECT golf_append_repository_activity($1,11,0,'source')", f.s.config.ForgeURL); e != nil {
 		t.Fatal(e)
 	}
 	if e = rollback.Rollback(); e != nil {

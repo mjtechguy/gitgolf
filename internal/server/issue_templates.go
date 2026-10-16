@@ -67,7 +67,7 @@ func (s *Server) ListIssueTemplates(ctx context.Context, req *connect.Request[go
 		}
 		out.CommitId = selected.CommitId
 		entries := []sourceEntry{}
-		for _, name := range []string{".gitea/ISSUE_TEMPLATE", ".github/ISSUE_TEMPLATE"} {
+		for _, name := range []string{".forgejo/ISSUE_TEMPLATE", ".github/ISSUE_TEMPLATE"} {
 			result, e := s.readContentsAtCommit(ctx, base, token, selected.CommitId, name)
 			if sourceNotFound(e) {
 				continue
@@ -84,7 +84,7 @@ func (s *Server) ListIssueTemplates(ctx context.Context, req *connect.Request[go
 				}
 			}
 		}
-		for _, name := range []string{".gitea/ISSUE_TEMPLATE.md", ".github/ISSUE_TEMPLATE.md", "ISSUE_TEMPLATE.md"} {
+		for _, name := range []string{".forgejo/ISSUE_TEMPLATE.md", ".github/ISSUE_TEMPLATE.md", "ISSUE_TEMPLATE.md"} {
 			result, e := s.readContentsAtCommit(ctx, base, token, selected.CommitId, name)
 			if sourceNotFound(e) {
 				continue

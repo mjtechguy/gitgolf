@@ -40,29 +40,29 @@ type oauthEnvelope struct {
 }
 
 func validateOAuthConfig(config Config) error {
-	if config.GiteaPublicURL == "" && config.GiteaOAuthClientID == "" && config.GiteaOAuthClientSecret == "" {
+	if config.ForgePublicURL == "" && config.ForgeOAuthClientID == "" && config.ForgeOAuthClientSecret == "" {
 		return nil
 	}
-	if config.GiteaPublicURL == "" || strings.TrimSpace(config.GiteaOAuthClientID) == "" || strings.TrimSpace(config.GiteaOAuthClientSecret) == "" {
-		return errors.New("GITEA_PUBLIC_URL, GITEA_OAUTH_CLIENT_ID and GITEA_OAUTH_CLIENT_SECRET must all be configured for OAuth")
+	if config.ForgePublicURL == "" || strings.TrimSpace(config.ForgeOAuthClientID) == "" || strings.TrimSpace(config.ForgeOAuthClientSecret) == "" {
+		return errors.New("GOLF_FORGE_PUBLIC_URL, GOLF_FORGE_OAUTH_CLIENT_ID and GOLF_FORGE_OAUTH_CLIENT_SECRET must all be configured for OAuth")
 	}
-	u, err := url.Parse(config.GiteaPublicURL)
+	u, err := url.Parse(config.ForgePublicURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Scheme != "http" && u.Scheme != "https") {
-		return errors.New("GITEA_PUBLIC_URL must be an HTTP(S) URL without credentials or query")
+		return errors.New("GOLF_FORGE_PUBLIC_URL must be an HTTP(S) URL without credentials or query")
 	}
 	ip := net.ParseIP(u.Hostname())
 	if u.Scheme != "https" && !(config.AllowInsecureCookies && (u.Hostname() == "localhost" || ip != nil && ip.IsLoopback())) {
-		return errors.New("GITEA_PUBLIC_URL requires HTTPS outside explicit loopback development")
+		return errors.New("GOLF_FORGE_PUBLIC_URL requires HTTPS outside explicit loopback development")
 	}
 	return nil
 }
 func (s *Server) oauthConfig() *oauth2.Config {
-	return &oauth2.Config{ClientID: s.config.GiteaOAuthClientID, ClientSecret: s.config.GiteaOAuthClientSecret,
+	return &oauth2.Config{ClientID: s.config.ForgeOAuthClientID, ClientSecret: s.config.ForgeOAuthClientSecret,
 		RedirectURL: s.config.PublicURL + oauthCallbackPath, Scopes: append([]string(nil), oauthScopes...),
-		Endpoint: oauth2.Endpoint{AuthURL: s.config.GiteaPublicURL + "/login/oauth/authorize", TokenURL: s.config.GiteaURL + "/login/oauth/access_token", AuthStyle: oauth2.AuthStyleInParams}}
+		Endpoint: oauth2.Endpoint{AuthURL: s.config.ForgePublicURL + "/login/oauth/authorize", TokenURL: s.config.ForgeURL + "/login/oauth/access_token", AuthStyle: oauth2.AuthStyleInParams}}
 }
 func (s *Server) oauthAvailable(ctx context.Context) bool {
-	if s.config.GiteaOAuthClientID == "" {
+	if s.config.ForgeOAuthClientID == "" {
 		return false
 	}
 	_, ready := s.dependencyChecks(ctx)
@@ -70,7 +70,7 @@ func (s *Server) oauthAvailable(ctx context.Context) bool {
 }
 func (s *Server) GetAuthenticationOptions(ctx context.Context, _ *connect.Request[golfv1.GetAuthenticationOptionsRequest]) (*connect.Response[golfv1.GetAuthenticationOptionsResponse], error) {
 	enabled := s.oauthAvailable(ctx)
-	return connect.NewResponse(&golfv1.GetAuthenticationOptionsResponse{GiteaOauthEnabled: enabled, ProviderLabel: s.forgeLabel(), LocalPasswordEnabled: s.db != nil, Scopes: append([]string(nil), oauthScopes...)}), nil
+	return connect.NewResponse(&golfv1.GetAuthenticationOptionsResponse{ForgeOauthEnabled: enabled, ProviderLabel: s.forgeLabel(), LocalPasswordEnabled: s.db != nil, Scopes: append([]string(nil), oauthScopes...)}), nil
 }
 func (s *Server) oauthCookie(value string, expires time.Time, maxAge int) *http.Cookie {
 	return &http.Cookie{Name: oauthCookieName, Value: value, Path: oauthCallbackPath, HttpOnly: true, Secure: !s.config.AllowInsecureCookies, SameSite: http.SameSiteLaxMode, Expires: expires, MaxAge: maxAge}
@@ -82,7 +82,7 @@ func randomOpaque() string {
 	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }
-func (s *Server) BeginGiteaOAuth(ctx context.Context, _ *connect.Request[golfv1.BeginGiteaOAuthRequest]) (*connect.Response[golfv1.BeginGiteaOAuthResponse], error) {
+func (s *Server) BeginForgeOAuth(ctx context.Context, _ *connect.Request[golfv1.BeginForgeOAuthRequest]) (*connect.Response[golfv1.BeginForgeOAuthResponse], error) {
 	if !s.oauthAvailable(ctx) {
 		return nil, rpcError(errOAuthDisabled)
 	}
@@ -101,7 +101,7 @@ func (s *Server) BeginGiteaOAuth(ctx context.Context, _ *connect.Request[golfv1.
 	if err := queries.CreateKeyedOAuthAttempt(ctx, database.CreateKeyedOAuthAttemptParams{StateHash: stateHash, BindingHash: bindingHash, EncryptedVerifier: encrypted, ExpiresAt: expires, CredentialKeyID: keyID}); err != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
-	response := connect.NewResponse(&golfv1.BeginGiteaOAuthResponse{AuthorizationUrl: s.oauthConfig().AuthCodeURL(state, oauth2.S256ChallengeOption(verifier))})
+	response := connect.NewResponse(&golfv1.BeginForgeOAuthResponse{AuthorizationUrl: s.oauthConfig().AuthCodeURL(state, oauth2.S256ChallengeOption(verifier))})
 	response.Header().Add("Set-Cookie", s.oauthCookie(binding, expires, int(oauthAttemptLifetime.Seconds())).String())
 	return response, nil
 }
@@ -155,7 +155,7 @@ func encodeOAuth(envelope oauthEnvelope) string {
 func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, s.oauthCookie("", time.Unix(1, 0), -1))
 	fail := func() { http.Redirect(w, r, "/?auth_error=oauth_failed", http.StatusSeeOther) }
-	if s.config.GiteaOAuthClientID == "" || s.db == nil || len(r.URL.RawQuery) > maxOAuthResponse {
+	if s.config.ForgeOAuthClientID == "" || s.db == nil || len(r.URL.RawQuery) > maxOAuthResponse {
 		fail()
 		return
 	}
@@ -219,7 +219,7 @@ func oauthExpired(envelope oauthEnvelope) bool {
 }
 
 func (s *Server) oauthCredential(ctx context.Context, hash []byte, payload string) (forgeCredential, error) {
-	if s.config.GiteaOAuthClientID == "" {
+	if s.config.ForgeOAuthClientID == "" {
 		return forgeCredential{}, errUnauthenticated
 	}
 	envelope, err := decodeOAuth(payload)
@@ -235,7 +235,7 @@ func (s *Server) oauthCredential(ctx context.Context, hash []byte, payload strin
 	}
 	defer tx.Rollback()
 	queries := database.New(s.db).WithTx(tx)
-	row, err := queries.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	row, err := queries.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return forgeCredential{}, errUnauthenticated
 	}
@@ -311,12 +311,12 @@ func (s *Server) oauthCredential(ctx context.Context, hash []byte, payload strin
 	return forgeCredential{Kind: "oauth", Token: envelope.AccessToken}, nil
 }
 
-// Gitea 1.27.3 refresh errors distinguish the application from the user's
+// Forgejo's OAuth2 refresh errors distinguish the application from the user's
 // grant. An invalid client can be a recoverable operator secret/config issue
-// (and Gitea even uses it for app lookup database errors), so preserve the
+// (and the provider even uses it for app lookup database errors), so preserve the
 // encrypted grant. Its unauthorized_client code also covers expired/reused
 // refresh tokens. Never treat a 5xx/429 error body as proof of revocation.
-// https://github.com/go-gitea/gitea/blob/v1.27.3/routers/web/auth/oauth2_provider.go#L536-L598
+// See Forgejo's OAuth2 provider token handler (routers/web/auth) at the pinned release.
 func oauthRefreshError(err error) error {
 	var retrieve *oauth2.RetrieveError
 	if !errors.As(err, &retrieve) || retrieve.Response == nil || (retrieve.Response.StatusCode != http.StatusBadRequest && retrieve.Response.StatusCode != http.StatusUnauthorized) {

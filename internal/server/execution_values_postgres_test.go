@@ -556,7 +556,7 @@ func TestExecutionValueLifecycleLatchPostgres(t *testing.T) {
 	target := executionWebhookTarget(t, f)
 	key := uuid.NewString()
 	var operation int64
-	e := f.db.QueryRow(`INSERT INTO golf_repository_lifecycle_operations(user_id,forge_url,actor_id,idempotency_key,repository_id,owner_id,repository_owner,repository_name,expected_revision,from_archived,to_archived,fingerprint) SELECT id,$1,forge_user_id,$2,$3,$4,'alice','example',$5,false,true,$6 FROM golf_users WHERE forge_url=$1 RETURNING id`, f.s.config.GiteaURL, key, target.RepositoryId, target.OwnerId, target.AccessRevision, bytes.Repeat([]byte{2}, 32)).Scan(&operation)
+	e := f.db.QueryRow(`INSERT INTO golf_repository_lifecycle_operations(user_id,forge_url,actor_id,idempotency_key,repository_id,owner_id,repository_owner,repository_name,expected_revision,from_archived,to_archived,fingerprint) SELECT id,$1,forge_user_id,$2,$3,$4,'alice','example',$5,false,true,$6 FROM golf_users WHERE forge_url=$1 RETURNING id`, f.s.config.ForgeURL, key, target.RepositoryId, target.OwnerId, target.AccessRevision, bytes.Repeat([]byte{2}, 32)).Scan(&operation)
 	if e != nil {
 		t.Fatal("actual lifecycle latch", e)
 	}
@@ -587,14 +587,14 @@ func TestExecutionRetainedBootstrapLaterPagePostgres(t *testing.T) {
 	var last []byte
 	for index, id := range ids {
 		repo := int64(500 + index)
-		if _, e = tx.Exec(`INSERT INTO golf_execution_value_brokers(forge_url,repository_id,owner_id) VALUES($1,$2,42)`, f.s.config.GiteaURL, repo); e != nil {
+		if _, e = tx.Exec(`INSERT INTO golf_execution_value_brokers(forge_url,repository_id,owner_id) VALUES($1,$2,42)`, f.s.config.ForgeURL, repo); e != nil {
 			t.Fatal(e)
 		}
-		if _, e = tx.Exec(`INSERT INTO golf_execution_values(id,forge_url,repository_id,owner_id,name,kind,version,value_bytes) VALUES($1,$2,$3,42,'BUILD_CREDENTIAL','secret',1,8)`, id, f.s.config.GiteaURL, repo); e != nil {
+		if _, e = tx.Exec(`INSERT INTO golf_execution_values(id,forge_url,repository_id,owner_id,name,kind,version,value_bytes) VALUES($1,$2,$3,42,'BUILD_CREDENTIAL','secret',1,8)`, id, f.s.config.ForgeURL, repo); e != nil {
 			t.Fatal(e)
 		}
 		for version := int64(1); version <= 256; version++ {
-			binding := executionValueBinding(id, version, f.s.config.GiteaURL, repo, 42, "BUILD_CREDENTIAL", "secret", 8)
+			binding := executionValueBinding(id, version, f.s.config.ForgeURL, repo, 42, "BUILD_CREDENTIAL", "secret", 8)
 			cipher, key, e := f.s.keyring.seal(executionValueDomain, "abcdefgh", binding)
 			if e != nil {
 				t.Fatal(e)

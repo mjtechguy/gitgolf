@@ -75,7 +75,7 @@ func (s *Server) discussionAttachmentBytes(ctx context.Context, token forgeCrede
 		return nil, errUnauthenticated
 	}
 	// The verified API association supplies only UUID. No provider URL is followed.
-	req, e := http.NewRequestWithContext(ctx, http.MethodGet, s.config.GiteaURL+"/attachments/"+a.UUID, nil)
+	req, e := http.NewRequestWithContext(ctx, http.MethodGet, s.config.ForgeURL+"/attachments/"+a.UUID, nil)
 	if e != nil {
 		return nil, e
 	}

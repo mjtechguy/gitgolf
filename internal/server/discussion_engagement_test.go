@@ -27,7 +27,7 @@ func newEngagementFixture(t *testing.T) *engagementFixture {
 	provider := httptest.NewServer(http.HandlerFunc(f.serveEngagement))
 	t.Cleanup(provider.Close)
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL, config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
+	config.ForgePublicURL, config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {

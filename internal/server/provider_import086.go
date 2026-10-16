@@ -156,7 +156,7 @@ func (s *Server) ownProviderConnection(ctx context.Context, session string, toke
 	}
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		record, e = scanProviderConnection(s.db.QueryRowContext(ctx, `SELECT `+providerConnectionColumns+` FROM golf_provider_connections WHERE id=$1 AND user_id=$2 AND forge_url=$3`, id, caller.UserID, s.config.GiteaURL))
+		record, e = scanProviderConnection(s.db.QueryRowContext(ctx, `SELECT `+providerConnectionColumns+` FROM golf_provider_connections WHERE id=$1 AND user_id=$2 AND forge_url=$3`, id, caller.UserID, s.config.ForgeURL))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -183,7 +183,7 @@ func (s *Server) ListProviderConnections(ctx context.Context, req *connect.Reque
 	}
 	result := &golfv1.ListProviderConnectionsResponse{}
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
-		rows, e := s.db.QueryContext(ctx, `SELECT `+providerConnectionColumns+` FROM golf_provider_connections WHERE user_id=$1 AND forge_url=$2 ORDER BY created_at DESC,id LIMIT 101`, c.UserID, s.config.GiteaURL)
+		rows, e := s.db.QueryContext(ctx, `SELECT `+providerConnectionColumns+` FROM golf_provider_connections WHERE user_id=$1 AND forge_url=$2 ORDER BY created_at DESC,id LIMIT 101`, c.UserID, s.config.ForgeURL)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -245,19 +245,19 @@ func (s *Server) CreateProviderConnection(ctx context.Context, req *connect.Requ
 			return errKeyPolicy
 		}
 		var count int64
-		if e = tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_provider_connections WHERE user_id=$1 AND forge_url=$2`, c.UserID, s.config.GiteaURL).Scan(&count); e != nil {
+		if e = tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_provider_connections WHERE user_id=$1 AND forge_url=$2`, c.UserID, s.config.ForgeURL).Scan(&count); e != nil {
 			return errStorageUnavailable
 		}
 		if count >= 100 {
 			return errForgeResponseTooLarge
 		}
 		binding := providerConnectionBinding(m.ConnectionId)
-		plain, _ := json.Marshal(providerSecret{Contract: "golf.personal-provider-connection.v1", ConnectionID: m.ConnectionId, UserID: c.UserID, Forge: s.config.GiteaURL, Provider: m.Provider, ProviderID: providerID, Token: m.Token})
+		plain, _ := json.Marshal(providerSecret{Contract: "golf.personal-provider-connection.v1", ConnectionID: m.ConnectionId, UserID: c.UserID, Forge: s.config.ForgeURL, Provider: m.Provider, ProviderID: providerID, Token: m.Token})
 		cipher, key, e := s.keyring.seal(infrastructureConnectionDomain, string(plain), binding)
 		if e != nil {
 			return e
 		}
-		r, e = scanProviderConnection(tx.QueryRowContext(ctx, `INSERT INTO golf_provider_connections(id,user_id,forge_url,actor_id,provider,name,provider_account_id,provider_login,encrypted_credential,credential_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING `+providerConnectionColumns, m.ConnectionId, c.UserID, s.config.GiteaURL, actor.ID, m.Provider, m.Name, providerID, login, cipher, binding, key))
+		r, e = scanProviderConnection(tx.QueryRowContext(ctx, `INSERT INTO golf_provider_connections(id,user_id,forge_url,actor_id,provider,name,provider_account_id,provider_login,encrypted_credential,credential_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING `+providerConnectionColumns, m.ConnectionId, c.UserID, s.config.ForgeURL, actor.ID, m.Provider, m.Name, providerID, login, cipher, binding, key))
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -291,7 +291,7 @@ func (s *Server) UpdateProviderConnection(ctx context.Context, req *connect.Requ
 	}
 	e = s.workflowTransaction(ctx, session, r.ActorID, func(tx *sql.Tx, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanProviderConnection(tx.QueryRowContext(ctx, `UPDATE golf_provider_connections SET name=$1,revoked=$2,version=version+1 WHERE id=$3 AND user_id=$4 AND forge_url=$5 AND version=$6 AND NOT revoked RETURNING `+providerConnectionColumns, m.Name, m.Revoke, m.ConnectionId, c.UserID, s.config.GiteaURL, r.Version))
+		r, e = scanProviderConnection(tx.QueryRowContext(ctx, `UPDATE golf_provider_connections SET name=$1,revoked=$2,version=version+1 WHERE id=$3 AND user_id=$4 AND forge_url=$5 AND version=$6 AND NOT revoked RETURNING `+providerConnectionColumns, m.Name, m.Revoke, m.ConnectionId, c.UserID, s.config.ForgeURL, r.Version))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errRepositoryAccessConflict
 		}
@@ -486,7 +486,7 @@ func (s *Server) GetProviderImport(ctx context.Context, req *connect.Request[gol
 	var r providerImportRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanProviderImport(s.db.QueryRowContext(ctx, `SELECT `+providerImportColumns+` FROM golf_provider_import_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, req.Msg.OperationId))
+		r, e = scanProviderImport(s.db.QueryRowContext(ctx, `SELECT `+providerImportColumns+` FROM golf_provider_import_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, req.Msg.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -548,7 +548,7 @@ func (s *Server) SubmitProviderImport(ctx context.Context, req *connect.Request[
 	fresh := false
 	e = s.workflowTransaction(ctx, session, actor.ID, func(tx *sql.Tx, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanProviderImport(tx.QueryRowContext(ctx, `SELECT `+providerImportColumns+` FROM golf_provider_import_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanProviderImport(tx.QueryRowContext(ctx, `SELECT `+providerImportColumns+` FROM golf_provider_import_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(r.Fingerprint, fp) {
 				return errRepositoryAccessConflict
@@ -559,11 +559,11 @@ func (s *Server) SubmitProviderImport(ctx context.Context, req *connect.Request[
 			return errStorageUnavailable
 		}
 		var connection providerConnectionRecord
-		connection, e = scanProviderConnection(tx.QueryRowContext(ctx, `SELECT `+providerConnectionColumns+` FROM golf_provider_connections WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND NOT revoked AND version=$4 FOR UPDATE`, m.Preview.ConnectionId, c.UserID, s.config.GiteaURL, version))
+		connection, e = scanProviderConnection(tx.QueryRowContext(ctx, `SELECT `+providerConnectionColumns+` FROM golf_provider_connections WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND NOT revoked AND version=$4 FOR UPDATE`, m.Preview.ConnectionId, c.UserID, s.config.ForgeURL, version))
 		if e != nil || connection.ActorID != actor.ID {
 			return errResourceNotFound
 		}
-		r, e = scanProviderImport(tx.QueryRowContext(ctx, `INSERT INTO golf_provider_import_operations(user_id,forge_url,actor_id,operation_id,connection_id,connection_version,source_url,provider_repository_id,source_head_commit_id,destination_name,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING `+providerImportColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, connection.ID, version, m.Preview.SourceUrl, m.Preview.ProviderRepositoryId, m.Preview.SourceHeadCommitId, m.DestinationName, fp))
+		r, e = scanProviderImport(tx.QueryRowContext(ctx, `INSERT INTO golf_provider_import_operations(user_id,forge_url,actor_id,operation_id,connection_id,connection_version,source_url,provider_repository_id,source_head_commit_id,destination_name,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING `+providerImportColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, connection.ID, version, m.Preview.SourceUrl, m.Preview.ProviderRepositoryId, m.Preview.SourceHeadCommitId, m.DestinationName, fp))
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -639,7 +639,7 @@ func (s *Server) SubmitProviderImport(ctx context.Context, req *connect.Request[
 										return errUnauthenticated
 									}
 									var current int64
-									if e := tx.QueryRowContext(ctx, `SELECT version FROM golf_provider_connections WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND NOT revoked FOR SHARE`, connection.ID, c.UserID, s.config.GiteaURL).Scan(&current); e != nil || current != r.Version {
+									if e := tx.QueryRowContext(ctx, `SELECT version FROM golf_provider_connections WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND NOT revoked FOR SHARE`, connection.ID, c.UserID, s.config.ForgeURL).Scan(&current); e != nil || current != r.Version {
 										return errRepositoryAccessConflict
 									}
 									if _, e = tx.ExecContext(ctx, `UPDATE golf_provider_import_operations SET phase='SUCCEEDED',repository_id=$1 WHERE id=$2 AND phase='DISPATCH_UNKNOWN'`, result.ID, r.ID); e != nil {

@@ -180,7 +180,7 @@ func (s *Server) ListAutomationGrants(ctx context.Context, req *connect.Request[
 		if s.db == nil {
 			return errStorageUnavailable
 		}
-		rows, e := s.db.QueryContext(ctx, `SELECT `+automationGrantColumns+` FROM golf_automation_grants WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 AND ($4='' OR id::text>$4) ORDER BY id LIMIT 26`, s.config.GiteaURL, a.RepositoryId, a.OwnerId, cursor)
+		rows, e := s.db.QueryContext(ctx, `SELECT `+automationGrantColumns+` FROM golf_automation_grants WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 AND ($4='' OR id::text>$4) ORDER BY id LIMIT 26`, s.config.ForgeURL, a.RepositoryId, a.OwnerId, cursor)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -225,7 +225,7 @@ func (s *Server) CreateAutomationGrant(ctx context.Context, req *connect.Request
 		if !automationGrantAdmin(a) {
 			return forgeError{http.StatusForbidden}
 		}
-		g := automationGrantRecord{ID: uuid.NewString(), ForgeURL: s.config.GiteaURL, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, OrganizationOwned: a.OrganizationOwned, SponsorNativeUserID: user.ID, ExpiresAt: expiry, Branches: slices.Clone(m.Branches), WorkflowPaths: slices.Clone(m.WorkflowPaths)}
+		g := automationGrantRecord{ID: uuid.NewString(), ForgeURL: s.config.ForgeURL, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, OrganizationOwned: a.OrganizationOwned, SponsorNativeUserID: user.ID, ExpiresAt: expiry, Branches: slices.Clone(m.Branches), WorkflowPaths: slices.Clone(m.WorkflowPaths)}
 		delegated := forgeCredential{Kind: "pat", Token: m.NativeToken}
 		if e := s.verifyAutomationDelegation(ctx, g, delegated); e != nil {
 			return e
@@ -353,7 +353,7 @@ func (s *Server) RevokeAutomationGrant(ctx context.Context, req *connect.Request
 			return e
 		}
 		return s.workflowTransaction(ctx, s.cookieValue(req.Header()), user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, _ []byte) error {
-			g, e := scanAutomationGrant(tx.QueryRowContext(ctx, `SELECT `+automationGrantColumns+` FROM golf_automation_grants WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 FOR UPDATE`, m.GrantId, s.config.GiteaURL, a.RepositoryId, a.OwnerId))
+			g, e := scanAutomationGrant(tx.QueryRowContext(ctx, `SELECT `+automationGrantColumns+` FROM golf_automation_grants WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 FOR UPDATE`, m.GrantId, s.config.ForgeURL, a.RepositoryId, a.OwnerId))
 			if errors.Is(e, sql.ErrNoRows) {
 				return errResourceNotFound
 			}

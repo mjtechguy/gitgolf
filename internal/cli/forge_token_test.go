@@ -9,7 +9,6 @@ import (
 
 func TestForgeTokenAliasCannotMixCredentialKinds(t *testing.T) {
 	for _, env := range []map[string]string{
-		{"GOLF_FORGE_TOKEN": "private-provider-token", "GOLF_GITEA_TOKEN": "different-provider-token"},
 		{"GOLF_FORGE_TOKEN": "private-provider-token", "GOLF_API_TOKEN": fixtureAPIToken},
 		{"GOLF_FORGE_TOKEN": "private-provider-token", "GOLF_NATIVE_TOKEN": "golf_native_example"},
 	} {

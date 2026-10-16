@@ -29,7 +29,7 @@ func disableAccountRequest(s *Server, session loginResult, account, version, pas
 }
 
 func TestInstanceDisableBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

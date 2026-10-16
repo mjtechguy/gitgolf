@@ -19,7 +19,7 @@ import (
 func TestStaticDeploymentIndependentReviewAndParentExpiryPostgres(t *testing.T) {
 	f := newWorkflowRunFixture(t, ".gitlab-ci.yml")
 	f.row.HTMLURL = "https://forge.invalid/alice/example"
-	upstream, _ := url.Parse(f.server.config.GiteaURL)
+	upstream, _ := url.Parse(f.server.config.ForgeURL)
 	const bobToken = "preview-bob-fixture"
 	bob := User{ID: 43, Login: "bob"}
 	var denyBob atomic.Bool
@@ -71,14 +71,14 @@ func TestStaticDeploymentIndependentReviewAndParentExpiryPostgres(t *testing.T) 
 	}))
 	t.Cleanup(provider.Close)
 	config := f.server.config
-	config.GiteaURL = provider.URL
+	config.ForgeURL = provider.URL
 	var e error
 	f.server, e = New(config, f.server.db)
 	if e != nil {
 		t.Fatal(e)
 	}
 	for _, actor := range []struct{ name, token string }{{"alice", "run-fixture"}, {"bob", bobToken}} {
-		if _, e = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, config.GiteaURL, "create", LocalAccountInput{Username: actor.name, Password: localTestPassword, ForgeToken: actor.token}); e != nil {
+		if _, e = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, config.ForgeURL, "create", LocalAccountInput{Username: actor.name, Password: localTestPassword, ForgeToken: actor.token}); e != nil {
 			t.Fatal("supportedactorenrollment", e)
 		}
 	}

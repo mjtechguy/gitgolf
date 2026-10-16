@@ -151,7 +151,7 @@ export async function issueTemplates(row, body, artifact, readTree) {
     if (!commit || !sha(commit.treeHash)) throw Error('Invalid default branch identity');
     const root = await readTree(repo, commit.treeHash), parents = [], entries = [];
     const regular = entry => ['blob', 'exec'].includes(entry?.type);
-    for (const name of ['.gitea', '.github']) {
+    for (const name of ['.forgejo', '.github']) {
       const parent = root.find(entry => entry.name === name);
       parents.push([name + '/', parent?.type === 'tree' ? await readTree(repo, parent.hash) : []]);
     }

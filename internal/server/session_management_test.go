@@ -79,7 +79,7 @@ func newManagementFixture(t *testing.T) *managementFixture {
 		}
 	})
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL, config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
+	config.ForgePublicURL, config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
 	var err error
 	f.s, err = New(config, f.db)
 	if err != nil {
@@ -127,7 +127,7 @@ func managementToken() forgeCredential {
 }
 
 func TestSessionManagementBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,8 +254,8 @@ func TestSessionManagementSQLScopesPostgres(t *testing.T) {
 	otherID, _, _ := f.id(t, other)
 	_, bobID, bobHash := f.id(t, bob)
 	config := f.s.config
-	config.GiteaURL += "/another-forge"
-	config.GiteaOAuthClientID, config.GiteaOAuthClientSecret, config.GiteaPublicURL = "", "", ""
+	config.ForgeURL += "/another-forge"
+	config.ForgeOAuthClientID, config.ForgeOAuthClientSecret, config.ForgePublicURL = "", "", ""
 	another, err := New(config, f.db)
 	if err != nil {
 		t.Fatal(err)
@@ -270,7 +270,7 @@ func TestSessionManagementSQLScopesPostgres(t *testing.T) {
 		hash []byte
 		user int64
 		url  string
-	}{{hash, bobID, f.s.config.GiteaURL}, {bobHash, aliceID, f.s.config.GiteaURL}, {hash, aliceID, config.GiteaURL}, {foreignHash, aliceID, f.s.config.GiteaURL}, {bytes.Repeat([]byte{9}, 32), aliceID, f.s.config.GiteaURL}} {
+	}{{hash, bobID, f.s.config.ForgeURL}, {bobHash, aliceID, f.s.config.ForgeURL}, {hash, aliceID, config.ForgeURL}, {foreignHash, aliceID, f.s.config.ForgeURL}, {bytes.Repeat([]byte{9}, 32), aliceID, f.s.config.ForgeURL}} {
 		rows, err := queries.ListManagedSessions(ctx, database.ListManagedSessionsParams{CallerTokenHash: test.hash, UserID: test.user, ForgeURL: test.url, RowLimit: 100})
 		if err != nil || len(rows) != 0 {
 			t.Fatal("SQL list escaped caller/user/forge scope", err)

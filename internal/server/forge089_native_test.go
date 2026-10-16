@@ -84,7 +84,7 @@ func qualifyForge089Native(t *testing.T, s *Server, httpClient *http.Client, ori
 	}
 	part.Write([]byte("owned attachment bytes089"))
 	writer.Close()
-	native, e := http.NewRequestWithContext(ctx, "POST", s.config.GiteaURL+"/api/v1"+base+"/issues/"+strconv.FormatUint(uint64(pull.Number), 10)+"/assets", &body)
+	native, e := http.NewRequestWithContext(ctx, "POST", s.config.ForgeURL+"/api/v1"+base+"/issues/"+strconv.FormatUint(uint64(pull.Number), 10)+"/assets", &body)
 	if e != nil {
 		t.Fatal(e)
 	}

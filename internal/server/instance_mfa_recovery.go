@@ -57,7 +57,7 @@ func (s *Server) ResetRegularLocalMFA(ctx context.Context, req *connect.Request[
 		return nil, rpcError(invalid("Acknowledge the loss of factor protection and provide a recovery reason of at most512UTF-8bytes."))
 	}
 	q := database.New(s.db)
-	target, e := q.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: account, ForgeURL: s.config.GiteaURL})
+	target, e := q.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: account, ForgeURL: s.config.ForgeURL})
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil, rpcError(errResourceNotFound)
 	}
@@ -111,15 +111,15 @@ func (s *Server) ResetRegularLocalMFA(ctx context.Context, req *connect.Request[
 	if subject.CredentialVersion != version {
 		return nil, rpcError(errAdminAccountConflict)
 	}
-	latestTarget, e := locked.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: account, ForgeURL: s.config.GiteaURL})
+	latestTarget, e := locked.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: account, ForgeURL: s.config.ForgeURL})
 	if e != nil || latestTarget.UserID != user || latestTarget.ForgeUserID != native {
 		return nil, rpcError(errAdminAccountConflict)
 	}
-	if _, e = locked.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL}); e != nil {
+	if _, e = locked.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.ForgeURL}); e != nil {
 		return nil, rpcError(errUnauthenticated)
 	}
 	checkActor := func() error {
-		current, e := locked.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		current, e := locked.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if e != nil || current != initial {
 			return errUnauthenticated
 		}

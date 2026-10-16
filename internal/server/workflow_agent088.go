@@ -168,7 +168,7 @@ func (s *Server) admitWorkflowAgent(ctx context.Context, tx *sql.Tx, run workflo
 	}
 	id = uuid.NewString()
 	config, _ := json.Marshal(a.Config)
-	_, err = tx.ExecContext(ctx, `INSERT INTO golf_agent_tasks(id,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,config,policy_fingerprint,idempotency_key,input_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$1,$16)`, id, s.config.GiteaURL, run.RepositoryID, run.OwnerID, run.RepositoryOwner, run.RepositoryName, run.UserID, a.Actor.NativeID, run.SessionHash, a.Account.ID, a.Account.Version, run.CommitID, a.Source, config, a.Fingerprint, a.Digest[:])
+	_, err = tx.ExecContext(ctx, `INSERT INTO golf_agent_tasks(id,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,config,policy_fingerprint,idempotency_key,input_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$1,$16)`, id, s.config.ForgeURL, run.RepositoryID, run.OwnerID, run.RepositoryOwner, run.RepositoryName, run.UserID, a.Actor.NativeID, run.SessionHash, a.Account.ID, a.Account.Version, run.CommitID, a.Source, config, a.Fingerprint, a.Digest[:])
 	if err != nil {
 		return "", "", errStorageUnavailable
 	}

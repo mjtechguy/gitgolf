@@ -31,13 +31,13 @@ func TestCredentialSourcesFailBeforeInputOrNetwork(t *testing.T) {
 		args []string
 		env  map[string]string
 	}{
-		{[]string{"repo", "list"}, map[string]string{"GOLF_API_TOKEN": fixtureAPIToken, "GOLF_GITEA_TOKEN": "private-pat"}},
+		{[]string{"repo", "list"}, map[string]string{"GOLF_API_TOKEN": fixtureAPIToken, "GOLF_FORGE_TOKEN": "private-pat"}},
 		{[]string{"--api-token-stdin", "--token-stdin", "repo", "list"}, nil},
-		{[]string{"--api-token-stdin", "repo", "list"}, map[string]string{"GOLF_GITEA_TOKEN": "private-pat"}},
+		{[]string{"--api-token-stdin", "repo", "list"}, map[string]string{"GOLF_FORGE_TOKEN": "private-pat"}},
 		{[]string{"--token-stdin", "repo", "list"}, map[string]string{"GOLF_API_TOKEN": fixtureAPIToken}},
 		{[]string{"--api-token-stdin", "mcp"}, nil},
 		{[]string{"--token-stdin", "mcp"}, nil},
-		{[]string{"mcp"}, map[string]string{"GOLF_API_TOKEN": fixtureAPIToken, "GOLF_GITEA_TOKEN": "private-pat"}},
+		{[]string{"mcp"}, map[string]string{"GOLF_API_TOKEN": fixtureAPIToken, "GOLF_FORGE_TOKEN": "private-pat"}},
 	} {
 		var output, diagnostic bytes.Buffer
 		code := Run(context.Background(), test.args, unreadInput{t}, &output, &diagnostic, func(key string) string { return test.env[key] })

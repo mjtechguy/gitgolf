@@ -147,7 +147,7 @@ func TestHTTPObservationPrivacyCorrelationAndIsolation(t *testing.T) {
 		if span.Name == "HTTP "+procedure {
 			serverSpan = span
 		}
-		if span.Name == "gitea.request" {
+		if span.Name == "forge.request" {
 			providerSpan = span
 		}
 	}
@@ -163,7 +163,7 @@ func TestHTTPObservationPrivacyCorrelationAndIsolation(t *testing.T) {
 	}
 	otherMetrics := httptest.NewRecorder()
 	other.MetricsHandler().ServeHTTP(otherMetrics, httptest.NewRequest("GET", "/metrics", nil))
-	if strings.Contains(otherMetrics.Body.String(), "golf_http_requests_total{") || strings.Contains(otherMetrics.Body.String(), "golf_gitea_requests_total{") {
+	if strings.Contains(otherMetrics.Body.String(), "golf_http_requests_total{") || strings.Contains(otherMetrics.Body.String(), "golf_forge_requests_total{") {
 		t.Fatal("independent runtime inherited another server's observations")
 	}
 }

@@ -43,7 +43,7 @@ func TestProviderReal090GitHubPublicNative(t *testing.T) {
 		t.Fatal("server unavailable")
 	}
 	sessions, _, _, transport, origin := testRPCClients(t, s)
-	if _, e = sessions.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: f.NativeToken})); e != nil {
+	if _, e = sessions.LoginWithForgeToken(t.Context(), connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: f.NativeToken})); e != nil {
 		t.Fatal("owned session failed")
 	}
 	t.Cleanup(func() { sessions.Logout(context.Background(), connect.NewRequest(&golfv1.LogoutRequest{})) })

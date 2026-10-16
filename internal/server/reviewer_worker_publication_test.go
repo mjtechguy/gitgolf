@@ -112,7 +112,7 @@ func TestReviewerWorkerMigratedBlockerVisibilityPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	q := database.New(db)
-	user, err := q.UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: runtimeConfig.GiteaURL, ForgeUserID: 42, Login: "alice"})
+	user, err := q.UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: runtimeConfig.ForgeURL, ForgeUserID: 42, Login: "alice"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestReviewerWorkerMigratedBlockerVisibilityPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	reviewerID := uuid.NewString()
-	if _, err := db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,'{}',true,clock_timestamp()+interval '1 day')`, reviewerID, runtimeConfig.GiteaURL, user, account.ID); err != nil {
+	if _, err := db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,'{}',true,clock_timestamp()+interval '1 day')`, reviewerID, runtimeConfig.ForgeURL, user, account.ID); err != nil {
 		t.Fatal(err)
 	}
 	ids := map[string]string{}

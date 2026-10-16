@@ -51,7 +51,7 @@ func TestFileBatchJournalAndUncertaintyPostgres(t *testing.T) {
 	for _, mode := range []string{"", "lost", "ignored", "wrong-parent", "protected", "stale"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newFileMutationFixture(t, 1)
-			native, _ := url.Parse(f.s.config.GiteaURL)
+			native, _ := url.Parse(f.s.config.ForgeURL)
 			proxy := httputil.NewSingleHostReverseProxy(native)
 			files := map[string][]byte{"old.txt": []byte("old"), "delete.txt": []byte("delete")}
 			writes := 0
@@ -120,8 +120,8 @@ func TestFileBatchJournalAndUncertaintyPostgres(t *testing.T) {
 			}))
 			t.Cleanup(provider.Close)
 			config := f.s.config
-			config.GiteaURL = provider.URL
-			config.GiteaPublicURL = provider.URL
+			config.ForgeURL = provider.URL
+			config.ForgePublicURL = provider.URL
 			var e error
 			f.s, e = New(config, f.db)
 			if e != nil {

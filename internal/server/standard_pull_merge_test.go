@@ -249,9 +249,9 @@ func newStandardMergeFixture(t *testing.T) *standardMergeFixture {
 	}))
 	t.Cleanup(provider.Close)
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL = provider.URL
-	config.GiteaOAuthClientID = "fixture-client"
-	config.GiteaOAuthClientSecret = "fixture-secret"
+	config.ForgePublicURL = provider.URL
+	config.ForgeOAuthClientID = "fixture-client"
+	config.ForgeOAuthClientSecret = "fixture-secret"
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {
@@ -352,7 +352,7 @@ func TestStandardMergeRefusalAndUnknownPostgres(t *testing.T) {
 			}
 			if !known {
 				var active int
-				if e = f.db.QueryRow(`SELECT golf_repository_lifecycle_active($1,11)`, f.s.config.GiteaURL).Scan(&active); e != nil || active < 1 {
+				if e = f.db.QueryRow(`SELECT golf_repository_lifecycle_active($1,11)`, f.s.config.ForgeURL).Scan(&active); e != nil || active < 1 {
 					t.Fatal("unknown archive exclusion", e)
 				}
 				fresh := proto.Clone(m).(*golfv1.SubmitStandardPullMergeRequest)

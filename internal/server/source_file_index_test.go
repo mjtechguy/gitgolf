@@ -70,8 +70,8 @@ func TestSourceFileIndexAuthorityPostgres(t *testing.T) {
 			}))
 			defer provider.Close()
 			config := testConfig(provider.URL)
-			config.GiteaPublicURL = provider.URL
-			config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = "fixture-client", "fixture-secret"
+			config.ForgePublicURL = provider.URL
+			config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = "fixture-client", "fixture-secret"
 			var err error
 			f.s, err = New(config, f.db)
 			if err != nil {

@@ -181,7 +181,7 @@ func TestStandardMergeForkRefusalAndUnknownPostgres(t *testing.T) {
 			}
 			if state == "lost-response" || state == "late-source-denied" {
 				var active int
-				if e = f.db.QueryRow(`SELECT golf_repository_lifecycle_active($1,23)`, f.s.config.GiteaURL).Scan(&active); e != nil || active != 1 {
+				if e = f.db.QueryRow(`SELECT golf_repository_lifecycle_active($1,23)`, f.s.config.ForgeURL).Scan(&active); e != nil || active != 1 {
 					t.Fatal("Unresolved source archive not fenced", e, active)
 				}
 				again, e := f.submit(t, session, m)

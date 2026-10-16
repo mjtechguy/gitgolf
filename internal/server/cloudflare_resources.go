@@ -40,7 +40,7 @@ func (s *Server) cfResourceOwner(ctx context.Context, id string) (*codexRuntime,
 	if e != nil {
 		return nil, errStorageUnavailable
 	}
-	lock := codexLockID("golf-cloudflare-resource/" + s.config.GiteaURL + "/" + id)
+	lock := codexLockID("golf-cloudflare-resource/" + s.config.ForgeURL + "/" + id)
 	var owns bool
 	if e = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, lock).Scan(&owns); e != nil {
 		// Cancellation can lose the acknowledgement after acquiring the lock.
@@ -83,7 +83,7 @@ func (s *Server) cfResourceRecord(ctx context.Context, id string, user int64) (*
 	var state, envID, profileID string
 	var repo, owner, native, envVersion, profileVersion int64
 	var created, updated time.Time
-	e := s.db.QueryRowContext(ctx, `SELECT receipt,input_hash,state,repository_id,owner_id,native_actor_id,environment_id::text,environment_version,connection_id::text,connection_version,created_at,updated_at FROM golf_cloudflare_resource_operations WHERE id=$1 AND forge_url=$2 AND user_id=$3`, id, s.config.GiteaURL, user).Scan(&raw, &hash, &state, &repo, &owner, &native, &envID, &envVersion, &profileID, &profileVersion, &created, &updated)
+	e := s.db.QueryRowContext(ctx, `SELECT receipt,input_hash,state,repository_id,owner_id,native_actor_id,environment_id::text,environment_version,connection_id::text,connection_version,created_at,updated_at FROM golf_cloudflare_resource_operations WHERE id=$1 AND forge_url=$2 AND user_id=$3`, id, s.config.ForgeURL, user).Scan(&raw, &hash, &state, &repo, &owner, &native, &envID, &envVersion, &profileID, &profileVersion, &created, &updated)
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil, errResourceNotFound
 	}
@@ -144,7 +144,7 @@ func (s *Server) saveCFResource(ctx context.Context, v *golfv1.CloudflareEnviron
 	defer tx.Rollback()
 	var state string
 	var previousRaw []byte
-	if e = tx.QueryRowContext(ctx, `SELECT state,receipt FROM golf_cloudflare_resource_operations WHERE id=$1 AND forge_url=$2 FOR UPDATE`, v.OperationId, s.config.GiteaURL).Scan(&state, &previousRaw); e != nil {
+	if e = tx.QueryRowContext(ctx, `SELECT state,receipt FROM golf_cloudflare_resource_operations WHERE id=$1 AND forge_url=$2 FOR UPDATE`, v.OperationId, s.config.ForgeURL).Scan(&state, &previousRaw); e != nil {
 		return errStorageUnavailable
 	}
 	if state != previous {
@@ -187,7 +187,7 @@ func (s *Server) cfResourceCurrent(ctx context.Context, value string, token forg
 		if e := tx.QueryRowContext(ctx, `SELECT current_version FROM golf_infrastructure_connections WHERE id=$1 FOR SHARE`, v.ConnectionId).Scan(&profileVersion); e != nil {
 			return errStorageUnavailable
 		}
-		if e := tx.QueryRowContext(ctx, `SELECT current_version,deleted FROM golf_repository_environments WHERE forge_url=$1 AND id=$2 AND repository_id=$3 AND owner_id=$4 FOR SHARE`, s.config.GiteaURL, v.EnvironmentId, repo, owner).Scan(&environmentVersion, &deleted); e != nil {
+		if e := tx.QueryRowContext(ctx, `SELECT current_version,deleted FROM golf_repository_environments WHERE forge_url=$1 AND id=$2 AND repository_id=$3 AND owner_id=$4 FOR SHARE`, s.config.ForgeURL, v.EnvironmentId, repo, owner).Scan(&environmentVersion, &deleted); e != nil {
 			return errResourceNotFound
 		}
 		if deleted || v.ConnectionVersion != strconv.FormatInt(profileVersion, 10) || v.EnvironmentVersion != strconv.FormatInt(environmentVersion, 10) {
@@ -254,7 +254,7 @@ func (s *Server) ProvisionCloudflareEnvironmentResources(ctx context.Context, r 
 	if e != nil || profile.Config.Kind != "CLOUDFLARE" {
 		return nil, environmentRPCError(invalid("Select a saved Cloudflare management connection."))
 	}
-	env, e := database.New(s.db).GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.GiteaURL, ID: uuid.MustParse(r.Msg.EnvironmentId), RepositoryID: repo, OwnerID: owner})
+	env, e := database.New(s.db).GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.ForgeURL, ID: uuid.MustParse(r.Msg.EnvironmentId), RepositoryID: repo, OwnerID: owner})
 	if e != nil || env.Deleted || env.Version != envVersion {
 		return nil, environmentRPCError(errEnvironmentCAS)
 	}
@@ -267,12 +267,12 @@ func (s *Server) ProvisionCloudflareEnvironmentResources(ctx context.Context, r 
 	}
 	e = s.infrastructureAdminTransaction(ctx, value, initial, func(tx *sql.Tx) error {
 		// Reuse the environment/lifecycle fence rather than a new scheduler.
-		if _, e := tx.ExecContext(ctx, `SELECT golf_repository_environment_lock($1,$2)`, s.config.GiteaURL, repo); e != nil {
+		if _, e := tx.ExecContext(ctx, `SELECT golf_repository_environment_lock($1,$2)`, s.config.ForgeURL, repo); e != nil {
 			return errStorageUnavailable
 		}
 		var currentEnv, currentProfile int64
 		var deleted bool
-		if e := tx.QueryRowContext(ctx, `SELECT current_version,deleted FROM golf_repository_environments WHERE forge_url=$1 AND id=$2`, s.config.GiteaURL, v.EnvironmentId).Scan(&currentEnv, &deleted); e != nil {
+		if e := tx.QueryRowContext(ctx, `SELECT current_version,deleted FROM golf_repository_environments WHERE forge_url=$1 AND id=$2`, s.config.ForgeURL, v.EnvironmentId).Scan(&currentEnv, &deleted); e != nil {
 			return errStorageUnavailable
 		}
 		if e := tx.QueryRowContext(ctx, `SELECT current_version FROM golf_infrastructure_connections WHERE id=$1 FOR SHARE`, v.ConnectionId).Scan(&currentProfile); e != nil {
@@ -283,11 +283,11 @@ func (s *Server) ProvisionCloudflareEnvironmentResources(ctx context.Context, r 
 		}
 		// ponytail: ten operator resource pairs per workspace; replace with
 		// approved workspace allocations before enabling ordinary-user SaaS.
-		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1||'/cloudflare-resources/'||$2::bigint::text,0))`, s.config.GiteaURL, owner); e != nil {
+		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1||'/cloudflare-resources/'||$2::bigint::text,0))`, s.config.ForgeURL, owner); e != nil {
 			return errStorageUnavailable
 		}
 		var count, historical int
-		if e := tx.QueryRowContext(ctx, `SELECT count(*) FILTER(WHERE state NOT IN ('REMOVED','REFUSED')),count(*) FROM golf_cloudflare_resource_operations WHERE forge_url=$1 AND owner_id=$2`, s.config.GiteaURL, owner).Scan(&count, &historical); e != nil {
+		if e := tx.QueryRowContext(ctx, `SELECT count(*) FILTER(WHERE state NOT IN ('REMOVED','REFUSED')),count(*) FROM golf_cloudflare_resource_operations WHERE forge_url=$1 AND owner_id=$2`, s.config.ForgeURL, owner).Scan(&count, &historical); e != nil {
 			return errStorageUnavailable
 		}
 		if count >= 10 {
@@ -300,7 +300,7 @@ func (s *Server) ProvisionCloudflareEnvironmentResources(ctx context.Context, r 
 			return e
 		}
 		raw, _ := proto.Marshal(v)
-		if _, e := tx.ExecContext(ctx, `INSERT INTO golf_cloudflare_resource_operations(id,forge_url,user_id,native_actor_id,repository_id,owner_id,environment_id,environment_version,connection_id,connection_version,input_hash,receipt,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, v.OperationId, s.config.GiteaURL, initial.UserID, caller.ID, repo, owner, v.EnvironmentId, envVersion, v.ConnectionId, profileVersion, hash, raw, v.State); e != nil {
+		if _, e := tx.ExecContext(ctx, `INSERT INTO golf_cloudflare_resource_operations(id,forge_url,user_id,native_actor_id,repository_id,owner_id,environment_id,environment_version,connection_id,connection_version,input_hash,receipt,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, v.OperationId, s.config.ForgeURL, initial.UserID, caller.ID, repo, owner, v.EnvironmentId, envVersion, v.ConnectionId, profileVersion, hash, raw, v.State); e != nil {
 			return e
 		}
 		_, e := tx.ExecContext(ctx, `INSERT INTO golf_cloudflare_resource_events(operation_id,state,receipt) VALUES($1,$2,$3)`, v.OperationId, v.State, raw)
@@ -462,7 +462,7 @@ func (s *Server) ListCloudflareEnvironmentResources(ctx context.Context, r *conn
 	if e != nil || limit > 20 {
 		return nil, environmentRPCError(invalid("Use a resource inventory page size of at most 20."))
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT id::text FROM golf_cloudflare_resource_operations WHERE forge_url=$1 AND user_id=$2 AND repository_id=$3 AND owner_id=$4 AND environment_id=$5 ORDER BY created_at DESC,id LIMIT $6 OFFSET $7`, s.config.GiteaURL, initial.UserID, repo, owner, r.Msg.EnvironmentId, limit+1, (page-1)*limit)
+	rows, e := s.db.QueryContext(ctx, `SELECT id::text FROM golf_cloudflare_resource_operations WHERE forge_url=$1 AND user_id=$2 AND repository_id=$3 AND owner_id=$4 AND environment_id=$5 ORDER BY created_at DESC,id LIMIT $6 OFFSET $7`, s.config.ForgeURL, initial.UserID, repo, owner, r.Msg.EnvironmentId, limit+1, (page-1)*limit)
 	if e != nil {
 		return nil, environmentRPCError(errStorageUnavailable)
 	}

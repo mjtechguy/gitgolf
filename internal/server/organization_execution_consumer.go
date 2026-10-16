@@ -202,7 +202,7 @@ func (s *Server) openExecutionReference(ctx context.Context, q workflowQueryer, 
 			return "", "", "", errExecutionApproval
 		}
 		var overridden bool
-		if e = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_execution_values WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 AND name=$4 AND NOT deleted)`, s.config.GiteaURL, t.repo, t.owner, r.name).Scan(&overridden); e != nil {
+		if e = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_execution_values WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 AND name=$4 AND NOT deleted)`, s.config.ForgeURL, t.repo, t.owner, r.name).Scan(&overridden); e != nil {
 			return "", "", "", errStorageUnavailable
 		}
 		if overridden {

@@ -180,8 +180,8 @@ func TestAttachmentUploadJournalPostgres(t *testing.T) {
 			}))
 			t.Cleanup(provider.Close)
 			config := f.s.config
-			config.GiteaURL = provider.URL
-			config.GiteaPublicURL = provider.URL
+			config.ForgeURL = provider.URL
+			config.ForgePublicURL = provider.URL
 			var e error
 			f.s, e = New(config, f.db)
 			if e != nil {

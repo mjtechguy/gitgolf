@@ -109,7 +109,7 @@ func newCreationFixture(t *testing.T) *creationFixture {
 	t.Cleanup(provider.Close)
 	var err error
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL, config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = provider.URL, "creation-client", "creation-client-secret"
+	config.ForgePublicURL, config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = provider.URL, "creation-client", "creation-client-secret"
 	f.s, err = New(config, f.db)
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +151,7 @@ func (f *creationFixture) counts(t *testing.T, operations, events int) {
 }
 
 func TestRepositoryCreationBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,7 +618,7 @@ func TestRepositoryCreationMigrationAndGuardsPostgres(t *testing.T) {
 	if err := f.db.QueryRow("SELECT user_id,id FROM golf_repository_creations").Scan(&userID, &id); err != nil {
 		t.Fatal(err)
 	}
-	_, err = database.New(f.db).CompleteRepositoryCreation(t.Context(), database.CompleteRepositoryCreationParams{UserID: userID, ForgeURL: f.s.config.GiteaURL, CreationID: id, State: "REJECTED", FailureCode: "provider_http_409"})
+	_, err = database.New(f.db).CompleteRepositoryCreation(t.Context(), database.CompleteRepositoryCreationParams{UserID: userID, ForgeURL: f.s.config.ForgeURL, CreationID: id, State: "REJECTED", FailureCode: "provider_http_409"})
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal("terminal operation could transition again", err)
 	}

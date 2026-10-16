@@ -173,7 +173,7 @@ func (s *Server) GetRepositoryMirrorOperation(ctx context.Context, req *connect.
 	var r mirrorRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanMirror(s.db.QueryRowContext(ctx, `SELECT `+mirrorColumns+` FROM golf_repository_mirror_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanMirror(s.db.QueryRowContext(ctx, `SELECT `+mirrorColumns+` FROM golf_repository_mirror_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -218,7 +218,7 @@ func (s *Server) SubmitRepositoryMirrorOperation(ctx context.Context, req *conne
 		if e != nil {
 			return e
 		}
-		r, e = scanMirror(tx.QueryRowContext(held, `SELECT `+mirrorColumns+` FROM golf_repository_mirror_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanMirror(tx.QueryRowContext(held, `SELECT `+mirrorColumns+` FROM golf_repository_mirror_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(r.Fingerprint, fingerprint) {
 				return errRepositoryAccessConflict
@@ -228,7 +228,7 @@ func (s *Server) SubmitRepositoryMirrorOperation(ctx context.Context, req *conne
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanMirror(tx.QueryRowContext(held, `INSERT INTO golf_repository_mirror_operations(user_id,forge_url,actor_id,operation_id,repository_owner,repository_name,repository_id,owner_id,expected_revision,kind,interval_value,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING `+mirrorColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, m.Repository.Owner, m.Repository.Name, repoID, ownerID, m.ExpectedConfigurationRevision, int32(m.Kind), m.Interval, fingerprint))
+		r, e = scanMirror(tx.QueryRowContext(held, `INSERT INTO golf_repository_mirror_operations(user_id,forge_url,actor_id,operation_id,repository_owner,repository_name,repository_id,owner_id,expected_revision,kind,interval_value,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING `+mirrorColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, m.Repository.Owner, m.Repository.Name, repoID, ownerID, m.ExpectedConfigurationRevision, int32(m.Kind), m.Interval, fingerprint))
 		if e != nil {
 			return errStorageUnavailable
 		}

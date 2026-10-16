@@ -204,7 +204,7 @@ func newInvitationFixture(t *testing.T) *invitationFixture {
 	}
 	for _, name := range []string{"alice", "bob", "carol"} {
 		token := name + "-invitation-token"
-		if _, e := ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.GiteaURL, "create", LocalAccountInput{Username: name, Password: localTestPassword, ForgeToken: token}); e != nil {
+		if _, e := ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.ForgeURL, "create", LocalAccountInput{Username: name, Password: localTestPassword, ForgeToken: token}); e != nil {
 			t.Fatal(e)
 		}
 		session, e := f.s.loginLocalSession(t.Context(), name, localTestPassword, "")
@@ -324,7 +324,7 @@ func TestRepositoryInvitationUnknownPostgres(t *testing.T) {
 				t.Fatal("unknown activity")
 			}
 			var active int
-			f.db.QueryRow(`SELECT golf_repository_lifecycle_active($1,17)`, f.s.config.GiteaURL).Scan(&active)
+			f.db.QueryRow(`SELECT golf_repository_lifecycle_active($1,17)`, f.s.config.ForgeURL).Scan(&active)
 			if active != 1 {
 				t.Fatal("archive did not count unresolved grant", active)
 			}
@@ -346,7 +346,7 @@ func TestRepositoryInvitationLocalVersionAndRejectPostgres(t *testing.T) {
 				if action == "reset-password" {
 					input.Password = localTestPassword + " replacement"
 				}
-				if _, e := ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.GiteaURL, action, input); e != nil {
+				if _, e := ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.ForgeURL, action, input); e != nil {
 					t.Fatal(e)
 				}
 				if _, e := f.respond("bob", i, uuid.NewString(), golfv1.RepositoryInvitationDecision_REPOSITORY_INVITATION_DECISION_ACCEPT); e == nil {
@@ -628,7 +628,7 @@ func TestRepositoryInvitationConcurrentIssuerQuotaPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer holder.Rollback()
-	if _, err = holder.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-invitation-quota/'||$2::bigint::text,0))`, f.s.config.GiteaURL, int64(17)); err != nil {
+	if _, err = holder.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-invitation-quota/'||$2::bigint::text,0))`, f.s.config.ForgeURL, int64(17)); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 2)
@@ -722,7 +722,7 @@ func TestRepositoryInvitationUnresolvedDirectAccessPostgres(t *testing.T) {
 	if err := f.db.QueryRow(`SELECT count(*) FROM golf_repository_invitation_operations WHERE invitation_id=$1`, invite.Id).Scan(&operations); err != nil || operations != 0 {
 		t.Fatal("rolled-back reservation became a fabricated invitation receipt", operations, err)
 	}
-	if err := f.db.QueryRow(`SELECT generation FROM golf_repository_access_generations WHERE forge_url=$1 AND repository_id=17 AND recipient_id=43`, f.s.config.GiteaURL).Scan(&generation); err != nil || generation != 1 {
+	if err := f.db.QueryRow(`SELECT generation FROM golf_repository_access_generations WHERE forge_url=$1 AND repository_id=17 AND recipient_id=43`, f.s.config.ForgeURL).Scan(&generation); err != nil || generation != 1 {
 		t.Fatal("refusal changed the original shared generation", generation, err)
 	}
 	if err := f.db.QueryRow(`SELECT count(*) FROM golf_repository_activity WHERE repository_id=17`).Scan(&activities); err != nil || activities != 0 {

@@ -54,7 +54,7 @@ func (s *Server) reviewerActor(ctx context.Context, p reviewerRecord) (codexActo
 }
 func (s *Server) reviewerCurrent(ctx context.Context, p reviewerRecord) error {
 	var okay bool
-	e := s.db.QueryRowContext(ctx, `SELECT enabled AND revision=$2 AND publisher_id=$3 AND expires_at>clock_timestamp() FROM golf_reviewers WHERE id=$1 AND forge_url=$4`, p.ID, p.Revision, p.PublisherID, s.config.GiteaURL).Scan(&okay)
+	e := s.db.QueryRowContext(ctx, `SELECT enabled AND revision=$2 AND publisher_id=$3 AND expires_at>clock_timestamp() FROM golf_reviewers WHERE id=$1 AND forge_url=$4`, p.ID, p.Revision, p.PublisherID, s.config.ForgeURL).Scan(&okay)
 	if e != nil || !okay {
 		return errExecutionPolicyConflict
 	}
@@ -190,7 +190,7 @@ func (s *Server) admitReview(ctx context.Context, p reviewerRecord, number uint3
 	fail := func(e error) (reviewerRunRecord, error) {
 		clean, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		_, _ = s.db.ExecContext(clean, `UPDATE golf_agent_tasks SET state='cancelled',reason='Reviewer admission failed before dispatch.',version=version+1,finished_at=clock_timestamp() WHERE forge_url=$1 AND idempotency_key=$2 AND state='queued'`, s.config.GiteaURL, id)
+		_, _ = s.db.ExecContext(clean, `UPDATE golf_agent_tasks SET state='cancelled',reason='Reviewer admission failed before dispatch.',version=version+1,finished_at=clock_timestamp() WHERE forge_url=$1 AND idempotency_key=$2 AND state='queued'`, s.config.ForgeURL, id)
 		_, _ = s.db.ExecContext(context.Background(), `UPDATE golf_reviewer_runs SET state='failed',reason='Admission failed; inspect before explicitly retrying.' WHERE id=$1 AND state='admitting'`, id)
 		return out, e
 	}
@@ -220,7 +220,7 @@ func (s *Server) admitReview(ctx context.Context, p reviewerRecord, number uint3
 	return scanReviewRun(s.db.QueryRowContext(ctx, `SELECT `+reviewRunColumns+` FROM golf_reviewer_runs WHERE id=$1`, id))
 }
 func (s *Server) coordinateReviews(ctx context.Context) {
-	rows, e := s.db.QueryContext(ctx, `SELECT `+reviewerColumns+` FROM golf_reviewers WHERE forge_url=$1 AND enabled AND expires_at>clock_timestamp() ORDER BY id LIMIT 25`, s.config.GiteaURL)
+	rows, e := s.db.QueryContext(ctx, `SELECT `+reviewerColumns+` FROM golf_reviewers WHERE forge_url=$1 AND enabled AND expires_at>clock_timestamp() ORDER BY id LIMIT 25`, s.config.ForgeURL)
 	if e != nil {
 		return
 	}
@@ -349,7 +349,7 @@ func (s *Server) failReviewerRun(ctx context.Context, id, reason string) bool {
 	return err == nil && n == 1
 }
 func (s *Server) publishReviews(ctx context.Context) {
-	rows, e := s.db.QueryContext(ctx, `SELECT `+reviewRunColumns+` FROM golf_reviewer_runs WHERE reviewer_id IN (SELECT id FROM golf_reviewers WHERE forge_url=$1) AND state IN ('queued','running') ORDER BY created_at LIMIT 25`, s.config.GiteaURL)
+	rows, e := s.db.QueryContext(ctx, `SELECT `+reviewRunColumns+` FROM golf_reviewer_runs WHERE reviewer_id IN (SELECT id FROM golf_reviewers WHERE forge_url=$1) AND state IN ('queued','running') ORDER BY created_at LIMIT 25`, s.config.ForgeURL)
 	if e != nil {
 		return
 	}
@@ -361,7 +361,7 @@ func (s *Server) publishReviews(ctx context.Context) {
 		}
 	}
 	rows.Close()
-	_, _ = s.db.ExecContext(ctx, `DELETE FROM golf_sessions WHERE token_hash IN (SELECT t.session_hash FROM golf_agent_tasks t JOIN golf_reviewer_runs r ON r.task_id=t.id WHERE t.forge_url=$1 AND t.state NOT IN ('running','queued') AND r.state IN ('published','failed','outdated','publication_unknown'))`, s.config.GiteaURL)
+	_, _ = s.db.ExecContext(ctx, `DELETE FROM golf_sessions WHERE token_hash IN (SELECT t.session_hash FROM golf_agent_tasks t JOIN golf_reviewer_runs r ON r.task_id=t.id WHERE t.forge_url=$1 AND t.state NOT IN ('running','queued') AND r.state IN ('published','failed','outdated','publication_unknown'))`, s.config.ForgeURL)
 	for _, r := range runs {
 		if r.Task == "" {
 			continue
@@ -375,7 +375,7 @@ func (s *Server) publishReviews(ctx context.Context) {
 			continue
 		}
 		check, stop := context.WithTimeout(ctx, 15*time.Second)
-		p, e := scanReviewer(s.db.QueryRowContext(check, `SELECT `+reviewerColumns+` FROM golf_reviewers WHERE id=$1 AND forge_url=$2`, r.ReviewerID, s.config.GiteaURL))
+		p, e := scanReviewer(s.db.QueryRowContext(check, `SELECT `+reviewerColumns+` FROM golf_reviewers WHERE id=$1 AND forge_url=$2`, r.ReviewerID, s.config.ForgeURL))
 		if e != nil {
 			stop()
 			continue
@@ -500,7 +500,7 @@ func (s *Server) reviewTaskAccess(ctx context.Context, t agentTaskRecord) error 
 	if e != nil || (r.State != "queued" && r.State != "running") {
 		return errExecutionPolicyConflict
 	}
-	p, e := scanReviewer(s.db.QueryRowContext(ctx, `SELECT `+reviewerColumns+` FROM golf_reviewers WHERE id=$1 AND forge_url=$2`, r.ReviewerID, s.config.GiteaURL))
+	p, e := scanReviewer(s.db.QueryRowContext(ctx, `SELECT `+reviewerColumns+` FROM golf_reviewers WHERE id=$1 AND forge_url=$2`, r.ReviewerID, s.config.ForgeURL))
 	if e != nil || p.Revision != r.Revision {
 		return errExecutionPolicyConflict
 	}

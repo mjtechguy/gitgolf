@@ -249,7 +249,7 @@ func (s *Server) GetRepositoryFileBatchOperation(ctx context.Context, req *conne
 	var r fileMutationRecord
 	e = s.withManagedSession(ctx, s.cookieValue(req.Header()), token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanFileMutation(s.db.QueryRowContext(ctx, `SELECT `+fileMutationColumns+` FROM golf_repository_file_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, req.Msg.OperationId))
+		r, e = scanFileMutation(s.db.QueryRowContext(ctx, `SELECT `+fileMutationColumns+` FROM golf_repository_file_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, req.Msg.OperationId))
 		return e
 	})
 	if e != nil {
@@ -286,7 +286,7 @@ func (s *Server) SubmitRepositoryFileBatch(ctx context.Context, req *connect.Req
 		if e != nil {
 			return e
 		}
-		r, e = scanFileMutation(tx.QueryRowContext(held, `SELECT `+fileMutationColumns+` FROM golf_repository_file_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanFileMutation(tx.QueryRowContext(held, `SELECT `+fileMutationColumns+` FROM golf_repository_file_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if r.Kind != "BATCH" || !bytes.Equal(r.Fingerprint, fingerprint) || !bytes.Equal(r.BatchOriginal, fileBatchOriginal(m)) {
 				return errRepositoryAccessConflict
@@ -303,7 +303,7 @@ func (s *Server) SubmitRepositoryFileBatch(ctx context.Context, req *connect.Req
 		for _, f := range m.Changes {
 			size += len(f.Content)
 		}
-		r, e = scanFileMutation(tx.QueryRowContext(held, `INSERT INTO golf_repository_file_mutations(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,kind,branch_name,expected_commit_id,file_path,expected_blob_id,content_sha256,content_size_bytes,message_sha256,input_fingerprint,batch_original) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'BATCH',$10,$11,$12,'',$13,$14,$15,$16,$17) RETURNING `+fileMutationColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, repoID, ownerID, m.Repository.Owner, m.Repository.Name, m.AccessRevision, m.Branch, m.ExpectedCommitId, m.Changes[0].Path, fileMutationHash(fileBatchOriginal(m)), size, m.CommitMessageSha256, fingerprint, fileBatchOriginal(m)))
+		r, e = scanFileMutation(tx.QueryRowContext(held, `INSERT INTO golf_repository_file_mutations(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,kind,branch_name,expected_commit_id,file_path,expected_blob_id,content_sha256,content_size_bytes,message_sha256,input_fingerprint,batch_original) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'BATCH',$10,$11,$12,'',$13,$14,$15,$16,$17) RETURNING `+fileMutationColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, repoID, ownerID, m.Repository.Owner, m.Repository.Name, m.AccessRevision, m.Branch, m.ExpectedCommitId, m.Changes[0].Path, fileMutationHash(fileBatchOriginal(m)), size, m.CommitMessageSha256, fingerprint, fileBatchOriginal(m)))
 		fresh = e == nil
 		return e
 	})

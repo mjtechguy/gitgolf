@@ -61,7 +61,7 @@ func TestCloudflareConnectionBrowser(t *testing.T) {
 	config := f.server.config
 	config.PublicURL = origin
 	config.AllowInsecureCookies = false
-	config.GiteaPublicURL, config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = "", "", ""
+	config.ForgePublicURL, config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = "", "", ""
 	config.WebDir, e = filepath.Abs("../../web/dist")
 	if e != nil {
 		t.Fatal(e)

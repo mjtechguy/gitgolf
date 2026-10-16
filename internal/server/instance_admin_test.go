@@ -30,7 +30,7 @@ func instanceAccountsRequest(s *Server, session loginResult, body string) *httpt
 }
 
 func TestInstanceAdminBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,10 +72,10 @@ func TestInstanceAdminInventoryPostgres(t *testing.T) {
 	if response := apiRequest(f.s, delegated.Token, golfv1connect.InstanceAdminServiceListLocalAccountsProcedure, "{}"); response.Code != 403 {
 		t.Fatal("local administrator delegation acquired administration", response.Code)
 	}
-	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "set-email", LocalAccountInput{Username: "bob", Email: "bob@example.invalid"}); err != nil {
+	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "set-email", LocalAccountInput{Username: "bob", Email: "bob@example.invalid"}); err != nil {
 		t.Fatal(err)
 	}
-	disabled, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "bob"})
+	disabled, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "disable", LocalAccountInput{Username: "bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestInstanceAdminPostWaitDenialPostgres(t *testing.T) {
 				if action == "reset-password" {
 					input.Password = "New independent Golf password"
 				}
-				if _, err := ManageLocalAccount(context.Background(), f.db, f.s.keyring, f.s.config.GiteaURL, action, input); err != nil {
+				if _, err := ManageLocalAccount(context.Background(), f.db, f.s.keyring, f.s.config.ForgeURL, action, input); err != nil {
 					t.Fatal(err)
 				}
 			case "source_logout":

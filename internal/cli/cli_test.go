@@ -29,7 +29,7 @@ func TestReadCommandSessionAndFailureCleanup(t *testing.T) {
 					t.Error("origin does not match the destination")
 				}
 				w.Header().Set("Content-Type", "application/json")
-				if strings.HasSuffix(r.URL.Path, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure) {
+				if strings.HasSuffix(r.URL.Path, golfv1connect.SessionServiceLoginWithForgeTokenProcedure) {
 					var input map[string]string
 					if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input["token"] != token {
 						t.Error("token login failed")
@@ -96,7 +96,7 @@ func TestReadCommandSessionAndFailureCleanup(t *testing.T) {
 			if strings.Contains(out.String()+diagnostic.String(), token) {
 				t.Fatal("credential leaked to output")
 			}
-			want := "POST /rpc" + golfv1connect.SessionServiceLoginWithGiteaTokenProcedure + ",POST /rpc" + golfv1connect.RepositoryServiceGetRepositoryProcedure + ",POST /rpc" + golfv1connect.RepositoryServiceResolveRepositorySourceProcedure + ",POST /rpc" + golfv1connect.RepositoryServiceGetContentsProcedure + ",POST /rpc" + golfv1connect.SessionServiceLogoutProcedure
+			want := "POST /rpc" + golfv1connect.SessionServiceLoginWithForgeTokenProcedure + ",POST /rpc" + golfv1connect.RepositoryServiceGetRepositoryProcedure + ",POST /rpc" + golfv1connect.RepositoryServiceResolveRepositorySourceProcedure + ",POST /rpc" + golfv1connect.RepositoryServiceGetContentsProcedure + ",POST /rpc" + golfv1connect.SessionServiceLogoutProcedure
 			if strings.Join(calls, ",") != want {
 				t.Fatalf("missing session cleanup: %v", calls)
 			}
@@ -132,7 +132,7 @@ func TestClientRejectsUnsafeOriginsRedirectsAndMalformedResponses(t *testing.T) 
 					}
 					return
 				}
-				if strings.HasSuffix(r.URL.Path, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure) {
+				if strings.HasSuffix(r.URL.Path, golfv1connect.SessionServiceLoginWithForgeTokenProcedure) {
 					http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "opaque", Path: "/"})
 					fmt.Fprint(w, `{}`)
 					return
@@ -225,7 +225,7 @@ func TestCancellationStillClosesSession(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/rpc" + golfv1connect.SessionServiceLoginWithGiteaTokenProcedure:
+		case "/rpc" + golfv1connect.SessionServiceLoginWithForgeTokenProcedure:
 			http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "opaque", Path: "/"})
 			fmt.Fprint(w, `{}`)
 		case "/rpc" + golfv1connect.RepositoryServiceListRepositoriesProcedure:
@@ -298,7 +298,7 @@ func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 					}
 					w.Header().Set("Content-Type", "application/json")
 					switch r.URL.Path {
-					case "/rpc" + golfv1connect.SessionServiceLoginWithGiteaTokenProcedure:
+					case "/rpc" + golfv1connect.SessionServiceLoginWithForgeTokenProcedure:
 						var input map[string]string
 						if json.NewDecoder(r.Body).Decode(&input) != nil || input["token"] != token {
 							t.Error("scoped token bootstrap changed")
@@ -365,7 +365,7 @@ func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 				if strings.Contains(out.String()+diagnostic.String(), token) || strings.Contains(diagnostic.String(), "private-membership-data") || bytes.Contains(out.Bytes(), []byte{27}) {
 					t.Fatal("remote error leaked credential or private data")
 				}
-				want := []string{"/rpc" + golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, "/rpc" + command.procedure, "/rpc" + golfv1connect.SessionServiceLogoutProcedure}
+				want := []string{"/rpc" + golfv1connect.SessionServiceLoginWithForgeTokenProcedure, "/rpc" + command.procedure, "/rpc" + golfv1connect.SessionServiceLogoutProcedure}
 				if !reflect.DeepEqual(calls, want) {
 					t.Fatal("organization read did not use exactly one temporary session and page")
 				}
@@ -387,7 +387,7 @@ func TestPathHistoryIdentityAndLiteralInput(t *testing.T) {
 		calls = append(calls, method)
 		w.Header().Set("Content-Type", "application/json")
 		switch method {
-		case "LoginWithGiteaToken":
+		case "LoginWithForgeToken":
 			http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "opaque", Path: "/", HttpOnly: true})
 			fmt.Fprint(w, `{"user":{"id":"1"}}`)
 		case "GetRepository":
@@ -414,7 +414,7 @@ func TestPathHistoryIdentityAndLiteralInput(t *testing.T) {
 	if code != 0 || json.Unmarshal(out.Bytes(), &envelope) != nil || envelope.Data.RepositoryId != "9007199254740993" || strings.Contains(out.String()+diagnostics.String(), "private-token") {
 		t.Fatal("history CLI failed", code)
 	}
-	if strings.Join(calls, ",") != "LoginWithGiteaToken,GetRepository,ListCommits,Logout" {
+	if strings.Join(calls, ",") != "LoginWithForgeToken,GetRepository,ListCommits,Logout" {
 		t.Fatal("history identity/session cleanup", calls)
 	}
 }
@@ -444,7 +444,7 @@ func TestReviewCommentExplicitSelectionBeforeAuthentication(t *testing.T) {
 	for _, args := range cases {
 		var output, diagnostics bytes.Buffer
 		code := Run(context.Background(), append([]string{"--url", server.URL}, args...), strings.NewReader(""), &output, &diagnostics, func(name string) string {
-			if name == "GOLF_GITEA_TOKEN" {
+			if name == "GOLF_FORGE_TOKEN" {
 				return "fixture-private-token"
 			}
 			return ""
@@ -488,7 +488,7 @@ func TestPullDiffExplicitSelectionBeforeAuthentication(t *testing.T) {
 	for _, args := range cases {
 		var output, diagnostics bytes.Buffer
 		code := Run(context.Background(), append([]string{"--url", server.URL}, args...), strings.NewReader(""), &output, &diagnostics, func(name string) string {
-			if name == "GOLF_GITEA_TOKEN" {
+			if name == "GOLF_FORGE_TOKEN" {
 				return "fixture-private-token"
 			}
 			return ""
@@ -540,10 +540,10 @@ func sourceReadFixture(t *testing.T, api bool, kind, name, failure string) (*htt
 			t.Error("source request lost origin binding")
 		}
 		if api {
-			if r.Header.Get("Authorization") != "Bearer "+fixtureAPIToken || r.Header.Get("Cookie") != "" || method == "LoginWithGiteaToken" || method == "Logout" {
+			if r.Header.Get("Authorization") != "Bearer "+fixtureAPIToken || r.Header.Get("Cookie") != "" || method == "LoginWithForgeToken" || method == "Logout" {
 				t.Error("bearer source traversal crossed session boundary")
 			}
-		} else if method == "LoginWithGiteaToken" {
+		} else if method == "LoginWithForgeToken" {
 			http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "opaque", Path: "/", HttpOnly: true})
 			fmt.Fprint(w, `{"user":{"id":"1"}}`)
 			return
@@ -669,7 +669,7 @@ func TestSourceContentsTypedResolutionAndBoundReceipts(t *testing.T) {
 				}
 				want := "GetRepository,ResolveRepositorySource,GetContents"
 				if !api {
-					want = "LoginWithGiteaToken," + want + ",Logout"
+					want = "LoginWithForgeToken," + want + ",Logout"
 				}
 				if strings.Join(calls(), ",") != want {
 					t.Fatalf("source traversal/session cleanup changed: %v", calls())

@@ -26,7 +26,7 @@ func protectionPayloadHash(input any) ([32]byte, error) {
 func (s *Server) protectionDispatchAllowed(ctx context.Context, db workflowQueryer, repository int64) error {
 	var id, user, actor int64
 	var phase string
-	err := db.QueryRowContext(ctx, `SELECT id,user_id,actor_id,phase FROM golf_repository_rule_mutations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN')`, s.config.GiteaURL, repository).Scan(&id, &user, &actor, &phase)
+	err := db.QueryRowContext(ctx, `SELECT id,user_id,actor_id,phase FROM golf_repository_rule_mutations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN')`, s.config.ForgeURL, repository).Scan(&id, &user, &actor, &phase)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -34,7 +34,7 @@ func (s *Server) protectionDispatchAllowed(ctx context.Context, db workflowQuery
 		return errStorageUnavailable
 	}
 	permit, ok := ctx.Value(protectionDispatchPermitKey{}).(protectionDispatchPermit)
-	if !ok || permit.id != id || permit.user != user || permit.actor != actor || permit.repository != repository || permit.forge != s.config.GiteaURL || phase != "DISPATCH_UNKNOWN" {
+	if !ok || permit.id != id || permit.user != user || permit.actor != actor || permit.repository != repository || permit.forge != s.config.ForgeURL || phase != "DISPATCH_UNKNOWN" {
 		return errLifecycleBlocked
 	}
 	return nil

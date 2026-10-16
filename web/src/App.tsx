@@ -123,8 +123,8 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
     queryFn: ({ signal }) => sessionClient.getAuthenticationOptions({}, { signal, timeoutMs: 8_000 }),
   });
   const passwordAvailable = options.isSuccess && !options.isFetching && options.data.localPasswordEnabled;
-  const oauthAvailable = options.isSuccess && !options.isFetching && options.data.giteaOauthEnabled;
-  const accessAvailable = document.documentElement.dataset.golfRuntime === 'cloudflare-native' || options.isSuccess && !options.isFetching && options.data.providerLabel === 'Cloudflare Access' && !options.data.localPasswordEnabled && !options.data.giteaOauthEnabled;
+  const oauthAvailable = options.isSuccess && !options.isFetching && options.data.forgeOauthEnabled;
+  const accessAvailable = document.documentElement.dataset.golfRuntime === 'cloudflare-native' || options.isSuccess && !options.isFetching && options.data.providerLabel === 'Cloudflare Access' && !options.data.localPasswordEnabled && !options.data.forgeOauthEnabled;
   async function signedIn() {
     setPassword(''); loginForm.setFieldValue('mfaCode',''); setMfaChallenge(null);
     forgetPrivateQueries(client);
@@ -133,7 +133,7 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
   const oauth = useMutation({
     gcTime: 0,
     mutationFn: async () => {
-      const result = await sessionClient.beginGiteaOAuth({}, { timeoutMs: 8_000 });
+      const result = await sessionClient.beginForgeOAuth({}, { timeoutMs: 8_000 });
       const destination = repositoryLink(result.authorizationUrl);
       if (!destination) throw new ConnectError('Golf received an invalid sign-in address. Try again or sign in with your Golf account.', Code.Internal);
       return destination;

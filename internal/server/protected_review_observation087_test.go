@@ -93,7 +93,7 @@ func TestProtectedReviewCompleteInventory087(t *testing.T) {
 				json.NewEncoder(w).Encode([]any{row})
 			}))
 			defer provider.Close()
-			s := &Server{config: Config{GiteaURL: provider.URL}, client: provider.Client()}
+			s := &Server{config: Config{ForgeURL: provider.URL}, client: provider.Client()}
 			out, e := s.protectedReviewObservation(t.Context(), forgeCredential{Kind: "pat", Token: "owned-test"}, "/repos/alice/private", pull, head)
 			if mode == "valid" {
 				if e != nil || out.ExactHeadOfficialApprovals != 2 || out.UnavailableReason != "" {

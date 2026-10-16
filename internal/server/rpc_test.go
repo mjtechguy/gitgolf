@@ -46,7 +46,7 @@ func TestRPCErrorMapping(t *testing.T) {
 }
 
 func TestRPCWireAndSPABoundary(t *testing.T) {
-	config := testConfig("http://gitea.invalid")
+	config := testConfig("http://forgejo.invalid")
 	config.WebDir = t.TempDir()
 	if err := os.WriteFile(filepath.Join(config.WebDir, "index.html"), []byte("PRIVATE-SPA-SENTINEL"), 0600); err != nil {
 		t.Fatal(err)
@@ -82,7 +82,7 @@ func TestRPCWireAndSPABoundary(t *testing.T) {
 	compressor := gzip.NewWriter(&zipped)
 	fmt.Fprintf(compressor, `{"token":%q}`, strings.Repeat("x", 32<<10))
 	compressor.Close()
-	request := httptest.NewRequest("POST", "/rpc"+golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, &zipped)
+	request := httptest.NewRequest("POST", "/rpc"+golfv1connect.SessionServiceLoginWithForgeTokenProcedure, &zipped)
 	request.Header.Set("Origin", config.PublicURL)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Content-Encoding", "gzip")
@@ -150,7 +150,7 @@ func TestCapabilityReadinessWithPostgres(t *testing.T) {
 }
 
 func TestDefaultAppearanceIsValidatedAndServedWithTheDocument(t *testing.T) {
-	config := testConfig("http://gitea.invalid")
+	config := testConfig("http://forgejo.invalid")
 	config.WebDir = t.TempDir()
 	if err := os.WriteFile(filepath.Join(config.WebDir, "index.html"), []byte("<!doctype html><html lang=\"en\"><body></body></html>"), 0600); err != nil {
 		t.Fatal(err)
@@ -180,7 +180,7 @@ func TestDefaultAppearanceIsValidatedAndServedWithTheDocument(t *testing.T) {
 }
 
 func TestWebCacheSeparatesHashedAssetsFromDocumentsAndRPC(t *testing.T) {
-	config := testConfig("http://gitea.invalid")
+	config := testConfig("http://forgejo.invalid")
 	config.WebDir = t.TempDir()
 	if err := os.Mkdir(filepath.Join(config.WebDir, "assets"), 0700); err != nil {
 		t.Fatal(err)

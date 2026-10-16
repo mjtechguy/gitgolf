@@ -171,18 +171,18 @@ const (
 	// SessionServiceGetAuthenticationOptionsProcedure is the fully-qualified name of the
 	// SessionService's GetAuthenticationOptions RPC.
 	SessionServiceGetAuthenticationOptionsProcedure = "/golf.v1.SessionService/GetAuthenticationOptions"
-	// SessionServiceBeginGiteaOAuthProcedure is the fully-qualified name of the SessionService's
-	// BeginGiteaOAuth RPC.
-	SessionServiceBeginGiteaOAuthProcedure = "/golf.v1.SessionService/BeginGiteaOAuth"
+	// SessionServiceBeginForgeOAuthProcedure is the fully-qualified name of the SessionService's
+	// BeginForgeOAuth RPC.
+	SessionServiceBeginForgeOAuthProcedure = "/golf.v1.SessionService/BeginForgeOAuth"
 	// SessionServiceLoginWithPasswordProcedure is the fully-qualified name of the SessionService's
 	// LoginWithPassword RPC.
 	SessionServiceLoginWithPasswordProcedure = "/golf.v1.SessionService/LoginWithPassword"
 	// SessionServiceCompletePasswordMFAProcedure is the fully-qualified name of the SessionService's
 	// CompletePasswordMFA RPC.
 	SessionServiceCompletePasswordMFAProcedure = "/golf.v1.SessionService/CompletePasswordMFA"
-	// SessionServiceLoginWithGiteaTokenProcedure is the fully-qualified name of the SessionService's
-	// LoginWithGiteaToken RPC.
-	SessionServiceLoginWithGiteaTokenProcedure = "/golf.v1.SessionService/LoginWithGiteaToken"
+	// SessionServiceLoginWithForgeTokenProcedure is the fully-qualified name of the SessionService's
+	// LoginWithForgeToken RPC.
+	SessionServiceLoginWithForgeTokenProcedure = "/golf.v1.SessionService/LoginWithForgeToken"
 	// SessionServiceGetSessionProcedure is the fully-qualified name of the SessionService's GetSession
 	// RPC.
 	SessionServiceGetSessionProcedure = "/golf.v1.SessionService/GetSession"
@@ -1031,10 +1031,10 @@ const (
 // SessionServiceClient is a client for the golf.v1.SessionService service.
 type SessionServiceClient interface {
 	GetAuthenticationOptions(context.Context, *connect.Request[v1.GetAuthenticationOptionsRequest]) (*connect.Response[v1.GetAuthenticationOptionsResponse], error)
-	BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error)
+	BeginForgeOAuth(context.Context, *connect.Request[v1.BeginForgeOAuthRequest]) (*connect.Response[v1.BeginForgeOAuthResponse], error)
 	LoginWithPassword(context.Context, *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error)
 	CompletePasswordMFA(context.Context, *connect.Request[v1.CompletePasswordMFARequest]) (*connect.Response[v1.CompletePasswordMFAResponse], error)
-	LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error)
+	LoginWithForgeToken(context.Context, *connect.Request[v1.LoginWithForgeTokenRequest]) (*connect.Response[v1.LoginWithForgeTokenResponse], error)
 	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
 	RevokeSession(context.Context, *connect.Request[v1.RevokeSessionRequest]) (*connect.Response[v1.RevokeSessionResponse], error)
@@ -1059,10 +1059,10 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("GetAuthenticationOptions")),
 			connect.WithClientOptions(opts...),
 		),
-		beginGiteaOAuth: connect.NewClient[v1.BeginGiteaOAuthRequest, v1.BeginGiteaOAuthResponse](
+		beginForgeOAuth: connect.NewClient[v1.BeginForgeOAuthRequest, v1.BeginForgeOAuthResponse](
 			httpClient,
-			baseURL+SessionServiceBeginGiteaOAuthProcedure,
-			connect.WithSchema(sessionServiceMethods.ByName("BeginGiteaOAuth")),
+			baseURL+SessionServiceBeginForgeOAuthProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("BeginForgeOAuth")),
 			connect.WithClientOptions(opts...),
 		),
 		loginWithPassword: connect.NewClient[v1.LoginWithPasswordRequest, v1.LoginWithPasswordResponse](
@@ -1077,10 +1077,10 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("CompletePasswordMFA")),
 			connect.WithClientOptions(opts...),
 		),
-		loginWithGiteaToken: connect.NewClient[v1.LoginWithGiteaTokenRequest, v1.LoginWithGiteaTokenResponse](
+		loginWithForgeToken: connect.NewClient[v1.LoginWithForgeTokenRequest, v1.LoginWithForgeTokenResponse](
 			httpClient,
-			baseURL+SessionServiceLoginWithGiteaTokenProcedure,
-			connect.WithSchema(sessionServiceMethods.ByName("LoginWithGiteaToken")),
+			baseURL+SessionServiceLoginWithForgeTokenProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("LoginWithForgeToken")),
 			connect.WithClientOptions(opts...),
 		),
 		getSession: connect.NewClient[v1.GetSessionRequest, v1.GetSessionResponse](
@@ -1119,10 +1119,10 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 // sessionServiceClient implements SessionServiceClient.
 type sessionServiceClient struct {
 	getAuthenticationOptions *connect.Client[v1.GetAuthenticationOptionsRequest, v1.GetAuthenticationOptionsResponse]
-	beginGiteaOAuth          *connect.Client[v1.BeginGiteaOAuthRequest, v1.BeginGiteaOAuthResponse]
+	beginForgeOAuth          *connect.Client[v1.BeginForgeOAuthRequest, v1.BeginForgeOAuthResponse]
 	loginWithPassword        *connect.Client[v1.LoginWithPasswordRequest, v1.LoginWithPasswordResponse]
 	completePasswordMFA      *connect.Client[v1.CompletePasswordMFARequest, v1.CompletePasswordMFAResponse]
-	loginWithGiteaToken      *connect.Client[v1.LoginWithGiteaTokenRequest, v1.LoginWithGiteaTokenResponse]
+	loginWithForgeToken      *connect.Client[v1.LoginWithForgeTokenRequest, v1.LoginWithForgeTokenResponse]
 	getSession               *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
 	listSessions             *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
 	revokeSession            *connect.Client[v1.RevokeSessionRequest, v1.RevokeSessionResponse]
@@ -1135,9 +1135,9 @@ func (c *sessionServiceClient) GetAuthenticationOptions(ctx context.Context, req
 	return c.getAuthenticationOptions.CallUnary(ctx, req)
 }
 
-// BeginGiteaOAuth calls golf.v1.SessionService.BeginGiteaOAuth.
-func (c *sessionServiceClient) BeginGiteaOAuth(ctx context.Context, req *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error) {
-	return c.beginGiteaOAuth.CallUnary(ctx, req)
+// BeginForgeOAuth calls golf.v1.SessionService.BeginForgeOAuth.
+func (c *sessionServiceClient) BeginForgeOAuth(ctx context.Context, req *connect.Request[v1.BeginForgeOAuthRequest]) (*connect.Response[v1.BeginForgeOAuthResponse], error) {
+	return c.beginForgeOAuth.CallUnary(ctx, req)
 }
 
 // LoginWithPassword calls golf.v1.SessionService.LoginWithPassword.
@@ -1150,9 +1150,9 @@ func (c *sessionServiceClient) CompletePasswordMFA(ctx context.Context, req *con
 	return c.completePasswordMFA.CallUnary(ctx, req)
 }
 
-// LoginWithGiteaToken calls golf.v1.SessionService.LoginWithGiteaToken.
-func (c *sessionServiceClient) LoginWithGiteaToken(ctx context.Context, req *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error) {
-	return c.loginWithGiteaToken.CallUnary(ctx, req)
+// LoginWithForgeToken calls golf.v1.SessionService.LoginWithForgeToken.
+func (c *sessionServiceClient) LoginWithForgeToken(ctx context.Context, req *connect.Request[v1.LoginWithForgeTokenRequest]) (*connect.Response[v1.LoginWithForgeTokenResponse], error) {
+	return c.loginWithForgeToken.CallUnary(ctx, req)
 }
 
 // GetSession calls golf.v1.SessionService.GetSession.
@@ -1183,10 +1183,10 @@ func (c *sessionServiceClient) Logout(ctx context.Context, req *connect.Request[
 // SessionServiceHandler is an implementation of the golf.v1.SessionService service.
 type SessionServiceHandler interface {
 	GetAuthenticationOptions(context.Context, *connect.Request[v1.GetAuthenticationOptionsRequest]) (*connect.Response[v1.GetAuthenticationOptionsResponse], error)
-	BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error)
+	BeginForgeOAuth(context.Context, *connect.Request[v1.BeginForgeOAuthRequest]) (*connect.Response[v1.BeginForgeOAuthResponse], error)
 	LoginWithPassword(context.Context, *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error)
 	CompletePasswordMFA(context.Context, *connect.Request[v1.CompletePasswordMFARequest]) (*connect.Response[v1.CompletePasswordMFAResponse], error)
-	LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error)
+	LoginWithForgeToken(context.Context, *connect.Request[v1.LoginWithForgeTokenRequest]) (*connect.Response[v1.LoginWithForgeTokenResponse], error)
 	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
 	RevokeSession(context.Context, *connect.Request[v1.RevokeSessionRequest]) (*connect.Response[v1.RevokeSessionResponse], error)
@@ -1207,10 +1207,10 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("GetAuthenticationOptions")),
 		connect.WithHandlerOptions(opts...),
 	)
-	sessionServiceBeginGiteaOAuthHandler := connect.NewUnaryHandler(
-		SessionServiceBeginGiteaOAuthProcedure,
-		svc.BeginGiteaOAuth,
-		connect.WithSchema(sessionServiceMethods.ByName("BeginGiteaOAuth")),
+	sessionServiceBeginForgeOAuthHandler := connect.NewUnaryHandler(
+		SessionServiceBeginForgeOAuthProcedure,
+		svc.BeginForgeOAuth,
+		connect.WithSchema(sessionServiceMethods.ByName("BeginForgeOAuth")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceLoginWithPasswordHandler := connect.NewUnaryHandler(
@@ -1225,10 +1225,10 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("CompletePasswordMFA")),
 		connect.WithHandlerOptions(opts...),
 	)
-	sessionServiceLoginWithGiteaTokenHandler := connect.NewUnaryHandler(
-		SessionServiceLoginWithGiteaTokenProcedure,
-		svc.LoginWithGiteaToken,
-		connect.WithSchema(sessionServiceMethods.ByName("LoginWithGiteaToken")),
+	sessionServiceLoginWithForgeTokenHandler := connect.NewUnaryHandler(
+		SessionServiceLoginWithForgeTokenProcedure,
+		svc.LoginWithForgeToken,
+		connect.WithSchema(sessionServiceMethods.ByName("LoginWithForgeToken")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceGetSessionHandler := connect.NewUnaryHandler(
@@ -1265,14 +1265,14 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		switch r.URL.Path {
 		case SessionServiceGetAuthenticationOptionsProcedure:
 			sessionServiceGetAuthenticationOptionsHandler.ServeHTTP(w, r)
-		case SessionServiceBeginGiteaOAuthProcedure:
-			sessionServiceBeginGiteaOAuthHandler.ServeHTTP(w, r)
+		case SessionServiceBeginForgeOAuthProcedure:
+			sessionServiceBeginForgeOAuthHandler.ServeHTTP(w, r)
 		case SessionServiceLoginWithPasswordProcedure:
 			sessionServiceLoginWithPasswordHandler.ServeHTTP(w, r)
 		case SessionServiceCompletePasswordMFAProcedure:
 			sessionServiceCompletePasswordMFAHandler.ServeHTTP(w, r)
-		case SessionServiceLoginWithGiteaTokenProcedure:
-			sessionServiceLoginWithGiteaTokenHandler.ServeHTTP(w, r)
+		case SessionServiceLoginWithForgeTokenProcedure:
+			sessionServiceLoginWithForgeTokenHandler.ServeHTTP(w, r)
 		case SessionServiceGetSessionProcedure:
 			sessionServiceGetSessionHandler.ServeHTTP(w, r)
 		case SessionServiceListSessionsProcedure:
@@ -1296,8 +1296,8 @@ func (UnimplementedSessionServiceHandler) GetAuthenticationOptions(context.Conte
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.GetAuthenticationOptions is not implemented"))
 }
 
-func (UnimplementedSessionServiceHandler) BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.BeginGiteaOAuth is not implemented"))
+func (UnimplementedSessionServiceHandler) BeginForgeOAuth(context.Context, *connect.Request[v1.BeginForgeOAuthRequest]) (*connect.Response[v1.BeginForgeOAuthResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.BeginForgeOAuth is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) LoginWithPassword(context.Context, *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error) {
@@ -1308,8 +1308,8 @@ func (UnimplementedSessionServiceHandler) CompletePasswordMFA(context.Context, *
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.CompletePasswordMFA is not implemented"))
 }
 
-func (UnimplementedSessionServiceHandler) LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.LoginWithGiteaToken is not implemented"))
+func (UnimplementedSessionServiceHandler) LoginWithForgeToken(context.Context, *connect.Request[v1.LoginWithForgeTokenRequest]) (*connect.Response[v1.LoginWithForgeTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.LoginWithForgeToken is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error) {

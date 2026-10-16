@@ -126,7 +126,7 @@ func workflowRequest(s *Server, session loginResult, ref string) *httptest.Respo
 	return response
 }
 func TestWorkflowBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

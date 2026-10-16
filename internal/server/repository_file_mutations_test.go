@@ -106,7 +106,7 @@ type fileMutationFixture struct {
 func newFileMutationFixture(t *testing.T, k golfv1.RepositoryFileMutationKind) *fileMutationFixture {
 	f := &fileMutationFixture{releasePublicationFixture: newReleasePublicationFixture(t), kind: fileMutationKind(k), head: strings.Repeat("c", 40), data: []byte("old"), present: fileMutationKind(k) != "CREATE"}
 	f.fileMode.Store("")
-	target, _ := url.Parse(f.s.config.GiteaURL)
+	target, _ := url.Parse(f.s.config.ForgeURL)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		base := "/api/v1/repos/alice/private"
@@ -272,8 +272,8 @@ func newFileMutationFixture(t *testing.T, k golfv1.RepositoryFileMutationKind) *
 	}))
 	t.Cleanup(provider.Close)
 	config := f.s.config
-	config.GiteaURL = provider.URL
-	config.GiteaPublicURL = provider.URL
+	config.ForgeURL = provider.URL
+	config.ForgePublicURL = provider.URL
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {

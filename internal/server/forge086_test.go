@@ -272,7 +272,7 @@ func TestPackage086NamespaceOriginalAndDownloadsPostgres(t *testing.T) {
 				t.Fatal("original publication resent", e)
 			}
 			var activities int
-			if e := f.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=11 AND topic='source'", f.s.config.GiteaURL).Scan(&activities); e != nil {
+			if e := f.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=11 AND topic='source'", f.s.config.ForgeURL).Scan(&activities); e != nil {
 				t.Fatal(e)
 			}
 			if (want == 2 && activities != 0) || (want == 3 && activities != 1) {

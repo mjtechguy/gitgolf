@@ -356,15 +356,15 @@ func TestReleaseOperationsActualNative(t *testing.T) {
 		t.Fatal("fixture invalid")
 	}
 	config := testConfig(fixture.Native)
-	config.GiteaPublicURL = fixture.Native
-	config.GiteaOAuthClientID = "owned-source-fixture"
-	config.GiteaOAuthClientSecret = "owned-source-fixture-secret"
+	config.ForgePublicURL = fixture.Native
+	config.ForgeOAuthClientID = "owned-source-fixture"
+	config.ForgeOAuthClientSecret = "owned-source-fixture-secret"
 	s, e := New(config, testDatabase(t))
 	if e != nil {
 		t.Fatal(e)
 	}
 	sessions, repos, _, httpClient, origin := testRPCClients(t, s)
-	if _, e = sessions.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: fixture.Token})); e != nil {
+	if _, e = sessions.LoginWithForgeToken(t.Context(), connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: fixture.Token})); e != nil {
 		t.Fatal("owned native login failed")
 	}
 	t.Cleanup(func() {

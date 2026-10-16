@@ -264,7 +264,7 @@ func TestRepositoryAccessIntentReplayAndUncertainPostgres(t *testing.T) {
 				}
 			}
 			var active int64
-			f.db.QueryRow(`SELECT golf_repository_lifecycle_active($1,$2)`, f.s.config.GiteaURL, int64(9007199254740993)).Scan(&active)
+			f.db.QueryRow(`SELECT golf_repository_lifecycle_active($1,$2)`, f.s.config.ForgeURL, int64(9007199254740993)).Scan(&active)
 			if lost && active == 0 {
 				t.Fatal("unresolved access did not fence archive")
 			}
@@ -417,7 +417,7 @@ func TestRepositoryInvitationAccessGenerationFencePostgres(t *testing.T) {
 		t.Fatal("old invitation overwrote competing direct grant", result, e)
 	}
 	var generation int64
-	if e = f.db.QueryRow(`SELECT generation FROM golf_repository_access_generations WHERE forge_url=$1 AND repository_id=17 AND recipient_id=43`, f.s.config.GiteaURL).Scan(&generation); e != nil || generation != 2 {
+	if e = f.db.QueryRow(`SELECT generation FROM golf_repository_access_generations WHERE forge_url=$1 AND repository_id=17 AND recipient_id=43`, f.s.config.ForgeURL).Scan(&generation); e != nil || generation != 2 {
 		t.Fatal("rejection changed target generation", generation, e)
 	}
 }

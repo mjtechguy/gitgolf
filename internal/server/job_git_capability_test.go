@@ -28,7 +28,7 @@ func jobGitFixture(t *testing.T) (*Server, workflowRunRecord, string, time.Time)
 	now := time.Unix(1800000000, 0)
 	worker := sha256.Sum256([]byte("worker-control-credential"))
 	lease := sha256.Sum256([]byte("attempt-control-credential"))
-	s := &Server{config: Config{PublicURL: "https://golf.invalid", GiteaURL: "https://forge.invalid"}, keyring: parseTestKeys(t, "", map[string]string{"job": keyFixture(9)}, "job"), runnerKeys: map[string][32]byte{"worker": worker}}
+	s := &Server{config: Config{PublicURL: "https://golf.invalid", ForgeURL: "https://forge.invalid"}, keyring: parseTestKeys(t, "", map[string]string{"job": keyFixture(9)}, "job"), runnerKeys: map[string][32]byte{"worker": worker}}
 	run := workflowRunRecord{ID: originalDispatchKey, AttemptID: strings.Repeat("a", 32), RunnerID: "worker", LeaseTokenHash: lease[:], LeaseExpiresAt: sql.NullTime{Time: now.Add(45 * time.Second), Valid: true}, RepositoryID: 17, OwnerID: 18, RepositoryOwner: "alice", RepositoryName: "example", CommitID: strings.Repeat("b", 40), BlobID: strings.Repeat("c", 40), WorkflowPath: ".github/workflows/lint.yml", SourceSHA256: strings.Repeat("d", 64), EngineCatalog: runner.ActionsCatalog, State: "running"}
 	return s, run, strings.Repeat("e", 32), now
 }
@@ -548,7 +548,7 @@ func TestJobGitCurrentGraphAndLateRevocationPostgres(t *testing.T) {
 							t.Fatal(err)
 						}
 					case "policy-revision":
-						if _, err := f.server.db.ExecContext(t.Context(), `UPDATE golf_execution_policies SET revision=revision+1 WHERE forge_url=$1 AND scope='instance'`, f.server.config.GiteaURL); err != nil {
+						if _, err := f.server.db.ExecContext(t.Context(), `UPDATE golf_execution_policies SET revision=revision+1 WHERE forge_url=$1 AND scope='instance'`, f.server.config.ForgeURL); err != nil {
 							t.Fatal(err)
 						}
 					case "native-denial":

@@ -40,7 +40,7 @@ func lifecycleChange(account, version string) map[string]string {
 }
 
 func TestInstanceLifecycleBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestInstanceLifecycleEnrollmentResetEnablePostgres(t *testing.T) {
 	if created.Account.NativeUserId != "84" || created.Account.Username != "bob" || created.Account.Email != "bob@example.test" || created.Account.IsInstanceAdmin || created.Account.Disabled || created.Account.CredentialVersion != "1" || created.SessionsRevoked != 0 || created.OperationId == "" {
 		t.Fatal("incorrect ordinary enrollment metadata")
 	}
-	row, err := database.New(f.db).GetLocalAccount(t.Context(), database.GetLocalAccountParams{Username: "bob", ForgeURL: f.s.config.GiteaURL})
+	row, err := database.New(f.db).GetLocalAccount(t.Context(), database.GetLocalAccountParams{Username: "bob", ForgeURL: f.s.config.ForgeURL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestInstanceLifecycleEnrollmentResetEnablePostgres(t *testing.T) {
 	if response.Code != 200 || protojson.Unmarshal(response.Body.Bytes(), &enabled) != nil || enabled.Account.Disabled || enabled.Account.DisabledAt != nil || enabled.Account.CredentialVersion != "5" || enabled.Account.NativeUserId != "84" || enabled.Account.IsInstanceAdmin {
 		t.Fatal("re-enable did not preserve immutable ordinary identity", response.Code)
 	}
-	after, err := database.New(f.db).GetLocalAccount(t.Context(), database.GetLocalAccountParams{Username: "bob", ForgeURL: f.s.config.GiteaURL})
+	after, err := database.New(f.db).GetLocalAccount(t.Context(), database.GetLocalAccountParams{Username: "bob", ForgeURL: f.s.config.ForgeURL})
 	if err != nil || !bytes.Equal(after.CredentialBinding, row.CredentialBinding) || after.UserID != row.UserID {
 		t.Fatal("historical credential binding changed")
 	}
@@ -234,7 +234,7 @@ func TestInstanceLifecycleAuditRollbackPostgres(t *testing.T) {
 				procedure, input = golfv1connect.InstanceAdminServiceResetRegularLocalPasswordProcedure, lifecycleChange(bob.ID, "1")
 				if action == "ADMIN_ENABLED" {
 					var err error
-					bob, err = ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "bob"})
+					bob, err = ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.ForgeURL, "disable", LocalAccountInput{Username: "bob"})
 					if err != nil {
 						t.Fatal(err)
 					}

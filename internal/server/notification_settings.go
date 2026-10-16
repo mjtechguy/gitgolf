@@ -182,7 +182,7 @@ func (s *Server) withEmailAccount(ctx context.Context, header http.Header, fn fu
 		}
 		defer tx.Rollback()
 		q := database.New(s.db).WithTx(tx)
-		identity, e := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.GiteaURL})
+		identity, e := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if errors.Is(e, sql.ErrNoRows) {
 			return errUnauthenticated
 		}
@@ -192,7 +192,7 @@ func (s *Server) withEmailAccount(ctx context.Context, header http.Header, fn fu
 		if identity.ForgeUserID != actor.ID {
 			return errUnauthenticated
 		}
-		caller, e := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: hash, UserID: identity.ID, ForgeURL: s.config.GiteaURL})
+		caller, e := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: hash, UserID: identity.ID, ForgeURL: s.config.ForgeURL})
 		if e != nil {
 			return errUnauthenticated
 		}
@@ -791,7 +791,7 @@ func (s *Server) GetRepositoryEmailSubscription(ctx context.Context, req *connec
 	out := &golfv1.GetRepositoryEmailSubscriptionResponse{Target: req.Msg.Target}
 	e = s.withEmailRepository(ctx, req.Header(), req.Msg.Target, func() error {
 		return s.withEmailAccount(ctx, req.Header(), func(tx *sql.Tx, a emailAccount) error {
-			sub, e := scanEmailSubscription(tx.QueryRowContext(ctx, `SELECT `+emailSubscriptionColumns+` FROM golf_email_subscriptions WHERE user_id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4`, a.UserID, s.config.GiteaURL, id, owner))
+			sub, e := scanEmailSubscription(tx.QueryRowContext(ctx, `SELECT `+emailSubscriptionColumns+` FROM golf_email_subscriptions WHERE user_id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4`, a.UserID, s.config.ForgeURL, id, owner))
 			if e != nil && !errors.Is(e, sql.ErrNoRows) {
 				return e
 			}
@@ -838,7 +838,7 @@ func (s *Server) SaveRepositoryEmailSubscription(ctx context.Context, req *conne
 			if m.Enabled && (!c.VerifiedAt.Valid || !c.Enabled || c.Suppression != "") {
 				return invalid("Verify and enable your notification email first.")
 			}
-			old, e := scanEmailSubscription(tx.QueryRowContext(ctx, `SELECT `+emailSubscriptionColumns+` FROM golf_email_subscriptions WHERE user_id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 FOR UPDATE`, a.UserID, s.config.GiteaURL, repo, owner))
+			old, e := scanEmailSubscription(tx.QueryRowContext(ctx, `SELECT `+emailSubscriptionColumns+` FROM golf_email_subscriptions WHERE user_id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 FOR UPDATE`, a.UserID, s.config.ForgeURL, repo, owner))
 			exists := e == nil
 			if e != nil && !errors.Is(e, sql.ErrNoRows) {
 				return e
@@ -856,7 +856,7 @@ func (s *Server) SaveRepositoryEmailSubscription(ctx context.Context, req *conne
 					return e
 				}
 				var instanceCount, repositoryCount int
-				if e := tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER(WHERE forge_url=$1 AND repository_id=$2) FROM golf_email_subscriptions`, s.config.GiteaURL, repo).Scan(&instanceCount, &repositoryCount); e != nil {
+				if e := tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER(WHERE forge_url=$1 AND repository_id=$2) FROM golf_email_subscriptions`, s.config.ForgeURL, repo).Scan(&instanceCount, &repositoryCount); e != nil {
 					return e
 				}
 				if instanceCount >= 10000 || repositoryCount >= 500 {
@@ -883,7 +883,7 @@ func (s *Server) SaveRepositoryEmailSubscription(ctx context.Context, req *conne
 				authorization = "authorized"
 			}
 			if !exists {
-				_, e = tx.ExecContext(ctx, `INSERT INTO golf_email_subscriptions(id,user_id,forge_url,repository_id,owner_id,repository_owner,repository_name,local_account_id,native_user_id,credential_version,contact_version,version,event_topics,enabled,authorization_state,unsubscribe_hash,content_id,workflow_notifications) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1,$12,$13,$14,$15,$16,$17)`, m.Id, a.UserID, s.config.GiteaURL, repo, owner, key.Owner, key.Name, a.LocalID, a.NativeID, a.CredentialVersion, contact, encoded, m.Enabled, authorization, emailHash(secret), contentID, mode)
+				_, e = tx.ExecContext(ctx, `INSERT INTO golf_email_subscriptions(id,user_id,forge_url,repository_id,owner_id,repository_owner,repository_name,local_account_id,native_user_id,credential_version,contact_version,version,event_topics,enabled,authorization_state,unsubscribe_hash,content_id,workflow_notifications) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1,$12,$13,$14,$15,$16,$17)`, m.Id, a.UserID, s.config.ForgeURL, repo, owner, key.Owner, key.Name, a.LocalID, a.NativeID, a.CredentialVersion, contact, encoded, m.Enabled, authorization, emailHash(secret), contentID, mode)
 			} else {
 				_, e = tx.ExecContext(ctx, `UPDATE golf_email_subscriptions SET repository_owner=$2,repository_name=$3,credential_version=$4,contact_version=$5,version=version+1,epoch=epoch+1,event_topics=$6,enabled=$7,authorization_state=$8,unsubscribe_hash=$9,content_id=$10,workflow_notifications=$11,updated_at=clock_timestamp() WHERE id=$1`, m.Id, key.Owner, key.Name, a.CredentialVersion, contact, encoded, m.Enabled, authorization, emailHash(secret), contentID, mode)
 			}

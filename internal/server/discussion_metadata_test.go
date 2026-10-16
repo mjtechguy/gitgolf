@@ -281,7 +281,7 @@ func TestDiscussionMetadataRPCPostgres(t *testing.T) {
 	sessions, client, _, _, _ := testRPCClients(t, s)
 	ctx := context.Background()
 	key := &golfv1.RepositoryKey{Owner: "developer", Name: "example"}
-	if _, err = sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: "metadata-pat"})); err != nil {
+	if _, err = sessions.LoginWithForgeToken(ctx, connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: "metadata-pat"})); err != nil {
 		t.Fatal(err)
 	}
 	list, err := client.ListIssues(ctx, connect.NewRequest(&golfv1.ListIssuesRequest{Repository: key}))
@@ -407,5 +407,5 @@ func TestDiscussionMetadataNativeRead(t *testing.T) {
 	if !found {
 		t.Fatal("native issue list/detail metadata differ")
 	}
-	fmt.Println("PASS owned actual Gitea issue/list/PR metadata reads; no Golf runtime or job activation")
+	fmt.Println("PASS owned actual native forge issue/list/PR metadata reads; no Golf runtime or job activation")
 }

@@ -15,10 +15,10 @@ func TestForgeInstallationBindingRejectsAuthorityReplacement(t *testing.T) {
 		t.Fatal("restart refused", err)
 	}
 	for _, change := range []func(*Config){
-		func(c *Config) { c.ForgeKind = "gitea" },
-		func(c *Config) { c.GiteaURL = "https://elsewhere.invalid" },
+		func(c *Config) { c.ForgeKind = "other-forge" },
+		func(c *Config) { c.ForgeURL = "https://elsewhere.invalid" },
 		func(c *Config) { c.ForgeInstanceID = "ab09ae45-092f-4b4d-9e17-c6b848e5d95c" },
-		func(c *Config) { c.GiteaWorkflowDirs = ".github/workflows" },
+		func(c *Config) { c.ForgeWorkflowDirs = ".github/workflows" },
 	} {
 		other := c
 		change(&other)

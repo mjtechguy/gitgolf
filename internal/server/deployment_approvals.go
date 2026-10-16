@@ -81,7 +81,7 @@ func (s *Server) deploymentRead(ctx context.Context, token forgeCredential, d *g
 // project. Local account/CV and absolute expiry are repeated under ordered locks.
 func (s *Server) deploymentSession(ctx context.Context, hash []byte, native int64) (forgeCredential, time.Time, int64, error) {
 	q := database.New(s.db)
-	v, e := q.GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	v, e := q.GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if e != nil || v.ForgeUserID != native {
 		return forgeCredential{}, time.Time{}, 0, errUnauthenticated
 	}
@@ -173,7 +173,7 @@ func (s *Server) deploymentFence(ctx context.Context, d *deploymentRecord, viewe
 			}
 			seen[h] = true
 		}
-		v, e := q.GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: p.hash, ForgeURL: s.config.GiteaURL})
+		v, e := q.GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: p.hash, ForgeURL: s.config.ForgeURL})
 		if e != nil || v.ForgeUserID != p.native {
 			return errUnauthenticated
 		}
@@ -183,7 +183,7 @@ func (s *Server) deploymentFence(ctx context.Context, d *deploymentRecord, viewe
 	}
 	repo, _ := discussionID(d.wire.Target.RepositoryId)
 	owner, _ := discussionID(d.wire.Target.OwnerId)
-	if _, e = tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.GiteaURL, repo); e != nil {
+	if _, e = tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.ForgeURL, repo); e != nil {
 		return errStorageUnavailable
 	}
 	current, e := scanDeployment(tx.QueryRowContext(ctx, "SELECT "+deploymentColumns+" FROM golf_repository_deployments WHERE id=$1 FOR UPDATE", d.wire.Id))
@@ -193,7 +193,7 @@ func (s *Server) deploymentFence(ctx context.Context, d *deploymentRecord, viewe
 	if !bytes.Equal(current.inputHash, d.inputHash) || current.wire.State == "REVOKED" || current.wire.State == "EXPIRED" || current.expires.Valid && !current.expires.Time.After(time.Now()) {
 		return errDeployment
 	}
-	env, e := q.GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.GiteaURL, ID: uuid.MustParse(d.wire.EnvironmentId), RepositoryID: repo, OwnerID: owner})
+	env, e := q.GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.ForgeURL, ID: uuid.MustParse(d.wire.EnvironmentId), RepositoryID: repo, OwnerID: owner})
 	if e != nil || env.Deleted || strconv.FormatInt(env.Version, 10) != d.wire.EnvironmentVersion {
 		return errDeployment
 	}
@@ -244,7 +244,7 @@ func (s *Server) deploymentFence(ctx context.Context, d *deploymentRecord, viewe
 		return e
 	}
 	for _, p := range people {
-		v, e := q.GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: p.hash, ForgeURL: s.config.GiteaURL})
+		v, e := q.GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: p.hash, ForgeURL: s.config.ForgeURL})
 		if e != nil || v.ForgeUserID != p.native || !v.ExpiresAt.After(time.Now()) {
 			return errUnauthenticated
 		}
@@ -286,7 +286,7 @@ func (s *Server) deploymentResponse(ctx context.Context, session string, token f
 		}
 		terminal := d.wire.State == "REVOKED" || d.wire.State == "EXPIRED"
 		if !terminal && d.wire.State != "READY" && deploymentReviewer(d.wire, user.ID) {
-			env, e := database.New(s.db).GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.GiteaURL, ID: uuid.MustParse(d.wire.EnvironmentId), RepositoryID: repo, OwnerID: owner})
+			env, e := database.New(s.db).GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.ForgeURL, ID: uuid.MustParse(d.wire.EnvironmentId), RepositoryID: repo, OwnerID: owner})
 			d.wire.CanApprove = e == nil && !env.Deleted && strconv.FormatInt(env.Version, 10) == d.wire.EnvironmentVersion && s.deploymentRead(ctx, token, d.wire, user.ID) == nil
 		}
 		admin := s.environmentAuthority(ctx, token, key, user, target, true, false) == nil
@@ -376,7 +376,7 @@ func (s *Server) ListRepositoryDeployments(ctx context.Context, r *connect.Reque
 	}
 	out := &golfv1.ListRepositoryDeploymentsResponse{}
 	e = s.withWorkflowRepository(ctx, s.cookieValue(r.Header()), token, key, repo, owner, false, func(_ User, _ *golfv1.RepositoryAccess) error {
-		rows, e := s.db.QueryContext(ctx, "SELECT "+deploymentColumns+" FROM golf_repository_deployments WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 ORDER BY created_at DESC,id LIMIT $4 OFFSET $5", s.config.GiteaURL, repo, owner, size+1, (page-1)*size)
+		rows, e := s.db.QueryContext(ctx, "SELECT "+deploymentColumns+" FROM golf_repository_deployments WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 ORDER BY created_at DESC,id LIMIT $4 OFFSET $5", s.config.ForgeURL, repo, owner, size+1, (page-1)*size)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -439,7 +439,7 @@ func (s *Server) reviewRepositoryDeployment(ctx context.Context, r *connect.Requ
 		return nil, deploymentError(forgeError{403})
 	}
 	e = s.workflowTransaction(ctx, s.cookieValue(r.Header()), u.ID, func(tx *sql.Tx, a database.LockManagedSessionRow, h []byte) error {
-		if _, e := tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.GiteaURL, repo); e != nil {
+		if _, e := tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.ForgeURL, repo); e != nil {
 			return errStorageUnavailable
 		}
 		var priorID string
@@ -461,7 +461,7 @@ func (s *Server) reviewRepositoryDeployment(ctx context.Context, r *connect.Requ
 		if current.wire.State == "REVOKED" || current.wire.State == "EXPIRED" || current.wire.State == "READY" && r.Msg.Approve {
 			return errDeployment
 		}
-		v, e := database.New(s.db).WithTx(tx).GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.GiteaURL, ID: uuid.MustParse(d.wire.EnvironmentId), RepositoryID: repo, OwnerID: owner})
+		v, e := database.New(s.db).WithTx(tx).GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.ForgeURL, ID: uuid.MustParse(d.wire.EnvironmentId), RepositoryID: repo, OwnerID: owner})
 		if e != nil || v.Deleted || strconv.FormatInt(v.Version, 10) != d.wire.EnvironmentVersion {
 			return errDeployment
 		}
@@ -607,7 +607,7 @@ func (s *Server) revokeRepositoryDeployment(ctx context.Context, r *connect.Requ
 		return nil, deploymentError(errResourceNotFound)
 	}
 	e = s.workflowTransaction(ctx, s.cookieValue(r.Header()), u.ID, func(tx *sql.Tx, a database.LockManagedSessionRow, _ []byte) error {
-		if _, e := tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.GiteaURL, repo); e != nil {
+		if _, e := tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.ForgeURL, repo); e != nil {
 			return errStorageUnavailable
 		}
 		if e = s.environmentAuthority(ctx, token, key, u, r.Msg.Target, true, true); e != nil {

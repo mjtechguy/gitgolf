@@ -124,7 +124,7 @@ func TestAgentControlManagedSubprocessPostgres(t *testing.T) {
 	f.start(t)
 	s := f.x.f.server
 	s.config.ReviewImage = "sha256:" + strings.Repeat("d", 64)
-	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version,acp_file_tools) VALUES($1,'worker',$2,$2,$3,true)`, s.config.GiteaURL, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
+	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version,acp_file_tools) VALUES($1,'worker',$2,$2,$3,true)`, s.config.ForgeURL, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
 		t.Fatal(e)
 	}
 	ctx, cookie := controlContext(t, f)
@@ -258,7 +258,7 @@ func TestAgentControlAuthorityLossPostgres(t *testing.T) {
 	if _, e := s.db.Exec(`INSERT INTO golf_agent_controls(task_id,attempt_id,image,native_version,native_session,state) VALUES($1,$2,$3,$4,'native','idle')`, f.t.ID, f.attempt, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version,acp_file_tools) VALUES($1,'worker',$2,$2,$3,true)`, s.config.GiteaURL, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
+	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version,acp_file_tools) VALUES($1,'worker',$2,$2,$3,true)`, s.config.ForgeURL, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
 		t.Fatal(e)
 	}
 	ctx, cookie := controlContext(t, f)

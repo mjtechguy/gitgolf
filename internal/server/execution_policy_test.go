@@ -302,7 +302,7 @@ func TestExecutionPolicyPushIndependentCeilings(t *testing.T) {
 
 func TestExecutionPolicyPushAdmissionPostgres(t *testing.T) {
 	db := testDatabase(t)
-	s, err := New(testConfig("http://gitea.invalid"), db)
+	s, err := New(testConfig("http://forgejo.invalid"), db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func TestExecutionPolicyPushAdmissionPostgres(t *testing.T) {
 		name, id string
 		owner    int64
 	}{{"instance", "instance", 0}, {"organization", "42", 42}, {"repository", "99", 42}} {
-		if _, err = db.Exec(`INSERT INTO golf_execution_policies(forge_url,scope,scope_id,owner_id,mode,manual_dispatch_enabled,allow_all_workflows) VALUES($1,$2,$3,$4,'all',true,true)`, s.config.GiteaURL, scope.name, scope.id, scope.owner); err != nil {
+		if _, err = db.Exec(`INSERT INTO golf_execution_policies(forge_url,scope,scope_id,owner_id,mode,manual_dispatch_enabled,allow_all_workflows) VALUES($1,$2,$3,$4,'all',true,true)`, s.config.ForgeURL, scope.name, scope.id, scope.owner); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -367,7 +367,7 @@ func TestExecutionPolicyPushAdmissionPostgres(t *testing.T) {
 	if _, err = db.Exec(`UPDATE golf_execution_policies SET mode='selected' WHERE scope='instance'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.Exec(`INSERT INTO golf_execution_policy_repositories(forge_url,scope,scope_id,repository_id,owner_id) VALUES($1,'instance','instance',99,43)`, s.config.GiteaURL); err != nil {
+	if _, err = db.Exec(`INSERT INTO golf_execution_policy_repositories(forge_url,scope,scope_id,repository_id,owner_id) VALUES($1,'instance','instance',99,43)`, s.config.ForgeURL); err != nil {
 		t.Fatal(err)
 	}
 	check("push", false)

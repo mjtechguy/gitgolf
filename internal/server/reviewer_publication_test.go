@@ -50,15 +50,15 @@ func newReviewerPublicationFixtureOnDatabase(t *testing.T, db *sql.DB) *reviewer
 	provider := httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(provider.Close)
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL = provider.URL
-	config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = "fixture-client", "fixture-secret"
+	config.ForgePublicURL = provider.URL
+	config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = "fixture-client", "fixture-secret"
 	config.ReviewPublisherToken = "publisher-fixture"
 	var err error
 	f.s, err = New(config, db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	account, err := ManageLocalAccount(t.Context(), f.s.db, f.s.keyring, config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "sponsor-fixture"})
+	account, err := ManageLocalAccount(t.Context(), f.s.db, f.s.keyring, config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "sponsor-fixture"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func newReviewerPublicationFixtureOnDatabase(t *testing.T, db *sql.DB) *reviewer
 	user, _ := strconv.ParseInt(account.UserID, 10, 64)
 	f.p = reviewerRecord{ID: uuid.NewString(), RepoID: 11, OwnerID: 42, UserID: user, NativeID: 42, LocalID: local, LocalVersion: 1, PublisherID: 43, Revision: 1, Enabled: true, Expiry: time.Now().Add(time.Hour), Config: &golfv1.Reviewer{Name: "Security Reviewer", PublisherLogin: "golf-bot", RespondToMentions: true, Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}}}
 	raw, _ := json.Marshal(f.p.Config)
-	_, err = f.s.db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,$5,true,clock_timestamp()+interval '1 hour')`, f.p.ID, config.GiteaURL, user, local, raw)
+	_, err = f.s.db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,$5,true,clock_timestamp()+interval '1 hour')`, f.p.ID, config.ForgeURL, user, local, raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -532,7 +532,7 @@ func TestReviewerPublicationMigrationPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	q := database.New(db)
-	user, err := q.UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: runtimeConfig.GiteaURL, ForgeUserID: 42, Login: "alice"})
+	user, err := q.UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: runtimeConfig.ForgeURL, ForgeUserID: 42, Login: "alice"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -551,7 +551,7 @@ func TestReviewerPublicationMigrationPostgres(t *testing.T) {
 	}
 	f := &reviewerPublicationFixture{p: reviewerRecord{ID: uuid.NewString(), RepoID: 11, OwnerID: 42, UserID: user, NativeID: 42, LocalID: account.ID, LocalVersion: 1, PublisherID: 43, Revision: 1, Enabled: true, Expiry: time.Now().Add(time.Hour), Config: &golfv1.Reviewer{Name: "Security Reviewer", PublisherLogin: "golf-bot", RespondToMentions: true, Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}}}}
 	raw, _ := json.Marshal(f.p.Config)
-	if _, err = db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,$5,true,clock_timestamp()+interval '1 hour')`, f.p.ID, runtimeConfig.GiteaURL, user, account.ID, raw); err != nil {
+	if _, err = db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,$5,true,clock_timestamp()+interval '1 hour')`, f.p.ID, runtimeConfig.ForgeURL, user, account.ID, raw); err != nil {
 		t.Fatal(err)
 	}
 	states := []string{"publishing", "publication_unknown", "outdated", "published", "queued", "failed"}

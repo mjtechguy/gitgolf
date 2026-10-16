@@ -104,7 +104,7 @@ func (s *Server) configureRepositoryEvents() error {
 	slices.SortFunc(connections, func(a, b repositoryEventConnection) int { return strings.Compare(a.ID, b.ID) })
 	for _, input := range connections {
 		connection := s.repositoryEventConnections[input.ID]
-		_, err = tx.ExecContext(ctx, `INSERT INTO golf_repository_event_connections(id,forge_url,repository_id,owner_id,repository) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING`, connection.ID, s.config.GiteaURL, connection.repoID, connection.ownerID, connection.Repository)
+		_, err = tx.ExecContext(ctx, `INSERT INTO golf_repository_event_connections(id,forge_url,repository_id,owner_id,repository) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING`, connection.ID, s.config.ForgeURL, connection.repoID, connection.ownerID, connection.Repository)
 		if err != nil {
 			return errStorageUnavailable
 		}
@@ -113,7 +113,7 @@ func (s *Server) configureRepositoryEvents() error {
 		if err := tx.QueryRowContext(ctx, `SELECT forge_url,repository_id,owner_id,repository FROM golf_repository_event_connections WHERE id=$1`, connection.ID).Scan(&forge, &repositoryID, &ownerID, &repository); err != nil {
 			return errStorageUnavailable
 		}
-		if forge != s.config.GiteaURL || repositoryID != connection.repoID || ownerID != connection.ownerID || repository != connection.Repository {
+		if forge != s.config.ForgeURL || repositoryID != connection.repoID || ownerID != connection.ownerID || repository != connection.Repository {
 			return errors.New("repository event connection ID is already bound to a different immutable resource")
 		}
 	}
@@ -221,24 +221,9 @@ func (s *Server) repositoryEventWebhook(w http.ResponseWriter, r *http.Request) 
 		fail(http.StatusBadRequest)
 		return
 	}
-	for _, header := range []string{"Content-Type", "X-Gitea-Delivery", "X-Gitea-Event", "X-Gitea-Event-Type", "X-Gitea-Signature"} {
+	// Forgejo 15 signs and labels deliveries with these headers; each must appear exactly once.
+	for _, header := range []string{"Content-Type", "X-Forgejo-Delivery", "X-Forgejo-Event", "X-Forgejo-Event-Type", "X-Forgejo-Signature"} {
 		if len(r.Header.Values(header)) != 1 {
-			fail(http.StatusBadRequest)
-			return
-		}
-	}
-	// Forgejo 15 omits the scope header; its native and compatibility headers must agree.
-	if s.config.ForgeKind == "forgejo" {
-		for _, suffix := range []string{"Delivery", "Event", "Event-Type", "Signature"} {
-			if len(r.Header.Values("X-Forgejo-"+suffix)) != 1 || r.Header.Get("X-Forgejo-"+suffix) != r.Header.Get("X-Gitea-"+suffix) {
-				fail(http.StatusBadRequest)
-				return
-			}
-		}
-	}
-	scopes := r.Header.Values("X-Gitea-Hook-Installation-Target-Type")
-	if len(scopes) != 1 || scopes[0] != "repository" {
-		if s.config.ForgeKind != "forgejo" || len(scopes) != 0 {
 			fail(http.StatusBadRequest)
 			return
 		}
@@ -248,12 +233,12 @@ func (s *Server) repositoryEventWebhook(w http.ResponseWriter, r *http.Request) 
 		fail(http.StatusUnsupportedMediaType)
 		return
 	}
-	delivery := r.Header.Get("X-Gitea-Delivery")
-	if !canonicalEventUUID(delivery) || r.Header.Get("X-Gitea-Event") != "push" || r.Header.Get("X-Gitea-Event-Type") != "push" {
+	delivery := r.Header.Get("X-Forgejo-Delivery")
+	if !canonicalEventUUID(delivery) || r.Header.Get("X-Forgejo-Event") != "push" || r.Header.Get("X-Forgejo-Event-Type") != "push" {
 		fail(http.StatusBadRequest)
 		return
 	}
-	signature := r.Header.Get("X-Gitea-Signature")
+	signature := r.Header.Get("X-Forgejo-Signature")
 	if !repositoryEventSignature.MatchString(signature) {
 		fail(http.StatusUnauthorized)
 		return

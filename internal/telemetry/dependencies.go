@@ -18,7 +18,7 @@ type providerTransport struct {
 	base    http.RoundTripper
 }
 
-// HTTPTransport instruments only the configured Gitea client. The category is
+// HTTPTransport instruments only the configured Forgejo client. The category is
 // fixed; URL paths/hosts, request/response bodies and credentials are untouched
 // and never become span attributes or metric labels. Duration ends at headers.
 func (r *Runtime) HTTPTransport(base http.RoundTripper) http.RoundTripper {
@@ -30,8 +30,8 @@ func (r *Runtime) HTTPTransport(base http.RoundTripper) http.RoundTripper {
 
 func (t providerTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	method := boundedMethod(request.Method)
-	ctx, span := t.runtime.tracer.Start(request.Context(), "gitea.request", trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(attribute.String("server.address", "gitea"), attribute.String("http.request.method", method)))
+	ctx, span := t.runtime.tracer.Start(request.Context(), "forge.request", trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(attribute.String("server.address", "forgejo"), attribute.String("http.request.method", method)))
 	started := time.Now()
 	response, err := t.base.RoundTrip(request.Clone(ctx))
 	status := 0
@@ -41,11 +41,11 @@ func (t providerTransport) RoundTrip(request *http.Request) (*http.Response, err
 	status, label := boundedStatus(status)
 	span.SetAttributes(attribute.Int("http.response.status_code", status))
 	if err != nil || status == 0 || status >= 400 {
-		span.SetStatus(codes.Error, "Gitea request failed")
+		span.SetStatus(codes.Error, "Forgejo request failed")
 	}
 	span.End()
-	t.runtime.gitea.WithLabelValues(method, label).Inc()
-	t.runtime.giteaTime.WithLabelValues(method, label).Observe(time.Since(started).Seconds())
+	t.runtime.forge.WithLabelValues(method, label).Inc()
+	t.runtime.forgeTime.WithLabelValues(method, label).Observe(time.Since(started).Seconds())
 	return response, err
 }
 

@@ -57,7 +57,7 @@ func TestForwardGitRefusesNativeResponseEncoding(t *testing.T) {
 						}
 						return response, err
 					})}
-					s := &Server{config: Config{GiteaURL: native.URL}, client: client}
+					s := &Server{config: Config{ForgeURL: native.URL}, client: client}
 					incoming := httptest.NewRequest(method, "https://golf.invalid/git/alice/example.git/"+suffix, nil)
 					route := gitTransportRoute{Key: repositoryKey{"alice", "example"}, Service: service, Advertisement: advertisement}
 					data, err := s.forwardGit(t.Context(), incoming, forgeCredential{Token: "owned-fixture-token"}, User{Login: "alice"}, route, nil, 1024)

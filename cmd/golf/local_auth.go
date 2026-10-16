@@ -202,7 +202,7 @@ func runLocalAccount(parent context.Context, options localAccountOptions, input 
 			return err
 		}
 	}
-	result, err := server.ManageLocalAccount(ctx, db, keys, forgeConfig.GiteaURL, options.action, account)
+	result, err := server.ManageLocalAccount(ctx, db, keys, forgeConfig.ForgeURL, options.action, account)
 	// Credentials never appear in operator output, argv or logs.
 	account.Password, account.ForgeToken = "", ""
 	if err != nil {
