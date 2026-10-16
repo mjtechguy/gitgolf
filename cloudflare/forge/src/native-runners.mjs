@@ -67,9 +67,13 @@ export async function nativeRunnerAdmin(db, env, person, request, body) {
   await admin(db, person, request);
   if (body.action === 'list') {
     if (!fields(body, ['action'])) invalid('Use a runner inventory request.');
-    const pools = (await db.prepare('SELECT * FROM native_runner_pools ORDER BY name LIMIT 21').all()).results;
-    const machines = (await db.prepare('SELECT * FROM native_runner_machines ORDER BY created_at,id LIMIT 101').all()).results;
-    return reply({ pools, machines: machines.map(publicMachine), truncated: pools.length > 20 || machines.length > 100 });
+    // The same bounds as savePool and enroll (20 pools, 100 machines, revoked ones included): pools by name, machines newest first,
+    // with the totals and each pool's machine count read in SQL, so a cut list never miscounts or blocks what the bounds allow.
+    const pools = (await db.prepare('SELECT p.*,(SELECT COUNT(*) FROM native_runner_machines m WHERE m.pool_id=p.id) AS machine_count FROM native_runner_pools p ORDER BY p.name LIMIT 20').all()).results;
+    const machines = (await db.prepare('SELECT * FROM native_runner_machines ORDER BY created_at DESC,id DESC LIMIT 100').all()).results;
+    const totals = await db.prepare('SELECT (SELECT COUNT(*) FROM native_runner_pools) AS pools,(SELECT COUNT(*) FROM native_runner_machines) AS machines').first();
+    return reply({ pools, machines: machines.map(publicMachine), poolCount: totals.pools, machineCount: totals.machines, poolLimit: 20, machineLimit: 100,
+      truncated: totals.pools > pools.length || totals.machines > machines.length });
   }
   if (body.action === 'savePool') {
     if (env.TEST_EXECUTION_ENABLED !== 'true' || !imageOK(env.TEST_IMAGE_ID)) refuse('An approved native runner image is required.');

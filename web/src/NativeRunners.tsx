@@ -9,9 +9,9 @@ import { nativeAPI } from './NativeForge';
 import { NativePipelineRunners } from './NativePipelineRunners';
 import { RunnerSharePanel } from './RunnerShares';
 
-type Pool = { id: string; name: string; version: number; state: 'ACTIVE' | 'DRAINING'; trust_class: 'UNTRUSTED' | 'TRUSTED'; max_parallel: number; image_id: string };
+type Pool = { id: string; name: string; version: number; state: 'ACTIVE' | 'DRAINING'; trust_class: 'UNTRUSTED' | 'TRUSTED'; max_parallel: number; image_id: string; machine_count?: number };
 type Machine = { id: string; pool_id: string; name: string; protocol: 'native' | 'gitlab'; version: number; state: 'ACTIVE' | 'DRAINING' | 'QUARANTINED' | 'REVOKED'; expires_at: number; last_seen_at: string | null; active_job_id: string | null; cleanup_state: 'CONFIRMED' | 'UNKNOWN' };
-type Inventory = { pools: Pool[]; machines: Machine[]; truncated: boolean };
+type Inventory = { pools: Pool[]; machines: Machine[]; poolCount: number; machineCount: number; poolLimit: number; machineLimit: number; truncated: boolean };
 type Placement = { repository_id: number; pool_id: string | null; pool_version: number | null; version: number };
 const message = (error: unknown) => error instanceof Error ? error.message : 'The runner operation could not be confirmed.';
 
@@ -55,10 +55,12 @@ export function NativeRunnerAdmin() {
     catch (cause) { setError(cause); await inventory.refetch(); return false; }
     finally { setBusy(false); }
   }
+  // The server's own bounds (native-runners.mjs): a full workspace refuses a new pool or host; a cut list does not.
+  const data = inventory.data, poolsFull = !!data && data.poolCount >= data.poolLimit, machinesFull = !!data && data.machineCount >= data.machineLimit;
   const pools: DataTableColumn<Pool>[] = [
     { accessorKey: 'name', header: 'Pool' }, { accessorKey: 'trust_class', header: 'Trust' }, { accessorKey: 'state', header: 'Admission' },
-    { accessorKey: 'max_parallel', header: 'Capacity' }, { id: 'machines', header: 'Machines', accessorFn: p => inventory.data?.machines.filter(m => m.pool_id === p.id).length || 0 },
-    { id: 'actions', header: 'Actions', enableSorting: false, cell: ({ row }) => <div className="credential-actions"><button className="button secondary" disabled={busy} onClick={() => setPool(row.original)}>Edit</button><button className="button secondary" disabled={busy || row.original.state !== 'ACTIVE'} onClick={() => { setNewMachineId(crypto.randomUUID()); setEnrollment(row.original); }}>Enroll host</button></div> },
+    { accessorKey: 'max_parallel', header: 'Capacity' }, { id: 'machines', header: 'Machines', accessorFn: p => p.machine_count ?? 0 },
+    { id: 'actions', header: 'Actions', enableSorting: false, cell: ({ row }) => <div className="credential-actions"><button className="button secondary" disabled={busy} onClick={() => setPool(row.original)}>Edit</button><button className="button secondary" disabled={busy || machinesFull || row.original.state !== 'ACTIVE'} onClick={() => { setNewMachineId(crypto.randomUUID()); setEnrollment(row.original); }}>Enroll host</button></div> },
   ];
   const machines: DataTableColumn<Machine>[] = [
     { accessorKey: 'name', header: 'Host' }, { id: 'pool', header: 'Pool', accessorFn: m => inventory.data?.pools.find(p => p.id === m.pool_id)?.name || m.pool_id },
@@ -76,11 +78,13 @@ export function NativeRunnerAdmin() {
   return <section className="page-stack"><header className="repository-intro"><div><h2>Native runner pools</h2><p>Customer hosts poll outbound for approved PR jobs. A host must have the approved image installed and a private state directory.</p></div></header>
     {error ? <p className="error" role="alert">{message(error)} Refresh inventory and inspect the original operation before retrying.</p> : null}
     {credential && <section className="browser-panel"><h3>One-time credential for {credential.machine}</h3><p className="field-help">Store it on the host now. Closing this panel removes it from the page.</p><code>{credential.value}</code><div className="credential-actions"><CopyButton text={credential.value} label="Copy runner credential" /><button className="button secondary" onClick={() => setCredential(undefined)}>Close credential</button></div></section>}
-    <section className="browser-panel"><div className="browser-panel-heading"><h3>Pools</h3><button className="button primary" disabled={busy || !!inventory.data?.truncated} onClick={() => { setNewPoolId(crypto.randomUUID()); setPool('new'); }}>New pool</button><button className="button secondary" disabled={inventory.isFetching || busy} onClick={() => void inventory.refetch()}>Refresh</button></div>
-      {inventory.error && <p className="error" role="alert">{message(inventory.error)}</p>}{inventory.isSuccess && <DataTable data={inventory.data.pools} columns={pools} getRowId={p => p.id} label="native runner pools" />}</section>
+    <section className="browser-panel"><div className="browser-panel-heading"><h3>Pools</h3><button className="button primary" disabled={busy || poolsFull} onClick={() => { setNewPoolId(crypto.randomUUID()); setPool('new'); }}>New pool</button><button className="button secondary" disabled={inventory.isFetching || busy} onClick={() => void inventory.refetch()}>Refresh</button></div>
+      {inventory.error && <p className="error" role="alert">{message(inventory.error)}</p>}{inventory.isSuccess && <DataTable data={inventory.data.pools} columns={pools} getRowId={p => p.id} label="native runner pools" />}
+      {data && data.poolCount > data.pools.length && <p className="field-help">Showing the first {data.pools.length} of {data.poolCount} pools by name.</p>}{poolsFull && <p className="field-help">The workspace has {data.poolCount} pools, its limit of {data.poolLimit}: a new pool is refused.</p>}</section>
     {pool && <PoolEditor key={pool === 'new' ? newPoolId : pool.id + '/' + pool.version} pool={pool === 'new' ? undefined : pool} busy={busy} close={() => setPool(undefined)} save={async value => { if (await mutate({ action: 'savePool', id: pool === 'new' ? newPoolId : pool.id, expectedVersion: pool === 'new' ? 0 : pool.version, ...value })) setPool(undefined); }} />}
     {enrollment && <MachineEditor key={newMachineId} pool={enrollment} busy={busy} close={() => setEnrollment(undefined)} enroll={async (name, ttlHours, protocol) => { if (await mutate<{ credential: string }>({ action: protocol === 'gitlab' ? 'enrollGitLab' : 'enroll', id: newMachineId, poolId: enrollment.id, poolVersion: enrollment.version, name, ttlHours, trustExecution: true }, value => setCredential({ machine: name, value: value.credential }))) setEnrollment(undefined); }} />}
-    <section className="browser-panel"><div className="browser-panel-heading"><h3>Machines</h3></div>{inventory.isSuccess && <DataTable data={inventory.data.machines} columns={machines} getRowId={m => m.id} label="native runner machines" />}{inventory.data?.truncated && <p className="field-help">Inventory limit reached. Inspect the full inventory through the API before adding hosts.</p>}</section>
+    <section className="browser-panel"><div className="browser-panel-heading"><h3>Machines</h3></div>{inventory.isSuccess && <DataTable data={inventory.data.machines} columns={machines} getRowId={m => m.id} label="native runner machines" />}
+      {data && data.machineCount > data.machines.length && <p className="field-help">Showing the newest {data.machines.length} of {data.machineCount} machines; older ones are not listed.</p>}{machinesFull && <p className="field-help">The workspace has {data.machineCount} machines, revoked ones included, its limit of {data.machineLimit}: enrolling another host is refused.</p>}</section>
     {reconcile && <form className="credential-form-content" onSubmit={event => { event.preventDefault(); void mutate({ action: 'reconcile', id: reconcile.id, expectedVersion: reconcile.version, jobId: reconcile.active_job_id, cleanupConfirmed: true }).then(ok => { if (ok) setReconcile(undefined); }); }}><h3>Confirm physical cleanup of {reconcile.name}</h3><p>Verify all containers, volumes and local source files for job <code>{reconcile.active_job_id}</code> are gone before clearing quarantine.</p><label><input type="checkbox" required disabled={busy} /> I inspected the exact host and confirmed cleanup.</label><div className="credential-actions"><button className="button primary" disabled={busy}>Confirm cleanup</button><button type="button" className="button secondary" disabled={busy} onClick={() => setReconcile(undefined)}>Cancel</button></div></form>}
   </section>;
 }
