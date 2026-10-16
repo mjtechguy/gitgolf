@@ -127,7 +127,7 @@ test('Settings → Agentic mode lists recent landings in the shared table, inclu
   const current = page.getByRole('region', { name: 'Current setting' });
   await expect(current).toContainText('Revert on failureOn — a change Golf landed on its own is reverted');
   const recent = page.getByRole('region', { name: 'Recent landings', exact: true });
-  await expect(recent).toContainText('All 3 land operations are loaded, newest started first.');
+  await expect(recent).toContainText('All 3 land operations are loaded, most recently updated first.');
   const table = recent.getByRole('table', { name: 'Recent landings' });
   await expect(table.getByRole('row').filter({ hasText: '#9' })).toContainText('Reverted');
   await expect(table.getByRole('row').filter({ hasText: '#9' })).toContainText('Golf (agentic mode)');
@@ -144,6 +144,6 @@ test('Recent landings says older land operations are omitted only when the list 
   await backend(page, { operations: Array.from({ length: 51 }, (_, i) => op({ number: i + 1, updatedAt: at(i) })) });
   await page.goto('/alex/demo/settings/agentic-mode');
   const recent = page.getByRole('region', { name: 'Recent landings', exact: true });
-  await expect(recent).toContainText('The 50 most recently started land operations are loaded; older ones are not, and search and sorting cover only these.');
-  await expect(recent.getByText('newest started first')).toHaveCount(0);
+  await expect(recent).toContainText('The 50 most recently updated land operations are loaded; older ones are not, and search and sorting cover only these.');
+  await expect(recent.getByText('most recently updated first')).toHaveCount(0);
 });
