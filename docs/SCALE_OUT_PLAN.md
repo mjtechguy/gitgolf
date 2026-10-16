@@ -257,6 +257,24 @@ An **Estimated costs** page under Admin → Operations.
 - **Logging.** `golf.land_soon_skipped` says why a targeted landing did not land a head. `golf.request_unconfirmed` records the error
   behind a generic 503.
 
+## Next measurements
+
+The scale-out benchmark and the blog post ("110 agents. One repository.") promise these. Each run records success, latency,
+Workspace admission wait and cost from Estimated costs (unit costs per applied write and per landed pull request).
+
+1. **The full mix again at about 110 agents** with everything deployed. The last full run came before the landing fixes and lost
+   its Source API committers to a setup fetch.
+2. **Runner capacity at an approved limit (S5 evidence):** a capacity request approved by a second administrator, then a bench run
+   with CI at the new limit: queue wait and cost per run.
+3. **A bigger run** (for example about 250 agents), after 1 and 2, with abort criteria: the home page over 5 s, or 5xx bursts.
+4. **Cost:**
+   - billed Artifacts operations per landed pull request, before and after the isolate object cache;
+   - token create/revoke per Git request (see "Outside Golf").
+5. **Smart Placement** (future deploy support): D1 latency from the Worker before and after, when the deploy tooling supports it.
+
+Each run is short (6 to 10 minutes plus the landing window) unless a longer one is the point, because benchmark runs are what drive
+this installation's Artifacts bill.
+
 ## Outside Golf
 
 - Artifacts answered `ERR artifacts_git_receive_pack_busy` under load. Every write to one repository (push, Source API commit,
