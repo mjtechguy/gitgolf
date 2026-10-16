@@ -297,9 +297,39 @@ async function repositoryValues(db, env, run) {
   valueCache.set(key, { at: Date.now(), value });
   return value;
 }
+// Every secret, and each line of a multi-line one, of 4 or more characters.
+const secretTexts = secrets => [...new Set(Object.values(secrets).flatMap(value => [value, ...value.split(/\r?\n/)]).filter(value => value.length >= 4))];
+// Actions rows are whole lines, so each row is redacted on its own: no secret line spans two rows.
 function redactor(secrets) {
-  const patterns = [...new Set(Object.values(secrets).flatMap(value => [value, ...value.split(/\r?\n/)]).filter(value => value.length >= 4))].sort((a, b) => b.length - a.length);
+  const patterns = secretTexts(secrets).sort((a, b) => b.length - a.length);
   return line => patterns.reduce((out, secret) => out.split(secret).join('***'), line);
+}
+/* Byte traces (GitLab): every byte of every occurrence becomes '*', so stored offsets stay the runner's. `held` is the longest
+ * suffix that is a proper prefix of a secret (KMP leaves it in j): it is kept back, sealed, until the next upload or the job's
+ * end decides it, so a secret split across two uploads is never stored in part. `head` marks the first bytes of `data` that an
+ * occurrence begun in already-stored output covers. */
+function maskBytes(data, patterns, head = 0, final = false) {
+  const marks = new Int32Array(data.length + 1);
+  let held = 0;
+  if (head) { marks[0]++; marks[Math.min(head, data.length)]--; }
+  for (const pattern of patterns) {
+    const failure = new Int32Array(pattern.length);
+    for (let i = 1, j = 0; i < pattern.length; i++) { while (j > 0 && pattern[i] !== pattern[j]) j = failure[j - 1]; if (pattern[i] === pattern[j]) j++; failure[i] = j; }
+    let j = 0;
+    for (let i = 0; i < data.length; i++) {
+      while (j > 0 && data[i] !== pattern[j]) j = failure[j - 1];
+      if (data[i] === pattern[j]) j++;
+      if (j === pattern.length) { marks[i - j + 1]++; marks[i + 1]--; j = failure[j - 1]; }
+    }
+    held = Math.max(held, j);
+  }
+  if (final) held = 0;
+  const masked = Uint8Array.from(data), keep = data.length - held;
+  for (let i = 0, active = 0; i < data.length; i++) if ((marks[i] = (active += marks[i]) > 0 ? 1 : 0)) masked[i] = 42;
+  // Held bytes stay raw for the next match; an occurrence that started before them is remembered as the held head.
+  let carried = 0;
+  while (keep + carried < data.length && marks[keep + carried]) carried++;
+  return { body: masked.subarray(0, keep), held: data.slice(keep), head: carried };
 }
 
 // ---------- logs ----------
@@ -327,33 +357,67 @@ export async function appendJobLogLines(db, env, job, index, lines) {
   if (!await storeChunk(db, env, fresh, body, count, bytes, { lines: fresh.log_lines, bytes: fresh.log_bytes })) return { ack: (await db.prepare('SELECT log_lines FROM pipeline_jobs WHERE id=?').bind(job.id).first()).log_lines };
   return { ack: ack + count };
 }
+// The held tail of a byte trace (maskBytes) is part of a secret: sealed with the repository value key, which any secret needs.
+const heldPrefix = job => `pipelines/${job.run_id}/${job.id}/log/held-`, heldKey = (job, seq) => heldPrefix(job) + String(seq).padStart(8, '0');
+const heldAD = (env, job, seq, length, head) => ['golf.native.pipeline-log-held.v1', env.PUBLIC_ORIGIN, job.id, seq, length, head];
+const heldSealing = env => import('./sealed.mjs').then(async sealed => ({ ...sealed, ...await sealed.sealingKey(env.EXECUTION_VALUE_KEY, 'Repository value') }));
+async function readHeld(env, job, seq) {
+  const object = await bucket(env).get(heldKey(job, seq));
+  if (!object) return { bytes: new Uint8Array(), head: 0, found: false };
+  const [length, head, ...sealed] = (await object.text()).split('.'), size = Number(length), carried = Number(head);
+  if (!Number.isSafeInteger(size) || size < 0 || size > 65536 || !Number.isSafeInteger(carried) || carried < 0 || carried > size) return { bytes: new Uint8Array(), head: 0, found: true };
+  try {
+    const { open, key } = await heldSealing(env), plain = await open(key, heldAD(env, job, seq, size, carried), sealed.join('.'));
+    if (plain.length === size) return { bytes: Uint8Array.from(plain, c => c.charCodeAt(0)), head: carried, found: true };
+  } catch { /* the key changed since: the held bytes cannot be decided */ }
+  // Undecidable bytes are stored as '*': offsets still match and nothing of a secret is stored.
+  return { bytes: new Uint8Array(size).fill(42), head: size, found: true };
+}
+async function writeHeld(env, job, seq, bytes, head) {
+  const { seal, key } = await heldSealing(env), sealed = await seal(key, heldAD(env, job, seq, bytes.length, head), Array.from(bytes, b => String.fromCharCode(b)).join(''));
+  await bucket(env).put(heldKey(job, seq), `${bytes.length}.${head}.${sealed}`, { httpMetadata: { contentType: 'text/plain' } });
+}
+const traceSecrets = async (db, env, job) => secretTexts((await pipelineValues(db, env, await db.prepare('SELECT * FROM pipeline_runs WHERE id=?').bind(job.run_id).first(), job)).secrets).map(value => text.encode(value));
+const newlines = body => body.reduce((n, b) => n + (b === 10), 0);
+// The runner's next byte is what is stored plus the held tail.
+async function traceAck(db, env, job) {
+  const fresh = await db.prepare('SELECT * FROM pipeline_jobs WHERE id=?').bind(job.id).first();
+  return fresh.log_bytes + (await readHeld(env, fresh, fresh.log_chunks)).bytes.length;
+}
 export async function appendJobLogBytes(db, env, job, offset, bytes) {
   const fresh = await db.prepare('SELECT * FROM pipeline_jobs WHERE id=?').bind(job.id).first();
   if (!Number.isSafeInteger(offset) || offset < 0 || !(bytes instanceof Uint8Array)) invalid('Invalid trace range.');
-  if (offset !== fresh.log_bytes) throw Object.assign(new Fault('out_of_range', 416, 'Trace offset differs.'), { ack: fresh.log_bytes });
-  if (!bytes.length) return { ack: fresh.log_bytes };
-  if (bytes.length > maxChunkBytes || fresh.log_bytes + bytes.length > maxLogBytes) refuse('Job log exceeds the 64 MiB bound.');
-  const run = await db.prepare('SELECT * FROM pipeline_runs WHERE id=?').bind(fresh.run_id).first();
-  const secrets = (await pipelineValues(db, env, run, fresh)).secrets;
-  let body = bytes;
-  // Redaction keeps the stored byte count equal to the runner's offsets: each secret byte becomes '*'.
-  if (Object.keys(secrets).length) {
-    const decoded = new TextDecoder().decode(bytes), redact = redactor(secrets);
-    const masked = text.encode(redact(decoded));
-    body = masked.length === bytes.length ? masked : text.encode(decoded.replace(/[^\n]/g, c => c)).slice(0, bytes.length);
-    if (masked.length !== bytes.length) {
-      const stars = Uint8Array.from(bytes);
-      for (const secret of Object.values(secrets).filter(value => value.length >= 4)) {
-        const pattern = text.encode(secret);
-        for (let i = 0; i + pattern.length <= stars.length; i++) if (pattern.every((b, k) => bytes[i + k] === b)) stars.fill(42, i, i + pattern.length);
-      }
-      body = stars;
-    }
+  const seq = fresh.log_chunks, held = await readHeld(env, fresh, seq), accepted = fresh.log_bytes + held.bytes.length;
+  if (offset !== accepted) throw Object.assign(new Fault('out_of_range', 416, 'Trace offset differs.'), { ack: accepted });
+  if (!bytes.length) return { ack: accepted };
+  if (bytes.length > maxChunkBytes || accepted + bytes.length > maxLogBytes) refuse('Job log exceeds the 64 MiB bound.');
+  const patterns = await traceSecrets(db, env, fresh), ack = accepted + bytes.length;
+  let body = bytes, rest = new Uint8Array(), head = 0;
+  if (patterns.length || held.found) {
+    const data = new Uint8Array(held.bytes.length + bytes.length);
+    data.set(held.bytes); data.set(bytes, held.bytes.length);
+    ({ body, held: rest, head } = maskBytes(data, patterns, held.head));
   }
-  const newlines = body.reduce((n, b) => n + (b === 10), 0);
-  if (!await storeChunk(db, env, fresh, body, newlines, body.length, { lines: fresh.log_lines, bytes: fresh.log_bytes }))
-    throw Object.assign(new Fault('out_of_range', 416, 'Trace offset differs.'), { ack: (await db.prepare('SELECT log_bytes FROM pipeline_jobs WHERE id=?').bind(job.id).first()).log_bytes });
-  return { ack: fresh.log_bytes + body.length };
+  // All of it may still be the start of a secret: only the held tail grows.
+  if (!body.length) { await writeHeld(env, fresh, seq, rest, head); return { ack }; }
+  // Written before the chunk commits, so the tail the next upload expects survives a failure between the two.
+  if (rest.length) await writeHeld(env, fresh, seq + 1, rest, head);
+  else if (patterns.length || held.found) await bucket(env).delete(heldKey(fresh, seq + 1));
+  if (!await storeChunk(db, env, fresh, body, newlines(body), body.length, { lines: fresh.log_lines, bytes: fresh.log_bytes }))
+    throw Object.assign(new Fault('out_of_range', 416, 'Trace offset differs.'), { ack: await traceAck(db, env, job) });
+  if (held.found) await bucket(env).delete(heldKey(fresh, seq));
+  return { ack };
+}
+// The job's end decides a held tail: no secret completed it, so it is stored as it was, its carried head still masked.
+async function flushJobLog(db, env, fresh) {
+  if (!pipelinePolicy(env)) return;
+  const held = await readHeld(env, fresh, fresh.log_chunks);
+  if (!held.found) return;
+  if (held.bytes.length) {
+    const { body } = maskBytes(held.bytes, await traceSecrets(db, env, fresh), held.head, true);
+    await storeChunk(db, env, fresh, body, newlines(body), body.length, { lines: fresh.log_lines, bytes: fresh.log_bytes });
+  }
+  await bucket(env).delete(heldKey(fresh, fresh.log_chunks));
 }
 export async function readJobLog(db, env, job, { fromLine = 0, fromByte, limit = 2 * 1024 * 1024 } = {}) {
   const fresh = await db.prepare('SELECT * FROM pipeline_jobs WHERE id=?').bind(job.id).first();
@@ -412,9 +476,12 @@ export async function finishPipelineJob(db, env, job, { result, exitCode = null,
       db.prepare('DELETE FROM pipeline_log_chunks WHERE job_id=?').bind(job.id),
       db.prepare('DELETE FROM pipeline_steps WHERE job_id=?').bind(job.id),
     ]);
-    if (chunks.length) await env.PIPELINE_BUCKET.delete(chunks.map(chunk => logKey(fresh.run_id, job.id, chunk.seq)));
+    const { objects: held } = await env.PIPELINE_BUCKET.list({ prefix: heldPrefix(fresh) });
+    const keys = [...chunks.map(chunk => logKey(fresh.run_id, job.id, chunk.seq)), ...held.map(object => object.key)];
+    if (keys.length) await env.PIPELINE_BUCKET.delete(keys);
     return { state: 'QUEUED', retried: true };
   }
+  await flushJobLog(db, env, fresh);
   const changed = await db.prepare("UPDATE pipeline_jobs SET state=?,exit_code=?,outputs=?,failure_reason=?,token_digest=NULL,token_expires_at=NULL,log_complete=1,finished_at=?,updated_at=? WHERE id=? AND state='RUNNING'")
     .bind(state, exitCode, outputJSON, failureReason.slice(0, 500), time, time, job.id).run();
   if (changed.meta.changes !== 1) refuse('The job changed; refresh.');

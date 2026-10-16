@@ -421,7 +421,12 @@ v3 artifact API (`ACTIONS_RUNTIME_URL=/api/actions_pipeline/`) is not implemente
 (`ACTIONS_CACHE_URL`, Forgejo Runner default); Golf stores no caches.
 
 Logs: `UpdateLog` rows are stored as immutable R2 chunks indexed in D1, with exact secret values (and each line of a
-multi-line secret) of 4 or more characters replaced by `***` before storage (the runner masks too). The Actions tab polls
+multi-line secret) of 4 or more characters replaced by `***` before storage (the runner masks too). Rows are whole lines,
+so the match does not depend on how rows are split across uploads. GitLab traces arrive as byte ranges: every byte of every
+occurrence becomes `*` (stored offsets stay the runner's), and the longest tail of an upload that could begin a secret is
+held back until the next range or the job's end decides it. The held tail is shorter than the longest secret, sealed with
+the repository value key in R2 (never stored as text) and not shown until then; at the job's end it is stored as it was,
+since no secret completed it. A re-queued job (GitLab `retry`) discards it with the log. The Actions tab polls
 the job log from the last line every 1.5 s while a job runs and folds it by step using the runner's step log ranges;
 WebSocket fan-out is not implemented. Step summaries (`UpdateStepSummary`) are stored in R2 but not yet shown.
 
@@ -501,7 +506,7 @@ ROOT_NAMESPACE,TITLE,URL,VISIBILITY}`, `CI_DEFAULT_BRANCH`, `CI_PIPELINE_{ID,IID
 
 | Route | Behaviour |
 | --- | --- |
-| `PATCH /api/v4/jobs/:id/trace` (`Content-Range: start-end`, ≤ 4 MiB) | `appendJobLogBytes` into R2 chunks; `202` + `Range: 0-<next byte>`; a wrong offset is `416` + `Range: 0-<next byte>` so the runner resends |
+| `PATCH /api/v4/jobs/:id/trace` (`Content-Range: start-end`, ≤ 4 MiB) | `appendJobLogBytes` into R2 chunks (a tail that could begin a secret is held back, sealed, until the next range or the job's end); `202` + `Range: 0-<next byte>`; a wrong offset is `416` + `Range: 0-<next byte>` so the runner resends |
 | `PUT /api/v4/jobs/:id` | `running` keeps the job; `success`/`failed`/`canceled` → `finishPipelineJob` (exit code, `failure_reason`; GitLab `retry` re-queues); `coverage` is the last match of the job's regex in the last MiB of the log, stored in `outputs.coverage` |
 | `POST /api/v4/jobs/:id/artifacts?artifact_type=&artifact_format=&expire_in=` | multipart `file`; archive (zip) → `gitlab-archive`, reports (gzip/raw) → `gitlab-report` named by type; at most `GITLAB_ARTIFACT_MAX_BYTES` (default 64 MiB, at most 96 MiB; buffered in the Worker) else `413`; `expire_in` honoured up to 90 days (`never` = 90 days) |
 | `GET /api/v4/jobs/:id/artifacts` | the archive of a job named in the caller's `dependencies`, same run, streamed from R2 |
