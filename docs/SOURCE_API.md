@@ -203,10 +203,12 @@ line, as `git grep -n --column -I` returns them.
 
 - **`pattern`:** a literal substring of 1 to 1,000 characters, matched case-insensitively when
   `caseSensitive` is false. A pattern cannot contain a newline or NUL.
-- **No regular expressions yet:** `regex: true` is refused with 400 and
-  `reason: "regex_unavailable"`. The scan runs inside the workspace that serves every request,
-  and JavaScript's engine can backtrack for seconds on a hostile pattern. Regex search will
-  return once the scan runs outside it.
+- **Regular expressions:** with `regex: true` the pattern is a JavaScript regular expression,
+  matched per line (`i` when `caseSensitive` is false). An invalid one is refused with 400.
+  - The search runs in the stateless Worker (scale-out S3). A pattern that backtracks without end
+    stops at that request's CPU limit and fails only that request.
+  - Where the search would run in the shared Workspace instead, `regex: true` is still refused with
+    400 and `reason: "regex_unavailable"`.
 - **Results:**
   - `column` is the 1-based position of the first match in the line, in UTF-16 code
     units. It equals Git's byte column for ASCII.

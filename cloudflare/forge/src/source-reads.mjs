@@ -122,7 +122,7 @@ function globMatcher(globs) {
   return path => tests.some(test => test(path));
 }
 
-function matcher(body) {
+function matcher(body, env) {
   const { pattern } = body, regex = body.regex ?? false, caseSensitive = body.caseSensitive ?? true;
   if (typeof regex !== 'boolean' || typeof caseSensitive !== 'boolean') invalid('regex and caseSensitive are true or false.');
   const max = readLimits.literal;
@@ -130,9 +130,13 @@ function matcher(body) {
   if (/[\n\0]/.test(pattern)) invalid('pattern matches within one line; it cannot contain a newline or NUL.');
   if (!regex && caseSensitive) return line => line.indexOf(pattern);
   let expression;
-  // A regular expression would run inside the workspace that serves every request, and JavaScript's engine can backtrack for
-  // seconds on a hostile pattern; until the scan runs outside it, only literal search (linear) is offered.
-  if (regex) throw new Refused('invalid_argument', 400, 'Regular-expression search is not available yet: a slow pattern would stall the workspace that serves every request. Use a literal pattern, with caseSensitive: false if needed.', { reason: 'regex_unavailable' });
+  // JavaScript's engine can backtrack for seconds on a hostile pattern. In the stateless Worker (scale-out S3) that ends only the
+  // caller's own request, at its CPU limit; anywhere else (the shared Workspace) only literal search, which is linear, is offered.
+  if (regex) {
+    if (!env?.statelessWorker) throw new Refused('invalid_argument', 400, 'Regular-expression search is not available here: a slow pattern would stall the workspace that serves every request. Use a literal pattern, with caseSensitive: false if needed.', { reason: 'regex_unavailable' });
+    try { expression = new RegExp(pattern, caseSensitive ? '' : 'i'); } catch { invalid('pattern is not a valid JavaScript regular expression.'); }
+    return line => { const found = expression.exec(line); return found ? found.index : -1; };
+  }
   expression = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   return line => { const found = expression.exec(line); return found ? found.index : -1; };
 }
@@ -141,7 +145,7 @@ function matcher(body) {
 // one result per matching line. Binary files (a NUL in the first 8,000 bytes) and files over 1 MiB are skipped and counted. Stops at
 // maxResults, 5,000 files read, 32 MiB read or 10 seconds, with truncated: true and the reason.
 export async function grep(env, repo, row, body, ctx) {
-  const find = matcher(body), selected = globMatcher(body.paths), maxResults = body.maxResults ?? readLimits.grepDefaultResults;
+  const find = matcher(body, env), selected = globMatcher(body.paths), maxResults = body.maxResults ?? readLimits.grepDefaultResults;
   if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > readLimits.grepResults) invalid('maxResults is a whole number from 1 to 500.');
   const head = await commitAt(env, repo, row, body.ref, ctx), started = Date.now();
   // A commit never changes, so the same search of it has the same answer: the isolate's object cache keeps the last 32 answers. The caller's

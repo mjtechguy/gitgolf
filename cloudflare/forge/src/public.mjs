@@ -172,7 +172,7 @@ async function dispatch(request, env, ctx, clock) {
       const response = await core.handle(forwarded, { ...env, waitUntil: promise => ctx.waitUntil(promise),
         // Repository reads (MCP tools, Source API reads) are confirmed against D1 after they run; Git reads check their grant themselves.
         confirmRead: core.confirmReadFromD1(forwarded, env),
-        workspaceBudget: (kind, id, write) => owner.chargeBudget(kind, id, write), pipelineCoordinator: ctx.exports.PipelineRun, gitObjectCache: isolateObjects,
+        workspaceBudget: (kind, id, write) => owner.chargeBudget(kind, id, write), pipelineCoordinator: ctx.exports.PipelineRun, gitObjectCache: isolateObjects, statelessWorker: true,
         notifyPipeline: id => ctx.waitUntil(owner.activityChanged(String(id), ['actions']).catch(() => {})),
         automationsQueued: () => ctx.waitUntil(owner.automations().catch(() => {})),
         notifyLanding: id => ctx.waitUntil(owner.activityChanged(String(id), ['source', 'pulls', 'issues']).catch(() => {})) });
