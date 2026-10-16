@@ -5,6 +5,8 @@ import { createHash } from 'node:crypto';
 import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetRepositoryResponseSchema, GetPullRequestResponseSchema, GetPullRequestDiffResponseSchema, GetPullRequestReviewDraftResponseSchema, GetPullRequestInlineReviewMutationResponseSchema, PublishPullRequestReviewDraftRequestSchema, PublishPullRequestReviewDraftResponseSchema, PullInlineReviewMutationSchema, PullInlineReviewPhase, PullRequestSchema, PullRequestReviewState, PullReviewDraftSchema, IssueState, LogoutResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import type { PublishPullRequestReviewDraftRequest, PullInlineReviewMutation } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
+import { ListCapabilitiesResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { portableRuntimeFixture } from './runtime-fixture';
 
 const base = 'a'.repeat(40), head = 'b'.repeat(40), merge = 'c'.repeat(40), revision = 'd'.repeat(64);
 const user = { id: '9007199254740993', login: 'reader' }, repo = { id: '9007199254740994', name: 'sample', fullName: 'owner/sample', private: true, defaultBranch: 'main' };
@@ -19,6 +21,7 @@ async function backend(page: Page) {
   const s = { pull: clone(PullRequestSchema, original), draft: clone(PullReviewDraftSchema, saved), text: diff, signedIn: true, deny: false, lost: false, missing: false, wrong: '', phase: PullInlineReviewPhase.SUCCEEDED, posts: [] as PublishPullRequestReviewDraftRequest[], reads: 0, held: undefined as Promise<void> | undefined, mutation: undefined as PullInlineReviewMutation | undefined };
   await page.route('**/rpc/**', async route => {
     const method = route.request().url().split('/').at(-1);
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (method === 'GetSession') return s.signedIn ? respond(route, GetSessionResponseSchema, { user }) : reject(route, 'unauthenticated', 'Signed out.');
     if (method === 'Logout') { s.signedIn = false; return respond(route, LogoutResponseSchema, {}); }

@@ -184,7 +184,9 @@ test('pull navigation paginates and filters native states with canonical detail 
 test('detail preserves exact refs and IDs; review pagination retains empty pages and shows native flags and safe Markdown', async ({ page }) => {
   const state = await backend(page);
   await page.goto('/repositories/alex/design-system?view=pulls&pull=12');
-  await expect(page.getByLabel('Pull request body, rendered Markdown')).toContainText('image preview unavailable');
+  // Since fa4dbd3 an image without alt text renders nothing, rather than an "(image preview unavailable)" placeholder.
+  await expect(page.getByLabel('Pull request body, rendered Markdown')).toContainText('PRIVATE PULL');
+  await expect(page.getByLabel('Pull request body, rendered Markdown').locator('.markdown-image-placeholder')).toHaveCount(0);
   await page.getByText('Comparison details',{exact:true}).click();
   await expect(page.getByRole('region', { name: 'Base metadata' })).toContainText(repository.id);
   await expect(page.getByRole('region', { name: 'Head metadata' })).toContainText('9007199254740995');

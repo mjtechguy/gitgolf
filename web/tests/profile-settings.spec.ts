@@ -30,6 +30,8 @@ test('profile shows authoritative fields and role with an explicit editor and re
   await backend(page); await page.goto('/account/settings'); const panel = page.getByRole('region', { name: 'Account profile', exact: true });
   await expect(panel.getByText('Alex Original', { exact: true })).toBeVisible(); await expect(panel.getByText('Instance administrator', { exact: true })).toBeVisible(); await expect(panel.getByText('alex · Read only', { exact: true })).toBeVisible();
   await expect(panel.locator('input,textarea,select')).toHaveCount(0); await expect(panel.getByRole('button', { name: 'Edit profile', exact: true })).toBeVisible();
+  // Since 36f7d01 the settings inventory renders only after Capability diagnostics is opened.
+  await page.getByText('Capability diagnostics', { exact: true }).click();
   await page.getByRole('searchbox', { name: 'Search loaded Personal settings', exact: true }).fill('Profile and email'); await expect(page.getByRole('table', { name: 'Personal settings', exact: true }).getByText('Partial', { exact: true })).toBeVisible();
 });
 test('cancel and pagehide clear drafts without submitting profile changes', async ({ page }) => {

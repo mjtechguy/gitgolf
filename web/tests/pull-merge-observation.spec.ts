@@ -173,7 +173,8 @@ for(const width of [390,1440])test(`native image receipt stays private and fits 
   const path=new URL(route.request().url()).pathname;
   if(path==='/native/config')return route.fulfill({json:{workspace:'alex',evidence:true,tests:true,previews:false}});
   if(path==='/native/repository-access')return route.fulfill({json:{role:'read'}});
-  if(path==='/native/pr-evidence'){
+  // Since b8e5e85 list and report reads use /native/pr-evidence/read; the bare path is for writes.
+  if(path==='/native/pr-evidence/read'){
    if(denied)return route.fulfill({status:403,json:{message:'Repository access revoked'}});
    const input=route.request().postDataJSON();
    return route.fulfill({json:input.action==='report'?{job,report:{agentResult:{state:'NONE'},tests:{state:'PASSED',image},advice:{state:'NONE'},limitations:[]}}:{jobs:[job],truncated:false}});
@@ -183,7 +184,8 @@ for(const width of [390,1440])test(`native image receipt stays private and fits 
  await open(page);await page.getByRole('button',{name:'Read report',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Published container image'})).toBeVisible();
  await expect(page.getByText('registry.example.com/alex/private@'+image.digest,{exact:true})).toBeVisible();
- await expect(page.getByText(/not a signed build attestation/)).toBeVisible();
+ // Since ffc79ac the receipt links to the package's scan, SBOM and policy instead of a note about attestation.
+ await expect(page.getByRole('link',{name:'Inspect scan, SBOM and policy',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain(image.digest);
  denied=true;await page.getByRole('button',{name:'Refresh PR',exact:true}).click();
@@ -203,8 +205,9 @@ for (const view of ['conversation', 'checks']) test(`native ${view} connects eac
   if (denied) return route.fulfill({ status: 403, json: { message: 'Repository access revoked' } });
   if (path === '/native/config') return route.fulfill({ json: { workspace: 'alex', evidence: true, tests: true, previews: true, apps: true } });
   if (path === '/native/repository-access') return route.fulfill({ json: { role: 'read' } });
-  if (path === '/native/pr-evidence') return route.fulfill({ json: { jobs: [job], truncated: false } });
-  if (path === '/native/pr-preview') return route.fulfill({ json: { previews: [preview, { ...preview, id: 'other-pr', jobId: 'foreign', url: 'https://foreign.example.com/' }, { ...preview, id: 'wrong-source', commitId: B, url: 'https://wrong-source.example.com/' }], truncated: false } });
+  // Since b8e5e85 run and preview inventories are read from the /read paths.
+  if (path === '/native/pr-evidence/read') return route.fulfill({ json: { jobs: [job], truncated: false } });
+  if (path === '/native/pr-preview/read') return route.fulfill({ json: { previews: [preview, { ...preview, id: 'other-pr', jobId: 'foreign', url: 'https://foreign.example.com/' }, { ...preview, id: 'wrong-source', commitId: B, url: 'https://wrong-source.example.com/' }], truncated: false } });
   return route.fulfill({ status: 404, json: { message: 'Fixture route unavailable' } });
  });
  await page.goto('/alex/private/pull/7' + (view === 'checks' ? '/checks' : ''));

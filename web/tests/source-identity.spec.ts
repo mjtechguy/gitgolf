@@ -160,7 +160,8 @@ test('duplicate root inventory prevents private rows and README discovery', asyn
 for (const wrong of ['repositoryId', 'commit', 'document', 'reference']) test(`image ${wrong} receipt is rejected before byte decoding`, async ({ page }) => {
   const state = await fixture(page); state.badImage = wrong;
   await page.goto(`/alex/identity/blob/${head}/README.md`);
-  await expect(page.getByText('Private badge (image preview unavailable)', { exact: true })).toBeVisible();
+  // Since fa4dbd3 the placeholder shows the alt text alone, labelled "<alt>: image unavailable".
+  await expect(page.getByLabel('Private badge: image unavailable', { exact: true })).toHaveText('Private badge');
   await expect(page.locator('.markdown-body img')).toHaveCount(0);
   expect(state.images[0]).toMatchObject({ repositoryId, commitId: head, documentPath: 'README.md', imageUrl: './badge.svg' });
 });

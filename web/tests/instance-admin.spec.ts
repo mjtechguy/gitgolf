@@ -41,9 +41,11 @@ test('instance inventory preserves exact IDs, loaded search, paging and protecte
   await expect(table.getByText('9007199254740997', { exact: true })).toBeVisible();
   await expect(table.getByText('9007199254740999', { exact: true })).toBeVisible();
   expect(await table.locator('tbody tr[data-row-id]').first().locator('small').evaluate(element => getComputedStyle(element).display)).toBe('block');
-  await page.getByRole('searchbox', { name: 'Search loaded Local accounts', exact: true }).fill('Disabled');
+  // "Disabled" also matches the Authenticator column of every account without an authenticator, so search by role.
+  await page.getByRole('searchbox', { name: 'Search loaded Local accounts', exact: true }).fill('Instance administrator');
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(1);
-  await expect(table.getByText('disabled-user', { exact: true })).toBeVisible();
+  await expect(table.getByText('alex', { exact: true })).toBeVisible();
+  await expect(table.getByText('disabled-user', { exact: true })).toHaveCount(0);
   await page.getByRole('searchbox', { name: 'Search loaded Local accounts', exact: true }).fill('');
   await page.getByRole('button', { name: 'Load more accounts', exact: true }).click();
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(3);
@@ -119,6 +121,9 @@ test('unconfirmed disable never retries and requires state inspection before ano
 test('global overview separates configuration coverage from account inventory', async ({ page }) => {
   const state = await backend(page);
   await page.goto('/admin');
+  // Since 36f7d01 the settings inventory renders only after Capability diagnostics is opened.
+  await expect(page.getByRole('table', { name: 'Instance settings', exact: true })).toHaveCount(0);
+  await page.getByText('Capability diagnostics', { exact: true }).click();
   await expect(page.getByRole('table', { name: 'Instance settings', exact: true })).toBeVisible();
   expect(state.reads).toHaveLength(0);
   await page.getByRole('link', { name: 'Accounts', exact: true }).click();

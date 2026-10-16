@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { CreateRepositoryRequestSchema, CreateRepositoryResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryCreationRequestSchema, GetRepositoryCreationResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, LogoutResponseSchema, RepositoryCreationState, RepositorySchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
 import type { CreateRepositoryRequest } from '../src/gen/golf/v1/golf_pb';
+import { ListProviderConnectionsResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -22,6 +23,8 @@ async function backend(page: Page) {
     if (procedure === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session expired.');
     if (procedure === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
+    // The new-repository page lists personal provider connections for connected imports; this account has none.
+    if (procedure === 'ListProviderConnections') return respond(route, ListProviderConnectionsResponseSchema, {});
     const first = state.posts.at(-1);
     const repository = create(RepositorySchema, { id: '73', name: first?.name || 'project', fullName: `alex/${first?.name || 'project'}`, private: first?.private ?? true, description: first?.description || '', updatedAt: '2026-10-02T00:00:00Z' });
     if (procedure === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: state.listed ? [repository] : [] });

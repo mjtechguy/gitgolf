@@ -55,7 +55,9 @@ test('native operations route is available explicitly while unsupported portable
  assert.equal(settingForRoute('instance-settings','operations',true),'operations.dashboard');
  assert.equal(settingForRoute('instance-settings','runners',true),'settings.native-runners');
  assert.equal(settingForRoute('repository-runners',undefined,true),'settings.runners');
- for(const view of ['execution','organizations','agents'])assert.ok(settingForRoute('instance-settings',view,true)?.startsWith('settings.'));
+ for(const view of ['execution','organizations'])assert.ok(settingForRoute('instance-settings',view,true)?.startsWith('settings.'));
+ // Since fdac521 (#70) the native /admin/agents page is the agent hosts service.
+ assert.equal(settingForRoute('instance-settings','agents',true),'agents.hosts');
  assert.equal(settingForRoute('instance-settings','overview',true),null);
 });
 

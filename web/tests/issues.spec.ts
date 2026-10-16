@@ -260,7 +260,9 @@ test('comments advance across an empty native page, render literal text and pres
   await expect(page.getByRole('heading', { name: 'No comments in the loaded pages.' })).toBeVisible();
   expect(state.pages.length).toBeGreaterThan(0); expect(state.pages.every((number) => number === 1)).toBe(true);
   await page.getByRole('button', { name: 'Load more comments' }).click();
-  await expect(page.getByLabel(`Comment ${comment.id}, rendered Markdown`)).toContainText('image preview unavailable');
+  // Since fa4dbd3 an image without alt text renders nothing, rather than an "(image preview unavailable)" placeholder.
+  await expect(page.getByLabel(`Comment ${comment.id}, rendered Markdown`)).toContainText('unsafe');
+  await expect(page.getByLabel(`Comment ${comment.id}, rendered Markdown`).locator('.markdown-image-placeholder')).toHaveCount(0);
   expect(state.pages.at(-1)).toBe(2); expect(state.pages.filter((number) => number === 2)).toHaveLength(1);
   await expect(page.locator('.issue-comment img, .issue-comment a[href^="javascript:"]')).toHaveCount(0);
   await page.getByRole('link', { name: 'All open issues' }).click();

@@ -127,6 +127,42 @@ fully serial rerun (`--workers=1`, 65 min) passed 16 of them. The remaining fail
 - **Environment:** fix the fixture or the setup script.
 - **Exit:** the full suite and the web unit tests are green on `main` twice in a row.
 
+**Status, part A (2026-10-16): stale expectations, groups A–F and H, and the two web unit tests.** Started; exit not met.
+
+- Changes: tests and fixtures only, plus one move of product code. The Cloudflare-native session bootstrap moved from
+  `web/src/queryClient.ts` to `web/src/sessionBootstrap.ts`, which `main.tsx` calls. `queryClient.ts` therefore no longer
+  imports the generated `golf_pb.ts` and runs under plain `node --test`. This was chosen over a test-only loader with
+  `--experimental-transform-types` so that every unit test keeps running with the same command.
+- Web unit tests: 29 of 29 pass (`node --test web/tests/*.test.ts`). `npm run typecheck` passes.
+- Full browser run, same wrapper as Q-1 (port 4379), `--workers=6 --retries=0`, 27.9 min. The machine was heavily loaded by
+  other worktrees (load average about 21 on 12 threads).
+
+  | | Q-1 baseline | After part A |
+  | --- | ---: | ---: |
+  | Total | 2,557 | 2,557 |
+  | Passed | 2,266 | 2,420 |
+  | Failed (including timeouts) | 208 | 54 |
+  | Skipped | 83 | 83 |
+
+- Groups A–F and H (185 in the baseline): 10 still failed in the full run.
+  - A: 9 (`pull-review-comments` 8, `pull-review-drafts` 1). Answering `ListCapabilities` exposed a load-dependent failure:
+    an opened inline-comment panel collapses again. The whole spec passes at 2 workers (46 of 46) and fails 6–13 tests
+    when run alone at 6 workers. Not fixed here; treat it as flaky.
+  - E: 1, a **real bug**. At 320px the workspace switcher dropdown overflows the viewport even with the extra alert gone:
+    `.workspace-switcher-dropdown` is `left:0` from a trigger at x≈104 with `max-width:calc(100vw - 32px)`, so it ends at
+    x≈392. Its test (`workspace-switcher.spec.ts` "header switcher…") stays red until `styles.css` is fixed.
+  - B, C, D, F, H: 0.
+- Other failures in the same run: I 3 and K 5 (owned by another change), 3 of the Q-1 flaky list, and 33 not in the
+  baseline. All 33 are in specs or tests that part A did not change, or they passed again. A rerun of those 33 at 3 workers
+  left 7 failing. 5 of those 7 then passed on both `main`'s copy and this branch (`issues` 758 ×2 and 810,
+  `pull-requests` 530 ×2). The other 2 are `pull-merge-observation` 76 (a Q-1 flaky test) and `repository-file-changes` 38.
+- Second-level stale expectations found while fixing (cited in each test): the home page's `.workspace-intro` became
+  `.repository-index` (fa4dbd3). Wide layouts without top navigation hide the workspace menu (27098d4). The OCI receipt's
+  attestation note became an "Inspect scan, SBOM and policy" link (ffc79ac). Brand, Flare surface and accent tokens changed
+  with the layout study (2cf0b71). The native runner chooser needs `/native/config` and `/native/capacity/shares/read`.
+- Remaining for Q-2: groups I, J and K; the flaky list; the switcher overflow bug; the `pull-review-comments` collapse under
+  load; then two consecutive green runs.
+
 ## Q-3 Keep it green
 
 - A documented local gate for UI changes: affected specs, then the full suite before merging a change that touches shared

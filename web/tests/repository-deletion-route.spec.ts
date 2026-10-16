@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { GetRepositoryLifecycleRequestSchema, GetRepositoryLifecycleResponseSchema, GetRepositoryDeletionOperationRequestSchema, GetRepositoryDeletionOperationResponseSchema, GetSessionResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
+import { ListCapabilitiesResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { portableRuntimeFixture } from './runtime-fixture';
 
 const repositoryId = '9007199254740993';
 const originalKey = '42faec6c-496a-4d23-95bb-e56d8dd95de7';
@@ -8,6 +10,7 @@ async function backend(page: Page, absent = false) {
   const state = { metadataReads: 0, availability: 0, status: 0, writes: 0 };
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '42', login: 'alice' } });
     if (method === 'GetRepository' || method === 'GetRepositoryAccess') { state.metadataReads++; return reject(route, 'not_found', 'The historical address cannot be rebound.'); }
     if (method === 'GetRepositoryLifecycle') {
