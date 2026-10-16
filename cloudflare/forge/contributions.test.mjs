@@ -70,7 +70,7 @@ test('writers count an issue, a comment and a close once, however often they are
   f.sql.exec(`UPDATE discussion_events SET created_at='${ago(hour)}'`);
   await f.sweep(); await f.sweep();
   assert.deepEqual(f.days(), expected);
-  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM contribution_events WHERE pending=1').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM contribution_ledger WHERE pending=1').get().n, 0);
 });
 
 test('the sweep counts what no writer saw, with AI tiers for agent proposals, API tokens, policy landings and agent tasks', async t => {
@@ -123,6 +123,28 @@ test('the sweep counts what no writer saw, with AI tiers for agent proposals, AP
   assert.ok(f.sql.prepare("SELECT position FROM contribution_cursors WHERE source='discussion-events'").get().position.includes(at));
 });
 
+test('a change to how contributions are labelled rebuilds the derived counts once, from Golf’s own records', async t => {
+  const f = await fixture(t);
+  const at = ago(3 * hour), day = at.slice(0, 10);
+  // Counts from before the token tier: a pull request opened over an API token was unlabelled, and the cursor had moved past it.
+  f.sql.exec(`INSERT INTO discussions(id,repository_id,number,kind,author_id,title,body,state,created_at,updated_at) VALUES(14,1,14,'pull',2,'Over MCP','','OPEN','${at}','${at}');
+    INSERT INTO pull_requests(id,discussion_id,base_branch,head_branch,base_commit,head_commit,draft) VALUES(14,14,'main','d','${hash(1)}','${hash(5)}',0);
+    INSERT INTO pull_request_origins(pull_request_id,kind,created_at) VALUES(14,'api-token','${at}');
+    INSERT INTO discussion_events(id,discussion_id,actor_id,kind,payload,created_at) VALUES('e1',14,2,'opened','{}','${at}');
+    INSERT INTO contribution_events(key,day,actor_id,repository_id,kind,ai_tier,pending) VALUES('opened:14','${day}',2,1,'pull_opened','none',0);
+    INSERT INTO contribution_days(actor_id,day,repository_id,kind,ai_tier,count) VALUES(2,'${day}',1,'pull_opened','none',1);
+    INSERT INTO contribution_cursors(source,position,updated_at) VALUES('discussion-events','["9999-01-01T00:00:00.000Z","z"]','t');
+    INSERT INTO contribution_git(repository_id,next_commit,pending,walked,checked_at,updated_at) VALUES(1,'',0,40,'${at}','${at}')`);
+  await f.sweep();
+  assert.deepEqual(f.days(`day='${day}'`).map(row => `${row.actor_id}:${row.kind}:${row.ai_tier}:${row.count}`), ['2:pull_opened:token:1']);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM contribution_events').get().n, 0);
+  assert.equal(f.sql.prepare("SELECT count(*) AS n FROM contribution_rebuilds WHERE name='token-tier'").get().n, 1);
+  // Once: later counts stay.
+  const before = JSON.stringify(f.days());
+  await f.sweep();
+  assert.equal(JSON.stringify(f.days()), before);
+});
+
 test('the Git backfill walks first-parent history in bounded batches, resumes where it stopped, and a push walks only the new commits', async t => {
   const f = await fixture(t);
   // 45 commits on main, newest first: authors with and without accounts, Golf's own identity, a declared AI co-author, an agent task's
@@ -159,7 +181,7 @@ test('the Git backfill walks first-parent history in bounded batches, resumes wh
   // alice: 15 commits (n%3==1), one declared (10), one an agent task's (31), one the agent pull request's merge (40, AI-assisted); bob
   // (matched case-insensitively): 15, one of them by Golf's own identity (20), which is actor 0; strangers are never counted.
   assert.deepEqual(commitsBy(), ['0:agent:1', '1:agent:1', '1:assisted:1', '1:declared:1', '1:none:12', '2:none:14']);
-  assert.equal(f.sql.prepare("SELECT count(*) AS n FROM contribution_events WHERE kind='commit'").get().n, 45);
+  assert.equal(f.sql.prepare("SELECT count(*) AS n FROM contribution_ledger WHERE kind='commit'").get().n, 45);
   // Nothing more until the branch moves.
   await f.sweep(limits);
   assert.equal(calls.log, 3);

@@ -35,7 +35,7 @@ test('defaults: absent settings read as off with the documented paths; the capab
   assert.equal((await f.read({ action: 'get' }, 'carol')).canEdit, false);
   const capabilities = (await f.call('/rpc/golf.v1.CapabilityService/ListCapabilities', {})).capabilities;
   assert.equal(capabilities.find(c => c.id === 'repository.agentic-mode').state, 'CAPABILITY_STATE_READY');
-  assert.equal((await f.call('/native/diagnostics', {})).schema, 53);
+  assert.equal((await f.call('/native/diagnostics', {})).schema, 54);
 });
 
 test('only a browser session reads or changes it; reads and changes use their own routes; outsiders are hidden', async t => {

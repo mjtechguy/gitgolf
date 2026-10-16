@@ -217,7 +217,7 @@ and limits, or create a custom automation from scratch.
 **Status (2026-10-16): CG-1 and CG-2 built and tested locally (schema 53); not yet deployed or migrated on the hosted demo.
 CG-3 and CG-4 not started.** What was built, and how it narrows the plan below:
 
-- **Data:** `contribution_days` as planned, fed through a ledger, `contribution_events`, keyed by source (`opened:<discussion>`,
+- **Data:** `contribution_days` as planned, fed through a ledger, `contribution_ledger` (`contribution_events` before migration 0054), keyed by source (`opened:<discussion>`,
   `merged:<discussion>`, `event:<discussion event>`, `task:<agent task>`, `evidence:<job>`, `commit:<repository>:<sha>`). A retried write
   or a repeated sweep inserts nothing, and the rollup changes in the same batch. `contribution_git` holds each repository's walk
   position, `contribution_cursors` each sweep's position, `contribution_settings` the privacy choice.
