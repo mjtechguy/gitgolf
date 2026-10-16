@@ -155,7 +155,7 @@ and limits, or create a custom automation from scratch.
    - automation definitions, triggers, targets, outputs and limits;
    - the first built-in tools: PR reviewer, issue triage, Issue → PR, CI fixer.
 
-   **Status (2026-10-15): phase 2a (engines and the credential vault) built and verified locally, not yet hosted.**
+   **Status (2026-10-16): phase 2a (engines and the credential vault) hosted and verified** (see IMPLEMENTATION_STATUS, 2026-10-15 "Hosted checks: agent tasks on MCP, automations, vault, engines"; provider-model reasoning effort #121).
    [CREDENTIAL_VAULT.md](CREDENTIAL_VAULT.md) and [ENGINES.md](ENGINES.md), schema 45:
    - user, organization and installation API keys, and stored subscription sign-ins, under envelope encryption with explicit grants;
    - engine selection at installation, organization and repository level, replacing per-use-case model selection;
@@ -164,7 +164,7 @@ and limits, or create a custom automation from scratch.
 
    Using a subscription sign-in waits for cloud sandboxes (phase 3).
 
-   **Status (2026-10-15): phase 2b (the automation framework) built and verified locally, not yet hosted.**
+   **Status (2026-10-16): phase 2b (the automation framework) hosted and verified:** PR reviewer, Issue → PR, CI fixer and Clef ran on the hosted demo (2026-10-15). Review tasks (#124) let a coding CLI review a pull request read-only under its own sign-in.
    [AUTOMATIONS.md](AUTOMATIONS.md), schema 46:
    - definitions at repository, organization and installation scope, with triggers (events and Durable Object alarm schedules),
      targets, engines, places, versioned instructions, outputs, limits, a kill switch and audit;
@@ -185,7 +185,7 @@ and limits, or create a custom automation from scratch.
      ACLs;
    - Cloudflare Tunnel / Workers VPC / Mesh for SSH hosts on private networks.
 
-   **Status (2026-10-15): reach for SSH hosts built and verified locally with stand-ins. Direct and Tailscale reach are verified from the hosted container; Cloudflare Tunnel and Workers VPC are not verified on hosted.**
+   **Status (2026-10-16): reach for SSH hosts verified on hosted over all four paths:** direct, Tailscale, Cloudflare Tunnel (`cloudflared access ssh` with an Access service token) and Workers VPC (#123, the DO bridge waits for the listener).
    See [SSH_HOSTS.md](SSH_HOSTS.md#reach):
    - **Tailscale:** an ephemeral node per task, in userspace networking, with a sealed auth key and tags;
    - **Cloudflare Tunnel:** `cloudflared access ssh`, with an optional Access service token;
@@ -213,6 +213,8 @@ and limits, or create a custom automation from scratch.
   as maintenance already does.
 
 ## Contribution graphs and AI impact
+
+**Status (2026-10-16): not started; next (CG-1 and CG-2 first, on the hosted demo).**
 
 Asked for on 2026-10-14: GitHub-style contribution graphs for people, and the same for
 agents overall and for each individual agent, to show how much AI helps.
