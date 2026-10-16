@@ -92,16 +92,20 @@ export function PanelError({ error, retry }: { error: Error; retry: () => void }
 }
 const relativeDateUnits: [Intl.RelativeTimeFormatUnit, number][] = [['year', 365 * 86400], ['month', 30 * 86400], ['day', 86400], ['hour', 3600], ['minute', 60], ['second', 1]];
 const relativeDateFormat = new Intl.RelativeTimeFormat(undefined, { numeric: 'always' });
+// toLocaleDateString with options builds a new formatter on every call: about 1 ms per row at 4x CPU, so a 513-row
+// journal spent half a second in date labels. These match toLocaleDateString(undefined, options) and toLocaleString().
+const shortDateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+const fullDateFormat = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' });
 export function DateLabel({ value, relative = false }: { value: string; relative?: boolean }) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return <span>Date unavailable</span>;
-  let label = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  let label = shortDateFormat.format(date);
   if (relative) {
     const seconds = (date.getTime() - Date.now()) / 1000, age = Math.abs(seconds);
     const [unit, size] = relativeDateUnits.find(([, size]) => age >= size) || relativeDateUnits[relativeDateUnits.length - 1]!;
     label = age < 5 ? seconds > 0 ? 'in a moment' : 'just now' : relativeDateFormat.format(Math.floor(age / size) * Math.sign(seconds), unit);
   }
-  return <time dateTime={value} title={date.toLocaleString()}>{label}</time>;
+  return <time dateTime={value} title={fullDateFormat.format(date)}>{label}</time>;
 }
 export function More({ hasMore, loading, load, label }: { hasMore: boolean; loading: boolean; load: () => void; label: string }) {
   return hasMore ? <button className="text-button" disabled={loading} onClick={load}>{loading ? 'Loading…' : `Load more ${label}`}<ArrowDown size={14} /></button> : null;
