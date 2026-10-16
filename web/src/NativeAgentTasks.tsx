@@ -205,7 +205,7 @@ function TaskLogView({ context, task }: { context: Context; task: AgentTask }) {
         : <p className="pipeline-log-empty">{terminal ? complete ? 'This task produced no log.' : 'Reading the log…' : 'No output yet.'}</p>}
       {truncated ? <p className="pipeline-log-empty agent-task-log-truncated" role="status">Log truncated: Golf keeps the first 10,000 lines or 512 KiB of a task’s log; later lines were not stored.</p> : null}
     </div>
-    <p className="panel-footnote">Output from the tool on the host, streamed as it runs. Golf does not filter it; the tool never receives Golf credentials.</p>
+    <p className="panel-footnote">Output from the tool on the host, streamed as it runs. Golf stores each line with NUL bytes removed and anything shaped like a Golf credential (task, host, registration, native, Git and API tokens) replaced by ***; nothing else is filtered. The tool gets no Golf credential except, when Golf MCP tools are on for the task, the task’s own token.</p>
   </div>;
 }
 

@@ -205,6 +205,9 @@ test('assigning an issue shows unusable tools disabled with their reason, stream
   const logView = detail.getByRole('log', { name: 'Agent task log' });
   await expect(logView).toContainText('Reading src/webhooks/deliver.ts');
   await expect(logView).toContainText('Committed 3 files');
+  // Stored lines are scrubbed (agent-hosts.mjs scrub), and the footnote says so.
+  await expect(detail).toContainText('Golf stores each line with NUL bytes removed and anything shaped like a Golf credential');
+  await expect(detail).not.toContainText('does not filter');
   await expect(detail).toContainText('Proposal ready');
   await expect(detail).toContainText('3 changed files');
   await expect(detail.getByLabel('Reported summary, rendered Markdown')).toContainText('Retries failed deliveries up to 5 times');
