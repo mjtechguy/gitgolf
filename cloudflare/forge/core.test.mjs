@@ -2550,6 +2550,23 @@ test('native signed webhook tests retain original operations and never leak rece
  assert.equal((await drainWebhooks(f.env,{fetch:async()=>{throw Error('must not send');}})).processed,0);
 });
 
+test('disabling or re-saving a webhook cancels its queued deliveries; Redeliver sends them under the current secret',async t=>{
+ const f=await webhookFixture(t);await f.save();const {drainWebhooks}=await import('./src/webhooks.mjs');
+ const queue=async version=>(await f.value(await f.invoke('TestRepositoryWebhook',{subscriptionId:f.draft.id,expectedVersion:version,operationId:crypto.randomUUID()}))).delivery;
+ const history=async()=>(await f.value(await f.invoke('ListRepositoryWebhookDeliveries',{subscriptionId:f.draft.id}))).deliveries;
+ const first=await queue('1');
+ await f.save({expectedVersion:'1',enabled:false,authorizeBackground:false,endpoint:'',signingSecret:''});
+ assert.equal((await drainWebhooks(f.env,{fetch:async()=>{throw Error('must not send');}})).processed,0);
+ assert.deepEqual((await history()).map(d=>[d.id,d.state,d.failureCode]),[[first.id,'cancelled','authority_changed']]);
+ const secret='y'.repeat(40);await f.save({expectedVersion:'2',endpoint:'',signingSecret:secret});
+ const second=await queue('3');await f.save({expectedVersion:'3',endpoint:'',signingSecret:'z'.repeat(40)});
+ assert.equal((await drainWebhooks(f.env,{fetch:async()=>{throw Error('must not send');}})).processed,0);
+ assert.equal((await history()).find(d=>d.id===second.id).state,'cancelled');
+ const again=await f.value(await f.invoke('RedeliverRepositoryWebhook',{deliveryId:first.id,expectedVersion:'4',operationId:crypto.randomUUID()}));
+ assert.equal(again.delivery.eventId,first.eventId);const {createHmac}=await import('node:crypto');
+ assert.equal((await drainWebhooks(f.env,{fetch:async(url,options)=>{assert.equal(options.headers['X-Golf-Signature-256'],'sha256='+createHmac('sha256','z'.repeat(40)).update(options.headers['X-Golf-Timestamp']+'\n'+options.headers['X-Golf-Event-ID']+'\n'+options.body).digest('hex'));return new Response(null,{status:204});}})).processed,1);
+});
+
 test('removing a webhook origin in installation policy fails queued deliveries at their next attempt and refuses new saves',async t=>{
  const f=await webhookFixture(t);await f.save();const {drainWebhooks}=await import('./src/webhooks.mjs');const {withInstallationPolicy}=await import('./src/installation.mjs');
  const queued=await f.value(await f.invoke('TestRepositoryWebhook',{subscriptionId:f.draft.id,expectedVersion:'1',operationId:crypto.randomUUID()}));assert.equal(queued.delivery.state,'queued');

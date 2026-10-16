@@ -498,6 +498,16 @@ mean the receiver already accepted it. The UI marks possible duplicates and
 never reads back secrets or response bodies. Authorization is checked immediately
 before sending; already transmitted bytes cannot be recalled.
 
+Each delivery is bound to the subscription version and sponsor authorization it was
+queued under. Disabling the subscription, any save (a new name, destination, topic
+or signing secret), or the sponsor losing that authorization cancels deliveries
+still queued or retrying with `authority_changed`; they are not held and replayed
+when the subscription is enabled again, because the saved destination, topics and
+sponsor may no longer be the ones those events were queued for. A credential or
+destination that can no longer be opened or approved fails them with
+`destination_or_credential_unavailable`. Both stay in history, and Redeliver
+queues the same event again under the current subscription and signing secret.
+
 Delivery receipts are retained in D1, including idempotency records. There is no
 automatic receipt pruning or infinite-scale retention claim yet. Keep testing
 within the approved event/attempt envelope; add a reviewed archive/tombstone

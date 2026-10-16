@@ -62,6 +62,8 @@ test('native webhooks use the shared editor and history without probing portable
  await page.getByText('Delivery and authorization details',{exact:true}).click();
  await expect(page.getByText('Only operator-approved public HTTPS origins can receive deliveries.',{exact:false})).toBeVisible();
  await expect(page.getByText('installation-wide daily attempt budget',{exact:false})).toBeVisible();
+ await expect(page.getByText('cancels deliveries still queued or retrying',{exact:false})).toBeVisible();
+ await expect(page.locator('main')).not.toContainText('pauses queued work');
  await expect(page.locator('main')).not.toContainText('200 pending deliveries');
  await expect(page.getByRole('navigation',{name:'Repository settings',exact:true}).getByRole('link',{name:'Webhooks',exact:true})).toHaveAttribute('aria-current','page');
 });
