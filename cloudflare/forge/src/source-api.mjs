@@ -127,23 +127,37 @@ async function tree(env, repo, row, body, ctx) {
   const { entries, truncated } = await listTree(read, root.hash, path, recursive, limits.entries);
   return { repositoryId: String(row.id), commitId: value.hash, path, entries: entries.map(([entry, path]) => wireEntry(entry, path)), truncated, limit: limits.entries };
 }
-// Breadth first, eight directory reads at a time, stopping at limit entries; [entry, path] pairs sorted by path.
+// Depth first in path order: a directory's own entry sorts by its name and its contents by name + '/', so [entry, path] pairs come out
+// sorted by full path and the cut at limit is the first limit paths of the tree. The directory being opened and up to seven of the next in
+// that order are read at a time; a read ahead past the cut is the only extra work.
 export async function listTree(read, hash, path, recursive, limit) {
-  const entries = []; let truncated = false, level = [[hash, path]];
-  walk: while (level.length) {
-    const next = [];
-    for (let i = 0; i < level.length; i += 8) {
-      for (const [list, prefix] of await Promise.all(level.slice(i, i + 8).map(async ([hash, prefix]) => [await read(hash), prefix]))) for (const entry of list) {
-        if (entries.length >= limit) { truncated = true; break walk; }
-        const child = prefix ? prefix + '/' + entry.name : entry.name;
-        entries.push([entry, child]);
-        if (recursive && entry.type === 'tree') next.push([entry.hash, child]);
-      }
+  const entries = [], frames = [];
+  const open = (list, prefix) => {
+    const items = [];
+    for (const entry of list) {
+      const child = prefix ? prefix + '/' + entry.name : entry.name;
+      items.push([entry.name, entry, child, false]);
+      if (recursive && entry.type === 'tree') items.push([entry.name + '/', entry, child, true]);
     }
-    level = next;
+    items.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    frames.push({ items, at: 0, directories: items.filter(item => item[3]), next: 0 });
+  };
+  // A directory read ahead keeps its promise (item[4]); a failure surfaces when the walk reaches it, and not at all past the cut.
+  const ahead = () => {
+    for (let f = frames.length - 1, n = 0; f >= 0 && n < 7; f--) for (let d = frames[f].next; d < frames[f].directories.length && n < 7; d++, n++) {
+      const item = frames[f].directories[d];
+      if (!item[4]) (item[4] = read(item[1].hash)).catch(() => {});
+    }
+  };
+  open(await read(hash), path);
+  while (frames.length) {
+    const frame = frames.at(-1);
+    if (frame.at === frame.items.length) { frames.pop(); continue; }
+    const item = frame.items[frame.at++], [, entry, child, expand] = item;
+    if (!expand) { if (entries.length === limit) return { entries, truncated: true }; entries.push([entry, child]); continue; }
+    frame.next++; const list = item[4] || read(entry.hash); ahead(); open(await list, child);
   }
-  entries.sort((a, b) => a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0);
-  return { entries, truncated };
+  return { entries, truncated: false };
 }
 
 // ---------- writes ----------

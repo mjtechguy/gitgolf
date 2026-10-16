@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { digest, handle, serialize, admission, withArtifact } from './src/core.mjs';
 import { bodyLimit } from './src/common.mjs';
 import { packetLine } from './src/git.mjs';
-import { sourceAPI } from './src/source-api.mjs';
+import { sourceAPI, listTree } from './src/source-api.mjs';
 import { scopeAllows, requireScope } from './src/token-scope.mjs';
 import { gitAvailable, gitFixture } from './git-cli-fixture.mjs';
 
@@ -344,6 +344,42 @@ test('a tree listing stops at 10,000 entries and says so', { skip: !gitAvailable
   f.g.run(['update-ref', 'refs/heads/main', commit]);
   const listed = await f.ok('tree', { repository: key, ref: commit });
   assert.equal(listed.truncated, true); assert.equal(listed.entries.length, 10000); assert.equal(listed.limit, 10000);
+});
+
+test('a truncated tree is the first paths of the whole tree in path order, read with a bounded look-ahead', async () => {
+  // Trees as hash -> [{name, type, hash}]; a directory sorts before "a.txt" but its contents after it.
+  const trees = new Map([['root', [{ name: 'z', type: 'blob', hash: 'f' }, { name: 'a', type: 'tree', hash: 'a' }, { name: 'a.txt', type: 'blob', hash: 'f' }, { name: 'a0', type: 'tree', hash: 'a0' }]],
+    ['a', [{ name: 'y', type: 'blob', hash: 'f' }, { name: 'x', type: 'blob', hash: 'f' }]], ['a0', [{ name: 'q', type: 'blob', hash: 'f' }]]]);
+  let reads = [];
+  const read = async hash => { reads.push(hash); return trees.get(hash); }, paths = async (limit, recursive = true) => listTree(read, 'root', '', recursive, limit).then(r => [r.entries.map(([, path]) => path), r.truncated]);
+  const all = ['a', 'a.txt', 'a/x', 'a/y', 'a0', 'a0/q', 'z'];
+  // A breadth-first walk cut at four would have listed a, a.txt, a0 and z.
+  for (let limit = 1; limit <= 8; limit++) assert.deepEqual(await paths(limit), [all.slice(0, limit), limit < all.length], String(limit));
+  assert.deepEqual(await paths(2, false), [['a', 'a.txt'], true]); assert.deepEqual(await paths(4, false), [['a', 'a.txt', 'a0', 'z'], false]);
+  // A directory read ahead past the cut that fails does not fail the listing; one the walk reaches does.
+  const failing = async hash => { if (hash === 'a0') throw Error('Missing tree a0'); return trees.get(hash); };
+  assert.deepEqual(await listTree(failing, 'root', '', true, 3).then(r => r.entries.map(([, path]) => path)), ['a', 'a.txt', 'a/x']);
+  await assert.rejects(listTree(failing, 'root', '', true, 6), /Missing tree a0/);
+  // Random trees: every cut is the sorted prefix of every path, and directories read are those before the cut plus at most seven per level.
+  let seed = 7; const random = n => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
+  for (let round = 0; round < 20; round++) {
+    const forest = new Map(), names = ['a', 'a.b', 'a-b', 'a0', 'b', 'B', 'é', '_'], listed = [];
+    const build = (id, prefix, depth) => {
+      const list = [...new Set(Array.from({ length: 1 + random(5) }, () => names[random(names.length)] + (random(3) ? '' : random(9))))].map(name => ({ name, type: depth < 3 && random(2) ? 'tree' : 'blob', hash: id + '/' + name }));
+      forest.set(id, list);
+      for (const entry of list) { const path = prefix ? prefix + '/' + entry.name : entry.name; listed.push(path); if (entry.type === 'tree') build(entry.hash, path, depth + 1); }
+    };
+    build('root', '', 0); listed.sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+    const walk = async (hash) => { reads.push(hash); return forest.get(hash); };
+    for (const limit of [1, 3, 10, listed.length - 1, listed.length]) {
+      if (limit < 1) continue;
+      reads = [];
+      const { entries, truncated } = await listTree(walk, 'root', '', true, limit);
+      assert.deepEqual([entries.map(([, path]) => path), truncated], [listed.slice(0, limit), limit < listed.length], `${round}/${limit}`);
+      const needed = entries.filter(([entry]) => entry.type === 'tree').length + 1;
+      assert.ok(reads.length <= needed + 7 * 4, `${reads.length} reads for ${needed}`);
+    }
+  }
 });
 
 test('grants, scopes and readers: reads need a grant, writes need write access, and a token scope narrows both', { skip: !gitAvailable }, async t => {

@@ -132,8 +132,11 @@ byte or invalid UTF-8), or `skipped`: `missing`, `directory`, `submodule`,
 ```
 
 Returns `{repositoryId, commitId, path, entries: [{path, type, mode, sha}], truncated,
-limit}`, sorted by path, at most 10,000 entries (`truncated: true` beyond). Sizes are
-not listed; `files` returns them.
+limit}`, sorted by path, at most 10,000 entries (`truncated: true` beyond). A
+truncated listing is the first 10,000 paths of the whole tree in that order: the
+walk is depth first in path order, reading the directory it opens and up to seven
+of the next ones ahead, so it stops at the cut. Sizes are not listed; `files`
+returns them.
 
 ## blame
 
@@ -231,8 +234,10 @@ line, as `git grep -n --column -I` returns them.
 
   The search stops at the first bound it meets, with `truncated: true` and `reason`
   `max_results`, `file_bound`, `read_bound`, `tree_bound` or `time_bound`. Results
-  are always the first in path and line order. `max_results` is reported only when
-  another matching line exists. The time is checked between file reads, because
+  are always the first in path and line order: the tree is listed in path order
+  (as for `tree`), so with `tree_bound` only files after the first 50,000 paths are
+  left unsearched. `max_results` is reported only when another matching line
+  exists. The time is checked between file reads, because
   Workers clocks advance only at I/O; one file's search is bounded by its size, not by
   the clock.
 - **Cache:** objects are read through the isolate's object cache (trees and blobs up

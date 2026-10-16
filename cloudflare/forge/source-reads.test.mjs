@@ -308,6 +308,10 @@ test('grep stops at 5,000 files, 32 MiB, its tree bound and its time bound, says
   t.after(() => Object.assign(readLimits, saved));
   readLimits.grepEntries = 10;
   assert.deepEqual(await f.ok('grep', { pattern: 'small', paths: ['many'], maxResults: 500 }).then(r => [r.truncated, r.reason, r.matches.length]), [true, 'tree_bound', 0]);
+  // The tree bound is a path-ordered prefix (heavy, its 40 files, many, then many's first files), so its matches are the tree's first
+  // (another maxResults, so the answer cached under the smaller bound is not reused).
+  readLimits.grepEntries = 45;
+  assert.deepEqual(await f.ok('grep', { pattern: 'small', paths: ['many'], maxResults: 499 }).then(r => [r.reason, r.matches.map(m => m.path)]), ['tree_bound', ['many/f0000.txt', 'many/f0001.txt', 'many/f0002.txt']]);
   Object.assign(readLimits, saved); readLimits.grepTime = -1;
   const timed = await f.ok('grep', { pattern: 'small again', paths: ['many'] });
   assert.deepEqual([timed.truncated, timed.reason, timed.filesSearched], [true, 'time_bound', 0]);
