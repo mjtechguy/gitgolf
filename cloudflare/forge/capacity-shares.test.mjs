@@ -315,3 +315,24 @@ test('the shares read overlaps other requests in the stateless Worker; changes s
   assert.equal(concurrentRead(new Request(origin + '/native/capacity/shares/read', { method: 'POST' })), true);
   assert.equal(concurrentRead(new Request(origin + '/native/capacity/shares', { method: 'POST' })), false);
 });
+
+test('a pool cap counts and limits installation runners only: runners a repository registers itself never use it up', async t => {
+  const f = await fixture(t);
+  const installation = f.runner(['ubuntu-latest']), own = f.runner(['ubuntu-latest'], 'forgejo-actions', ['repository', '3']);
+  await f.create(3, 2); await f.create(1, 1);
+  assert.equal((await f.policy('alice', 'runner-pools', { pools: [{ engine: 'forgejo-actions', labels: ['ubuntu-latest'], maxConcurrent: 1 }] })).status, 200);
+  // erin's own runner runs both of her jobs: it is not capped, and they do not count against the installation's pool.
+  assert.ok(await f.claim(own)); assert.ok(await f.claim(own));
+  // The installation's runner still takes acme/project's job.
+  const claimed = await f.claim(installation);
+  assert.ok(claimed); assert.equal(f.running('r.repository_id=1'), 1);
+});
+
+test('a repository read of its share shows the organization-wide running count to the repository administrators only', async t => {
+  const f = await fixture(t);
+  await f.policy('alice', 'runner-shares', { maxRunning: 4, maxRunsPerDay: 50, enforced: false });
+  const project = { repository: { owner: 'acme', name: 'project' }, repositoryId: '1' };
+  const read = who => f.call(who, '/native/capacity/shares/read', { action: 'read', ...project });
+  assert.equal(typeof (await read('carol')).value.usage.parentRunning, 'number');
+  assert.equal((await read('dave')).value.usage.parentRunning, null);
+});

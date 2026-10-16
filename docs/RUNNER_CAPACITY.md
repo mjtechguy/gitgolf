@@ -213,6 +213,11 @@ The installation policy `runner-pools` (`capacity-policy.mjs`) lists caps: `{ "p
     statement at a time, so concurrent claims cannot overshoot.
   - The pool is matched in SQL by the runner's label names (`json_each`), so a runner registered or relabelled (Forgejo `Declare`)
     meanwhile is counted.
+  - A cap counts and limits **installation runners only**. Runners a repository or organization registers itself never use up the
+    installation's pool, and are not capped by it; shares still apply to their jobs.
+  - **Caps hold against cooperating runners.** A runner chooses its labels when it registers and can change them (Forgejo
+    `Declare`). A runner that relabels itself leaves the pool, and its jobs leave the pool's count. Caps limit capacity you operate;
+    they are not a security boundary against a runner's own configuration.
   - Running jobs are not stopped; a lower cap applies as they finish.
 
 ## Runner shares

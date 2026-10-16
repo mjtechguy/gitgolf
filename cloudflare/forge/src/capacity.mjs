@@ -79,7 +79,7 @@ export function runnerPools(runners, jobs, now = Date.now(), { caps = null, held
 
 async function pipelineRows(db, engine = null) {
   const { results: runners } = await db.prepare(`SELECT n.id,n.engine,n.scope,n.scope_id,n.labels,n.state,n.last_seen_at,
-    (SELECT count(*) FROM pipeline_jobs j WHERE j.runner_id=n.id AND j.state='RUNNING') AS running FROM pipeline_runners n WHERE n.deleted=0${engine ? ' AND n.engine=?' : ''} ORDER BY n.id DESC LIMIT ${runnerLimit + 1}`)
+    (SELECT count(*) FROM pipeline_jobs j WHERE j.engine=n.engine AND j.state='RUNNING' AND j.runner_id=n.id) AS running FROM pipeline_runners n WHERE n.deleted=0${engine ? ' AND n.engine=?' : ''} ORDER BY n.id DESC LIMIT ${runnerLimit + 1}`)
     .bind(...(engine ? [engine] : [])).all();
   // The claim's own filter: the job's run is current, not cancelled and still open.
   const { results: jobs } = await db.prepare(`SELECT j.id,j.engine,j.runs_on,COALESCE(j.queued_at,j.created_at) AS since,r.repository_id,o.owner_id,CASE WHEN k.kind='ORGANIZATION' THEN k.id END AS organization_id FROM pipeline_jobs j
@@ -358,6 +358,9 @@ export async function capacityAPI(db, env, person, request, body, read, provider
       return answer(row.id);
     };
     if (!policy || !deploy || !spec(key, field)) return fail(`${policy?.label || key} is not allocated on this installation; nothing was applied.`);
+    // A request raises a limit. If the setting already reached the requested value meanwhile, applying it would lower it: fail instead.
+    if (typeof value?.[field] === 'number' && row.requested_value <= value[field])
+      return fail(`${spec(key, field).label} is already ${value[field]}, at or above the requested ${row.requested_value}; nothing was applied.`);
     const ceiling = ceilingOf(env, key, field, deploy), candidate = { ...value, [field]: row.requested_value };
     if (row.requested_value > ceiling) {
       // Above the deploy ceiling: recorded as approved; the value waits for a deploy that raises the ceiling.
