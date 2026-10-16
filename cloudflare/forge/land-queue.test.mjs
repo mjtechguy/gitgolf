@@ -456,6 +456,25 @@ test('maintenance settles a land interrupted after its merge was sent', { skip }
   assert.equal(f.head('main'), base);
 });
 
+test('landSoon reaches its pull request however many are open: it starts from the branches at the commit, not a fixed 200', { skip }, async t => {
+  const f = await fixture(t);
+  f.settings({ landWithoutPerson: 1 });
+  // 250 stale open pull requests whose branches are gone (an agent bench leaves them), then one whose head just passed its checks.
+  for (let i = 0; i < 250; i++) {
+    const { number, id } = f.sql.prepare('SELECT COALESCE(max(number),0)+1 AS number,COALESCE(max(id),0)+1 AS id FROM discussions').get();
+    f.sql.prepare("INSERT INTO discussions(id,repository_id,number,kind,author_id,title,body,state,created_at,updated_at) VALUES(?,1,?,'pull',1,'stale','','OPEN','t','t')").run(id, number);
+    f.sql.prepare("INSERT INTO pull_requests(discussion_id,base_branch,head_branch,base_commit,head_commit,draft) VALUES(?,'main',?,?,?,0)").run(id, 'gone-' + i, f.base, f.base);
+  }
+  const docs = f.pull('docs-late', { 'docs/late.md': 'late\n' });
+  // The sweep's order puts it past the first 200 of these.
+  const rank = f.sql.prepare(`SELECT rank FROM (SELECT d.number n, ROW_NUMBER() OVER (ORDER BY (p.id*7919)%104729) rank FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE d.state='OPEN') WHERE n=?`).get(docs.number).rank;
+  assert.ok(rank > 200, `rank ${rank}`);
+  f.run(docs.head, 'SUCCESS', 'CI', 'pull_request');
+  const pending = [], env = { ...f.env, waitUntil: promise => pending.push(promise) };
+  landSoon(env, 1, docs.head, withArtifact); await Promise.all(pending.splice(0));
+  assert.deepEqual(f.ops().map(op => [op.number, op.state]), [[docs.number, 'LANDED']]);
+});
+
 test('landSoon lands the pull request whose head just passed its checks, after the response; only where landing without a person is on', { skip }, async t => {
   const f = await fixture(t);
   const docs = f.pull('docs-soon', { 'docs/soon.md': 'soon\n' });
