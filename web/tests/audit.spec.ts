@@ -45,7 +45,7 @@ async function backend(page: Page) {
       if (state.error) { if (state.error === 'unauthenticated') state.signedIn = false; return reject(route, state.error, state.error === 'unauthenticated' ? 'Your session expired.' : state.error === 'permission_denied' ? 'Account activity access denied.' : 'Account activity temporarily unavailable.'); }
       return respond(route, ListAuditEventsResponseSchema, response);
     }
-    return reject(route, 'not_found', 'Unsupported fixture operation.');
+    return reject(route, 'unimplemented', 'Unsupported fixture operation.');
   });
   return state;
 }

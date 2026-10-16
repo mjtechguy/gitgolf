@@ -1,15 +1,14 @@
 import {expect,test,type Page} from '@playwright/test';
-import {mkdir,writeFile,rm} from 'node:fs/promises';
+import {writeHarness} from './harness-file';
 import {resolve} from 'node:path';
 import type {Terminal} from '@xterm/xterm';
 const host=resolve(import.meta.dirname,'../.tmp/workflow-log-console.html');
 declare global {interface Window{logTerminal:Terminal;logTerminals:Terminal[];operatorData:string[];clipboardWrites:number;releaseClipboard:()=>void}}
-test.beforeAll(async()=>{await mkdir(resolve(import.meta.dirname,'../.tmp'),{recursive:true});await writeFile(host,`<!doctype html><html data-theme="dark"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><main id="root"></main><script type="module">
+test.beforeAll(async()=>{await writeHarness(host,`<!doctype html><html data-theme="dark"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><main id="root"></main><script type="module">
 import React,{useState,useEffect} from 'react';import{createRoot}from'react-dom/client';import{Terminal}from'@xterm/xterm';import{WorkflowLogConsole}from'/src/WorkflowLogConsole.tsx';import'/src/styles.css';
 const open=Terminal.prototype.open;window.logTerminals=[];window.operatorData=[];Terminal.prototype.open=function(element){window.logTerminal=this;window.logTerminals.push(this);this.onData(value=>window.operatorData.push(value));return open.call(this,element)};
 function Host(){const[state,set]=useState({scopeKey:'actor/repo/run/attempt/source/all',text:'',authorized:true,status:'idle',fileName:'owned.log',hasMore:false});useEffect(()=>{const receive=e=>set(v=>({...v,...e.detail}));window.addEventListener('console-test',receive);return()=>window.removeEventListener('console-test',receive)},[]);return React.createElement(WorkflowLogConsole,state)}createRoot(document.getElementById('root')).render(React.createElement(React.StrictMode,null,React.createElement(Host)));
 </script></body></html>`);});
-test.afterAll(async()=>{await rm(host,{force:true});});
 async function update(page:Page,state:Record<string,unknown>){await page.evaluate(state=>window.dispatchEvent(new CustomEvent('console-test',{detail:state})),state);}
 async function buffer(page:Page){return page.evaluate(()=>{const b=window.logTerminal.buffer.active;return Array.from({length:b.length},(_,i)=>b.getLine(i)!.translateToString(true)).join('\n').trimEnd();});}
 async function open(page:Page,text=''){await page.goto('/.tmp/workflow-log-console.html',{waitUntil:'networkidle'});await expect(page.getByLabel('Workflow run log',{exact:true})).toBeVisible();await page.evaluate(()=>document.fonts.ready);await expect.poll(()=>page.evaluate(()=>window.logTerminal?.cols)).toBeGreaterThan(2);await update(page,{text});}

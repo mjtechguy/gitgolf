@@ -53,7 +53,7 @@ async function backend(page: Page) {
       state.sessions = state.sessions.filter((entry) => entry.current);
       return respond(route, RevokeOtherSessionsResponseSchema, { revokedCount });
     }
-    return reject(route, 'not_found', 'Method not found.');
+    return reject(route, 'unimplemented', 'Method not found.');
   });
   return state;
 }

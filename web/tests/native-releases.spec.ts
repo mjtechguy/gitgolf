@@ -1,17 +1,17 @@
 import {test,expect,type Page,type Locator} from '@playwright/test';
-import {mkdir,writeFile,rm,readFile} from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
+import {writeHarness} from './harness-file';
 import {resolve} from 'node:path';
 
 // The release pages against the Cloudflare-native Worker itself (D1 on node:sqlite, in-memory R2), not a fixture of
 // its replies: every RPC and the asset download reach the real handlers with the verified Access identity of alice.
 const host=resolve(import.meta.dirname,'../.tmp/native-releases.html');
-test.beforeAll(async()=>{await mkdir(resolve(import.meta.dirname,'../.tmp'),{recursive:true});await writeFile(host,`<!doctype html><html><body><main id="root" class="app-main"></main><script type="module">
+test.beforeAll(async()=>{await writeHarness(host,`<!doctype html><html><body><main id="root" class="app-main"></main><script type="module">
 import React from'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{createRootRoute,createRouter,RouterProvider}from'@tanstack/react-router';import{createClient}from'@connectrpc/connect';import{createConnectTransport}from'@connectrpc/connect-web';import{RepositoryService}from'/src/gen/golf/v1/golf_pb.ts';import{RepositoryReleases}from'/src/RepositoryReleases.tsx';import'/src/styles.css';
 const cache=new QueryClient({defaultOptions:{queries:{retry:false}}}),client=createClient(RepositoryService,createConnectTransport({baseUrl:'/rpc',useBinaryFormat:false}));cache.setQueryData(['session'],{id:'1'});
 function Host(){return React.createElement(RepositoryReleases,{client,userId:'1',repositoryId:'1',repository:{owner:'alice',name:'project'},releaseId:new URLSearchParams(location.search).get('release')||undefined,signingOut:false,revalidating:false});}
 const route=createRootRoute({component:Host}),router=createRouter({routeTree:route});createRoot(document.getElementById('root')).render(React.createElement(QueryClientProvider,{client:cache},React.createElement(RouterProvider,{router})));
-</script></body></html>`,{flag:'wx'});});
-test.afterAll(()=>rm(host,{force:true}));
+</script></body></html>`);});
 
 type Forge={sql:{exec:(sql:string)=>void;prepare:(sql:string)=>{get:(...values:unknown[])=>Record<string,number|string>}};objects:Map<string,{bytes:Uint8Array}>;bucket:{puts:number};dispatch:(request:Request)=>Promise<Response>;browse:(path:string,token:string)=>Promise<Response>;value:(path:string,body:unknown)=>Promise<Record<string,unknown>>;access:()=>Promise<{revision:string}>};
 async function native(page:Page){

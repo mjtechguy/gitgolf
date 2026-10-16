@@ -57,7 +57,7 @@ async function backend(page: Page) {
       if (state.failure) { if (state.failure === 'unauthenticated') state.signedIn = false; return reject(route, state.failure, `Diff unavailable: ${state.failure}.`); }
       return respond(route, GetCommitDiffResponseSchema, response);
     }
-    return reject(route, 'not_found', 'Unsupported fixture operation.');
+    return reject(route, 'unimplemented', 'Unsupported fixture operation.');
   });
   return state;
 }

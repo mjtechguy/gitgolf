@@ -38,7 +38,7 @@ async function backend(page: Page) {
       state.keys = state.keys.filter((key) => key.id !== input.keyId); if (state.lost) return route.abort('failed');
       return respond(route, DeleteRepositoryDeployKeyResponseSchema, { keyId: input.keyId, repositoryId: input.repositoryId, ownerId: input.ownerId, accessRevision: input.expectedRevision });
     }
-    return reject(route, 'not_found', 'No fixture for this procedure.');
+    return reject(route, 'unimplemented', 'No fixture for this procedure.');
   });
   return state;
 }

@@ -66,7 +66,7 @@ async function backend(page: Page) {
       if (state.mode === 'overfull') return reject(route, 'resource_exhausted', 'Workflow configuration inventory exceeds its bound.');
       return respond(route, InspectWorkflowsResponseSchema, { repositoryId: state.badTarget?'18':'9007199254740997', commitId: commit, catalogVersion: 'golf.workflow.inspect.v3', executionCatalog:state.typed?'golf.workflow.act.v0.2.89.linux.v2':'', executionAvailable: state.worker, policyRevision: state.policyKnown?(state.badPolicyRevision?'not-a-revision':'e'.repeat(64)):'', configurations: (state.mode === 'empty' ? [] : [state.mode === 'push' ? { ...manual, events: ['push'] } : manual, { path: '.gitlab-ci.yml', blobId: 'c'.repeat(40), byteSize: 321n, format: WorkflowFormat.GITLAB_CI, state: state.gitlabReady?WorkflowInspectionState.VALIDATED_SUBSET:WorkflowInspectionState.UNSUPPORTED, jobs: [{ id: 'build', stage: 'test', stepCount: 1 }], diagnostics: [{ code: 'unsupported_field', message: 'Remote includes are not fetched.', line: 3, column: 2 }] }]).map(item=>({...item,path:state.nativeDirectory&&item.path===manual.path?'.forgejo/workflows/manual.yml':item.path,...(state.typed&&item.path===manual.path?{manualInputs:state.badInputs?[{...inputDefinitions[0]!,type:99}]:state.definitions,manualInputsSchemaSha256:inputSchema}:{}),manualPolicyAllowed:state.policyKnown?state.manualPolicy:undefined,pushPolicyAllowed:state.policyKnown?state.pushPolicy:undefined})) });
     }
-    return reject(route, 'not_found', 'Unsupported workflow fixture: '+method);
+    return reject(route, 'unimplemented', 'Unsupported workflow fixture: '+method);
   });
   return state;
 }

@@ -1,18 +1,17 @@
 import {test,expect,type Page} from '@playwright/test';
-import {mkdir,writeFile,rm} from 'node:fs/promises';
+import {writeHarness} from './harness-file';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {request,respond,reject} from './rpc';
 import {GetRepositoryAccessResponseSchema,GetRepositoryRulesResponseSchema,ListTagsResponseSchema,ResolveRepositorySourceRequestSchema,ResolveRepositorySourceResponseSchema,RepositorySourceRefKind as Kind,RepositorySourceResolution as Resolution,SubmitRepositoryReleasePublicationRequestSchema,SubmitRepositoryReleasePublicationResponseSchema,GetRepositoryReleasePublicationOperationRequestSchema,GetRepositoryReleasePublicationOperationResponseSchema,RepositoryReleasePublicationPhase as Phase,type RepositoryReleasePublicationOperation} from '../src/gen/golf/v1/golf_pb';
 const repo={owner:'alex',name:'private'},H='a'.repeat(40),T='b'.repeat(40),revision='c'.repeat(64),prefix='golf.release-publication.v1:',key=prefix+'42:11',date='2026-10-04T18:00:00Z';
 const host=resolve(import.meta.dirname,'../.tmp/release-publication.html');
-test.beforeAll(async()=>{await mkdir(resolve(import.meta.dirname,'../.tmp'),{recursive:true});await writeFile(host,`<!doctype html><html><body><main id="root" class="app-main"></main><script type="module">
+test.beforeAll(async()=>{await writeHarness(host,`<!doctype html><html><body><main id="root" class="app-main"></main><script type="module">
 import React,{useEffect,useState}from'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{ReleasePublication}from'/src/ReleasePublication.tsx';import'/src/styles.css';
 const cache=new QueryClient({defaultOptions:{queries:{retry:false}}});cache.setQueryData(['session'],{id:'42'});
 function Host(){const[s,set]=useState({userId:'42',repository:${JSON.stringify(repo)},repositoryId:'11',blocked:false,signingOut:false});useEffect(()=>{const f=e=>{if(e.detail.userId)cache.setQueryData(['session'],{id:e.detail.userId});set(v=>({...v,...e.detail}));};window.addEventListener('publication-fixture',f);window.publicationRefresh=()=>cache.invalidateQueries({queryKey:['release-publication']});return()=>window.removeEventListener('publication-fixture',f);},[]);return React.createElement(ReleasePublication,{...s,onVerified:()=>{window.publicationVerified=(window.publicationVerified||0)+1;cache.invalidateQueries({queryKey:['release-publication']});}});}
 createRoot(document.getElementById('root')).render(React.createElement(QueryClientProvider,{client:cache},React.createElement(Host)));
-</script></body></html>`,{flag:'wx'});});
-test.afterAll(()=>rm(host,{force:true}));
+</script></body></html>`);});
 const sha=(v:string)=>createHash('sha256').update(v).digest('hex');
 async function backend(page:Page){const state={writes:[]as ReturnType<typeof request<typeof SubmitRepositoryReleasePublicationRequestSchema>>[],reads:[]as string[],access:0,source:0,tagReads:0,manage:true,protected:false,deny:false,lost:false,missing:false,badAccess:false,badSource:false,badTag:false,badReceipt:'',phase:Phase.SUCCEEDED,held:undefined as Promise<void>|undefined,receipt:undefined as Record<string,unknown>|undefined};
  await page.route('**/rpc/**',async route=>{const method=new URL(route.request().url()).pathname.split('/').at(-1);

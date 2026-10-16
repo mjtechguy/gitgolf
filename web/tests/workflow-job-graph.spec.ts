@@ -71,7 +71,7 @@ async function fixture(page:Page){
    const sequence=input.afterSequence===0n?7n:29n;
    return respond(route,GetWorkflowRunLogsResponseSchema,{...receipt,logs:[{sequence,text}],hasMore:input.jobInstanceId===test22&&input.stepId==='0'&&input.afterSequence===0n});
   }
-  return reject(route,'not_found','Unavailable graph fixture.');
+  return reject(route,'unimplemented','Unavailable graph fixture.');
  });return state;
 }
 

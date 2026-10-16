@@ -138,7 +138,7 @@ async function backend(page: Page, native = false, engagement = false) {
       const visible = mutation.state === IssueMutationState.SUCCEEDED && !state.missingObject;
       return respond(route, GetIssueMutationResponseSchema, { mutation: state.mismatch ? { ...mutation, issueId: '9999' } : mutation, issue: visible && mutation.kind !== IssueMutationKind.CREATE_COMMENT ? state.issue : undefined, comment: visible && mutation.kind === IssueMutationKind.CREATE_COMMENT ? state.comments[0] : undefined });
     }
-    return reject(route, 'not_found', 'Unknown fixture RPC.');
+    return reject(route, 'unimplemented', 'Unknown fixture RPC.');
   });
   return state;
 }

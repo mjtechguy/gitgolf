@@ -29,7 +29,7 @@ test('Claude native browser code and OpenCode providers remain separate and keep
   }
   if (method === 'RefreshCodexConnection') { const input = request(route, RefreshCodexConnectionRequestSchema); return respond(route, RefreshCodexConnectionResponseSchema, { connection: rows.get(input.connectionId), usage: { available: false, reason: 'Usage is not reported by this account adapter.' } }); }
   if (method === 'DisconnectCodexConnection') { const input = request(route, DisconnectCodexConnectionRequestSchema); const row = create(CodexConnectionSchema, { ...rows.get(input.connectionId)!, state: CodexConnectionState.UNCONFIGURED, version: '2' }); rows.set(input.connectionId, row); return respond(route, DisconnectCodexConnectionResponseSchema, { connection: row }); }
-  return reject(route, 'not_found', 'Unsupported fixture');
+  return reject(route, 'unimplemented', 'Unsupported fixture');
  });
  await page.goto('/account/agents');
  await page.getByRole('button', { name: 'Connect Claude Code', exact: true }).click();

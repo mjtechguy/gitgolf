@@ -40,7 +40,7 @@ async function backend(page: Page) {
       const receipt = { repositoryId: state.access.repositoryId, ownerId: state.access.ownerId, accessRevision: state.access.revision, team: state.badReceipt ? { ...updated, team: { ...updated.team!, permission: TeamPermission.ADMIN } } : updated };
       return method === 'AttachRepositoryTeam' ? respond(route, AttachRepositoryTeamResponseSchema, receipt) : respond(route, DetachRepositoryTeamResponseSchema, receipt);
     }
-    return reject(route, 'not_found', 'No fixture for this procedure.');
+    return reject(route, 'unimplemented', 'No fixture for this procedure.');
   }); return state;
 }
 async function open(page: Page) { await page.goto('/workshop/project/settings/access'); await expect(page.getByRole('table', { name: 'Repository team access', exact: true })).toBeVisible(); }

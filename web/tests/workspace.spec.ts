@@ -54,7 +54,7 @@ async function backend(page: Page, signedIn = true) {
       return respond(route, CreateRepositoryResponseSchema, { repository, creation });
     }
     if (path === '/rpc/golf.v1.RepositoryService/ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: state.repositories });
-    return reject(route, 'not_found', 'Method not found.');
+    return reject(route, 'unimplemented', 'Method not found.');
   });
   return state;
 }

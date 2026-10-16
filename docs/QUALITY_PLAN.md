@@ -199,6 +199,72 @@ met. Same wrapper as Q-1 (port 4579). Other worktrees loaded the machine through
   failed at load average 29; the 5 (`layout-presets` 124, `repository-browser` 338, `pull-requests` 530, 566, 612) passed
   on rerun at 2 workers (20 of 20).
 
+**Status, part B (2026-10-16): test isolation and the flaky list.** Tests and fixtures only. Same wrapper as Q-1 (port
+4679). Three causes explain the flaky list:
+
+- **The live stream never settled (`rpc.ts`).** `WatchRepository` is the only server-streaming procedure. Connect clients
+  derive a stream's error code from the HTTP status alone, so `reject()`'s HTTP 501 reached `RepositoryLive` as Unknown:
+  a dropped stream. That means an immediate revalidation of issues, pulls, actions and agents, then reconnects with
+  revalidation after 1, 2, 4… s for the rest of the test. `reject()` now answers `WatchRepository` the way a Connect server
+  reports a stream error: HTTP 200, `application/connect+json`, one end-of-stream frame carrying the code. `not_found`
+  still becomes `unimplemented`, which settles the page on "Manual updates". `unavailable` still drops the stream, so the
+  offline tests are unchanged. Measured on `issues`, `pull-requests`, `repository-browser` and `repository-sidebar` (228
+  tests, traces at 6 workers): 6,858 RPCs and 389 stream calls before, 6,471 and 288 after. `issues` "known native issue
+  metadata… light 1440px" went from 58 to 33 RPCs.
+- **Harness pages reloaded every page on the dev server.** 25 specs write a harness page (and sometimes a module) into
+  `web/.tmp`, inside Vite's root, in `beforeAll`, and delete it in `afterAll`. Once Vite has served a harness, rewriting or
+  deleting it sends `full-reload` to every open page of every worker, so whatever test was running elsewhere lost its page
+  (the Vite log showed `page reload .tmp/pull-native-merge.html` each time). Deleting also broke other workers still using
+  the file, and `{flag:'wx'}` made `beforeAll` throw `EEXIST` when two workers ran the same spec. The new
+  `tests/harness-file.ts` writes a harness only when its content changes, atomically, and never deletes it (`.tmp` is
+  ignored by git). The two per-worker harnesses (`repository-deletion`, `repository-environments`) now share one file.
+- **Catch-alls answered absent procedures with `not_found`.** 39 fixtures did this; 38 are changed
+  (`workspace-switcher.spec.ts` is owned elsewhere). On repository pages, a NotFound from a repository-scoped read such as `GetRepositoryStar` denies the
+  whole repository (`RepositoryStars.tsx` calls `onAuthorityDenied`). Whether a test saw the page or "We can't show this
+  repository" depended on which answered first. Those catch-alls now answer `unimplemented`, as a server lacking the
+  procedure would.
+
+Each test on the flaky list. "Main" is `origin/main`'s tests, run with `--repeat-each=5 --workers=6` on all of them
+together: 35 of 151 runs failed. A second run with traces gave the causes (Vite reconnecting mid-test means a reload):
+
+| Test | Main | Root cause | Fix |
+| --- | ---: | --- | --- |
+| `action-runs` 35 | 3/10 | Mid-test reload from a harness rewrite | Harness writes |
+| `forge089` 15 | 1/10 | `EEXIST` from `{flag:'wx'}` | Harness writes |
+| `instance-admin` 106 | 0/5 | Could not reproduce | None |
+| `issues` 484 | 0/5 | Could not reproduce | None |
+| `issues` 557 (four variants) | 2/20 | Mid-test reload; stream retries re-read the issue | Harness writes, `rpc.ts` |
+| `issues` 694 | 3/5 | Stream retry re-read `ListRepositoryAssignees` (asserts at most 2 reads) | `rpc.ts` |
+| `missing-resource-refetch` 33 | 9/15 | Mid-test reload re-read the missing resource | Harness writes |
+| `organization-create` 20 | 1/5 | The listing refetch's "Loading your organizations…" status coexists with the "created" status | Wait for the refreshed listing first |
+| `organizations` 68 | 3/5 | Catch-all `not_found` for `GetRepositoryStar` denied the repository | Catch-all `unimplemented` |
+| `pull-merge-observation` 76 | 3/10 | Unanswered `GetPullReviewRequests` raised a second alert | Fixture answers it |
+| `pull-native-merge` 92 | 1/20 | Mid-test reload; `EEXIST` | Harness writes |
+| `pull-requests` 651 | 2/20 | Mid-test reload | Harness writes |
+| `repository-creation` 92 | 2/5 | Mid-test reload | Harness writes |
+| `repository-sidebar` 74 | 3/5 | Mid-test reload discarded the shown details | Harness writes |
+| `repository-file-changes` 38 | 1/5 | "No buttons" after an account switch held only until the new account's access read answered; `EEXIST` | Hold that read until the assertion |
+| `api-credentials` 203 (found here) | 1/5 | Released the late secret before the click had unmounted the form | Wait for the unmount |
+
+The same tests on this branch: 0 failures in 155 runs (two invocations, because the edits moved three tests' line numbers; the second ran without the others' load). `pull-requests` 280 relied on the stream fallback: after a list failure,
+**Refresh repository access** re-reads only the repository, and the list recovered because the dropped stream revalidated
+it. It now uses the list's own **Try again**.
+
+- **Product bug found (`repository-compare` 66).** In `BranchPicker.tsx`, **Load more branches** keeps focus and then
+  becomes disabled ("Loading…"). Chrome fires `focusout` with no related target, and `disclosureDismiss.onBlur`
+  (`RepositoryUI.tsx`) closes the picker, so the user loses the list they asked to extend. It is timing-dependent: on
+  `main` the test passes at 5 workers and fails at 1; on this branch it fails 4 of 6 at 6 workers. Not fixed here (product
+  code).
+- Broad sample: every spec importing `rpc.ts` (123 files) in 4 groups at 6 workers: 2,471 passed and 3 failed
+  (`repository-compare` 66 above; the switcher overflow, fixed in part C; `layout-presets` 124, a `page.goto` timeout that
+  passed 5 of 5 on rerun).
+- Full run on dc53e4f plus these changes, before part C: `--workers=6 --retries=0`, **17.5 min**, load average about 23.
+  2,557 tests: 2,475 passed, **3 failed**, 83 skipped (part A: 54 failed). The 3 were `repository-compare` 66,
+  `workspace-switcher` 40 and `pull-review-comments` "Files changed comments fit light 320". After rebasing onto part C,
+  the last two passed (3 of 3 and 12 of 12 at 6 workers).
+- Checks: `npm run typecheck` passes; `node --test web/tests/*.test.ts` 29 of 29.
+- Remaining for Q-2: the `BranchPicker` focus bug, then two consecutive green runs.
+
 ## Q-3 Keep it green
 
 - A documented local gate for UI changes: affected specs, then the full suite before merging a change that touches shared

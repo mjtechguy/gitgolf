@@ -47,7 +47,7 @@ async function backend(page: Page) {
       const response = { creation, repository: outcome === 'succeeded' && !state.noAccess ? { ...repository, name: source.name, fullName: `alex/${source.name}` } : undefined };
       return posting ? respond(route, CreateRepositoryResponseSchema, response) : respond(route, GetRepositoryCreationResponseSchema, response);
     }
-    return reject(route, 'not_found', 'Method not found.');
+    return reject(route, 'unimplemented', 'Method not found.');
   });
   return state;
 }

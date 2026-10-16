@@ -22,7 +22,7 @@ async function backend(page: Page) {
     }
     if (method === 'TestInfrastructureConnection') { state.tests.push(request(route, TestInfrastructureConnectionRequestSchema)); return respond(route, TestInfrastructureConnectionResponseSchema, { accessible: true, resultCode: 'accessible', checkedAt: '2026-10-02T12:00:00Z', qualificationScope: 'bucket_head_accessibility_only' }); }
     if (method === 'ActivateInfrastructureConnection') { const input = request(route, ActivateInfrastructureConnectionRequestSchema); state.activations.push(input); state.activeId = input.id; state.activeVersion = input.expectedVersion; return respond(route, ActivateInfrastructureConnectionResponseSchema, { connection: state.profiles.find(p => p.id === input.id), activeRevision: '8' }); }
-    return reject(route, 'not_found', 'Unsupported infrastructure fixture.');
+    return reject(route, 'unimplemented', 'Unsupported infrastructure fixture.');
   });
   return state;
 }

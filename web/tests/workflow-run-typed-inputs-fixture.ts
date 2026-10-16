@@ -41,6 +41,6 @@ export async function typedRunFixture(page:Page){
    if(state.badReceipt==='step')receipt.stepId='false-flag';
    return respond(route,GetWorkflowRunLogsResponseSchema,{...receipt,logs:[{sequence:input.afterSequence===0n?7n:29n,text:input.afterSequence===0n?'Literal input stayed literal.\n':'Number and boolean input checks passed.\n'}],hasMore:input.stepId==='literal'&&input.afterSequence===0n});
   }
-  return reject(route,'not_found','Unavailable typed run fixture.');
+  return reject(route,'unimplemented','Unavailable typed run fixture.');
  });return state;
 }

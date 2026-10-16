@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { writeHarness } from './harness-file';
 import { resolve } from 'node:path';
 import { create, clone } from '@bufbuild/protobuf';
 import { RepositoryEnvironmentAction as Action, RepositoryEnvironmentCapability as Capability, RepositoryEnvironmentSchema, RepositoryEnvironmentPolicySchema, RepositoryEnvironmentOperationSchema, RepositoryEnvironmentTargetSchema, GetRepositoryAccessResponseSchema, ListRepositoryEnvironmentsRequestSchema, ListRepositoryEnvironmentsResponseSchema, SaveRepositoryEnvironmentRequestSchema, SaveRepositoryEnvironmentResponseSchema, DeleteRepositoryEnvironmentRequestSchema, DeleteRepositoryEnvironmentResponseSchema, GetRepositoryEnvironmentOperationRequestSchema, GetRepositoryEnvironmentOperationResponseSchema, ResolveRepositoryCollaboratorResponseSchema, type RepositoryEnvironment, type SaveRepositoryEnvironmentRequest, type DeleteRepositoryEnvironmentRequest } from '../src/gen/golf/v1/golf_pb';
@@ -9,17 +9,13 @@ import { portableRuntimeFixture } from './runtime-fixture';
 
 // The spec owns its ignored Vite fixture, keeping product integration and shared
 // fixtures untouched. It imports real global CSS/fonts and the actual component.
-let fixture = '';
-let fixtureFiles: string[] = [];
-test.beforeAll(async ({}, worker) => {
-  const directory = resolve('.tmp'); await mkdir(directory, { recursive: true });
-  const name = `environment-source-${worker.workerIndex}`;
-  fixtureFiles = [resolve(directory, `${name}.html`), resolve(directory, `${name}.tsx`)]; fixture = `/.tmp/${name}.html`;
-  await writeFile(fixtureFiles[1]!, `import {useState} from 'react';import {createRoot} from 'react-dom/client';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {createClient} from '@connectrpc/connect';import {createConnectTransport} from '@connectrpc/connect-web';import {RepositoryEnvironmentService} from '../src/gen/golf/v1/golf_pb';import {RepositoryEnvironments} from '../src/RepositoryEnvironments';import '../src/styles.css';
+const name = 'environment-source', fixture = `/.tmp/${name}.html`;
+test.beforeAll(async () => {
+  const directory = resolve(import.meta.dirname, '../.tmp');
+  await writeHarness(resolve(directory, `${name}.tsx`), `import {useState} from 'react';import {createRoot} from 'react-dom/client';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {createClient} from '@connectrpc/connect';import {createConnectTransport} from '@connectrpc/connect-web';import {RepositoryEnvironmentService} from '../src/gen/golf/v1/golf_pb';import {RepositoryEnvironments} from '../src/RepositoryEnvironments';import '../src/styles.css';
 const client=createClient(RepositoryEnvironmentService,createConnectTransport({baseUrl:location.origin+'/rpc',useBinaryFormat:false}));const q=new QueryClient({defaultOptions:{queries:{retry:false}}});document.documentElement.dataset.theme=localStorage.getItem('golf.theme')||'dark';function Host(){const[p,set]=useState({userId:'42',owner:'alice',name:'example',signingOut:false,revalidating:false,passwordConfirmationAvailable:!location.search.includes('oauth')});return <QueryClientProvider client={q}><main className="workspace-content"><div className="credential-actions"><button onClick={()=>set(v=>({...v,revalidating:true}))}>Fixture revalidate</button><button onClick={()=>set(v=>({...v,revalidating:false}))}>Fixture restore access</button><button onClick={()=>set(v=>({...v,userId:'43'}))}>Fixture switch account</button><button onClick={()=>set(v=>({...v,userId:'42'}))}>Fixture restore account</button><button onClick={()=>set(v=>({...v,signingOut:true}))}>Fixture logout</button></div><RepositoryEnvironments {...p} client={client}/></main></QueryClientProvider>}createRoot(document.getElementById('root')!).render(<Host/>);`);
-  await writeFile(fixtureFiles[0]!, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Environment source fixture</title></head><body><div id="root"></div><script type="module" src="./${name}.tsx"></script></body></html>`);
+  await writeHarness(resolve(directory, `${name}.html`), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Environment source fixture</title></head><body><div id="root"></div><script type="module" src="./${name}.tsx"></script></body></html>`);
 });
-test.afterAll(async () => { for (const file of fixtureFiles) await rm(file, { force: true }); });
 const stamp = '2026-10-04T00:00:00Z';
 const id = '11111111-1111-4111-8111-111111111111';
 const second = '22222222-2222-4222-8222-222222222222';

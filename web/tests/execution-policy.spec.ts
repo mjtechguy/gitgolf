@@ -26,7 +26,7 @@ async function backend(page: Page, scope = ExecutionScope.REPOSITORY) {
       if (state.failure) return reject(route, 'unavailable', 'Receipt unavailable.');
       return respond(route, UpdateExecutionPolicyResponseSchema, { policy: state.invalidReceipt ? { ...state.policy, scopeId: 'another-id' } : state.invalidPushReceipt ? { ...state.policy, pushAllowed: !state.policy.pushAllowed } : state.policy });
     }
-    return reject(route, 'not_found', 'Unsupported policy fixture.');
+    return reject(route, 'unimplemented', 'Unsupported policy fixture.');
   });
   return state;
 }

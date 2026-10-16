@@ -45,7 +45,7 @@ async function fixture(page:Page){
   if(method==='ListIssueComments')return respond(route,ListIssueCommentsResponseSchema,{});
   if(method==='ListIssues')return respond(route,ListIssuesResponseSchema,{issues:[{id:'3',number:1,title:state.title,state:IssueState.OPEN,user,createdAt:'2026-10-03T00:00:00Z'}]});
   if(['GetDiscussionEngagement','ListDiscussionTimeline'].includes(method))return reject(route,'unimplemented','Optional discussion fixture is unavailable.');
-  return reject(route,'not_found',`Unimplemented fixture method: ${method}.`);
+  return reject(route,'unimplemented',`Unimplemented fixture method: ${method}.`);
  });return state;
 }
 

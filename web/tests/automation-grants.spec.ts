@@ -27,7 +27,7 @@ async function backend(page: Page) {
    if (state.wait) await state.wait; if (state.unknown) return reject(route, 'unavailable', 'Response lost.'); return respond(route, CreateAutomationGrantResponseSchema, { grant: state.wrongReceipt ? { ...value, ownerId: 'another-owner' } : value });
   }
   if (method === 'RevokeAutomationGrant') { const input = request(route, RevokeAutomationGrantRequestSchema); state.writes.push(input); const value = state.rows.find(row => row.id === input.grantId)!; value.enabled = false; value.revision = '3'; value.revocationEpoch = '4'; return respond(route, RevokeAutomationGrantResponseSchema, { grant: value }); }
-  return reject(route, 'not_found', 'Unsupported grant fixture.');
+  return reject(route, 'unimplemented', 'Unsupported grant fixture.');
  }); return state;
 }
 const panel = (page: Page) => page.getByRole('region', { name: 'Automation grants', exact: true });

@@ -20,7 +20,7 @@ async function fixture(page: Page) {
       if (state.unknown) return reject(route, 'unavailable', 'Response lost.');
       state.signedOut = true; return method === 'ChangeOwnPassword' ? respond(route, ChangeOwnPasswordResponseSchema, { credentialVersion: '9007199254740998', operationId: 'operation', sessionsRevoked: 2n, requiresLogin: true }) : respond(route, ChangeOwnLoginEmailResponseSchema, { credentialVersion: '9007199254740998', operationId: 'operation', sessionsRevoked: 2n, requiresLogin: true });
     }
-    return reject(route, 'not_found', 'Unsupported fixture.');
+    return reject(route, 'unimplemented', 'Unsupported fixture.');
   }); return state;
 }
 test('security has explicit editors, cancellation clears secrets and original immutable password binding survives receipt logout', async ({ page }) => {

@@ -77,7 +77,7 @@ async function backend(page: Page) {
       credential.revokedAt = '2026-10-02T12:30:00Z';
       return respond(route, RevokeApiCredentialResponseSchema, { credential });
     }
-    return reject(route, 'not_found', 'Unsupported fixture operation.');
+    return reject(route, 'unimplemented', 'Unsupported fixture operation.');
   });
   return state;
 }
@@ -214,6 +214,8 @@ test('synchronous submit events issue only once and unmount discards a late secr
   await expect.poll(() => state.issued.length).toBe(1);
   await expect(page.getByRole('button', { name: 'Creating…', exact: true })).toBeDisabled();
   await page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'Account activity', exact: true }).click();
+  // The secret must arrive after the form unmounts; under load the click can still be navigating.
+  await expect(page.locator('.credential-form-content')).toHaveCount(0);
   release();
   await page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'API credentials', exact: true }).click();
   await expect(page.getByText('Single submit', { exact: true })).toBeVisible();

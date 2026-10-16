@@ -60,7 +60,7 @@ async function backend(page: Page) {
       // The provider can filter all records in a page while still offering another page.
       return respond(route, ListTeamRepositoriesResponseSchema, input.page?.page === 2 ? { repositories: [{ id: '50', name: 'engine', fullName: 'lab/engine', description: 'Private team repository', private: true }] } : { repositories: [], page: { nextPage: 2 } });
     }
-    return reject(route, 'not_found', 'Method not found.');
+    return reject(route, 'unimplemented', 'Method not found.');
   });
   return state;
 }

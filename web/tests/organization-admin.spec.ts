@@ -54,7 +54,7 @@ async function backend(page: Page) {
       if (state.drop) return route.abort('failed');
       return remove ? respond(route, RemoveTeamMemberResponseSchema, { user, isMember: false }) : respond(route, AddTeamMemberResponseSchema, { user, isMember: true });
     }
-    return reject(route, 'not_found', 'Unsupported organization admin fixture.');
+    return reject(route, 'unimplemented', 'Unsupported organization admin fixture.');
   });
   return state;
 }

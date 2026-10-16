@@ -59,7 +59,7 @@ async function backend(page: Page) {
       if (state.drop) return route.abort('failed');
       return remove ? respond(route, RemoveRepositoryCollaboratorResponseSchema, { collaborator,operation }) : respond(route, SetRepositoryCollaboratorResponseSchema, { collaborator,operation });
     }
-    return reject(route, 'not_found', 'Unsupported access fixture.');
+    return reject(route, 'unimplemented', 'Unsupported access fixture.');
   });
   return state;
 }

@@ -41,7 +41,7 @@ async function backend(page: Page, admin = true) {
       return respond(route, UpdateRepositorySettingsResponseSchema, { settings: state.settings });
     }
     if(method==='UpdateRepositoryTopics'){const input=request(route,UpdateRepositoryTopicsRequestSchema);state.writes.push(input);state.settings.topics=[...input.topics].sort();state.settings.revision='c'.repeat(64);if(state.barrier)await state.barrier;if(state.dropped)return route.abort('failed');return respond(route,UpdateRepositoryTopicsResponseSchema,{settings:state.settings});}
-    return reject(route, 'not_found', 'Unsupported settings fixture.');
+    return reject(route, 'unimplemented', 'Unsupported settings fixture.');
   });
   return state;
 }

@@ -12,7 +12,7 @@ async function backend(page: Page) {
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'GetOrganizationCreationPolicy') { if (state.denied) return reject(route, 'permission_denied', 'Policy access ended.'); return respond(route, GetOrganizationCreationPolicyResponseSchema, { policy: state.policy }); }
     if (method === 'UpdateOrganizationCreationPolicy') { const input = request(route, UpdateOrganizationCreationPolicyRequestSchema); state.writes.push(input); state.policy = create(OrganizationCreationPolicySchema, { ...state.policy, mode: input.mode, selectedGolfUserIds: input.selectedGolfUserIds, revision: '1', revocationEpoch: '1' }); if (state.lost) return reject(route, 'unavailable', 'Policy receipt lost.'); return respond(route, UpdateOrganizationCreationPolicyResponseSchema, { policy: state.policy }); }
-    return reject(route, 'not_found', 'Unsupported creation policy fixture.');
+    return reject(route, 'unimplemented', 'Unsupported creation policy fixture.');
   }); return state;
 }
 async function edit(page: Page) { await page.goto('/admin/organizations'); await page.getByRole('button', { name: 'Edit organization creation policy', exact: true }).click(); return page.getByRole('form', { name: 'Edit organization creation policy', exact: true }); }
