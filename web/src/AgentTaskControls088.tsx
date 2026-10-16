@@ -48,8 +48,11 @@ export function useAgentTaskControl({userId,scope,task,ready}:Props) {
   }catch(error){if(active(stamp)&&!abort.signal.aborted)setAction({scope,pending:false,uncertain:true,notice:`${errorMessage(error instanceof Error?error:new Error('Command outcome unknown.'))} Refresh and inspect before another command. No automatic retry was made.`,editing:false});}
   finally{if(request.current===abort)request.current=null;}
  }
- async function refresh(){const stamp=generation.current.value;const receipt=await query.refetch();if(active(stamp)&&!receipt.error)setAction({scope,pending:false,uncertain:false,notice:'',editing:false});}
- return {query,control,state,ready,task,send,refresh,edit:()=>setAction({...state,editing:true}),cancelEdit:()=>setAction({...state,editing:false})};
+ // An explicit inspection that a parent check interrupts (ready drops, its receipt is discarded) runs again once the check passes.
+ const inspection=useRef('');
+ async function refresh(join=false){inspection.current=scope;const stamp=generation.current.value;const receipt=await query.refetch({cancelRefetch:!join});if(!active(stamp))return;if(inspection.current===scope)inspection.current='';if(!receipt.error)setAction({scope,pending:false,uncertain:false,notice:'',editing:false});}
+ useEffect(()=>{if(ready&&inspection.current===scope)void refresh(true);},[ready,scope]);
+ return {query,control,state,ready,task,send,refresh:()=>refresh(),edit:()=>setAction({...state,editing:true}),cancelEdit:()=>setAction({...state,editing:false})};
 }
 
 function ReplyForm({send,cancel,pending}:{send:(text:string)=>void;cancel:()=>void;pending:boolean}) {
