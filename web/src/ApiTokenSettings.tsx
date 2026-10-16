@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Plus, RefreshCw } from 'lucide-react';
 import { nativeAPI as api } from './nativeAPI';
-import { repositoryClient } from './api';
 import { CopyButton, DateLabel, Loading, privateQuery } from './RepositoryUI';
 import { DataTable, type DataTableColumn } from './DataTable';
 
@@ -15,6 +14,7 @@ export type ApiToken = { id: string; label: string; permission: 'read' | 'write'
 type Budget = { enabled: boolean; requestsPerMinute: number; writesPerMinute: number };
 type Inventory = { tokens: ApiToken[]; active: number; limit: number; mcpUrl: string; origin: string; budget?: Budget | null };
 type Created = { token: ApiToken; secret: string; mcpUrl: string; origin: string };
+type RepositoryPage = { repositories: { id: string; fullName: string }[]; nextPage: number };
 
 const message = (error: unknown) => error instanceof Error ? error.message : 'The API token operation could not be confirmed.';
 const stateLabels: Record<ApiToken['state'], string> = { active: 'Active', expired: 'Expired', revoked: 'Revoked', invalidated: 'Ended by an account change' };
@@ -69,8 +69,9 @@ export function ApiTokenSettings({ userId }: { userId: string }) {
 
 function NewToken({ close, done }: { close: () => void; done: (value: Created) => void }) {
   const [error, setError] = useState<unknown>();
-  // Selectable repositories: the first 100 this account can access, as one loaded page.
-  const repositories = useQuery({ ...privateQuery, queryKey: ['api-token-repositories'], queryFn: ({ signal }) => repositoryClient.listRepositories({ page: { page: 1, limit: 100 }, metadataOnly: true }, { signal }) });
+  // Selectable repositories: exactly those a token can name (the ones this account holds a grant on), by owner and name, 100 a page.
+  const repositories = useInfiniteQuery({ ...privateQuery, queryKey: ['api-token-repositories'], initialPageParam: 1, getNextPageParam: (last: RepositoryPage) => last.nextPage || undefined,
+    queryFn: ({ signal, pageParam }) => api<RepositoryPage>('/native/api-tokens', { action: 'repositories', page: pageParam }, signal) });
   const form = useForm({ defaultValues: { label: '', scope: 'all' as 'all' | 'selected', repositories: [] as string[], permission: 'read' as 'read' | 'write', branchPattern: '', lifetimeHours: 720 as number },
     onSubmit: async ({ value }) => {
       setError(undefined);
@@ -79,7 +80,7 @@ function NewToken({ close, done }: { close: () => void; done: (value: Created) =
           ...(value.permission === 'write' && value.branchPattern.trim() ? { branchPattern: value.branchPattern.trim() } : {}), lifetimeHours: value.lifetimeHours }));
       } catch (e) { setError(e); }
     } });
-  const listed = repositories.data?.repositories || [];
+  const listed = repositories.data?.pages.flatMap(page => page.repositories) || [];
   return <form className="browser-panel credential-form-content" aria-label="New API token" onSubmit={event => { event.preventDefault(); void form.handleSubmit(); }}>
     <h3>New API token</h3>
     <form.Field name="label">{field => <label>Name<input required maxLength={64} value={field.state.value} onChange={e => field.handleChange(e.target.value)} placeholder="Claude Code on my laptop" autoComplete="off" /></label>}</form.Field>
@@ -90,7 +91,8 @@ function NewToken({ close, done }: { close: () => void; done: (value: Created) =
     <form.Subscribe selector={state => state.values.scope}>{scope => scope === 'selected' ? <form.Field name="repositories">{field => <fieldset className="policy-choices"><legend>Selected repositories</legend>
       {repositories.isError ? <p className="error" role="alert">{message(repositories.error)}</p> : !repositories.data ? <Loading label="Reading your repositories…" /> : !listed.length ? <p className="field-help">You cannot access any repository yet.</p> :
         listed.map(r => <label key={r.id} className="policy-choice"><input type="checkbox" checked={field.state.value.includes(r.id)} onChange={e => field.handleChange(e.target.checked ? [...field.state.value, r.id] : field.state.value.filter(id => id !== r.id))} /><span><strong>{r.fullName}</strong></span></label>)}
-      {repositories.data?.page?.nextPage ? <p className="field-help">Showing the first 100 repositories you can access.</p> : null}
+      {listed.length ? <p className="field-help">Repositories you are a member of, by owner and name. Public repositories you are not a member of cannot be selected.</p> : null}
+      {repositories.hasNextPage ? <button type="button" className="text-button" disabled={repositories.isFetchingNextPage} onClick={() => void repositories.fetchNextPage()}>{repositories.isFetchingNextPage ? 'Loading…' : 'Load more repositories'}</button> : null}
     </fieldset>}</form.Field> : null}</form.Subscribe>
     <form.Field name="permission">{field => <label>Permission<select value={field.state.value} onChange={e => field.handleChange(e.target.value as 'read' | 'write')}><option value="read">Read: clone, read files, issues and pull requests</option><option value="write">Read and write: also commit, push, open pull requests and comment</option></select></label>}</form.Field>
     <form.Subscribe selector={state => state.values.permission}>{permission => permission === 'write' ? <form.Field name="branchPattern">{field => <><label>Write branches<input value={field.state.value} onChange={e => field.handleChange(e.target.value)} placeholder="agent/*" maxLength={200} autoComplete="off" /></label>

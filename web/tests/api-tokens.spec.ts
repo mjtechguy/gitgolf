@@ -28,11 +28,16 @@ async function backend(page: Page, { capability = true } = {}) {
     if (path === '/native/config') return json({ runtimeProfile: 'cloudflare-native', workspace: 'alex', pipelines: false });
     if (path === '/native/api-tokens') {
       state.calls.push(body);
+      if (body.action === 'repositories') {
+        // Two pages, so the picker must load the second before a repository on it can be chosen.
+        const all = [...repositories, ...Array.from({ length: 99 }, (_, i) => ({ id: String(100 + i), fullName: `alex/repo-${String(i).padStart(2, '0')}` }))].map(({ id, fullName }) => ({ id, fullName }));
+        const number = Number(body.page); return json({ repositories: all.slice((number - 1) * 100, number * 100), nextPage: number === 1 ? 2 : 0 });
+      }
       if (body.action === 'list') return json({ tokens: state.tokens, active: state.tokens.filter(t => t.state === 'active').length, limit: 50, mcpUrl: 'https://golf.example/mcp', origin: 'https://golf.example' });
       if (body.action === 'create') {
         if (body.label === 'too many') return json({ code: 'failed_precondition', message: 'Your account has 50 active API tokens, or its access changed. Revoke unused tokens and retry.' }, 412);
         const ids = body.repositories as string[] | null, token: Token = { id: '8', label: String(body.label), permission: body.permission, branchPattern: body.branchPattern || '', state: 'active',
-          repositories: ids && ids.map(id => ({ id, fullName: repositories.find(r => r.id === id)!.fullName })), createdAt: at(0), expiresAt: at(Number(body.lifetimeHours)), lastUsedAt: '', revokedAt: '' };
+          repositories: ids && ids.map(id => ({ id, fullName: repositories.find(r => r.id === id)?.fullName || `alex/repo-${String(Number(id) - 100).padStart(2, '0')}` })), createdAt: at(0), expiresAt: at(Number(body.lifetimeHours)), lastUsedAt: '', revokedAt: '' };
         state.tokens.unshift(token);
         return json({ token, secret, mcpUrl: 'https://golf.example/mcp', origin: 'https://golf.example' });
       }
@@ -63,13 +68,20 @@ test('API tokens lead with the inventory; New token opens the form and shows the
   await form.getByRole('radio', { name: /Only selected repositories/ }).check();
   await expect(form.getByRole('button', { name: 'Create token' })).toBeDisabled();
   await form.getByRole('checkbox', { name: 'acme/site' }).check();
+  await expect(form).toContainText('Public repositories you are not a member of cannot be selected.');
+  await expect(form.getByRole('checkbox', { name: 'alex/repo-98' })).toHaveCount(0);
+  await form.getByRole('button', { name: 'Load more repositories' }).click();
+  await form.getByRole('checkbox', { name: 'alex/repo-98' }).check();
+  await expect(form.getByRole('button', { name: 'Load more repositories' })).toHaveCount(0);
+  await expect(form.getByRole('checkbox', { name: 'acme/site' })).toBeChecked();
   await expect(form.getByLabel('Write branches')).toHaveCount(0);
   await form.getByLabel('Permission').selectOption('write');
   await expect(form).toContainText('limits commits and pushes to matching branches');
   await form.getByLabel('Write branches').fill('agent/*');
   await form.getByLabel('Expires after').selectOption({ label: '7 days' });
   await form.getByRole('button', { name: 'Create token' }).click();
-  expect(state.calls.find(c => c.action === 'create')).toEqual({ action: 'create', label: 'codex agent', repositories: ['42'], permission: 'write', branchPattern: 'agent/*', lifetimeHours: 168 });
+  expect([...new Set(state.calls.filter(c => c.action === 'repositories').map(c => JSON.stringify(c)))]).toEqual([{ action: 'repositories', page: 1 }, { action: 'repositories', page: 2 }].map(c => JSON.stringify(c)));
+  expect(state.calls.find(c => c.action === 'create')).toEqual({ action: 'create', label: 'codex agent', repositories: ['42', '198'], permission: 'write', branchPattern: 'agent/*', lifetimeHours: 168 });
   const shown = page.getByRole('region', { name: 'Your new API token' });
   await expect(shown).toContainText(secret);
   await expect(shown).toContainText(`claude mcp add --transport http golf https://golf.example/mcp --header "Authorization: Bearer ${secret}"`);

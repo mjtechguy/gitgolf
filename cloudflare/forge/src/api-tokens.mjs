@@ -174,6 +174,16 @@ export async function apiTokensAPI(db, env, person, request, body) {
     return { tokens, active: tokens.filter(t => t.state === 'active').length, limit: 50, mcpUrl: env.PUBLIC_ORIGIN + '/mcp', origin: env.PUBLIC_ORIGIN,
       budget: policy && { enabled: policy.enabled, requestsPerMinute: policy.tokenRequestsPerMinute, writesPerMinute: policy.tokenWritesPerMinute } };
   }
+  if (body.action === 'repositories') {
+    // The picker lists exactly what create accepts: active repositories this account holds a grant on (not public ones it does not
+    // belong to), by owner then name, 100 a page.
+    if (!fields(body, ['action', 'page'])) invalid('Unknown field.');
+    const number = body.page ?? 1;
+    if (!Number.isInteger(number) || number < 1 || number > 1000) invalid('Choose a page from 1 to 1000.');
+    const { results } = await db.prepare(`SELECT r.id,r.name,${ownerColumns} FROM grants g JOIN repositories r ON r.id=g.repository_id ${ownerJoin}
+      WHERE g.user_id=? AND r.state='ACTIVE' ORDER BY COALESCE(o.slug,?),r.name,r.id LIMIT 101 OFFSET ?`).bind(person.id, env.WORKSPACE_SLUG || '', (number - 1) * 100).all();
+    return { repositories: results.slice(0, 100).map(row => ({ id: String(row.id), fullName: `${ownerSlug(row, env)}/${row.name}` })), nextPage: results.length > 100 ? number + 1 : 0 };
+  }
   if (body.action === 'create') {
     if (!fields(body, ['action', 'label', 'repositories', 'permission', 'branchPattern', 'lifetimeHours'])) invalid('Unknown field.');
     const { label, repositories = null, permission, branchPattern = '', lifetimeHours } = body;
@@ -204,5 +214,5 @@ export async function apiTokensAPI(db, env, person, request, body) {
     if (revoked.meta.changes !== 1) throw new Fault('not_found', 404, 'API token not found.');
     return { id: body.id, revoked: true };
   }
-  invalid('Use list, create or revoke.');
+  invalid('Use list, repositories, create or revoke.');
 }
