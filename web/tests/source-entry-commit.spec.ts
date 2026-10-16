@@ -52,7 +52,9 @@ async function fixture(page: Page, count = 1, showByDefault = true) {
   return state;
 }
 
-const entry = (page: Page, path = 'row-000.ts') => page.getByLabel(`Latest change for ${path}`, { exact: true });
+// An exact attribute match: getByLabel computes accessible names across all 1000 rows on every poll, which competes
+// with the page for the main thread and made these tests depend on machine load.
+const entry = (page: Page, path = 'row-000.ts') => page.locator(`.source-entry-commit[aria-label="Latest change for ${path}"]`);
 
 test('directory renders files before optional latest-change reads', async ({ page }) => {
   const state = await fixture(page, 32, false);
@@ -105,7 +107,8 @@ test('scrolling away cancels inflight and queued row reads before newly visible 
   await expect.poll(() => state.calls.length).toBe(3);
   await entry(page, 'row-980.ts').scrollIntoViewIfNeeded();
   await expect.poll(() => canceled.length).toBeGreaterThan(0);
-  await expect.poll(() => state.calls.some(call => Number(call.path.slice(4, 7)) >= 970)).toBe(true);
+  // The three freed slots go to the first rows of the new window, which starts above row-980 (row-967 at 1440x1000).
+  await expect.poll(() => state.calls.some(call => Number(call.path.slice(4, 7)) >= 900)).toBe(true);
   // These original visible rows were queued behind the three held requests.
   expect(state.calls.some(call => call.path === 'row-005.ts')).toBe(false);
   state.hold = false; state.held.splice(0).forEach(release => release());

@@ -15,6 +15,7 @@ const kinds = ['prompt','user_message','thread_started','turn_started','tool_sta
 const statuses = ['', 'inProgress','completed','failed','interrupted','declined','pending'];
 const tools = ['', 'commandExecution','fileChange'];
 const bodies = [Body.WITHHELD, Body.AVAILABLE, Body.UNAVAILABLE];
+const terminal = ['succeeded','failed','cancelled','timed_out','budget_exceeded','lost'];
 const bytes = (text:string) => new TextEncoder().encode(text).length;
 const safeText = (text:string,limit:number) => bytes(text)<=limit&&!/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\uD800-\uDFFF]/u.test(text);
 const nativeId = (id:string) => id===''||bytes(id)<=128&&!/[\p{Cc}\p{White_Space}\uD800-\uDFFF]/u.test(id);
@@ -56,7 +57,14 @@ export function useAgentTaskConversation({userId,repositoryId,owner,name,task,re
  const key=['agent-task-events',userId,owner,name,repositoryId,task?.id||'',task?.attemptId||'',task?.commitId||''];
  // Each refresh reads a complete bounded journal from cursor zero. No partially
  // screened collection enters the cache, and a screening transition gets one reset.
- const query=useQuery({...privateQuery,staleTime:Infinity,refetchOnWindowFocus:false,refetchOnReconnect:false,refetchOnMount:false,queryKey:key,enabled:valid&&ready&&!paused,
+ // A finished attempt's screened (or unavailable) journal cannot change, so live or
+ // fallback invalidation keeps it; a failed read stays failed until an explicit refresh.
+ // A running journal is due again after 5 s: each parent check re-enables the reader,
+ // which resets the interval below, so a due journal is read once the check passes.
+ const final=terminal.includes(task?.state||''),running=task?.state==='running';
+ const query=useQuery({...privateQuery,refetchOnWindowFocus:false,refetchOnReconnect:false,refetchOnMount:false,queryKey:key,
+  staleTime:(current:{state:{data?:ListAgentTaskEventsResponse}})=>final&&current.state.data!==undefined&&current.state.data.bodyState!==Body.WITHHELD?'static':running?5000:Infinity,
+  enabled:(current:{state:{error:Error|null}})=>valid&&ready&&!paused&&!(current.state.error&&!(current.state.error instanceof ConnectError&&current.state.error.code===Code.Canceled)),
   queryFn:async({signal})=>{
    const stamp=generation.current.value,bounded=AbortSignal.any([signal,AbortSignal.timeout(12000)]);
    if(!task||!ready)invalid();
@@ -80,7 +88,8 @@ export function useAgentTaskConversation({userId,repositoryId,owner,name,task,re
   },
   refetchInterval:current=>ready&&!paused&&!current.state.error&&task?.state==='running'?5000:false,
  });
- useEffect(()=>{if(!ready||paused)void client.cancelQueries({queryKey:key,exact:true});},[client,scope,ready,paused]);
+ // A read interrupted by a parent check is discarded, not lost: it is read again once the check passes.
+ useEffect(()=>{if(!ready||paused){const interrupted=!paused&&client.isFetching({queryKey:key,exact:true})>0;void client.cancelQueries({queryKey:key,exact:true}).then(()=>{if(interrupted)void client.invalidateQueries({queryKey:key,exact:true,refetchType:'none'});});}},[client,scope,ready,paused]);
  useEffect(()=>{if(ready&&refreshRequest.scope===scope&&refreshRequest.number>handledRefresh.current){handledRefresh.current=refreshRequest.number;void query.refetch({cancelRefetch:false});}},[ready,scope,refreshRequest]);
  const pendingRefresh=refreshRequest.scope===scope&&refreshRequest.number>handledRefresh.current;
  const denied=conversationDenial(controller.query.error);
