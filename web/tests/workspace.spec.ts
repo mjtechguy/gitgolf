@@ -427,13 +427,15 @@ test('appearance choices color the Golf brand, persist, and share the header col
   const mode = page.getByRole('group', { name: 'Color mode' });
   await expect(root).toHaveAttribute('data-appearance', 'golf');
   await expect(page.getByRole('heading', { name: 'Appearance', exact: true })).toBeVisible();
+  // Values under the layouts this suite runs (Classic: Primer, Golf: Refined, Flare: Console) since 2cf0b71 (#7);
+  // the Golf topbar is 52px since fa4dbd3 (#1).
   const brandColors: Record<string, [string, string]> = {
-    'Classic/Light': ['rgb(9, 105, 218)', 'rgb(121, 184, 255)'],
-    'Classic/Dark': ['rgb(121, 184, 255)', 'rgb(121, 184, 255)'],
+    'Classic/Light': ['rgb(31, 35, 40)', 'rgb(9, 105, 218)'],
+    'Classic/Dark': ['rgb(240, 246, 252)', 'rgb(121, 184, 255)'],
     'Golf/Light': ['rgb(212, 255, 58)', 'rgb(63, 100, 0)'],
     'Golf/Dark': ['rgb(212, 255, 58)', 'rgb(212, 255, 58)'],
-    'Flare/Light': ['rgb(237, 106, 36)', 'rgb(198, 81, 20)'],
-    'Flare/Dark': ['rgb(237, 106, 36)', 'rgb(255, 163, 105)'],
+    'Flare/Light': ['rgb(246, 130, 31)', 'rgb(185, 83, 12)'],
+    'Flare/Dark': ['rgb(246, 130, 31)', 'rgb(255, 163, 105)'],
   };
   for (const name of ['Classic', 'Golf', 'Flare']) for (const color of ['Light', 'Dark']) {
     await appearance.getByRole('button', { name: `${name} appearance` }).click();
@@ -447,12 +449,12 @@ test('appearance choices color the Golf brand, persist, and share the header col
       await brand.evaluate(element => getComputedStyle(element).color),
     ]).toEqual(brandColors[`${name}/${color}`]);
     if (name === 'Flare') {
-      expect(await root.evaluate(element => getComputedStyle(element).backgroundColor)).toBe(color === 'Dark' ? 'rgb(3, 3, 3)' : 'rgb(248, 248, 248)');
-      expect(await root.evaluate(element => getComputedStyle(element).getPropertyValue('--accent-bg').trim())).toBe(color === 'Dark' ? '#3168e5' : '#086bde');
-      expect(await root.evaluate(element => getComputedStyle(element).getPropertyValue('--accent').trim())).toBe(color === 'Dark' ? '#8db6ff' : '#086bde');
+      expect(await root.evaluate(element => getComputedStyle(element).backgroundColor)).toBe(color === 'Dark' ? 'rgb(10, 10, 10)' : 'rgb(251, 251, 251)');
+      expect(await root.evaluate(element => getComputedStyle(element).getPropertyValue('--accent-bg').trim())).toBe(color === 'Dark' ? 'oklch(54% .22 260)' : 'oklch(57.72% .2324 260)');
+      expect(await root.evaluate(element => getComputedStyle(element).getPropertyValue('--accent').trim())).toBe(color === 'Dark' ? '#7cacff' : '#1e40af');
     }
     if (name !== 'Golf') expect(await root.evaluate(element => getComputedStyle(element).fontFamily)).toContain('Segoe UI');
-    if (name === 'Golf') expect(await page.locator('.topbar').evaluate(element => getComputedStyle(element).height)).toBe('60px');
+    if (name === 'Golf') expect(await page.locator('.topbar').evaluate(element => getComputedStyle(element).height)).toBe('52px');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await appearance.getByRole('button', { name: 'Classic appearance' }).click();
@@ -461,7 +463,7 @@ test('appearance choices color the Golf brand, persist, and share the header col
   await expect(root).toHaveAttribute('data-theme', 'dark');
   await appearance.getByRole('button', { name: 'Flare appearance' }).click();
   await expect(page.getByRole('complementary', { name: 'Workspace shortcuts' })).toBeVisible();
-  expect(await page.locator('.appearance-sidebar .brand-mark').evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgb(237, 106, 36)');
+  expect(await page.locator('.appearance-sidebar .brand-mark').evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgb(246, 130, 31)');
   await page.reload();
   await expect(root).toHaveAttribute('data-appearance', 'flare');
   await expect(root).toHaveAttribute('data-theme', 'dark');

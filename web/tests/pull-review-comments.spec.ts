@@ -4,6 +4,8 @@ import { create, clone, toJson } from '@bufbuild/protobuf';
 import { UserSchema, RepositorySchema, PullRequestSchema, PullRequestReviewSchema, PullRequestReviewCommentSchema, WatchRepositoryResponseSchema, GetSessionResponseSchema, GetAuthenticationOptionsResponseSchema, ListRepositoriesResponseSchema, GetRepositoryResponseSchema, GetPullRequestResponseSchema, GetPullRequestDiffResponseSchema, ListPullRequestReviewsResponseSchema, GetPullRequestDiscussionResponseSchema, ListIssueCommentsResponseSchema, ListReviewerRunsResponseSchema, LogoutResponseSchema, GetPullRequestReviewCommentsRequestSchema, GetPullRequestReviewCommentsResponseSchema, IssueState, PullRequestReviewState } from '../src/gen/golf/v1/golf_pb';
 import type { GetPullRequestReviewCommentsRequest } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
+import { ListCapabilitiesResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { portableRuntimeFixture } from './runtime-fixture';
 // Development StrictMode cancels its first admitted read and remounts once; both requests must bind the same target.
 const base='a'.repeat(40),head='b'.repeat(40),older='c'.repeat(40);
 const user=create(UserSchema,{id:'2',login:'reader'});
@@ -17,6 +19,7 @@ async function backend(page:Page){
  const s={signedIn:true,user:clone(UserSchema,user),pull:clone(PullRequestSchema,pull),review:clone(PullRequestReviewSchema,review),comments:[clone(PullRequestReviewCommentSchema,comment),clone(PullRequestReviewCommentSchema,oldComment),clone(PullRequestReviewCommentSchema,reply)],reads:[] as GetPullRequestReviewCommentsRequest[],reviewReads:0,discussionReads:0,denied:false,expired:false,detailDenied:false,hold:undefined as Promise<void>|undefined,currentHead:head,wrong:'',detailHold:undefined as Promise<void>|undefined,live:false,streamChange:false,streamCursor:1};
  await page.route('**/rpc/**',async route=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,portableRuntimeFixture);
   if(method==='GetSession')return s.signedIn?respond(route,GetSessionResponseSchema,{user:s.user}):reject(route,'unauthenticated','Sign in required.');
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
   if(method==='Logout'){s.signedIn=false;return respond(route,LogoutResponseSchema,{});}

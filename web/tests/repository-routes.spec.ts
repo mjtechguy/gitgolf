@@ -71,13 +71,17 @@ test('workspace frame stays aligned between repository, list, and account pages'
     await page.reload();
     await expect(page.locator('.repository-context')).toHaveAttribute('aria-label', 'alex/demo');
     await expect(page.locator('.workspace-navigation a').first()).toHaveAttribute('aria-current', 'page');
+    // Since 882ba28 the workspace switcher is mounted only on home and organization pages, so it is not part of the shared frame.
+    // Since fa4dbd3 the repository list is .repository-index rather than .workspace-intro.
     const frame = () => page.evaluate(() => {
       const x = (selector:string) => Math.round(document.querySelector(selector)!.getBoundingClientRect().x);
-      return {header:Math.round(document.querySelector('.topbar')!.getBoundingClientRect().height), menu:x('.global-menu'), switcher:x('.workspace-switcher'), account:x('.topbar-controls .account-menu'), content:x('.repository-context, .workspace-intro, .account-layout'), overflow:document.documentElement.scrollWidth > innerWidth};
+      return {header:Math.round(document.querySelector('.topbar')!.getBoundingClientRect().height), menu:x('.global-menu'), account:x('.topbar-controls .account-menu'), content:x('.repository-context, .repository-index, .account-layout'), overflow:document.documentElement.scrollWidth > innerWidth};
     });
     const repositoryFrame = await frame();
-    await page.getByLabel('Open workspace navigation', {exact:true}).click();
-    await page.getByRole('navigation', {name:'Workspace menu', exact:true}).getByRole('link', {name:'Repositories', exact:true}).click();
+    // Since 27098d4 wide layouts without top navigation hide the workspace menu and show the Workspace links instead.
+    const workspaceMenu = page.getByLabel('Open workspace navigation', {exact:true});
+    if (await workspaceMenu.isVisible()) { await workspaceMenu.click(); await page.getByRole('navigation', {name:'Workspace menu', exact:true}).getByRole('link', {name:'Repositories', exact:true}).click(); }
+    else await page.getByRole('navigation', {name:'Workspace', exact:true}).getByRole('link', {name:'Repositories', exact:true}).click();
     await expect(page).toHaveURL('/');
     expect(await frame()).toEqual(repositoryFrame);
     await page.getByLabel('Your account', {exact:true}).click();
@@ -329,6 +333,9 @@ test('native runner chooser stays open while repository access and placement rev
   const state = await fixture(page, 'cloudflare-native');
   state.nativeCapabilities.push({id:'settings.native-runners',label:'Customer-hosted native runners',state:3,reason:'Available'});
   let reads = 0;
+  // The placement panel renders only when /native/config reports tests, and the page also reads the repository's runner share.
+  await page.route('**/native/config', route => route.fulfill({status:200, contentType:'application/json', json:{tests:true}}));
+  await page.route('**/native/capacity/shares/read', route => route.fulfill({status:200, contentType:'application/json', json:{allocated:false, reason:'No runner share is allocated on this installation.', parent:{scope:'installation', name:''}}}));
   await page.route('**/native/runner-placement', route => { reads++; return route.fulfill({status:200, contentType:'application/json', json:{placement:{repository_id:19,pool_id:null,pool_version:null,version:1},pools:[{id:'p1',name:'workstation',version:1,state:'ACTIVE',trust_class:'UNTRUSTED',max_parallel:1,image_id:'sha256:'+'a'.repeat(64)}],canEdit:true}}); });
   await page.goto('/alex/demo/settings/runners');
   await page.getByRole('button', {name:'Change runner',exact:true}).click();

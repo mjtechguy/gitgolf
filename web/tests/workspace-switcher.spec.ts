@@ -1,6 +1,7 @@
 import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
 import { GetAuthenticationOptionsResponseSchema, GetOrganizationRequestSchema, GetOrganizationResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListOrganizationsRequestSchema, ListOrganizationsResponseSchema, ListRepositoriesResponseSchema, ListTeamsResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { ListProviderConnectionsResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 async function backend(page: Page) {
@@ -14,6 +15,8 @@ async function backend(page: Page) {
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
+    // The home page lists personal provider connections for connected imports; this account has none.
+    if (method === 'ListProviderConnections') return respond(route, ListProviderConnectionsResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { id: '17', fullName: 'lab/project', name: 'project', private: true, empty: true } });
     if (method === 'GetOrganization') return respond(route, GetOrganizationResponseSchema, { organization: { id: '19', name: request(route, GetOrganizationRequestSchema).organization } });
@@ -57,8 +60,10 @@ test('header switcher loads memberships only on demand and closes with keyboard 
 });
 
 test('repository owners never imply active organization and Browse organizations is explicit', async ({ page }) => {
+  // Since 882ba28 the switcher is mounted only on home and organization pages, so a repository page shows none.
   const state = await backend(page); await page.goto('/repositories/lab/project');
-  await expect(trigger(page)).toHaveText('alex'); expect(state.pages).toHaveLength(0);
+  await expect(page.getByRole('banner')).toBeVisible(); await expect(trigger(page)).toHaveCount(0); expect(state.pages).toHaveLength(0);
+  await page.goto('/'); await expect(trigger(page)).toHaveText('alex'); expect(state.pages).toHaveLength(0);
   await trigger(page).click(); await chooser(page).getByRole('link', { name: 'Browse organizations', exact: true }).click();
   await expect(page).toHaveURL(/\/organizations$/); await expect(chooser(page)).toHaveCount(0); await expect(trigger(page)).toHaveText('alex');
 });

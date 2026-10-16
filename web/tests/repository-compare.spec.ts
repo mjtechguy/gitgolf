@@ -93,13 +93,15 @@ test('compact mobile header retains workspace, account and theme controls with b
  await backend(page);await page.goto('/alex/design-system/compare?head=feature');
  for(const width of [320,390]){
   await page.setViewportSize({width,height:844});
-  await expect(page.getByLabel('Switch workspace',{exact:true})).toBeVisible();
+  // Since 882ba28 the workspace switcher is mounted only on home and organization pages; repository pages keep the workspace menu.
+  await expect(page.getByLabel('Switch workspace',{exact:true})).toHaveCount(0);
+  const workspace=page.getByLabel('Open workspace navigation',{exact:true});await expect(workspace).toBeVisible();
   await expect(page.getByLabel('Your account',{exact:true})).toBeVisible();
   const height=await page.locator('.topbar').evaluate(e=>e.getBoundingClientRect().height);expect(height).toBeLessThan(80);
-  await page.getByLabel('Switch workspace',{exact:true}).focus();await page.keyboard.press('Enter');
-  const menu=page.getByRole('navigation',{name:'Choose workspace',exact:true});await expect(menu.getByRole('link',{name:'Browse organizations',exact:true})).toBeVisible();await expect(menu.getByRole('link',{name:/Personal workspace/})).toHaveAttribute('href','/');
+  await workspace.focus();await page.keyboard.press('Enter');
+  const menu=page.getByRole('navigation',{name:'Workspace menu',exact:true});await expect(menu.getByRole('link',{name:'Organizations',exact:true})).toBeVisible();await expect(menu.getByRole('link',{name:'Repositories',exact:true})).toHaveAttribute('href','/');
   const bounds=await menu.boundingBox();expect(bounds!.x).toBeGreaterThanOrEqual(0);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(width);
-  await page.keyboard.press('Escape');await expect(page.getByLabel('Switch workspace',{exact:true})).toBeFocused();await expect(menu).toHaveCount(0);
+  await page.keyboard.press('Escape');await expect(workspace).toBeFocused();await expect(menu).toBeHidden();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  }
 });

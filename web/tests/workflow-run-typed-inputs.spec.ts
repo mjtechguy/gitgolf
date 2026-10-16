@@ -5,6 +5,16 @@ async function terminalText(log:Locator){
  const rows=await log.locator('.xterm-accessibility-tree [role="listitem"]').allTextContents();
  return rows.map(row=>row.replaceAll('\u00a0',' ').trimEnd()).join('\n').trim();
 }
+// The terminal's column count, from its rendered screen width and the width of one rendered cell.
+async function terminalColumns(log:Locator){
+ return log.evaluate(element=>{
+  const row=[...element.querySelectorAll('.xterm-rows > div')].find(node=>(node.textContent||'').trim())!;
+  const range=document.createRange();range.selectNodeContents(row);
+  const cell=range.getBoundingClientRect().width/(row.textContent||'').length;
+  return Math.round(element.querySelector('.xterm-screen')!.getBoundingClientRect().width/cell);
+ });
+}
+const softWrap=(text:string,columns:number)=>text.split('\n').flatMap(line=>line.match(new RegExp(`.{1,${columns}}`,'g'))||['']).join('\n');
 import {WorkflowRunState,WorkflowRunOrigin,WorkflowOutputState} from '../src/gen/golf/v1/golf_pb';
 import {typedRunFixture,path,selectedPath,job,contract} from './workflow-run-typed-inputs-fixture';
 
@@ -56,9 +66,10 @@ test('late typed log cannot restore output after parent authority denial',async(
 for(const theme of ['dark','light'])for(const width of [390,1440])test(`typed selected step ${theme}/${width} uses existing contained log workspace`,async({page})=>{
  await typedRunFixture(page);await page.setViewportSize({width,height:900});await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);await page.goto(selectedPath);
  await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
- // Native a11y rows preserve the terminal's real soft wrapping at 390px.
- const visibleText=width===390?'Literal input stayed literal.\nNumber and boolean input checks passe\nd.':'Literal input stayed literal.\nNumber and boolean input checks passed.';
- await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe(visibleText);
+ // Native a11y rows preserve the terminal's real soft wrapping, which follows its fitted column count rather than a fixed width.
+ const log=page.getByLabel('Workflow run log',{exact:true});await expect(log.locator('.xterm-rows')).toContainText('Literal input');
+ const visibleText=softWrap('Literal input stayed literal.\nNumber and boolean input checks passed.',await terminalColumns(log));
+ await expect.poll(()=>terminalText(log)).toBe(visibleText);
  if(width===390){const log=await page.getByLabel('Workflow run log',{exact:true}).boundingBox();expect(log!.y).toBeLessThan(700);await page.locator('.workflow-jobs-disclosure summary').click();}
  await expect(page.getByRole('link',{name:'succeeded Check literal input 10s',exact:true})).toBeVisible();
  await page.getByText('Execution receipt',{exact:true}).click();await expect(page.getByLabel('Run summary')).toContainText(contract);

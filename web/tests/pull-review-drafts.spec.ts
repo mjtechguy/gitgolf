@@ -5,6 +5,8 @@ import { createHash } from 'node:crypto';
 import { UserSchema, RepositorySchema, PullRequestSchema, GetSessionResponseSchema, GetAuthenticationOptionsResponseSchema, ListRepositoriesResponseSchema, GetRepositoryResponseSchema, GetPullRequestResponseSchema, GetPullRequestDiffResponseSchema, LogoutResponseSchema, GetPullRequestReviewDraftResponseSchema, SavePullRequestReviewDraftRequestSchema, SavePullRequestReviewDraftResponseSchema, DeletePullRequestReviewDraftRequestSchema, DeletePullRequestReviewDraftResponseSchema, PullReviewDraftSchema, PullReviewDraftReceiptSchema, PullReviewDraftOperationKind, IssueState } from '../src/gen/golf/v1/golf_pb';
 import type { SavePullRequestReviewDraftRequest, DeletePullRequestReviewDraftRequest, PullReviewDraft, PullReviewDraftReceipt } from '../src/gen/golf/v1/golf_pb';
 import { respond, reject, request } from './rpc';
+import { ListCapabilitiesResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { portableRuntimeFixture } from './runtime-fixture';
 const base='a'.repeat(40),head='b'.repeat(40),merge='c'.repeat(40);
 const path='src/日本語 [view].ts';
 const diff=`diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-old readme\n+new readme\ndiff --git "a/${path}" "b/${path}"\n--- "a/${path}"\n+++ "b/${path}"\n@@ -1,2 +1,2 @@\n-old\n+new\n keep\n@@ -10 +10 @@\n-oldSecond\n+newSecond\n`;
@@ -16,6 +18,7 @@ async function backend(page:Page){
  const state={signedIn:true,user:clone(UserSchema,user),pull:clone(PullRequestSchema,originalPull),text:diff,draft:null as PullReviewDraft|null,deleted:false,version:'0',generation:'0',receipts:new Map<string,PullReviewDraftReceipt>(),saves:[] as SavePullRequestReviewDraftRequest[],deletes:[] as DeletePullRequestReviewDraftRequest[],reads:[] as Record<string,unknown>[],lostSave:false,lostDelete:false,conflict:false,deny:false,expired:false,wrong:'',hold:undefined as Promise<void>|undefined,saveHold:undefined as Promise<void>|undefined};
  await page.route('**/rpc/**',async route=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,portableRuntimeFixture);
   if(method==='GetSession')return state.signedIn?respond(route,GetSessionResponseSchema,{user:state.user}):reject(route,'unauthenticated','Sign in required.');
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
   if(method==='Logout'){state.signedIn=false;return respond(route,LogoutResponseSchema,{});}

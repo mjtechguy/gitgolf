@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import { create, clone } from '@bufbuild/protobuf';
 import { RepositoryEnvironmentAction as Action, RepositoryEnvironmentCapability as Capability, RepositoryEnvironmentSchema, RepositoryEnvironmentPolicySchema, RepositoryEnvironmentOperationSchema, RepositoryEnvironmentTargetSchema, GetRepositoryAccessResponseSchema, ListRepositoryEnvironmentsRequestSchema, ListRepositoryEnvironmentsResponseSchema, SaveRepositoryEnvironmentRequestSchema, SaveRepositoryEnvironmentResponseSchema, DeleteRepositoryEnvironmentRequestSchema, DeleteRepositoryEnvironmentResponseSchema, GetRepositoryEnvironmentOperationRequestSchema, GetRepositoryEnvironmentOperationResponseSchema, ResolveRepositoryCollaboratorResponseSchema, type RepositoryEnvironment, type SaveRepositoryEnvironmentRequest, type DeleteRepositoryEnvironmentRequest } from '../src/gen/golf/v1/golf_pb';
 import { request, respond, reject } from './rpc';
+import { ListCapabilitiesResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { portableRuntimeFixture } from './runtime-fixture';
 
 // The spec owns its ignored Vite fixture, keeping product integration and shared
 // fixtures untouched. It imports real global CSS/fonts and the actual component.
@@ -28,6 +30,7 @@ async function backend(page: Page) {
   const state = { rows: [row()], saves: [] as SaveRepositoryEnvironmentRequest[], deletes: [] as DeleteRepositoryEnvironmentRequest[], reads: 0, lookups: 0, inspections: 0, accessReads: 0, accessRevision: 'a'.repeat(64), permission: 'owner', canManage: true, mode: 'success', statusMissing: false, denied: false, malformed: '', receiptBad: '', barrier: undefined as Promise<void> | undefined, operations: new Map<string, { environment: RepositoryEnvironment; operation: ReturnType<typeof create<typeof RepositoryEnvironmentOperationSchema>> }>() };
   await page.route('**/rpc/**', async route => {
     const method = route.request().url().split('/').at(-1);
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
     if (method === 'GetRepositoryAccess') { state.accessReads++; if (state.denied) return reject(route, 'permission_denied', 'Current ordinary repository administrator required.'); return respond(route, GetRepositoryAccessResponseSchema, { access: { repositoryId: state.malformed === 'access-id' ? '01' : target().repositoryId, ownerId: '42', owner: { id: '42', login: 'alice' }, revision: state.accessRevision, currentPermission: state.permission, canManage: state.canManage } }); }
     if (method === 'ResolveRepositoryCollaborator') { state.lookups++; if (state.denied) return reject(route, 'permission_denied', 'Reviewer lookup authority was revoked.'); return respond(route, ResolveRepositoryCollaboratorResponseSchema, { collaborator: { user: { id: '43', login: 'reviewer' }, permission: 'read', isDirect: true, revision: 'b'.repeat(64), generation: '0' } }); }
     if (method === 'ListRepositoryEnvironments') {

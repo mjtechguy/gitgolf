@@ -1,7 +1,5 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
-import { fromJson } from '@bufbuild/protobuf';
-import { GetSessionResponseSchema } from './gen/golf/v1/golf_pb';
 
 export function forgetPrivateQueries(client: QueryClient) {
   const filter = { predicate: (query: { queryKey: readonly unknown[] }) => !['session', 'capabilities', 'authentication-options'].includes(String(query.queryKey[0])) };
@@ -29,11 +27,6 @@ export function createQueryClient() {
     queryCache: new QueryCache({ onError }),
     mutationCache: new MutationCache({ onError: error => onError(error) }),
   });
-  const bootstrap = typeof document !== 'undefined' && document.documentElement.dataset.golfRuntime === 'cloudflare-native' ? document.getElementById('golf-session') : null;
-  if (bootstrap) {
-    try { const session = fromJson(GetSessionResponseSchema, JSON.parse(bootstrap.textContent || 'null')); if (session.user?.id) client.setQueryData(['session'], session.user); } catch { /* Older deployments use the session RPC. */ }
-    bootstrap.remove();
-  }
   let pruning = false;
   const measured = new WeakMap<object, { data: unknown; bytes: number }>();
   client.getQueryCache().subscribe(event => {

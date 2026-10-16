@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import {
   GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema,
-  ListLocalAccountsRequestSchema, ListLocalAccountsResponseSchema,
+  ListGolfUserAccessResponseSchema, ListLocalAccountsRequestSchema, ListLocalAccountsResponseSchema,
 } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
@@ -14,6 +14,8 @@ async function inventory(page: Page, count = 55) {
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '17', login: 'owner', isInstanceAdmin: true } });
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, portableRuntimeFixture);
+    // The accounts page also reads Golf user access; an unanswered read would add a second alert.
+    if (method === 'ListGolfUserAccess') return respond(route, ListGolfUserAccessResponseSchema, {});
     if (method === 'ListLocalAccounts') {
       const input = request(route, ListLocalAccountsRequestSchema);
       const number = input.page?.page || 1;

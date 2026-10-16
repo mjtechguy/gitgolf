@@ -144,7 +144,9 @@ test('source and issues render safe Markdown; excluded previews explain their bo
     await expect(page.locator('.source-preview')).toHaveCount(0);
   }
   await page.goto('/repositories/alex/design-system?view=issues&issue=12');
-  await expect(page.getByLabel('Issue body, rendered Markdown')).toContainText('image preview unavailable');
+  // Since fa4dbd3 an image without alt text renders nothing, rather than an "(image preview unavailable)" placeholder.
+  await expect(page.getByLabel('Issue body, rendered Markdown')).toContainText('PRIVATE ISSUE');
+  await expect(page.getByLabel('Issue body, rendered Markdown').locator('.markdown-image-placeholder')).toHaveCount(0);
   await expect(page.locator('.markdown-body img, .markdown-body a')).toHaveCount(0);
   expect(await page.evaluate(() => 'executed' in window)).toBe(false);
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toMatch(/PRIVATE|Make navigation/);
@@ -391,7 +393,8 @@ test('README renders GFM, highlights code, pins relative links and blocks active
  await expect(readme.getByRole('checkbox')).toBeChecked();await expect(readme.getByRole('checkbox')).toBeDisabled();
  await expect(readme.locator('.hljs-keyword')).toHaveText('const');
  await expect(readme.getByRole('link',{name:'Source',exact:true})).toHaveAttribute('href','/alex/design-system/tree/main/src/index.ts?refKind=branch&refName=main');
- await expect(readme.getByRole('link',{name:'Unsafe'})).toHaveCount(0);await expect(readme.locator('img,script,iframe')).toHaveCount(0);expect(requests).toEqual([]);
+ // README images resolve at the exact commit through GetRepositoryImage (RepositoryImage.tsx) and render as data: URLs; the browser never requests the remote URL.
+ await expect(readme.getByRole('link',{name:'Unsafe'})).toHaveCount(0);await expect(readme.locator('script,iframe')).toHaveCount(0);await expect(readme.locator('img')).toHaveCount(1);await expect(readme.locator('img')).toHaveAttribute('src',/^data:image\/svg\+xml/);expect(requests).toEqual([]);
  expect(await page.evaluate(()=> 'executed' in window)).toBe(false);
  for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);}
  await readme.getByRole('button',{name:'Source',exact:true}).click();

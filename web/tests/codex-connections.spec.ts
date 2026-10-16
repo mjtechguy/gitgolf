@@ -110,14 +110,15 @@ test('provider quota snapshots show plan, remaining percentages, reset time and 
 test('shared page stack gives panels consistent desktop and mobile section gaps', async ({ page }) => {
  await backend(page); await page.goto('/account/agents');
  await expect(page.getByRole('region', { name: 'Codex account connection', exact: true })).toBeVisible();
- for (const [width, gap] of [[1440,20],[390,20]] as const) {
+ // The gap is the shared --section-gap token (16px at every width since fa4dbd3), not a page-specific value.
+ for (const width of [1440, 390]) {
   await page.setViewportSize({ width, height: 1000 });
   const bounds = await page.evaluate(() => {
    const panel = document.querySelector('[aria-label="Codex account connection"]')!.getBoundingClientRect();
    const other = document.querySelector('[aria-label="Claude Code account connection"]')!.getBoundingClientRect();
-   return { gap: other.top-panel.bottom, body: document.documentElement.scrollWidth, viewport: window.innerWidth };
+   return { gap: other.top-panel.bottom, token: Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--section-gap')), body: document.documentElement.scrollWidth, viewport: window.innerWidth };
   });
-  expect(bounds.gap).toBe(gap); expect(bounds.body).toBeLessThanOrEqual(bounds.viewport);
+  expect(bounds.token).toBeGreaterThan(0); expect(bounds.gap).toBe(bounds.token); expect(bounds.body).toBeLessThanOrEqual(bounds.viewport);
  }
 });
 

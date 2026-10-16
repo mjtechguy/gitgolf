@@ -12,7 +12,9 @@ for (const isInstanceAdmin of [false, true]) test(`status setup respects adminis
     if (path.endsWith('/ListInfrastructureConnections')) return reply(toJsonString(ListInfrastructureConnectionsResponseSchema, create(ListInfrastructureConnectionsResponseSchema, {})));
     if (path.endsWith('/ListCapabilities')) {
       if (denied) return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ code: 'permission_denied', message: 'Capability access denied.' }) });
-      return reply(toJsonString(ListCapabilitiesResponseSchema, create(ListCapabilitiesResponseSchema, { capabilities: [
+      // Editors such as Manage connections need a reported runtime profile and its settings capability (runtimeCapabilities.settingAvailable).
+      return reply(toJsonString(ListCapabilitiesResponseSchema, create(ListCapabilitiesResponseSchema, { runtimeProfile: 'docker', capabilities: [
+        { id: 'settings.infrastructure', label: 'Infrastructure connections', state: CapabilityState.READY, reason: 'Portable test installation supports this editor.' },
         { id: 'repositories', label: 'Repositories', state: CapabilityState.READY, reason: 'Repository access is available.' },
         { id: 'pipelines', label: 'Manual shell pipelines', state: CapabilityState.DEGRADED, reason: 'Worker is configured but unavailable.' },
         { id: 'webhooks.outbound', label: 'Slack notifications', state: CapabilityState.DISABLED, reason: 'Outbound delivery is planned.' },
@@ -49,7 +51,7 @@ for (const isInstanceAdmin of [false, true]) test(`status setup respects adminis
   await expect(cloudflare.getByText('R2 sources', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Rows per page for Coding agents', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('navigation', { name: 'Golf platform pages' })).toHaveCount(0);
-  await expect(platform.locator('.visibility.available')).toHaveText('ready');
+  await expect(platform.locator('.visibility.available')).toHaveText(['ready', 'ready']);
   await expect(platform.locator('.visibility.configured')).toHaveText('configured · degraded');
   await page.getByRole('searchbox', { name: 'Search loaded Cloudflare integrations', exact: true }).fill('');
   await expect(cloudflare.locator('tbody tr[data-row-id]')).toHaveCount(27);
