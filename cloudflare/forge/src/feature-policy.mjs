@@ -47,6 +47,8 @@ const catalogue = [
   { id: 'agentic-mode', label: 'Agentic mode', group: 'Automation', requires: ['pull-requests'], choice: false, allocated: () => true },
   // Automations (docs/AUTOMATIONS.md): no operator binding, so always allocated; every automation is created off. Off here stops every run in scope.
   { id: 'automations', label: 'Automations', plural: true, group: 'Automation', requires: [], choice: true, allocated: () => true },
+  // Contribution graphs (docs/AGENTS_AND_AUTOMATIONS_PLAN.md, CG-1 and CG-2): D1 counts only, so always allocated; off here hides this repository's counts and keeps them.
+  { id: 'contribution-graphs', label: 'Contribution graphs', plural: true, group: 'Collaboration', requires: [], choice: true, allocated: () => true },
 ];
 // Features a policy can turn off but never require: each repository keeps its own setting (visibility, the agentic mode switch).
 const neverRequired = { 'public-repositories': 'Public repositories can never be required: each repository keeps its own visibility.',

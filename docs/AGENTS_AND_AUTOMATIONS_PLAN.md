@@ -214,7 +214,37 @@ and limits, or create a custom automation from scratch.
 
 ## Contribution graphs and AI impact
 
-**Status (2026-10-16): not started; next (CG-1 and CG-2 first, on the hosted demo).**
+**Status (2026-10-16): CG-1 and CG-2 built and tested locally (schema 53); not yet deployed or migrated on the hosted demo.
+CG-3 and CG-4 not started.** What was built, and how it narrows the plan below:
+
+- **Data:** `contribution_days` as planned, fed through a ledger, `contribution_events`, keyed by source (`opened:<discussion>`,
+  `merged:<discussion>`, `event:<discussion event>`, `task:<agent task>`, `evidence:<job>`, `commit:<repository>:<sha>`). A retried write
+  or a repeated sweep inserts nothing, and the rollup changes in the same batch. `contribution_git` holds each repository's walk
+  position, `contribution_cursors` each sweep's position, `contribution_settings` the privacy choice.
+- **Writers:**
+  - after collaboration mutations, merges and published review drafts (core handlers, from discussion events);
+  - when an agent task finishes;
+  - after a confirmed write to a default branch (`finishRefWrite`, `settleRefWrites`). This only marks the Git walk due, so the push
+    path costs one upsert.
+- **The maintenance sweep** (the `indexes` stage) reads discussion events, finished agent tasks and container proposals since its cursors
+  with the same keys. Landings by policy and merges settled later are counted there.
+- **Commits** come from first-parent history of each default branch, through Artifacts `log`/`readCommit`:
+  - at most 3 repositories and 200 commits each per pass;
+  - a walk from the tip reads a short page first;
+  - it resumes from `next_commit`, stops at the first commit already counted, and re-checks each repository daily.
+  - Authors are matched by email (and Golf's noreply address); commits by an email with no account are not counted.
+- **Tiers:**
+  - *Golf agent:* agent tasks and proposals, policy landings, Golf's agentic identity, agent task commits.
+  - *AI-assisted:* a person merged an agent task's pull request.
+  - *Declared:* a `Co-Authored-By` trailer naming a known AI tool.
+  - *Unlabelled:* everything else.
+- **Views built:**
+  - the person heatmap on profiles (53 weeks, year picker, legend, totals, streaks, day panel, AI overlay, table view);
+  - the privacy choice (anonymous counts for repositories a visitor cannot read);
+  - the installation **AI impact** page (`/admin/ai-impact`, operations administrators, anonymous aggregates only).
+- **Policy:** feature policy `contribution-graphs` hides counts at every level and keeps them.
+- **Not built in these slices:** "Your activity", organization admin views, CI pass rate of proposals, review findings acted on,
+  re-attributing commits when a person adds an email later, and public (signed-out) profile graphs.
 
 Asked for on 2026-10-14: GitHub-style contribution graphs for people, and the same for
 agents overall and for each individual agent, to show how much AI helps.
