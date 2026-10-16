@@ -268,7 +268,7 @@ test('assets download through the public Worker only with current repository acc
 
 test('releases report DISABLED and refuse every procedure without the R2 bucket; reads overlap and changes serialize', async t => {
   const f = await objectFixture(t);
-  assert.equal((await f.value('/native/diagnostics')).schema, 53);
+  assert.equal((await f.value('/native/diagnostics')).schema, 54);
   const capability = async () => (await f.value('CapabilityService/ListCapabilities')).capabilities.filter(c => c.id === 'repository.releases');
   let [row, ...rest] = await capability();
   assert.equal(rest.length, 0); assert.equal(row.state, 'CAPABILITY_STATE_READY'); assert.match(row.reason, /tags arrive by git push/); assert.match(row.reason, /25 assets of at most 256 KiB/);

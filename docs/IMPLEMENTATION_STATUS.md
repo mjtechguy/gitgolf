@@ -68,7 +68,8 @@ deployed: migration 0053 is not applied on the hosted demo.
 **Built:**
 - **Data (schema 53):**
   - `contribution_days`: the daily rollup, keyed by (actor, day, repository, kind, AI tier).
-  - `contribution_events`: the ledger, one row per contribution, keyed by its source, so retries and repeated sweeps count nothing twice.
+  - `contribution_ledger`: the ledger, one row per contribution, keyed by its source, so retries and repeated sweeps count nothing twice.
+    It replaced `contribution_events` in migration 0054, which stays unused.
   - `contribution_git`: each repository's Git walk.
   - `contribution_cursors`: each sweep's position.
   - `contribution_settings`: the privacy choice.
@@ -90,7 +91,8 @@ deployed: migration 0053 is not applied on the hosted demo.
     agent review tasks, commits by Golf's agentic identity or an agent task.
   - **API token:** a pull request opened through an API token, the way agents and automations outside Golf connect (a coding CLI
     over MCP, a script). Golf reports the token; it cannot tell an agent from a script. These count as AI involvement, not in the
-    person's human count (migration 0054 adds the tier and rebuilds the counts).
+    person's human count. Migration 0054 adds the tier; the next sweep rebuilds every count once from Golf's records
+    (`contribution_rebuilds`).
   - **AI-assisted:** a person merged an agent task's pull request (also counted as a proposal accepted) or one opened through an
     API token.
   - **Declared:** a `Co-Authored-By` trailer naming Claude, Copilot, Codex, Cursor, Gemini and other known tools or their domains.

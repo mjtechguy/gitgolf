@@ -1,7 +1,7 @@
 // Contribution graphs and AI impact (docs/AGENTS_AND_AUTOMATIONS_PLAN.md, "Contribution graphs and AI impact", CG-1 and CG-2).
 // Counts, not claims: every number here is something Golf recorded happening. Nothing estimates time saved or productivity.
 //
-// Writes. Every contribution enters the contribution_events ledger under a key naming its source, then the daily rollup in the same
+// Writes. Every contribution enters the contribution_ledger under a key naming its source, then the daily rollup in the same
 // batch, so a retried write or a repeated sweep counts nothing twice. Three kinds of writer feed it:
 //  - at the event: after a collaboration mutation or a merge (recordDiscussion), when an agent task finishes (recordAgentTask), and
 //    after a confirmed write to a default branch (recordRefWrite, which only marks the repository's Git walk as due);
@@ -45,16 +45,16 @@ export function declaredAI(message) {
 }
 
 // ---------- the ledger ----------
-const insertEvents = 'INSERT OR IGNORE INTO contribution_events(key,day,actor_id,repository_id,kind,ai_tier,pending)';
+const insertEvents = 'INSERT OR IGNORE INTO contribution_ledger(key,day,actor_id,repository_id,kind,ai_tier,pending)';
 // New ledger rows (pending=1) are added to the rollup, merges mark their repository's Git walk as due, and pending is cleared: one batch.
 function settle(db, time) {
   return [
     db.prepare(`INSERT INTO contribution_days(actor_id,day,repository_id,kind,ai_tier,count)
-      SELECT actor_id,day,repository_id,kind,ai_tier,count(*) FROM contribution_events WHERE pending=1 AND actor_id>=0 GROUP BY actor_id,day,repository_id,kind,ai_tier
+      SELECT actor_id,day,repository_id,kind,ai_tier,count(*) FROM contribution_ledger WHERE pending=1 AND actor_id>=0 GROUP BY actor_id,day,repository_id,kind,ai_tier
       ON CONFLICT(actor_id,day,repository_id,kind,ai_tier) DO UPDATE SET count=count+excluded.count`),
-    db.prepare(`INSERT INTO contribution_git(repository_id,pending,updated_at) SELECT DISTINCT repository_id,1,? FROM contribution_events WHERE pending=1 AND kind='pull_merged'
+    db.prepare(`INSERT INTO contribution_git(repository_id,pending,updated_at) SELECT DISTINCT repository_id,1,? FROM contribution_ledger WHERE pending=1 AND kind='pull_merged'
       ON CONFLICT(repository_id) DO UPDATE SET pending=1`).bind(time),
-    db.prepare('UPDATE contribution_events SET pending=0 WHERE pending=1'),
+    db.prepare('UPDATE contribution_ledger SET pending=0 WHERE pending=1'),
   ];
 }
 // Discussion events: issues and pull requests opened, issues closed, comments, reviews and merges. A pull request opened from an agent
@@ -140,10 +140,26 @@ async function sweepSource(db, { source, table, alias, time, id, limit, before, 
   return results.length;
 }
 
+// When how contributions are labelled changes, the derived counts are rebuilt once: both ledgers and the rollup are emptied, the cursors
+// and Git walks reset, and the rebuild recorded in one batch, each statement conditional on the record so a concurrent sweep repeats
+// nothing. The sweep then counts everything again, paced as for a new installation. 'token-tier': the API token tier (migration 0054).
+const rebuildName = 'token-tier';
+async function rebuild(db) {
+  if (await db.prepare('SELECT 1 FROM contribution_rebuilds WHERE name=?').bind(rebuildName).first()) return;
+  const due = 'NOT EXISTS(SELECT 1 FROM contribution_rebuilds WHERE name=?)', time = iso(Date.now());
+  await db.batch([
+    ...['contribution_events', 'contribution_ledger', 'contribution_days', 'contribution_cursors'].map(table => db.prepare(`DELETE FROM ${table} WHERE ${due}`).bind(rebuildName)),
+    db.prepare(`UPDATE contribution_git SET next_commit='',pending=1,walked=0,checked_at=NULL,updated_at=? WHERE ${due}`).bind(time, rebuildName),
+    db.prepare('INSERT OR IGNORE INTO contribution_rebuilds(name,done_at) VALUES(?,?)').bind(rebuildName, time),
+  ]);
+  console.log(JSON.stringify({ event: 'golf.contributions_rebuilt', name: rebuildName }));
+}
+
 // Maintenance (the read-index stage): D1 sources, then Git walks. Paced: a new installation fills in over a few cycles.
 export async function sweepContributions(env, withArtifact, limits = contributionLimits) {
   const db = env.DB.withSession('first-primary');
-  if (!(await db.prepare('PRAGMA table_info(contribution_days)').all()).results.length) return { processed: 0 };
+  if (!(await db.prepare('PRAGMA table_info(contribution_rebuilds)').all()).results.length) return { processed: 0 };
+  await rebuild(db);
   const now = Date.now(), before = iso(now - lagMs);
   let processed = 0;
   processed += await sweepSource(db, { source: 'discussion-events', table: 'discussion_events', alias: 'e', time: 'created_at', id: 'id', limit: limits.events, before,
@@ -205,7 +221,7 @@ async function walk(env, db, withArtifact, row, limits) {
   const keys = chain.map(commit => `commit:${row.id}:${commit.hash}`), counted = new Set();
   for (let offset = 0; offset < keys.length; offset += 90) {
     const part = keys.slice(offset, offset + 90);
-    for (const found of (await db.prepare(`SELECT key FROM contribution_events WHERE key IN (${part.map(() => '?').join()})`).bind(...part).all()).results) counted.add(found.key);
+    for (const found of (await db.prepare(`SELECT key FROM contribution_ledger WHERE key IN (${part.map(() => '?').join()})`).bind(...part).all()).results) counted.add(found.key);
   }
   const stop = keys.findIndex(key => counted.has(key)), uncounted = stop === -1 ? chain : chain.slice(0, stop);
   const rest = stop === -1 ? next : '';
