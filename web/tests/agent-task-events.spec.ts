@@ -6,13 +6,17 @@ import { AgentEventBodyState as Body, AgentTaskEventSchema, ActionRunKind, GetAc
 const id='12345678-1234-4234-8234-123456789012',attempt='b'.repeat(32),commit='a'.repeat(40),repo='21',actor='7',url=`/alex/private/actions/tasks/${id}`;
 const envelope=(flags:number,json:unknown)=>{const body=Buffer.from(JSON.stringify(json)),header=Buffer.alloc(5);header[0]=flags;header.writeUInt32BE(body.length,1);return Buffer.concat([header,body]);};
 async function fixture(page:Page){
- const state={body:Body.WITHHELD,taskState:'running',attempt,rows:11,bad:'',deny:false,deniedTask:false,ended:false,live:false,cursor:1,barrier:undefined as Promise<void>|undefined,requests:[] as unknown[],methods:[] as string[],onRead:undefined as ((after:number)=>void)|undefined};
+ const state={body:Body.WITHHELD,taskState:'running',attempt,rows:11,bad:'',deny:false,deniedTask:false,ended:false,live:false,cursor:1,streamFailure:undefined as Promise<void>|undefined,barrier:undefined as Promise<void>|undefined,requests:[] as unknown[],methods:[] as string[],onRead:undefined as ((after:number)=>void)|undefined};
  await page.route('**/rpc/**',async route=>{const method=new URL(route.request().url()).pathname.split('/').at(-1)!;state.methods.push(method);
  if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
  if(method==='GetSession')return state.ended?respond(route,GetSessionResponseSchema,{}):respond(route,GetSessionResponseSchema,{user:{id:actor,login:'alex'}});
  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
  if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:repo,name:'private',fullName:'alex/private',defaultBranch:'main',private:true}});
  if(method==='WatchRepository'&&state.live){await new Promise(resolve=>setTimeout(resolve,180));const raw=route.request().postDataBuffer()!,input=JSON.parse(raw.subarray(5).toString()),cursor=String(state.cursor);const event=toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:repo,cursor,kind:input.cursor?input.cursor===cursor?'heartbeat':'change':'reset',topics:input.cursor!==cursor?['agents']:[]}));return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([envelope(0,event),envelope(0,{repositoryId:repo,cursor,kind:'reconnect'}),envelope(2,{})])});}
+ // Without the live fixture the stream answers the way a Connect server reports an unimplemented streaming method
+ // (rpc.ts's HTTP 501 reaches a stream as Unknown, which is a dropped stream with fallback revalidation).
+ if(method==='WatchRepository'&&state.streamFailure){await state.streamFailure;state.streamFailure=undefined;return reject(route,'unavailable','Live stream dropped.');}
+ if(method==='WatchRepository')return route.fulfill({status:200,contentType:'application/connect+json',body:envelope(2,{error:{code:'unimplemented',message:'Live fixture not enabled.'}})});
  if(method==='GetActionRun'){if(state.deniedTask)return reject(route,'permission_denied','Current task access revoked.');const task={id,repository:{owner:'alex',name:'private'},state:state.taskState,commitId:commit,version:'1',createdAt:'2026-10-01T12:00:00Z',workerId:'worker-1',attemptId:state.attempt,modelId:'codex-model',tokens:'0',summary:'Private recorded result',patch:'diff --git a/private.ts b/private.ts\n--- a/private.ts\n+++ b/private.ts\n@@ -0,0 +1 @@\n+const secret = true;\n'};return respond(route,GetActionRunResponseSchema,{repositoryId:repo,summary:{ref:{kind:ActionRunKind.CODING_TASK,id},repositoryId:repo,ownerId:actor,title:'Coding task',state:task.state,commitId:commit,createdAt:task.createdAt,workerId:task.workerId,attemptId:task.attemptId,modelId:task.modelId},detail:{case:'task',value:task}});}
  if(method==='ListAgentTaskEvents'){
   const input=request(route,ListAgentTaskEventsRequestSchema);state.requests.push(input);state.onRead?.(Number(input.afterSequence||'0'));if(state.barrier)await state.barrier;if(state.ended)return reject(route,'unauthenticated','Session expired.');if(state.deny)return reject(route,'permission_denied','Recorded activity access revoked.');
@@ -48,6 +52,28 @@ test('automatic history loading drains multiple pages and keeps receiving new ev
 });
 test('the maximum journal drains once without duplicates or an endless cursor loop',async({page})=>{
  const state=await fixture(page);state.rows=513;state.taskState='succeeded';await page.goto(url);const rows=section(page).getByRole('list',{name:'Recorded agent events'}).locator(':scope>li');await expect(rows).toHaveCount(513);expect(state.requests).toHaveLength(17);expect(state.requests.at(-1)).toMatchObject({afterSequence:'512'});await page.waitForTimeout(300);expect(state.requests).toHaveLength(17);
+});
+// A dropped live stream revalidates the parent run and marks the journal stale (RepositoryLive fallback). The reconnect
+// one second later answers Unimplemented, so the second WatchRepository marks the point by which any re-read has started.
+const dropStream=(state:{streamFailure:Promise<void>|undefined})=>{let release!:()=>void;state.streamFailure=new Promise<void>(resolve=>release=resolve);return release;};
+const calls=(state:{methods:string[]},method:string)=>state.methods.filter(name=>name===method).length;
+test('a dropped live stream keeps a finished screened journal without reading it again',async({page})=>{
+ const state=await fixture(page);state.rows=513;state.body=Body.AVAILABLE;state.taskState='succeeded';const release=dropStream(state);await page.goto(url);const rows=section(page).getByRole('list',{name:'Recorded agent events'}).locator(':scope>li');
+ await expect(rows).toHaveCount(513);expect(state.requests).toHaveLength(17);const runs=calls(state,'GetActionRun');
+ release();await expect.poll(()=>calls(state,'GetActionRun')).toBe(runs+1);await expect.poll(()=>calls(state,'WatchRepository')).toBe(2);
+ await expect(rows).toHaveCount(513);expect(state.requests).toHaveLength(17);
+});
+test('a dropped live stream reads a finished withheld journal again once, after the parent run, without a cancelled read',async({page})=>{
+ const state=await fixture(page);state.rows=513;state.taskState='succeeded';const release=dropStream(state);await page.goto(url);const rows=section(page).getByRole('list',{name:'Recorded agent events'}).locator(':scope>li');
+ await expect(rows).toHaveCount(513);expect(state.requests).toHaveLength(17);
+ release();await expect.poll(()=>state.requests.length).toBe(34);await expect(rows).toHaveCount(513);await expect.poll(()=>calls(state,'WatchRepository')).toBe(2);
+ expect(state.requests).toHaveLength(34);expect(state.requests.slice(17,19)).toMatchObject([{afterSequence:''},{afterSequence:'32'}]);expect(state.requests.at(-1)).toMatchObject({afterSequence:'512'});
+});
+test('a dropped live stream does not read a rejected journal again',async({page})=>{
+ const state=await fixture(page);state.rows=514;state.body=Body.AVAILABLE;state.taskState='succeeded';state.bad='overflow';const release=dropStream(state);await page.goto(url);
+ await expect(section(page).getByRole('alert')).toContainText('Recorded activity');const reads=state.requests.length,runs=calls(state,'GetActionRun');expect(reads).toBeLessThanOrEqual(17);
+ release();await expect.poll(()=>calls(state,'GetActionRun')).toBe(runs+1);await expect.poll(()=>calls(state,'WatchRepository')).toBe(2);
+ await expect(section(page).getByRole('alert')).toContainText('Recorded activity');expect(state.requests).toHaveLength(reads);
 });
 test('a gap in a later page rejects the complete collection without retrying',async({page})=>{
  const state=await fixture(page);state.rows=65;state.taskState='succeeded';state.onRead=after=>{if(after===32)state.bad='gap';};await page.goto(url);await expect(section(page).getByRole('alert')).toContainText('Recorded activity');await expect(section(page).getByRole('list',{name:'Recorded agent events'}).locator(':scope>li')).toHaveCount(0);expect(state.requests).toHaveLength(2);

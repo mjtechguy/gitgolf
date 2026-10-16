@@ -33,6 +33,9 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
   setStatus('connecting');
   const scoped=(key:readonly unknown[])=>key[1]===userId&&key[2]===owner&&key[3]===name;
   const refresh=(topics:string[],revalidateMetadata=false)=>{
+   // The agent journal reader is disabled while its parent run revalidates ('agents' also invalidates the run), so it is
+   // only marked here and reads once when the parent re-enables it; refetching both at once wasted a cancelled read.
+   if(topics.includes('agents'))void client.invalidateQueries({predicate:query=>query.queryKey[0]==='agent-task-events'&&scoped(query.queryKey),refetchType:'none'});
    void client.invalidateQueries({predicate:query=>{
     const key=query.queryKey;
     if(key[0]==='native-repository'&&key[1]===repositoryId)return topics.some(topic=>['source','pulls','actions','agents'].includes(topic));
@@ -46,7 +49,6 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
     if(key[0]==='repository'&&key[4]==='pull-checks')return topics.includes('pulls')||topics.includes('actions');
     if(key[0]==='repository'&&['labels','milestones','assignees','resource-admin'].includes(String(key[4])))return topics.includes('issues')||topics.includes('pulls');
     if(key[0]==='repository')return topics.includes('issues')&&['issue','issues'].includes(String(key[4]))||topics.includes('pulls')&&['pull','pulls','pull-discussion'].includes(String(key[4]));
-    if(key[0]==='agent-task-events')return topics.includes('agents');
     if(['action-runs','action-run'].includes(String(key[0])))return topics.some(topic=>['actions','agents','pulls'].includes(topic));
     if(key[0]==='workflow-configurations')return topics.includes('source')||topics.includes('actions');
     if(key[0]==='repository-deployments')return topics.includes('actions');

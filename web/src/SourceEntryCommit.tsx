@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { hashKey, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { repositoryClient } from './api';
@@ -33,6 +33,10 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
   const client = useQueryClient();
   const key = useMemo(() => ['repository', userId, location.owner, location.name, 'source-entry-commit', repositoryId, commitId, path], [userId, location.owner, location.name, repositoryId, commitId, path]);
   const identity = JSON.stringify(key);
+  // A directory mounts up to 1000 rows. Exact-key filters (getQueryState, cancelQueries) scan and hash every cached
+  // query, so per-row calls made mounting quadratic and delayed visible reads by seconds; look the row up by hash.
+  const hash = useMemo(() => hashKey(key), [key]);
+  const cancel = () => client.getQueryCache().get(hash)?.cancel({ revert: true });
   const [visibleIdentity, setVisibleIdentity] = useState('');
   const [finishedIdentity, setFinishedIdentity] = useState('');
   const finished = finishedIdentity === identity;
@@ -40,7 +44,7 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
   const projected = validTarget && latestChange && validSourceLatestChange(latestChange, commitId) ? latestChange : undefined;
   const eligible = validTarget && !projected;
   const visible = visibleIdentity === identity;
-  const retained = client.getQueryState(key);
+  const retained = client.getQueryCache().get(hash)?.state;
   useEffect(() => {
     const element = target.current;
     if (!eligible || finished || !element || typeof IntersectionObserver === 'undefined') return;
@@ -54,9 +58,9 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
     return () => { observer.disconnect(); document.removeEventListener('visibilitychange', update); window.removeEventListener('pagehide', hide); };
   }, [identity, eligible, finished]);
   useEffect(() => {
-    if (!visible && !finished) void client.cancelQueries({ queryKey: key, exact: true });
-  }, [client, key, visible, finished]);
-  useEffect(() => () => { void client.cancelQueries({ queryKey: key, exact: true }); }, [client, key]);
+    if (!visible && !finished) void cancel();
+  }, [client, hash, visible, finished]);
+  useEffect(() => () => { void cancel(); }, [client, hash]);
   const query = useQuery({ ...privateNavigationQuery, queryKey: key, enabled: eligible && (visible || finished || retained?.status === 'success' || retained?.status === 'error'), retry: false, retryOnMount: false,
     queryFn: async ({ signal }) => {
       const release = await entryReadSlot(signal);

@@ -13,12 +13,17 @@ import { GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesRe
 const runId='12345678-1234-4234-8234-123456789abc',head='a'.repeat(40),path=`/alex/demo/actions/runs/${runId}`;
 function frame(flag:number,body:unknown){const payload=Buffer.from(JSON.stringify(body)),header=Buffer.alloc(5);header[0]=flag;header.writeUInt32BE(payload.length,1);return Buffer.concat([header,payload]);}
 async function backend(page:Page){
- const state={placement:undefined as {poolId:string;poolVersion:string;placementVersion:string;legacyUnbound:boolean}|undefined,catalog:'',cursor:1,live:false,deny:false,foreign:false,badLogs:false,logBarrier:undefined as Promise<void>|undefined,truncated:false,chunks:17,after:[] as string[],reads:0,cancels:[] as {runId:string;expectedVersion:string}[],cancelLost:false,cancelBarrier:undefined as Promise<void>|undefined,state:WorkflowRunState.RUNNING,progress:false,stepComplete:false,startSecond:true,stepReads:[] as (number|undefined)[]};
+ const state={streamDown:false,streamFailure:undefined as Promise<void>|undefined,watches:0,placement:undefined as {poolId:string;poolVersion:string;placementVersion:string;legacyUnbound:boolean}|undefined,catalog:'',cursor:1,live:false,deny:false,foreign:false,badLogs:false,logBarrier:undefined as Promise<void>|undefined,truncated:false,chunks:17,after:[] as string[],reads:0,cancels:[] as {runId:string;expectedVersion:string}[],cancelLost:false,cancelBarrier:undefined as Promise<void>|undefined,state:WorkflowRunState.RUNNING,progress:false,stepComplete:false,startSecond:true,stepReads:[] as (number|undefined)[]};
  const run=()=>({runnerPlacement:state.placement,engineCatalog:state.catalog,id:runId,repositoryId:state.foreign?'22':'11',workflowPath:'.github/workflows/qualification.yml',workflowBlobId:'b'.repeat(40),sourceSha256:'c'.repeat(64),commitId:head,createdAt:'2026-10-03T00:00:00Z',startedAt:'2026-10-03T00:01:00Z',finishedAt:state.state===WorkflowRunState.RUNNING?undefined:'2026-10-03T00:02:05Z',exitCode:state.state===WorkflowRunState.RUNNING?undefined:0,runnerId:'local-worker',version:'9',canCancel:state.state===WorkflowRunState.RUNNING,origin:WorkflowRunOrigin.PUSH,eventRef:'refs/heads/main',repositoryEventId:'5',automationGrantId:'owned-grant',state:state.state,logsTruncated:state.truncated,progress:state.progress?{jobId:'check',name:'Check source',eventsRecorded:true,steps:[{index:0,name:'First step',state:WorkflowStepState.SUCCEEDED,startedAt:'2026-10-03T00:01:00Z',finishedAt:'2026-10-03T00:01:10Z',exitCode:0},{index:1,name:'Second step',state:!state.startSecond?WorkflowStepState.PENDING:state.stepComplete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:state.startSecond?'2026-10-03T00:01:11Z':undefined,finishedAt:state.stepComplete?'2026-10-03T00:01:25Z':undefined,exitCode:state.stepComplete?0:undefined}]}:undefined});
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='WatchRepository'){
-   if(!state.live)return reject(route,'not_found','Live fixture not enabled.');
+   state.watches++;
+   // Without the live fixture the stream answers the way a Connect server reports an unimplemented streaming method
+   // (rpc.ts's HTTP 501 reaches a stream as Unknown, which is a dropped stream with fallback revalidation).
+   if(state.streamDown)return reject(route,'unavailable','Live stream down.');
+   if(state.streamFailure){await state.streamFailure;state.streamFailure=undefined;return reject(route,'unavailable','Live stream dropped.');}
+   if(!state.live)return route.fulfill({status:200,contentType:'application/connect+json',body:frame(2,{error:{code:'unimplemented',message:'Live fixture not enabled.'}})});
    const input=JSON.parse(route.request().postDataBuffer()!.subarray(5).toString());await new Promise(resolve=>setTimeout(resolve,200));
    const message=toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:'11',cursor:String(state.cursor),kind:!input.cursor?'reset':input.cursor!==String(state.cursor)?'change':'heartbeat',topics:input.cursor&&input.cursor!==String(state.cursor)?['actions']:[]}));
    return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([frame(0,message),frame(0,{repositoryId:'11',cursor:String(state.cursor),kind:'reconnect'}),frame(2,{})])});
@@ -80,6 +85,14 @@ test('a finished run automatically reads every validated page once without load 
  const reads=state.after.length;await page.waitForTimeout(250);expect(state.after).toHaveLength(reads);
 });
 
+test('a dropped live stream keeps a finished run log without reading it again',async({page})=>{
+ const state=await backend(page);state.state=WorkflowRunState.SUCCEEDED;state.chunks=18;let release!:()=>void;state.streamFailure=new Promise<void>(resolve=>release=resolve);await page.goto(path);
+ const log=page.getByLabel('Workflow run log',{exact:true});await expect.poll(()=>terminalText(log)).toContain('Chunk 18');const reads=state.after.length,runs=state.reads;
+ // The fallback revalidates the run at once; the reconnect a second later answers Unimplemented and marks the end.
+ release();await expect.poll(()=>state.reads).toBe(runs+1);await expect.poll(()=>state.watches).toBe(2);
+ await expect.poll(()=>terminalText(log)).toContain('Chunk 18');expect(state.after).toHaveLength(reads);
+});
+
 test('a denied automatic continuation clears previously loaded output and stops pagination',async({page})=>{
  const state=await backend(page);let release!:()=>void;state.logBarrier=new Promise(resolve=>{release=resolve;});await page.goto(path);
  const log=page.getByLabel('Workflow run log',{exact:true});await expect.poll(()=>terminalText(log)).toContain('Chunk 1');await expect.poll(()=>state.after.includes('16')).toBe(true);
@@ -88,7 +101,7 @@ test('a denied automatic continuation clears previously loaded output and stops 
 });
 
 test('foreign run binding refuses content before requesting logs and malformed run paths fail',async({page})=>{
- const state=await backend(page);state.foreign=true;await page.goto(path);
+ const state=await backend(page);state.foreign=true;state.streamDown=true;await page.goto(path);
  await expect(page.getByRole('alert')).toHaveText('This run does not belong to the selected repository.');
  expect(state.after).toEqual([]);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Reconnect live updates'})).toBeVisible();const reads=state.reads;

@@ -104,7 +104,10 @@ function JobGraphNavigation({run,location,selectedJobInstanceId,selectedStepId}:
 }
 
 function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,run,jobInstanceId,stepId,onAuthorityDenied}:{userId:string;owner:string;name:string;runId:string;truncated:boolean;enabled:boolean;stepIndex?:number;run:WorkflowRun;jobInstanceId?:string;stepId?:string;onAuthorityDenied:(error:ConnectError,observed:WorkflowRun)=>void}) {
- const query=useInfiniteQuery({...privateQuery,queryKey:['workflow-run-logs',userId,owner,name,runId,run.repositoryId,run.attemptId,run.commitId,jobInstanceId??'all',stepId??'all',stepIndex??'all',run.outputState,run.engineCatalog,run.inputContract,run.schemaSha256,run.submittedSha256,run.effectiveSha256],enabled,initialPageParam:0n,
+ const active=run.state===WorkflowRunState.RUNNING||run.state===WorkflowRunState.QUEUED;
+ // A finished run's completely read log cannot grow, so a refresh of the parent run (live or fallback) keeps it; the
+ // query key already changes with the attempt and publication receipt. Refresh run log still reads it again.
+ const query=useInfiniteQuery({...privateQuery,staleTime:(current:{state:{status:string;data?:{pages:{hasMore:boolean}[]}}})=>!active&&current.state.status==='success'&&current.state.data?.pages.at(-1)?.hasMore===false?'static':0,queryKey:['workflow-run-logs',userId,owner,name,runId,run.repositoryId,run.attemptId,run.commitId,jobInstanceId??'all',stepId??'all',stepIndex??'all',run.outputState,run.engineCatalog,run.inputContract,run.schemaSha256,run.submittedSha256,run.effectiveSha256],enabled,initialPageParam:0n,
   queryFn:async({signal,pageParam})=>{
    const page=await workflowRunClient.getWorkflowRunLogs({runId,afterSequence:pageParam,stepIndex,jobInstanceId,stepId},{signal,timeoutMs:12_000});
    signal.throwIfAborted();
@@ -119,7 +122,6 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,ru
  useEffect(()=>{if(query.error instanceof ConnectError&&[Code.Unauthenticated,Code.PermissionDenied,Code.NotFound].includes(query.error.code))onAuthorityDenied(query.error,run);},[query.error,onAuthorityDenied,run]);
  const loading=query.isPending;
  const liveStatus=useLiveStatus();
- const active=run.state===WorkflowRunState.RUNNING||run.state===WorkflowRunState.QUEUED;
  const withheld=run.outputState===WorkflowOutputState.WITHHELD;
  const text=query.data?.pages.flatMap(page=>page.logs).map(chunk=>chunk.text).join('')||'';
  const denied=Boolean(query.error)||!enabled;
