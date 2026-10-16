@@ -131,8 +131,11 @@ const native = {
       revertOnFailure: Boolean(s.revert_on_failure), lowRiskPaths: JSON.parse(s.low_risk_paths), sensitivePaths: JSON.parse(s.sensitive_paths), requiredChecks: JSON.parse(s.required_checks) }) : null; },
     after: () => agenticSummary(body) },
   // Landing a pull request (docs/AGENTIC_MODE.md). Lands and reverts by the policy itself are written by land-queue.mjs (actor 0).
-  land: body => body.action === 'land' && { action: 'agentic_mode.land', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => whole(body.number) && `#${whole(body.number)}`,
-    after: () => clean({ number: whole(body.number), method: clip(body.method, 10) || 'merge' }) },
+  land: body => body.action === 'land' ? { action: 'agentic_mode.land', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => whole(body.number) && `#${whole(body.number)}`,
+    after: () => clean({ number: whole(body.number), method: clip(body.method, 10) || 'merge' }) }
+    // A person's revert from the agentic inbox; a refused or conflicting revert answers phase REVERT_REFUSED and is recorded refused.
+    : body.action === 'revert' && { action: 'agentic_mode.revert_landing', scope: 'repository', key: () => token(body.idempotencyKey), subject: () => whole(body.number) && `#${whole(body.number)}`,
+      after: () => clean({ number: whole(body.number), landOperationId: token(body.id), landedCommitId: clip(body.landedCommitId, 40), reason: clip(body.reason, 500) || undefined }) },
   // Automations (docs/AUTOMATIONS.md) at the scope the request names; the stored automation must match it. Never the instructions text.
   automations: body => automationActions(body) && ({ action: automationActions(body), scope: ['repository', 'organization'].includes(body.scope) ? body.scope : 'installation',
     scopeId: async c => (await one(c.db, "SELECT id FROM native_owners WHERE slug=? AND kind='ORGANIZATION'", clip(body.organization, 40) || ''))?.id,
@@ -435,6 +438,8 @@ const phrases = {
   'agentic_mode.update': ['changed', 'change', e => `agentic mode${e.after?.enabled === true ? ' (on' + (e.after.landWithoutPerson ? ', landing low-risk changes without a person' : '') + ')' : e.after?.enabled === false ? ' (off)' : ''}`],
   'agentic_mode.land': ['landed', 'land', e => named('pull request', e.subject)], 'agentic_mode.auto_land': ['landed', 'land', e => `pull request ${e.subject} without a person`],
   'agentic_mode.revert': ['reverted', 'revert', e => `pull request ${e.subject} after its required checks failed`],
+  'agentic_mode.revert_landing': ['reverted', 'revert', e => `the landing of ${named('pull request', e.subject)} from the agentic inbox`],
+  'agentic_mode.branch_delete': ['deleted', 'delete', e => `agent branch ${e.subject}${e.after?.number ? ` after pull request #${e.after.number} ${e.after.why === 'closed' ? 'was closed' : e.after.why}` : ''}`],
   'automation.create': ['created', 'create', e => named('automation', e.subject)], 'automation.update': ['updated', 'update', e => named('automation', e.subject)],
   'automation.delete': ['deleted', 'delete', e => named('automation', e.subject)], 'automation.enable': ['turned on', 'turn on', e => named('automation', e.subject)],
   'automation.disable': ['turned off', 'turn off', e => named('automation', e.subject)], 'automation.kill_switch': ['engaged the kill switch of', 'engage the kill switch of', e => named('automation', e.subject)],

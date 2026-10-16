@@ -12,7 +12,7 @@ import { featureColumns, featureOff } from './feature-policy.mjs';
 import { sha } from './git.mjs';
 import { inventory, pullReviewContext, collaboration } from './collaboration.mjs';
 import { standardPullMerge } from './pull-merge.mjs';
-import { commitTree } from './source-api.mjs';
+import { commitTree, authority as writeAuthority, identity } from './source-api.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
 import { mergeTrees } from './tree-merge.mjs';
 import { GitTreeError } from './git-objects.mjs';
@@ -20,6 +20,7 @@ import { agenticSchema, agenticSettings, agenticFeature, landingEvaluation, head
 import { onlyApprovalNeeded, requiredCheckStates } from './land-policy.mjs';
 import { recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { pipelinePolicy } from './pipeline-policy.mjs';
+import { cleanUpAgentBranchSoon } from './agent-branches.mjs';
 
 // Commits Golf writes on its own (policy merges and reverts) carry this identity, never a person's.
 export const agenticIdentity = Object.freeze({ name: 'Golf (agentic mode)', email: 'agentic@golf.invalid' });
@@ -84,7 +85,7 @@ function policyGuard(principal, row, { version, kind, rulesVersion }) {
     values: [row.id, row.artifact_name, principal.id, principal.identity_version || 0, version, ...(rulesVersion === undefined ? [] : [rulesVersion])] });
 }
 // A repository row as authorizedRepository builds it, for one account's current grant, and that account; null without a grant.
-async function contextFor(db, env, repositoryId, userId) {
+export async function contextFor(db, env, repositoryId, userId) {
   if (!userId) return null;
   const row = await db.prepare(`SELECT r.*,g.role,${ownerColumns},COALESCE(o.id,w.id) AS workspace_id,COALESCE(v.version,0) AS access_version,
       (SELECT k.operation_id FROM git_ref_unknown k WHERE k.repository_id=r.id LIMIT 1) AS unknown_write,${featureColumns}
@@ -153,6 +154,9 @@ async function landed(db, env, row, op, receipt, principal, ctx) {
     catch { console.log(JSON.stringify({ event: 'golf.pipeline_intake_record_failed' })); }
   }
   env.notifyLanding?.(row.id);
+  // An agent's head branch is deleted once its change landed (agent-branches.mjs decides whether it may be).
+  if (done?.state === 'LANDED') await cleanUpAgentBranchSoon(env, { repositoryId: row.id, pullRequestId: op.pull_request_id, headCommitId: op.head_commit_id, why: 'landed' },
+    { withArtifact: ctx.withArtifact, providerFetch: ctx.providerFetch });
   return done;
 }
 
@@ -252,7 +256,8 @@ export async function landAPI(db, env, person, row, request, body, ctx) {
     if (!op) throw new Fault('not_found', 404, 'Land operation not found.');
     return { operation: wireLand(op) };
   }
-  if (body.action !== 'land') invalid('Use land, list or get.');
+  if (body.action === 'revert') return personRevert(db, env, person, row, body, ctx);
+  if (body.action !== 'land') invalid('Use land, revert, list or get.');
   if (Object.keys(body).some(field => !landFields.includes(field))) invalid('Send only repository, repositoryId, number, headCommitId, method and idempotencyKey.');
   if (!Number.isSafeInteger(body.number) || body.number < 1) invalid('Choose a pull request by its number.');
   // headCommitId and expectedHeadCommitId mean the same: the head the caller reviewed. Landing refuses a head that moved.
@@ -374,6 +379,40 @@ export async function checkLanded(env, op, { withArtifact, providerFetch = env.p
   return revertLanded(env, db, op, d, failed, { withArtifact, providerFetch, artifact, settings });
 }
 
+// The inverse three-way merge of a landed commit onto the current tip of ref, as `git revert -m 1`, committed through the branch fence
+// (source-api.mjs commitTree) under guard. author() is the commit identity at each attempt. Returns { commitId, operationId }, { noop },
+// { conflicts, conflictCount } or { failed }; a Fault (a branch rule, an unconfirmed write) is thrown.
+async function inverseCommit(env, db, row, principal, op, ref, { message, author, guard, record }, ctx) {
+  return ctx.withArtifact(env, row, async repo => {
+    const landedCommit = await repo.readCommit(op.landed_commit_id), parent = landedCommit?.parents?.[0] && await repo.readCommit(landedCommit.parents[0]);
+    if (!landedCommit || !parent) return { failed: 'the landed commit could not be read' };
+    for (let attempt = 1; attempt <= landLimits.revertAttempts; attempt++) {
+      const tip = (await inventory(env, row, repo, ctx.providerFetch)).get(ref), tipCommit = tip && await repo.readCommit(tip);
+      if (!tipCommit) return { failed: 'the base branch no longer exists' };
+      // From the landed tree back to its first parent, applied to the current tip.
+      let merged;
+      try { merged = await mergeTrees(repo, landedCommit.treeHash, tipCommit.treeHash, parent.treeHash); }
+      catch (error) { if (!(error instanceof GitTreeError)) throw error; merged = { treeId: null, conflicts: [{ path: error.path, reason: error.code }] }; }
+      if (!merged.treeId) return { conflicts: merged.conflicts.slice(0, 50).map(({ path, reason }) => ({ path, reason })), conflictCount: merged.conflicts.length };
+      if (merged.treeId === tipCommit.treeHash) return { noop: true };
+      let sent;
+      try {
+        sent = await commitTree(db, env, principal, row, repo, { ref, parent: tip, treeId: merged.treeId, objects: merged.objects, message, author: author(), guard, record },
+          { withArtifact: ctx.withArtifact, providerFetch: ctx.providerFetch, ciState: 'NONE' });
+      } catch (error) {
+        // A merge or an unknown write holding the repository: wait like a moved branch.
+        if (!(error instanceof Fault && error.message === busyMessage)) throw error;
+        sent = { outcome: 'busy' };
+      }
+      if (sent.outcome === 'applied') return { commitId: sent.commitId, operationId: sent.id };
+      if (attempt < landLimits.revertAttempts) await sleep(backoff(attempt));
+    }
+    return { failed: 'the base branch kept moving' };
+  });
+}
+// A Fault from a revert attempt, as an outcome.
+const revertFault = error => ({ failed: error.code === 'permission_denied' ? 'the base branch is locked by a branch rule' : error.status === 503 ? 'the revert was sent but not confirmed; maintenance reads the branch back' : error.message, unknown: error.status === 503 });
+
 async function revertLanded(env, db, op, d, failed, ctx) {
   const settingsRow = await db.prepare('SELECT updated_by,version FROM repository_agentic_settings WHERE repository_id=?').bind(op.repository_id).first();
   const context = await contextFor(db, env, op.repository_id, settingsRow?.updated_by);
@@ -384,38 +423,88 @@ async function revertLanded(env, db, op, d, failed, ctx) {
   let outcome;
   try {
     const rulesVersion = await enforceGitRules(db, row, principal, ref);
-    outcome = await ctx.withArtifact(env, row, async repo => {
-      const landedCommit = await repo.readCommit(op.landed_commit_id), parent = landedCommit?.parents?.[0] && await repo.readCommit(landedCommit.parents[0]);
-      if (!landedCommit || !parent) return { failed: 'the landed commit could not be read' };
-      for (let attempt = 1; attempt <= landLimits.revertAttempts; attempt++) {
-        const tip = (await inventory(env, row, repo, ctx.providerFetch)).get(ref), tipCommit = tip && await repo.readCommit(tip);
-        if (!tipCommit) return { failed: 'the base branch no longer exists' };
-        // The inverse three-way merge, as `git revert -m 1`: from the landed tree back to its first parent, applied to the current tip.
-        let merged;
-        try { merged = await mergeTrees(repo, landedCommit.treeHash, tipCommit.treeHash, parent.treeHash); }
-        catch (error) { if (!(error instanceof GitTreeError)) throw error; merged = { treeId: null, conflicts: [{ path: error.path, reason: error.code }] }; }
-        if (!merged.treeId) return { conflicts: merged.conflicts.slice(0, 50).map(({ path, reason }) => ({ path, reason })), conflictCount: merged.conflicts.length };
-        if (merged.treeId === tipCommit.treeHash) return { noop: true };
-        let sent;
-        try {
-          sent = await commitTree(db, env, principal, row, repo, { ref, parent: tip, treeId: merged.treeId, objects: merged.objects, message,
-            author: { ...agenticIdentity, time: Math.floor(Date.now() / 1000) }, guard: policyGuard(principal, row, { version: settingsRow.version, kind: 'revert', rulesVersion })(true),
-            record: (operationId, commitId) => record({ state: 'sending', operationId, commitId }) }, { withArtifact: ctx.withArtifact, providerFetch: ctx.providerFetch, ciState: 'NONE' });
-        } catch (error) {
-          // A merge or an unknown write holding the repository: wait like a moved branch.
-          if (!(error instanceof Fault && error.message === busyMessage)) throw error;
-          sent = { outcome: 'busy' };
-        }
-        if (sent.outcome === 'applied') return { commitId: sent.commitId, operationId: sent.id };
-        if (attempt < landLimits.revertAttempts) await sleep(backoff(attempt));
-      }
-      return { failed: 'the base branch kept moving' };
-    });
+    outcome = await inverseCommit(env, db, row, principal, op, ref, { message, author: () => ({ ...agenticIdentity, time: Math.floor(Date.now() / 1000) }),
+      guard: policyGuard(principal, row, { version: settingsRow.version, kind: 'revert', rulesVersion })(true), record: (operationId, commitId) => record({ state: 'sending', operationId, commitId }) }, ctx);
   } catch (error) {
     if (!(error instanceof Fault)) throw error;
-    outcome = { failed: error.code === 'permission_denied' ? 'the base branch is locked by a branch rule' : error.status === 503 ? 'the revert was sent but not confirmed; maintenance reads the branch back' : error.message, unknown: error.status === 503 };
+    outcome = revertFault(error);
   }
   return revertFollowUp(env, db, op, d, failed, outcome, context, ctx.artifact);
+}
+
+// ---------- a person reverts a landing from the agentic inbox ----------
+// POST /native/land { action: 'revert', id, number, landedCommitId, reason?, idempotencyKey }: a writer reverts a landed change (a policy's or
+// a person's) with the same inverse merge as the automatic revert, committed as that person under their current authority (the push fence's
+// guard: grant, access and identity versions, branch rules). The claim (detail.revert, keyed by the request) admits one revert per landing;
+// it also takes the post-landing check, so an automatic revert cannot run alongside, and gives it back when the revert does not apply.
+const revertFields = ['action', 'repository', 'repositoryId', 'id', 'number', 'landedCommitId', 'reason', 'idempotencyKey'];
+const inFlight = ['requested', 'sending', 'unknown'];
+const revertPhase = op => op.state === 'REVERTED' ? 'REVERTED' : inFlight.includes(parse(op.detail).revert?.state) ? 'REVERTING' : 'REVERT_REFUSED';
+const revertView = op => ({ operation: wireLand(op), phase: revertPhase(op), revert: parse(op.detail).revert || null });
+async function personRevert(db, env, person, row, body, ctx) {
+  if (Object.keys(body).some(field => !revertFields.includes(field))) invalid('Send only repository, repositoryId, id, number, landedCommitId, reason and idempotencyKey.');
+  if (!uuidOK(body.id)) invalid('Name the land operation by its ID.');
+  if (!Number.isSafeInteger(body.number) || body.number < 1) invalid('Name the pull request number of the landing.');
+  if (!sha(body.landedCommitId)) invalid('Send the full landed commit you are reverting as landedCommitId.');
+  if (!uuidOK(body.idempotencyKey)) invalid('idempotencyKey is a lowercase UUID v4.');
+  const reason = body.reason ?? '';
+  if (typeof reason !== 'string' || reason.length > 500 || /\p{Cc}/u.test(reason.replaceAll('\n', ''))) invalid('Write a reason of at most 500 characters, or none.');
+  if (!['write', 'admin'].includes(row.role)) forbidden('Reverting needs a write or admin grant on this repository.');
+  let op = await db.prepare(`${select} WHERE l.id=? AND l.repository_id=?`).bind(body.id, row.id).first();
+  if (!op) throw new Fault('not_found', 404, 'Land operation not found.');
+  if (op.number !== body.number || op.landed_commit_id !== body.landedCommitId) throw new Fault('aborted', 409, 'This land operation is a different landing; refresh the inbox.');
+  const mine = value => value?.key === body.idempotencyKey && value.actorId === String(person.id);
+  if (mine(parse(op.detail).revert)) return revertView(op);
+  if (op.state === 'REVERTED') refuse(`This landing was already reverted with ${op.revert_commit_id.slice(0, 12)}.`);
+  if (op.state !== 'LANDED') refuse('Only a landed change can be reverted.');
+  const d = await db.prepare('SELECT d.title,d.number,p.base_branch FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE p.id=?').bind(op.pull_request_id).first();
+  if (!d) refuse('The pull request of this landing no longer exists.');
+  const claim = { state: 'requested', trigger: 'person', actorId: String(person.id), actor: person.login, key: body.idempotencyKey, ...(reason.trim() ? { reason: reason.trim() } : {}), requestedAt: now() };
+  // Refused while another revert of it is in flight, or while an automatic revert that claimed it in the last ten minutes has not recorded an attempt.
+  const claimed = await db.prepare(`UPDATE land_operations SET detail=CASE WHEN json_extract(detail,'$.postLand') IS NULL THEN json_set(detail,'$.revert',json(?),'$.postLand',json(?))
+      ELSE json_set(detail,'$.revert',json(?)) END,updated_at=?
+    WHERE id=? AND state='LANDED' AND landed_commit_id=? AND COALESCE(json_extract(detail,'$.revert.state'),'') NOT IN ('requested','sending','unknown','applied')
+      AND NOT (COALESCE(json_extract(detail,'$.postLand.action'),'')='revert' AND json_extract(detail,'$.revert') IS NULL AND updated_at>?)`)
+    .bind(JSON.stringify(claim), JSON.stringify({ verdict: 'person_revert', checks: [] }), JSON.stringify(claim), now(), op.id, op.landed_commit_id, new Date(Date.now() - 600_000).toISOString()).run();
+  if (claimed.meta.changes !== 1) {
+    op = await reread(db, op.id);
+    if (mine(parse(op.detail).revert)) return revertView(op);
+    refuse(op.state === 'REVERTED' ? 'This landing was reverted meanwhile.' : 'A revert of this landing is already in progress.');
+  }
+  const ref = 'refs/heads/' + d.base_branch, title = String(d.title).replace(/\p{Cc}+/gu, ' ').trim();
+  const message = `Revert "${title}" (#${d.number})\n\n${claim.reason ? claim.reason + '\n\n' : ''}Reverted by @${person.login} from the agentic inbox.\n\nThis reverts commit ${op.landed_commit_id}.`;
+  const record = detail => db.prepare("UPDATE land_operations SET detail=json_set(detail,'$.revert',json(?)),updated_at=? WHERE id=?").bind(JSON.stringify({ ...claim, ...detail }), now(), op.id).run();
+  let outcome;
+  try {
+    const rulesVersion = await enforceGitRules(db, row, person, ref);
+    outcome = await inverseCommit(env, db, row, person, op, ref, { message, author: () => identity(env, person, Math.floor(Date.now() / 1000)), guard: writeAuthority(person, row, rulesVersion),
+      record: (operationId, commitId) => record({ state: 'sending', operationId, commitId }) }, ctx);
+  } catch (error) {
+    if (!(error instanceof Fault)) throw error;
+    outcome = revertFault(error);
+  }
+  return revertView(await personRevertFollowUp(env, db, op, d, outcome, claim, { row, person }, ctx.artifact));
+}
+
+// What happened to a person's revert: REVERTED with a comment on the pull request, or why it did not apply (and the post-landing check given
+// back). context is null when the person no longer has access (maintenance settling it): the outcome is still recorded.
+async function personRevertFollowUp(env, db, op, d, outcome, claim, context, artifact) {
+  const record = detail => db.prepare("UPDATE land_operations SET detail=json_set(detail,'$.revert',json(?)),updated_at=? WHERE id=?").bind(JSON.stringify({ ...claim, ...detail }), now(), op.id).run();
+  if (outcome.commitId) {
+    await db.prepare("UPDATE land_operations SET state='REVERTED',revert_commit_id=?,detail=json_set(detail,'$.revert',json(?)),updated_at=? WHERE id=? AND state='LANDED'")
+      .bind(outcome.commitId, JSON.stringify({ ...claim, state: 'applied', operationId: outcome.operationId, commitId: outcome.commitId }), now(), op.id).run();
+    if (context) {
+      await comment(db, env, context.person, context.row, op, 'person-revert', `@${claim.actor} reverted this pull request on \`${d.base_branch}\` with ${outcome.commitId.slice(0, 12)} from the agentic inbox.` +
+        (claim.reason ? `\n\n> ${claim.reason.replaceAll('\n', '\n> ')}` : ''), artifact);
+      env.notifyLanding?.(context.row.id);
+    }
+    return reread(db, op.id);
+  }
+  if (outcome.unknown) { await record({ state: 'unknown', reason: outcome.failed }); return reread(db, op.id); }
+  await record(outcome.noop ? { state: 'noop', reason: 'the base branch no longer holds the change' } : outcome.conflicts ? { state: 'conflict', conflicts: outcome.conflicts, conflictCount: outcome.conflictCount } : { state: 'refused', reason: outcome.failed });
+  // Not reverted: failing checks may still revert a policy landing automatically.
+  await db.prepare("UPDATE land_operations SET detail=json_remove(detail,'$.postLand'),updated_at=? WHERE id=? AND json_extract(detail,'$.postLand.verdict')='person_revert'").bind(now(), op.id).run();
+  return reread(db, op.id);
 }
 
 // What happened to the revert, told on the pull request and in an issue for the requester; also used when maintenance settles a revert.
@@ -497,6 +586,12 @@ async function settleRevert(env, db, op, withArtifact) {
   const write = revert.operationId && await db.prepare('SELECT g.state,w.outcome FROM git_operations g LEFT JOIN git_ref_writes w ON w.operation_id=g.id WHERE g.id=?').bind(revert.operationId).first();
   const outcome = write?.state === 'APPLIED' ? { commitId: revert.commitId, operationId: revert.operationId } : !write || write.outcome === 'NOT_APPLIED' ? { failed: 'the revert was not applied' } : null;
   if (!outcome) return 'unknown';
+  if (revert.trigger === 'person') {
+    const d = await db.prepare('SELECT d.title,d.number,p.base_branch FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE p.id=?').bind(op.pull_request_id).first();
+    const context = await contextFor(db, env, op.repository_id, Number(revert.actorId));
+    await personRevertFollowUp(env, db, op, d || { base_branch: '' }, outcome, revert, d && context, context && (action => withArtifact(env, context.row, action)));
+    return outcome.commitId ? 'reverted' : 'refused';
+  }
   const settingsRow = await db.prepare('SELECT updated_by FROM repository_agentic_settings WHERE repository_id=?').bind(op.repository_id).first();
   const context = await contextFor(db, env, op.repository_id, settingsRow?.updated_by);
   const d = await db.prepare('SELECT d.title,d.number,p.base_branch FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id WHERE p.id=?').bind(op.pull_request_id).first();

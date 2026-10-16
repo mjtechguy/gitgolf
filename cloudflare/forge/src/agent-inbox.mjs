@@ -11,6 +11,7 @@ import { intentInFlight, intentLimits, intentSchema, intentView, storedIntent } 
 import { aiAllocation } from './ai.mjs';
 import { aiGate, aiKinds, createAiRun } from './ai-workflow.mjs';
 import { inventory } from './collaboration.mjs';
+import { agentBranchPatterns } from './agent-branches.mjs';
 
 export const inboxLimits = Object.freeze({ evaluate: 25, rows: 100, defaultRows: 50 });
 const refuse = message => { throw new Fault('failed_precondition', 412, message); };
@@ -18,7 +19,7 @@ const forbidden = message => { throw new Fault('permission_denied', 403, message
 const writer = row => ['write', 'admin'].includes(row.role);
 
 // The land queue's table (AM-4 item 4, another migration). Read only when it exists with the columns this module selects; cached once found.
-const landColumns = ['id', 'repository_id', 'pull_request_id', 'number', 'trigger', 'actor_id', 'state', 'method', 'head_commit_id', 'landed_commit_id', 'revert_commit_id', 'created_at', 'updated_at'];
+const landColumns = ['id', 'repository_id', 'pull_request_id', 'number', 'trigger', 'actor_id', 'state', 'method', 'head_commit_id', 'landed_commit_id', 'revert_commit_id', 'detail', 'created_at', 'updated_at'];
 let landing = false;
 export async function landingSchema(db) {
   if (!landing) {
@@ -52,9 +53,18 @@ async function summaries(db, env, row) {
 
 const task = value => ({ id: value.id, state: value.state, tool: value.tool, model: value.model, host: value.host_name || '', requestedBy: value.requester || '',
   target: { kind: value.target_kind, number: value.target_number, title: value.target_title || '' }, branch: value.branch, createdAt: value.created_at, startedAt: value.started_at || '' });
+const parse = text => { try { const value = JSON.parse(text); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; } };
+// The revert of a landing as the inbox shows it: who asked (a person or the automatic revert after failed checks), its state and why it
+// did not apply. Never the request key.
+function revertSummary(detail) {
+  const revert = detail.revert;
+  if (!revert || typeof revert !== 'object') return null;
+  return { state: String(revert.state || ''), trigger: revert.trigger === 'person' ? 'person' : 'policy', actor: revert.trigger === 'person' ? String(revert.actor || '') : '',
+    reason: typeof revert.reason === 'string' ? revert.reason.slice(0, 500) : '', conflicts: Array.isArray(revert.conflicts) ? revert.conflicts.slice(0, 20).map(c => String(c?.path || '')) : [] };
+}
 const landed = value => ({ id: String(value.id), pullRequestId: String(value.pull_request_id), number: value.number, title: value.title || '', trigger: value.trigger, actor: value.actor || '',
   state: value.state, method: value.method || '', headCommitId: value.head_commit_id || '', landedCommitId: value.landed_commit_id || '', revertCommitId: value.revert_commit_id || '',
-  createdAt: value.created_at, updatedAt: value.updated_at });
+  revert: revertSummary(parse(value.detail)), createdAt: value.created_at, updatedAt: value.updated_at });
 
 async function inbox(db, env, row, body, artifact, person) {
   const limit = body.limit === undefined ? inboxLimits.defaultRows : body.limit;
@@ -101,12 +111,15 @@ async function inbox(db, env, row, body, artifact, person) {
     });
     for (const { pull, value, error } of results) {
       const base = { number: pull.number, title: pull.title, author: pull.author || '', pullRequestId: String(pull.pull_id), landing: queue.get(pull.pull_id) || null };
-      if (error) { needsPerson.push({ ...base, origin: '', headCommitId: '', baseCommitId: '', decision: 'unavailable', risk: '', reasons: [error], sensitivePaths: [], conflicts: [], changedPathCount: 0, checks: { passed: 0, pending: 0, failed: 0 }, intent: null }); continue; }
+      if (error) { needsPerson.push({ ...base, origin: '', headCommitId: '', baseCommitId: '', decision: 'unavailable', risk: '', reasons: [error], sensitivePaths: [], conflicts: [], changedPathCount: 0, checks: { passed: 0, pending: 0, failed: 0 }, intent: null, canLand: false }); continue; }
       const summary = intents.get(`${pull.pull_id}:${value.headCommitId}`), checks = { passed: 0, pending: 0, failed: 0 };
       for (const check of value.checks) checks[['success', 'neutral', 'skipped'].includes(check.state) ? 'passed' : check.state === 'pending' ? 'pending' : 'failed']++;
       const item = { ...base, origin: value.origin, headCommitId: value.headCommitId, baseCommitId: value.baseCommitId, decision: value.evaluation.decision, risk: value.evaluation.risk,
         reasons: value.evaluation.reasons, sensitivePaths: value.evaluation.matched.sensitive, conflicts: (value.mergeable.conflicts || []).map(({ path, reason }) => ({ path, reason })),
-        mergeable: value.mergeable.ok, changedPathCount: value.changedPathCount, checks, intent: summary ? intentView(summary) : null };
+        mergeable: value.mergeable.ok, changedPathCount: value.changedPathCount, checks, intent: summary ? intentView(summary) : null,
+        // Whether this caller may land it now through the land queue: the policy says land, or it asks only for a writer who is not the
+        // author, which this caller's land request is (land-queue.mjs decides again).
+        canLand: Boolean(landingReady && value.canLand) };
       (['land', 'waiting_checks'].includes(item.decision) ? readyToLand : needsPerson).push(item);
     }
   }
@@ -115,7 +128,7 @@ async function inbox(db, env, row, body, artifact, person) {
   let history = [], landingHistory = landingReady ? 'available' : 'unavailable';
   if (landingReady) {
     try {
-      history = (await db.prepare(`SELECT o.id,o.pull_request_id,o.number,o.trigger,o.state,o.method,o.head_commit_id,o.landed_commit_id,o.revert_commit_id,o.created_at,o.updated_at,d.title,u.login AS actor
+      history = (await db.prepare(`SELECT o.id,o.pull_request_id,o.number,o.trigger,o.state,o.method,o.head_commit_id,o.landed_commit_id,o.revert_commit_id,o.detail,o.created_at,o.updated_at,d.title,u.login AS actor
         FROM land_operations o LEFT JOIN pull_requests p ON p.id=o.pull_request_id LEFT JOIN discussions d ON d.id=p.discussion_id LEFT JOIN users u ON u.id=o.actor_id
         WHERE o.repository_id=? AND o.state IN ('LANDED','REVERTED') ORDER BY o.updated_at DESC,o.id DESC LIMIT ?`).bind(row.id, limit + 1).all()).results;
     } catch { history = []; landingHistory = 'unavailable'; }
@@ -124,7 +137,16 @@ async function inbox(db, env, row, body, artifact, person) {
     inProgress: tasks.slice(0, limit).map(task), readyToLand, needsPerson, landed: history.slice(0, limit).map(landed), landingHistory,
     pulls: { ...pulls, open, evaluated: evaluated.length, evaluateLimit: inboxLimits.evaluate },
     truncated: { inProgress: tasks.length > limit, pulls: open > evaluated.length, landed: history.length > limit },
-    summaries: ai };
+    summaries: ai,
+    // Writers land selected pull requests and revert landings through the land queue (POST /native/land), where it exists.
+    actions: { land: Boolean(landingReady && enabled && writer(row)), revert: Boolean(landingReady && writer(row)),
+      reason: !landingReady ? 'This installation has no land queue yet.' : !writer(row) ? 'Landing and reverting need write or admin access to this repository.' : !enabled ? 'Agentic mode is off for this repository.' : '' } };
+}
+
+// The branch list's agent branches (agent-branches.mjs): the patterns, and whether Golf deletes them after their pull request lands or closes.
+async function branches(db, env, row) {
+  const [settings, feature] = await Promise.all([current(db, row), featureState(db, env, row)]);
+  return { repositoryId: String(row.id), defaultBranch: row.default_branch, patterns: await agentBranchPatterns(db, row), cleanup: Boolean(settings.enabled && feature.allowed) };
 }
 
 // The open pull request by number and its current base and head tips; refused when it is not open or a branch is gone.
@@ -147,6 +169,7 @@ export async function agentInboxAPI(db, env, person, row, request, body, artifac
   browserOnly(env, request);
   if (!await agenticSchema(db)) refuse('The agentic inbox needs the schema 41 migration on this installation.');
   if (body.action === 'inbox') return inbox(db, env, row, body, artifact, person);
+  if (body.action === 'branches') return branches(db, env, row);
   if (!await intentSchema(db)) refuse('Intent summaries need the schema 43 migration on this installation.');
   if (body.action === 'summary') {
     const pull = await openPull(db, env, row, body.number, artifact);

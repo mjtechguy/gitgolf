@@ -11,6 +11,7 @@ import { handle, serialize, admission, withArtifact } from './src/core.mjs';
 import { packetLine } from './src/git.mjs';
 import { afterPipelineRun, autoLand, checkLanded, landSoon, sweepLanding, backoff, landLimits } from './src/land-queue.mjs';
 import { onlyApprovalNeeded } from './src/land-policy.mjs';
+import { cleanUpAgentBranch, isAgentBranch, patternMatches } from './src/agent-branches.mjs';
 import { gitAvailable, gitFixture } from './git-cli-fixture.mjs';
 
 const origin = 'https://golf.example.com', artifact = 'repo-' + 'b'.repeat(32), key = { owner: 'alice', name: 'project' };
@@ -491,4 +492,245 @@ test('landSoon lands the pull request whose head just passed its checks, after t
   landSoon(env, 1, docs.head, withArtifact); await Promise.all(pending.splice(0));
   const [op] = f.ops();
   assert.deepEqual([op.state, op.trigger, op.number], ['LANDED', 'policy', docs.number]);
+});
+
+// ---------- the agentic inbox's batch land, revert and agent branch cleanup (AM-5) ----------
+// The inbox lands a selection with one POST /native/land per pull request, each with its own idempotency key and expected head.
+test('batch land: each pull request is its own land request; the answers are landed, needs rebase, refused and replayed', { skip }, async t => {
+  const f = await fixture(t);
+  f.settings();
+  const a = f.pull('feature-a', { 'shared.txt': 'from a\n' }), b = f.pull('feature-b', { 'shared.txt': 'from b\n' }), c = f.pull('feature-c', { 'src/c.js': 'c\n' });
+  const moved = f.commit(c.head, { 'src/c.js': 'c2\n' }, 'Pushed after review');
+  f.ref('feature-c', moved);
+  const keys = [a, b, c].map(() => crypto.randomUUID());
+  const send = (pull, idempotencyKey) => f.call('/native/land', { action: 'land', number: pull.number, headCommitId: pull.head, idempotencyKey });
+  const answers = [];
+  for (const [i, pull] of [a, b, c].entries()) answers.push(await send(pull, keys[i]));
+  assert.deepEqual(answers.map(answer => [answer.status, answer.phase, answer.operation?.state]),
+    [[200, 'LANDED', 'LANDED'], [200, 'LAND_REFUSED', 'NEEDS_REBASE'], [412, undefined, undefined]]);
+  assert.deepEqual(answers[1].operation.detail.conflicts, [{ path: 'shared.txt', reason: 'both_modified' }]);
+  assert.match(answers[2].message, /head moved to/);
+  // A retried batch replays each key: the same operations, nothing sent again.
+  const pushes = f.counts.pushes;
+  const again = [await send(a, keys[0]), await send(b, keys[1])];
+  assert.deepEqual(again.map(answer => answer.operation.id), [answers[0].operation.id, answers[1].operation.id]);
+  assert.equal(f.counts.pushes, pushes);
+  // One key per pull request: reusing a's key for another pull request is refused.
+  assert.equal((await send(c, keys[0])).status, 409);
+  assert.equal(f.sql.prepare("SELECT count(*) AS n FROM installation_audit WHERE action='agentic_mode.land'").get().n >= 3, true);
+});
+
+test('a writer reverts a landing from the inbox: confirmed by key and landed commit, as themselves, once; conflicts refuse it; audited', { skip }, async t => {
+  const f = await fixture(t);
+  f.settings();
+  const a = f.pull('feature-a', { 'docs/guide.md': 'guide v2\n', 'src/a.js': 'a\n' }, { title: 'Guide and a' });
+  const landed = (await f.land(a.number, 'bob', a.head)).operation;
+  assert.equal(landed.state, 'LANDED');
+  const unrelated = f.commit(f.head('main'), { 'src/other.js': 'other\n' }, 'Unrelated');
+  f.ref('main', unrelated);
+  const revert = (body = {}, who = 'bob') => f.call('/native/land', { action: 'revert', id: landed.id, number: a.number, landedCommitId: landed.landedCommitId, idempotencyKey: crypto.randomUUID(), ...body }, who);
+  // Readers may not; the request names the exact landing and a key; unknown fields are refused.
+  assert.equal((await revert({}, 'carol')).status, 403);
+  assert.equal((await revert({ landedCommitId: 'f'.repeat(40) })).status, 409);
+  assert.equal((await revert({ idempotencyKey: undefined })).status, 400);
+  assert.equal((await revert({ extra: true })).status, 400);
+  assert.equal((await revert({ id: crypto.randomUUID() })).status, 404);
+  assert.equal((await f.call('/native/land/read', { action: 'revert' })).status, 400);
+  assert.equal(f.head('main'), unrelated);
+  const idempotencyKey = crypto.randomUUID(), done = await revert({ idempotencyKey, reason: 'Broke the docs build.' });
+  assert.equal(done.status, 200, JSON.stringify(done));
+  assert.equal(done.phase, 'REVERTED'); assert.equal(done.operation.state, 'REVERTED'); assert.equal(done.operation.revertCommitId, f.head('main'));
+  assert.equal(done.revert.state, 'applied'); assert.equal(done.revert.trigger, 'person'); assert.equal(done.revert.actor, 'bob');
+  // The inverse merge onto the current tip, as `git revert -m 1`, committed as the person.
+  assert.equal(f.g.text(['log', '-1', '--format=%P|%an <%ae>|%B', 'main']),
+    `${unrelated}|Bob <bob@example.com>|Revert "Guide and a" (#1)\n\nBroke the docs build.\n\nReverted by @bob from the agentic inbox.\n\nThis reverts commit ${landed.landedCommitId}.`);
+  assert.equal(f.g.text(['rev-parse', 'main^{tree}']), f.g.text(['merge-tree', '--write-tree', '--merge-base=' + landed.landedCommitId, unrelated, landed.landedCommitId + '^1']));
+  assert.equal(f.g.text(['show', 'main:docs/guide.md']), 'guide'); assert.equal(f.g.text(['show', 'main:src/other.js']), 'other');
+  f.g.run(['fsck', '--strict', '--full', '--no-dangling']);
+  // The journal names bob; a comment on the pull request; a push intake for the revert; the audit records it.
+  assert.equal(f.sql.prepare('SELECT user_id FROM git_operations WHERE new_sha=?').get(done.operation.revertCommitId).user_id, 2);
+  assert.match(f.comments(a.number).at(-1).body, /^@bob reverted this pull request on `main` with [0-9a-f]{12} from the agentic inbox\.\n\n> Broke the docs build\.$/);
+  assert.ok(f.sql.prepare("SELECT 1 FROM pipeline_intake WHERE json_extract(payload,'$.after')=?").get(done.operation.revertCommitId));
+  const audit = f.sql.prepare("SELECT subject,after,json_extract(client,'$.outcome') AS outcome FROM installation_audit WHERE action='agentic_mode.revert_landing' AND json_extract(client,'$.outcome')='success'").get();
+  assert.equal(audit.subject, '#1'); assert.equal(JSON.parse(audit.after).reason, 'Broke the docs build.');
+  // A replay answers the same revert and sends nothing; another request is refused; the automatic revert no longer applies.
+  const pushes = f.counts.pushes;
+  assert.equal((await revert({ idempotencyKey, reason: 'Broke the docs build.' })).operation.revertCommitId, done.operation.revertCommitId);
+  const twice = await revert();
+  assert.equal(twice.status, 412); assert.match(twice.message, /already reverted/);
+  f.run(landed.landedCommitId, 'FAILURE');
+  await afterPipelineRun(f.env, { repository_id: 1, commit_id: landed.landedCommitId }, withArtifact);
+  assert.equal(f.counts.pushes, pushes);
+
+  // A revert that conflicts with a later change stays LANDED, says which paths, and gives the post-landing check back.
+  const b = f.pull('feature-b', { 'docs/b.md': 'b\n' }, { title: 'Doc b' });
+  const second = (await f.land(b.number, 'bob', b.head)).operation;
+  f.ref('main', f.commit(f.head('main'), { 'docs/b.md': 'b edited\n' }, 'Edit b'));
+  const tip = f.head('main');
+  const refused = await f.call('/native/land', { action: 'revert', id: second.id, number: b.number, landedCommitId: second.landedCommitId, idempotencyKey: crypto.randomUUID() });
+  assert.equal(refused.status, 200); assert.equal(refused.phase, 'REVERT_REFUSED'); assert.equal(refused.operation.state, 'LANDED');
+  assert.deepEqual([refused.revert.state, refused.revert.conflicts], ['conflict', [{ path: 'docs/b.md', reason: 'deleted_by_them' }]]);
+  assert.equal(f.head('main'), tip); assert.equal(refused.operation.detail.postLand, undefined);
+  assert.equal(f.sql.prepare("SELECT json_extract(client,'$.outcome') AS outcome FROM installation_audit WHERE action='agentic_mode.revert_landing' ORDER BY id DESC").get().outcome, 'refused');
+  // After a conflict a person may try again (it conflicts again).
+  assert.equal((await f.call('/native/land', { action: 'revert', id: second.id, number: b.number, landedCommitId: second.landedCommitId, idempotencyKey: crypto.randomUUID() })).phase, 'REVERT_REFUSED');
+});
+
+test('a policy landing reverted by a person; an automatic revert in flight refuses a person, and a person in flight keeps the automatic one out', { skip }, async t => {
+  const f = await fixture(t);
+  f.settings({ landWithoutPerson: 1 });
+  const docs = f.pull('docs-a', { 'docs/a.md': 'a\n' }, { title: 'Doc a' });
+  f.run(docs.head, 'SUCCESS', 'CI', 'pull_request');
+  await autoLand(f.env, 1, { withArtifact });
+  const [op] = f.ops();
+  assert.equal(op.trigger, 'policy');
+  // An automatic revert that claimed the landing a moment ago and has not recorded an attempt: a person waits.
+  f.sql.prepare("UPDATE land_operations SET detail=json_set(detail,'$.postLand',json(?)),updated_at=? WHERE id=?").run(JSON.stringify({ verdict: 'failed', checks: ['CI'], action: 'revert' }), new Date().toISOString(), op.id);
+  const request = { action: 'revert', id: op.id, number: docs.number, landedCommitId: op.landed_commit_id };
+  const busy = await f.call('/native/land', { ...request, idempotencyKey: crypto.randomUUID() });
+  assert.equal(busy.status, 412); assert.match(busy.message, /already in progress/);
+  // Ten minutes on without an attempt, the claim no longer holds a person back.
+  f.sql.prepare("UPDATE land_operations SET updated_at='2026-01-01T00:00:00Z' WHERE id=?").run(op.id);
+  const done = await f.call('/native/land', { ...request, idempotencyKey: crypto.randomUUID() });
+  assert.equal(done.phase, 'REVERTED', JSON.stringify(done));
+  assert.equal(f.g.text(['log', '-1', '--format=%an', 'main']), 'Bob');
+  assert.equal(f.sql.prepare("SELECT count(*) AS n FROM discussions WHERE kind='issue'").get().n, 0);
+  // A person's claim also takes the post-landing check, so checkLanded cannot start an automatic revert alongside it.
+  const later = f.pull('docs-b', { 'docs/b.md': 'b\n' });
+  f.run(later.head, 'SUCCESS', 'CI', 'pull_request');
+  await autoLand(f.env, 1, { withArtifact });
+  const second = f.ops().find(o => o.number === later.number);
+  f.sql.prepare("UPDATE land_operations SET detail=json_set(detail,'$.revert',json(?),'$.postLand',json(?)) WHERE id=?").run(JSON.stringify({ state: 'requested', trigger: 'person', actorId: '2', actor: 'bob', key: crypto.randomUUID() }), JSON.stringify({ verdict: 'person_revert', checks: [] }), second.id);
+  f.run(second.landed_commit_id, 'FAILURE');
+  assert.equal(await checkLanded(f.env, f.ops().find(o => o.id === second.id), { withArtifact }), 'claimed');
+  // A person's revert interrupted after it was sent is settled by maintenance from the branch fence's journal, and told as theirs.
+  const sent = crypto.randomUUID(), revertCommit = 'e'.repeat(40);
+  f.sql.prepare("INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) VALUES(?,1,2,'refs/heads/main',?,?,'APPLIED','t')").run(sent, f.head('main'), revertCommit);
+  f.sql.prepare("UPDATE land_operations SET detail=json_set(detail,'$.revert',json(?)),updated_at='2026-01-01T00:00:00Z' WHERE id=?")
+    .run(JSON.stringify({ state: 'sending', trigger: 'person', actorId: '2', actor: 'bob', key: crypto.randomUUID(), operationId: sent, commitId: revertCommit }), second.id);
+  await sweepLanding(f.env, withArtifact);
+  const settled = f.ops().find(o => o.id === second.id);
+  assert.deepEqual([settled.state, settled.revert_commit_id, settled.detail.revert.state], ['REVERTED', revertCommit, 'applied']);
+  assert.match(f.comments(later.number).at(-1).body, /^@bob reverted this pull request on `main` with eeeeeeeeeeee from the agentic inbox\.$/);
+  assert.equal(f.sql.prepare("SELECT count(*) AS n FROM discussions WHERE kind='issue'").get().n, 0);
+});
+
+// ---------- agent branches ----------
+test('agent branch patterns: golf-agent/* and token patterns, never * and never the default branch', () => {
+  assert.equal(patternMatches('golf-agent/*', 'golf-agent/1a2b3c4d'), true); assert.equal(patternMatches('agent/*', 'agent'), false);
+  assert.equal(patternMatches('agent/fix', 'agent/fix'), true); assert.equal(patternMatches('*', 'anything'), false); assert.equal(patternMatches('', 'x'), false);
+  assert.equal(isAgentBranch(['golf-agent/*', 'main'], 'main', 'main'), false); assert.equal(isAgentBranch(['golf-agent/*'], 'feature', 'main'), false);
+  assert.equal(isAgentBranch(['golf-agent/*', 'agent/*'], 'agent/x', 'main'), true);
+});
+
+test('after landing, merging or closing, Golf deletes the agent head branch through the branch fence and audits it; other branches stay', { skip }, async t => {
+  const f = await fixture(t);
+  f.settings();
+  const exists = name => Boolean(f.head(name));
+  // A token whose branch pattern is agent/*; another whose pattern is * marks nothing.
+  const token = (pattern, id) => f.sql.prepare("INSERT INTO api_tokens(id,digest,user_id,label,repositories,permission,branch_pattern,identity_version,created_at,expires_at) VALUES(?,?,2,'agent',NULL,'write',?,0,0,3600)").run(id, 'd' + id, pattern);
+  token('agent/*', 1); token('*', 2);
+  assert.deepEqual((await f.call('/native/agent-inbox/read', { action: 'branches' })).patterns, ['golf-agent/*', 'agent/*']);
+  assert.equal((await f.call('/native/agent-inbox/read', { action: 'branches' })).cleanup, true);
+  // Landed through the land queue: golf-agent/… and agent/… are deleted, feature-x stays.
+  const task = f.pull('golf-agent/1a2b3c4d', { 'src/task.js': 'task\n' }), viaToken = f.pull('agent/fix-1', { 'src/token.js': 'token\n' }), person = f.pull('feature-x', { 'src/x.js': 'x\n' });
+  for (const pull of [task, viaToken, person]) assert.equal((await f.land(pull.number, 'bob', pull.head)).operation.state, 'LANDED');
+  assert.deepEqual([exists('golf-agent/1a2b3c4d'), exists('agent/fix-1'), exists('feature-x')], [false, false, true]);
+  const deletions = f.sql.prepare("SELECT subject,after,actor_id,json_extract(client,'$.via') AS via FROM installation_audit WHERE action='agentic_mode.branch_delete' ORDER BY id").all();
+  assert.deepEqual(deletions.map(row => [row.subject, row.actor_id, row.via]), [['golf-agent/1a2b3c4d', 0, 'agentic-mode'], ['agent/fix-1', 0, 'agentic-mode']]);
+  assert.deepEqual(JSON.parse(deletions[0].after), { branch: 'golf-agent/1a2b3c4d', number: task.number, why: 'landed', headCommitId: task.head, principal: 'alice' });
+  // Through the journal and the fence: an APPLIED git operation to zero under the administrator, the fence released, no pipeline intake for it.
+  const journal = f.sql.prepare("SELECT user_id,old_sha,new_sha,state FROM git_operations WHERE ref='refs/heads/golf-agent/1a2b3c4d'").get();
+  assert.deepEqual({ ...journal }, { user_id: 1, old_sha: task.head, new_sha: '0'.repeat(40), state: 'APPLIED' });
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM git_ref_writes').get().n, 0);
+  assert.equal(f.sql.prepare("SELECT count(*) AS n FROM pipeline_intake WHERE json_extract(payload,'$.ref')='refs/heads/golf-agent/1a2b3c4d'").get().n, 0);
+
+  // Closed through the API: deleted at the head it had when it was closed.
+  const closing = f.pull('golf-agent/2b3c4d5e', { 'src/closed.js': 'closed\n' });
+  const pr = (await f.call('/rpc/golf.v1.RepositoryService/GetPullRequest', { number: closing.number })).pullRequest;
+  const closed = await f.call('/rpc/golf.v1.RepositoryService/UpdatePullRequest', { number: closing.number, pullRequestId: pr.id, expectedRevision: pr.revision, state: 'ISSUE_STATE_CLOSED', idempotencyKey: crypto.randomUUID() }, 'alice');
+  assert.equal(closed.status, 200, closed.message);
+  assert.equal(exists('golf-agent/2b3c4d5e'), false);
+  assert.equal(JSON.parse(f.sql.prepare("SELECT after FROM installation_audit WHERE subject='golf-agent/2b3c4d5e'").get().after).why, 'closed');
+
+  // Merged with the Merge button (the standard native merge): deleted too.
+  const merging = f.pull('golf-agent/3c4d5e6f', { 'src/merged.js': 'merged\n' });
+  const current = (await f.call('/rpc/golf.v1.RepositoryService/GetPullRequest', { number: merging.number })).pullRequest;
+  const merged = await f.call('/rpc/golf.v1.StandardPullMergeService/SubmitStandardPullMerge', { selection: { repository: key, repositoryId: '1', pullRequestId: current.id, number: merging.number,
+    baseCommitId: current.base.commitId, headCommitId: current.head.commitId }, ownerId: '1', expectedPullRevision: current.revision, operationId: crypto.randomUUID(), sourceRef: 'golf-agent/3c4d5e6f', targetRef: 'main' }, 'alice');
+  assert.equal(merged.operation?.phase, 'STANDARD_PULL_MERGE_PHASE_SUCCEEDED', JSON.stringify(merged));
+  assert.equal(exists('golf-agent/3c4d5e6f'), false);
+  f.g.run(['fsck', '--strict', '--full', '--no-dangling']);
+});
+
+test('an agent branch is kept when its head moved, another open pull request uses it, a rule covers it, a task writes to it or agentic mode is off', { skip }, async t => {
+  const f = await fixture(t);
+  f.settings();
+  const exists = name => Boolean(f.head(name));
+  const pullId = number => f.sql.prepare('SELECT p.id FROM pull_requests p JOIN discussions d ON d.id=p.discussion_id WHERE d.number=?').get(number).id;
+  const close = number => f.sql.prepare("UPDATE discussions SET state='CLOSED' WHERE number=?").run(number);
+  const cleanup = (pull, headCommitId = pull.head) => cleanUpAgentBranch(f.env, { repositoryId: 1, pullRequestId: pullId(pull.number), headCommitId, why: 'closed' }, { withArtifact, pause: async () => {} });
+  // Still open: kept.
+  const open = f.pull('golf-agent/00000001', { 'a.txt': 'a\n' });
+  assert.match((await cleanup(open)).reason, /is open/);
+  // The head moved after it was closed (an agent pushed again): kept.
+  const moved = f.pull('golf-agent/00000002', { 'b.txt': 'b\n' });
+  close(moved.number);
+  f.ref('golf-agent/00000002', f.commit(moved.head, { 'b.txt': 'b2\n' }, 'Again'));
+  assert.match((await cleanup(moved)).reason, /moved to/);
+  assert.equal(exists('golf-agent/00000002'), true);
+  // Another open pull request uses it as its head or its base: kept.
+  const shared = f.pull('golf-agent/00000003', { 'c.txt': 'c\n' });
+  f.pull('golf-agent/00000003', { 'c.txt': 'c\n' }, { from: f.head('main') });
+  f.ref('golf-agent/00000003', shared.head);
+  close(shared.number);
+  assert.match((await cleanup(shared)).reason, /another open pull request/);
+  const stacked = f.pull('golf-agent/00000004', { 'd.txt': 'd\n' });
+  const above = f.pull('topic-above', { 'e.txt': 'e\n' }, { from: stacked.head });
+  f.sql.prepare("UPDATE pull_requests SET base_branch='golf-agent/00000004' WHERE head_branch='topic-above'").run();
+  close(stacked.number);
+  assert.match((await cleanup(stacked)).reason, /another open pull request/);
+  assert.equal(exists('golf-agent/00000004'), true); assert.ok(above.number);
+  // An unfinished agent task writes to it: kept.
+  const tasked = f.pull('golf-agent/00000005', { 'f.txt': 'f\n' });
+  close(tasked.number);
+  f.sql.exec(`INSERT INTO agent_hosts(id,uuid,name,scope,scope_id,registered_by,credential_digest,created_at) VALUES(1,'u','laptop','personal','1',1,'x','t')`);
+  f.sql.prepare(`INSERT INTO agent_tasks(id,repository_id,artifact_name,host_id,tool,requested_by,target_kind,target_number,target_title,base_ref,base_commit,branch,prompt,state,deadline,idempotency_key,created_at,updated_at)
+    VALUES('00000005-0000-4000-8000-000000000000',1,?,1,'claude',1,'issue',1,'t','refs/heads/main',?,'golf-agent/00000005','p','RUNNING',0,'k','t','t')`).run(artifact, f.base);
+  assert.match((await cleanup(tasked)).reason, /agent task writes/);
+  // A branch rule covers it: kept.
+  const ruled = f.pull('golf-agent/00000006', { 'g.txt': 'g\n' });
+  close(ruled.number);
+  f.sql.prepare("INSERT INTO repository_rules(repository_id,artifact_name,version,branches,tags,next_tag) VALUES(1,?,1,?,'[]',1)").run(artifact, JSON.stringify([{ ruleName: 'golf-agent/00000006' }]));
+  assert.match((await cleanup(ruled)).reason, /branch rule/);
+  // A non-agent branch is never deleted, even closed at its head.
+  const plain = f.pull('feature-plain', { 'h.txt': 'h\n' });
+  close(plain.number);
+  assert.equal((await cleanup(plain)).reason, 'not an agent branch');
+  // Agentic mode off (or turned off by a policy): kept.
+  const off = f.pull('golf-agent/00000007', { 'i.txt': 'i\n' });
+  close(off.number);
+  f.settings({ enabled: 0 });
+  assert.match((await cleanup(off)).reason, /agentic mode is off/);
+  f.settings();
+  f.sql.exec("INSERT INTO feature_policies(scope,scope_id,feature,mode,version,updated_by,updated_at) VALUES('installation','','agentic-mode','DISABLED',1,1,'t')");
+  assert.match((await cleanup(off)).reason, /agentic mode is off/);
+  f.sql.exec('DELETE FROM feature_policies');
+  // An administrator who lost write access authorizes nothing.
+  f.sql.exec("UPDATE grants SET role='read' WHERE user_id=1");
+  assert.match((await cleanup(off)).reason, /no longer has write access/);
+  f.sql.exec("UPDATE grants SET role='admin' WHERE user_id=1");
+  for (const name of ['golf-agent/00000001', 'golf-agent/00000003', 'golf-agent/00000005', 'golf-agent/00000006', 'feature-plain', 'golf-agent/00000007']) assert.equal(exists(name), true, name);
+  assert.equal(f.sql.prepare("SELECT count(*) AS n FROM installation_audit WHERE action='agentic_mode.branch_delete'").get().n, 0);
+  // Once nothing holds it, the same call deletes it, and a second call finds it gone.
+  assert.deepEqual(await cleanup(off), { deleted: true, reason: '', operationId: f.sql.prepare("SELECT id FROM git_operations WHERE ref='refs/heads/golf-agent/00000007'").get().id });
+  assert.equal(exists('golf-agent/00000007'), false);
+  assert.match((await cleanup(off)).reason, /no longer exists/);
+  // A delete request whose guard no longer holds (another pull request opened from the branch in between) sends nothing.
+  const raced = f.pull('golf-agent/00000008', { 'j.txt': 'j\n' });
+  close(raced.number);
+  f.hooks.afterAdvertise = () => { f.hooks.afterAdvertise = null; f.sql.prepare("UPDATE discussions SET state='OPEN' WHERE number=?").run(raced.number); };
+  const pushes = f.counts.pushes;
+  assert.match((await cleanup(raced)).reason, /came into use/);
+  assert.equal(f.counts.pushes, pushes); assert.equal(exists('golf-agent/00000008'), true);
 });

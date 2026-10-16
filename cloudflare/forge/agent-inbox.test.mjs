@@ -86,7 +86,12 @@ test('sections: agent tasks in progress, pull requests ready to land or needing 
   assert.deepEqual(value.readyToLand, []);
   assert.deepEqual(value.needsPerson, [{ number: 14, title: 'Feature work', author: 'alice', pullRequestId: '1', landing: null, origin: 'person', headCommitId: feature, baseCommitId: base,
     decision: 'needs_person', risk: 'normal', reasons: ['changes outside the low-risk paths need approval from a writer who is not the author and not an agent'], sensitivePaths: [], conflicts: [],
-    mergeable: true, changedPathCount: 1, checks: { passed: 0, pending: 0, failed: 0 }, intent: null }]);
+    mergeable: true, changedPathCount: 1, checks: { passed: 0, pending: 0, failed: 0 }, intent: null, canLand: false }]);
+  // Approval is all it needs: the author may not land it, another writer may (their land request is the approval), a reader may not.
+  assert.deepEqual(value.actions, { land: true, revert: true, reason: '' });
+  const asBob = await f.inbox({}, 'bob'), asCarol = await f.inbox({}, 'carol');
+  assert.equal(asBob.needsPerson[0].canLand, true); assert.equal(asCarol.needsPerson[0].canLand, false);
+  assert.deepEqual(asCarol.actions, { land: false, revert: false, reason: 'Landing and reverting need write or admin access to this repository.' });
   // Low-risk and landing without a person: waiting for checks, then ready to land; a failing check blocks it.
   await f.save({ lowRiskPaths: ['*.txt'], landWithoutPerson: true });
   value = await f.inbox();

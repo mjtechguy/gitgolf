@@ -349,7 +349,20 @@ writer in a new `git-objects.mjs`.
 
 ### AM-5 Agentic inbox and intent summaries
 
-**Status (2026-10-15): first slice done, hosted walkthrough recorded.** #101 (inbox, AI intent summaries, schema 43); on hosted the inbox sorted a sensitive PR into Needs a person and listed 16 landings with the policy revert, and an AI intent summary was generated and shown marked AI-written. Not yet: revert action in the inbox, batch approval, hiding agent branches, all-layout browser coverage.
+**Status (2026-10-16): items 1–4 built and tested locally; not deployed.**
+- **First slice (#101, schema 43), hosted-verified 2026-10-15:** the inbox and AI intent summaries. On hosted the inbox sorted a sensitive PR into Needs a person, listed 16 landings with the policy revert, and showed an AI intent summary marked AI-written.
+- **Second slice (no migration), local only:**
+  - batch approve and land through `POST /native/land`, one request per pull request with its own key and expected head;
+  - a person's revert from Landed (`action: 'revert'`), confirmed and audited;
+  - agent branches hidden from the branch list, with a toggle;
+  - agent branches deleted through the branch fence after their pull request lands, merges or closes;
+  - the browser spec in all 9 layouts.
+
+  See `docs/AGENTIC_MODE.md` and `docs/IMPLEMENTATION_STATUS.md`.
+- **Open:**
+  - a hosted walkthrough of the second slice;
+  - hiding agent branches in the branch picker;
+  - filtering agent branches on the server, not only on loaded pages.
 
 1. Repository page `/:owner/:repo/agents` becomes the inbox. It is linked from the
    repository navigation when agentic mode is on. Sections, each in the shared

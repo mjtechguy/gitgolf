@@ -1656,6 +1656,20 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .agent-inbox-reasons code { margin-right:6px; overflow-wrap:anywhere; }
 .agent-inbox-results { margin:8px 16px; padding-left:18px; font-size:.8125rem; color:var(--muted); }
 .agent-inbox-results li.error { color:var(--error); }
+.agent-inbox-results li { margin:2px 0; overflow-wrap:anywhere; }
+.agent-inbox-results li.landed strong { color:var(--accent); }
+.agent-inbox-results li:is(.queued,.needs_rebase,.unknown) strong { color:var(--warning); }
+.agent-inbox-results li:is(.blocked,.failed,.refused) strong { color:var(--error); }
+.agent-inbox-confirm { border-top:1px solid var(--line); }
+.agent-inbox-confirm h4 { margin:0 0 8px; font-size:.875rem; }
+.agent-inbox-confirm .policy-choice input { width:auto; }
+.agent-inbox-confirm > p:not(.field-help,.error) { margin:0 0 8px; }
+.agent-inbox-selection { margin:0 0 12px; padding-left:18px; }
+.agent-inbox-selection li { margin:2px 0; overflow-wrap:anywhere; }
+.agent-inbox-note { display:block; min-width:180px; max-width:360px; color:var(--muted); font-size:.8125rem; }
+.ref-agent-toggle { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; padding:8px var(--panel-padding); border-bottom:1px solid var(--line); }
+.ref-agent-toggle .checkbox-field { margin:0; }
+.ref-agent-toggle .field-help { margin:0; }
 .agent-inbox-intent h4 { margin:10px 0 4px; font-size:.8125rem; color:var(--muted); }
 .agent-inbox-intent ul { margin:0; padding-left:18px; }
 .agent-inbox-intent li { margin:2px 0; overflow-wrap:anywhere; }
