@@ -52,6 +52,7 @@ async function backend(page: Page, { ready = true } = {}) {
     if (body.action === 'test') { Object.assign(find(), { probe: probe({ state: 'RUNNING', startedAt: at(0) }) }); return json({ host: find() }); }
     if (body.action === 'trustHostKey') {
       const h = find();
+      if (body.expectedVersion !== h.version) return json({ code: 'failed_precondition', message: 'The SSH host changed; refresh before confirming its host key.' }, 412);
       if (body.fingerprint !== h.probe.offered?.fingerprint) return json({ code: 'failed_precondition', message: 'That fingerprint is not the one the latest connection test was offered.' }, 412);
       Object.assign(h, { hostKey: { pinned: true, fingerprint, type: 'ssh-ed25519', pinnedAt: at(0), pinnedBy: 'alex' }, version: h.version + 1 });
       return json({ host: h });
@@ -89,7 +90,7 @@ test('SSH hosts lead with the inventory; Add opens the form, shows Golf’s key 
   await expect(review).toContainText(fingerprint);
   await expect(review).toContainText('ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub');
   await review.getByRole('button', { name: 'Trust this host key' }).click();
-  await expect.poll(() => state.calls.find(call => call.action === 'trustHostKey')).toMatchObject({ id: '9', fingerprint });
+  await expect.poll(() => state.calls.find(call => call.action === 'trustHostKey')).toMatchObject({ id: '9', expectedVersion: 1, fingerprint });
   await expect.poll(() => state.calls.filter(call => call.action === 'test').length).toBe(2);
   await page.getByRole('button', { name: 'Refresh SSH hosts' }).click();
   await expect(row).toContainText('Ready');

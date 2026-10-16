@@ -80,7 +80,9 @@ uses the tools the last proven connection test reported.
   4. From then on every connection must present exactly that key. Golf asks the server
      for that key type, and a different key fails before authentication and before
      anything is sent.
-  5. Changing the address, port or reach forgets the pin.
+  5. Changing the address, port or reach forgets the pin and the test. A confirm is
+     fenced on the host version and on the test result it read, so a confirm that
+     started before a move, a rotation or a new test pins nothing.
 - **The task token never reaches the SSH host.**
   - The container clones with the token over HTTPS, exactly as the outbound host does.
   - It sends the host a working copy with `.git` but no remote, plus the prompt.
@@ -252,7 +254,8 @@ members may `list` without the public keys.
     clears the reported tools and the test.
 - `test` `{ id }` → `{ host }` with `probe.state` `RUNNING`. Only one test runs at a
   time (409).
-- `trustHostKey` `{ id, fingerprint }` → `{ host }`.
+- `trustHostKey` `{ id, expectedVersion, fingerprint }` → `{ host }`. It is refused (412) when the version or the
+  latest test result changed after the review.
 - `rotateKey` `{ id, expectedVersion }` → `{ host, publicKey, authorizedKey, installCommand }`.
 - `delete` `{ id }`: erases the `ssh_hosts` row (key and secrets), marks the agent host
   deleted, cancels queued tasks, and tells running tasks to stop.
