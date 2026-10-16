@@ -9,6 +9,7 @@ import { nativeAPI } from './NativeForge';
 import { repositoryOptions } from './navigation';
 import { holdErrorOnFocus, Loading, PanelError, privateQuery } from './RepositoryUI';
 import { ResourceError } from './ErrorScreens';
+import { ContributionGraph } from './ContributionGraph';
 
 const MarkdownBody = lazy(() => import('./RepositoryContent').then(m => ({ default: m.MarkdownBody })));
 type Repository = { id: string; name: string; owner: string; fullName: string; description: string; topics: string[]; updatedAt: string };
@@ -55,6 +56,7 @@ export function PublicOwnerProfile({ owner, userId }: { owner: string; userId: s
   </aside><div className="page-stack">{editing && value.canEdit ? <ProfileEditor key={value.revision} value={value} onSaved={profile => { cache.setQueryData(key, profile); setEditing(false); }} onCancel={() => { setEditing(false); void query.refetch(); }} /> : <>
     {value.readme ? <section className="browser-panel credential-form-content"><h2>README</h2><Suspense fallback={<Loading label="Opening profile README…" />}><MarkdownBody text={value.readme} label={`${owner} profile README`} /></Suspense></section> : null}
     {value.pinnedRepositories.length ? <section className="page-stack"><h2>Pinned repositories</h2><RepositoryList repositories={value.pinnedRepositories} pinned /></section> : null}
+    {value.kind === 'PERSONAL' && userId !== 'anonymous' ? <ContributionGraph owner={value.slug} userId={userId} /> : null}
     <PublicDiscovery key={owner} owner={owner} /></>}
   </div></div></>;
 }

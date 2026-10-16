@@ -29,6 +29,7 @@ import { afterPipelineRun, sweepLanding } from './land-queue.mjs';
 import { AgentBudgets, chargeBudget as chargeAgentBudget } from './agent-budgets.mjs';
 import { sweepAutomations, inferAutomationRuns } from './automations.mjs';
 import { sweepSSHHosts } from './ssh-hosts.mjs';
+import { sweepContributions } from './contributions.mjs';
 // SSH host tasks and connection tests (docs/SSH_HOSTS.md): a container Durable Object, used only where deploy allocates it.
 export { SSHAgentTask } from './ssh-task.mjs';
 
@@ -372,7 +373,9 @@ async function maintain(env, exports, owner) {
           settleRefWrites(pipelines || env, (await import('./core.mjs')).withArtifact),
           sweepLanding({ ...(pipelines || env), notifyLanding: id => owner.activityChanged(String(id), ['source', 'pulls', 'issues']).catch(() => {}) }, (await import('./core.mjs')).withArtifact),
           // Automations: due schedules and stale runs (Cron Triggers do not fire on this account; the alarm runs this stage), then a pass.
-          sweepAutomations(env).then(async result => { if (result.pending) await owner.automations(); return result; })]);
+          sweepAutomations(env).then(async result => { if (result.pending) await owner.automations(); return result; }),
+          // Contribution graphs: discussion events, agent tasks and proposals since each cursor, then bounded Git history walks.
+          sweepContributions(env, (await import('./core.mjs')).withArtifact)]);
         for (const result of settled) if (result.status === 'rejected') throw result.reason;
         return { ...settled[0].value, processed: settled.slice(1).reduce((sum, result) => sum + result.value.processed, 0) }; }],
 

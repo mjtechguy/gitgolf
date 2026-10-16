@@ -44,6 +44,89 @@
 - The branch picker still lists agent branches. Hiding works on loaded pages only.
 - Deletion is best-effort after the response, with no retry sweep.
 - Closing an unmerged agent pull request deletes its branch; the audit entry keeps the head commit.
+## 2026-10-16 — Contribution graphs and AI impact, CG-1 and CG-2 (schema 53, not on hosted)
+
+[`AGENTS_AND_AUTOMATIONS_PLAN.md`](AGENTS_AND_AUTOMATIONS_PLAN.md), "Contribution graphs and AI impact". Built and tested locally. Not
+deployed: migration 0053 is not applied on the hosted demo.
+
+**Built:**
+- **Data (schema 53):**
+  - `contribution_days`: the daily rollup, keyed by (actor, day, repository, kind, AI tier).
+  - `contribution_events`: the ledger, one row per contribution, keyed by its source, so retries and repeated sweeps count nothing twice.
+  - `contribution_git`: each repository's Git walk.
+  - `contribution_cursors`: each sweep's position.
+  - `contribution_settings`: the privacy choice.
+  - Indexes for the sweeps' reads.
+- **Writers** (`src/contributions.mjs`):
+  - **Collaboration** (core handlers, Workspace): after an issue, pull request, comment, review, close, merge or published review draft,
+    that discussion's last day of events. One batch, after the response is decided.
+  - **Agent tasks:** when a task finishes.
+  - **Pushes, Source API commits and agent task pushes** (`finishRefWrite`, in the stateless Worker and the Workspace) and maintenance
+    settlement: a confirmed write to the default branch marks the repository's Git walk due. One upsert; a failure never fails the write.
+- **Maintenance** (the `indexes` stage):
+  - **The sweep** reads discussion events, finished agent tasks and succeeded container proposals since its cursors, behind a two-minute
+    lag. It uses the writers' keys, so landings by policy and merges settled later are counted once.
+  - **The Git backfill** walks first-parent history of each default branch through Artifacts `log`/`readCommit`, never storage writes.
+    Each pass enrols 20 repositories and walks at most 3 of them, 200 commits each (a walk from the tip reads 20 first), with 40 extra
+    commit reads. It resumes from where it stopped, stops at the first commit already counted, and re-checks each repository daily.
+- **AI tiers:**
+  - **Golf agent:** pull requests opened from agent tasks, landings by the agentic mode policy, agent task and container proposals,
+    agent review tasks, commits by Golf's agentic identity or an agent task.
+  - **AI-assisted:** a person merged an agent task's pull request (also counted as a proposal accepted).
+  - **Declared:** a `Co-Authored-By` trailer naming Claude, Copilot, Codex, Cursor, Gemini and other known tools or their domains.
+  - **Unlabelled:** everything else.
+- **Reads:** `POST /native/contributions/read`, served by the stateless Worker (`statelessRoute` `'read'`) and overlapping reads in the
+  Workspace.
+  - **`person`:** for any signed-in person. Counts only for repositories the viewer can read (grant, or public on a public installation).
+    Activity in other repositories appears only as anonymous counts, for the person themself or when they chose to show it.
+  - **`impact`:** for operations administrators, checked before and after the reads. Installation-wide anonymous aggregates; no
+    repository or person is named.
+  - **Settings:** `POST /native/contributions` (`settings`) changes the privacy choice: self only, through Access, version-fenced.
+- **Feature policy:** `contribution-graphs` (installation, organization, repository). Off hides counts and keeps them.
+- **UI:**
+  - **Profile heatmap** (`ContributionGraph.tsx`): a 53-week calendar with month and weekday labels, a legend, totals, streaks, a year
+    picker, a per-day panel and a table view. The "Show AI involvement" overlay marks AI-involved days with a second hue and a dot,
+    never replacing the human count, with tier totals and definitions. The private contributions setting shows its value, with Edit
+    (TanStack Form).
+  - **AI impact page** (`/admin/ai-impact`, capability `operations.ai-impact`):
+    - merged pull requests with AI involvement, labelled as a share;
+    - agent proposals and acceptance, landings by policy, reported cost (with how many runs reported one);
+    - an AI activity calendar, contributions by tier, agent tasks, review advice, AI runs and automation runs;
+    - time to merge, labelled "Comparison, not an effect". Nothing estimates time saved or productivity.
+  - Colours follow the dataviz method: one blue ramp in four ordinal steps per mode, validated against each panel surface, and the
+    categorical orange for the overlay, validated against blue in both modes.
+
+**Verified locally:**
+- `node --test cloudflare/forge/*.test.mjs`: 775 tests, 774 pass, 1 skipped. The new `contributions.test.mjs` (11 tests) covers:
+  - stateless routing;
+  - the trailer rules and the 53-week range;
+  - idempotent writers through real CreateIssue, comment and close calls, with replays and a later sweep;
+  - every tier through the sweep (agent proposal merged by a person, policy landing, agent tasks and review tasks, container
+    proposals; excluded events and the lag);
+  - a bounded, resumable backfill of 45 commits in three passes, then a push walking only its three new commits;
+  - a failed Artifacts read leaving walks due;
+  - a real push through receive-pack marking only default-branch writes;
+  - authorization: counts only for repositories the viewer reads, anonymous private counts only by choice, never a private name,
+    settings self-only with a version fence, repository and installation policy, public repositories;
+  - the impact page for administrators only, its aggregates naming nothing, and the comparison label.
+- Web:
+  - `npm run typecheck`, `npm run build` and `npm run build:native` pass.
+  - `node --test web/tests/*.test.ts`: 23 tests, 21 pass. The 2 failures are the known `navigation-cache` and one
+    `runtime-capabilities` test.
+  - Playwright `contribution-graphs.spec.ts`: 5 of 5 pass (the heatmap, overlay, day panel, table and year picker; the privacy
+    setting; a visitor's view; the impact page and its unreadable and off states).
+  - Neighbouring specs (estimated-costs, runner-capacity, feature-policies-native, missing-resource-refetch,
+    native-installation-settings, settings, capabilities, profile-settings): 100 pass, 5 skipped. Two fail (`capabilities.spec.ts`
+    "Manage connections", `profile-settings.spec.ts` personal settings search), in portable account pages this change does not touch.
+
+**Not done:**
+- Hosted deploy and migration 0053. The first passes after it backfill Git history at the paced rate above.
+- CG-3 (per-agent, tool and automation pages) and CG-4 (repository and organization rollups, CSV export).
+- "Your activity" and organization views, CI pass rate of proposals, review findings acted on.
+- Re-attributing commits when a person adds an email later; profile graphs for signed-out visitors.
+- Comments Golf posts itself (landing notes) carry no discussion event and are not counted. Issues and pull requests opened before
+  discussion events existed (schema 14) are not counted.
+- The impact page's time-to-merge read scans merges in the period without an index on their settle time.
 
 
 ## 2026-10-16: Agent pull requests land: 71 of 71 on hosted

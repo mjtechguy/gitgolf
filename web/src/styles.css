@@ -2468,3 +2468,45 @@ pre.automation-output-text { padding:8px 10px; max-height:20rem; overflow:auto; 
 :root:is([data-appearance=classic],[data-appearance=flare]) .error-screen-quip { font-weight:700; text-transform:none; letter-spacing:-.02em; }
 @media(max-width:720px) { .error-screen { margin:16px auto; padding:20px; } .error-screen-actions .button { flex:1 1 auto; } }
 @media(prefers-reduced-motion:reduce) { .error-screen-flight,.error-screen-ball { animation:none; } }
+
+/* Contribution graphs (ContributionGraph.tsx, AiImpact.tsx). Magnitude is one blue ramp in four ordinal steps, each mode's steps validated
+   against the panel surface (light from the 250 step, dark from the 600 step). AI involvement is a second hue and a shape, never the fill. */
+:root { --contribution-0:var(--raised); --contribution-1:#86b6ef; --contribution-2:#5598e7; --contribution-3:#256abf; --contribution-4:#104281; --contribution-marker:#eb6834; }
+:root[data-theme=dark] { --contribution-1:#184f95; --contribution-2:#256abf; --contribution-3:#3987e5; --contribution-4:#86b6ef; --contribution-marker:#d95926; }
+@media(prefers-color-scheme:dark) { :root[data-theme=system] { --contribution-1:#184f95; --contribution-2:#256abf; --contribution-3:#3987e5; --contribution-4:#86b6ef; --contribution-marker:#d95926; } }
+.contribution-body { display:grid; gap:12px; min-width:0; padding:var(--panel-padding); }
+.contribution-body > .summary-band { margin:0; }
+.contribution-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; font-size:.8125rem; }
+.contribution-controls label { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.contribution-figure { min-width:0; margin:0; }
+.contribution-scroll { overflow-x:auto; padding:2px 0; }
+.contribution-calendar { border-collapse:separate; border-spacing:3px; color:var(--muted); font-size:.6875rem; line-height:1; }
+.contribution-calendar th { padding:0 4px 0 0; font-weight:400; text-align:left; white-space:nowrap; }
+.contribution-calendar thead th { position:relative; width:11px; height:14px; padding:0; }
+.contribution-month > span { position:absolute; bottom:2px; left:0; }
+.contribution-calendar td { width:11px; height:11px; padding:0; }
+.contribution-day, .contribution-swatch { position:relative; display:block; width:11px; height:11px; padding:0; border:0; border-radius:2px; background:var(--contribution-0); }
+.contribution-day { cursor:pointer; }
+.contribution-swatch { display:inline-block; }
+:is(.contribution-day,.contribution-swatch)[data-level="1"] { background:var(--contribution-1); }
+:is(.contribution-day,.contribution-swatch)[data-level="2"] { background:var(--contribution-2); }
+:is(.contribution-day,.contribution-swatch)[data-level="3"] { background:var(--contribution-3); }
+:is(.contribution-day,.contribution-swatch)[data-level="4"] { background:var(--contribution-4); }
+.contribution-day:hover, .contribution-day:focus-visible { outline:2px solid var(--text); outline-offset:1px; }
+.contribution-day[aria-pressed=true] { outline:2px solid var(--accent); outline-offset:1px; }
+.contribution-overlay .contribution-day[data-marked=true]::after, .contribution-marker-sample::after { content:""; position:absolute; top:-2px; right:-2px; width:6px; height:6px; border-radius:50%; background:var(--contribution-marker); box-shadow:0 0 0 1.5px var(--panel); }
+.contribution-marker-sample { margin-left:10px; }
+.contribution-caption { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px 16px; margin-top:6px; color:var(--muted); font-size:.75rem; }
+.contribution-legend { display:inline-flex; flex-wrap:wrap; align-items:center; gap:3px; }
+.contribution-legend > span:not(.contribution-swatch) { margin:0 3px; }
+.contribution-tiers { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px 16px; margin:0; }
+.contribution-tiers dt { font-weight:600; }
+.contribution-tiers dd { margin:0; }
+.contribution-tiers dd:not(.field-help) { font-size:1.125rem; font-variant-numeric:tabular-nums; }
+.contribution-day-panel { padding-top:8px; border-top:1px solid var(--line); }
+.contribution-day-panel h3, .contribution-repositories h3 { margin:0 0 4px; font-size:.875rem; }
+.contribution-day-panel p { margin:0 0 4px; }
+.contribution-day-panel ul, .contribution-repositories ul { display:grid; gap:4px; margin:0; padding:0; list-style:none; }
+.contribution-repositories li { display:flex; justify-content:space-between; gap:12px; font-variant-numeric:tabular-nums; }
+.contribution-privacy { display:grid; gap:8px; padding-top:8px; border-top:1px solid var(--line); }
+@media(forced-colors:active) { .contribution-day, .contribution-swatch { border:1px solid CanvasText; } .contribution-day[data-level="0"] { background:Canvas; } }

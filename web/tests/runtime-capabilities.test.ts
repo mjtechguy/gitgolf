@@ -64,6 +64,11 @@ test('estimated costs mount only where the installation reports them',()=>{
  assert.equal(settingForRoute('instance-settings','costs',false),'operations.costs');
 });
 
+test('AI impact mounts only where the installation reports it',()=>{
+ assert.equal(settingForRoute('instance-settings','ai-impact',true),'operations.ai-impact');
+ assert.equal(settingForRoute('instance-settings','ai-impact',false),'operations.ai-impact');
+});
+
 test('runner capacity mounts only where the installation reports it',()=>{
  assert.equal(settingForRoute('instance-settings','capacity',true),'operations.capacity');
  assert.equal(settingForRoute('instance-settings','capacity',false),'operations.capacity');

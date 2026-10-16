@@ -1,6 +1,7 @@
 import { repositoryRefs, recordPipelineIntake, dispatchPipelineIntake } from './actions-intake.mjs';
 import { pipelinePolicy } from './pipeline-policy.mjs';
 import { refusedRef } from './git.mjs';
+import { recordRefWrite } from './contributions.mjs';
 
 // The branch-level push fence (schema 37), shared by /git/ pushes, agent task pushes and the Source API. Pull request merges keep
 // reserving the whole repository through repositories.write_pending; an unsettled write still refuses to start while it is held.
@@ -74,6 +75,8 @@ export async function finishRefWrite(db, { id, repositoryId, applied, refused = 
     db.prepare('UPDATE repositories SET write_pending=NULL WHERE id=? AND write_pending=?').bind(repositoryId, id),
     ...statements,
   ]);
+  // Contribution graphs: a write to the default branch makes its Git walk due (never fails the write).
+  await recordRefWrite(db, id);
 }
 
 // Maintenance: a write still fencing its ref or its repository two minutes on, outside a pull request merge (which settles itself), is
@@ -107,6 +110,7 @@ export async function settleRefWrites(env, withArtifact, limit = 20) {
     ]);
     if (settled.meta.changes !== 1) continue;
     processed++;
+    if (applied) await recordRefWrite(db, op.id);
     console.log(JSON.stringify({ event: 'golf.ref_write_settled', operation: op.id, outcome }));
     // A task branch records no pipeline intake, as its live push does not.
     if (applied && !op.task_id && pipelinePolicy(env) && op.new_sha !== zero) {
