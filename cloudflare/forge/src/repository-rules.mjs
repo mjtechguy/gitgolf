@@ -14,6 +14,8 @@ export function rulePattern(value) {
   return value;
 }
 const matches = (pattern, name) => pattern.endsWith('*') ? name.startsWith(pattern.slice(0,-1)) : name===pattern;
+// Whether any stored tag rule names this tag (release publication refuses such tags).
+export const tagRuled = (tags, name) => tags.some(rule=>matches(rulePattern(rule.namePattern),name));
 function branch(value, createdAt, time) {
   if (!value || typeof value!=='object' || Array.isArray(value)) invalid('Choose a branch lock.');
   const allowed = new Set(['ruleName','priority','requiredApprovals','blockAdminMergeOverride','createdAt','updatedAt']);
