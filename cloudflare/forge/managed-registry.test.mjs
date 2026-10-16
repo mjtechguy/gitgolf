@@ -94,3 +94,28 @@ test('inventory hashes actual manifests, remains repository-bound and checks cur
   f.respond(() => { permitted = false; return Response.json({ name, tags: [] }); });
   await assert.rejects(registry.manage(input));
 });
+
+test('inventory pages past digest aliases and is truncated only when a 21st named tag exists', async () => {
+  const f = fixture(), bytes = JSON.stringify(image), published = 'sha256:' + Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(bytes))).toString('hex');
+  const alias = n => 'sha256:' + n.toString(16).padStart(64, '0'), named = n => 'v' + String(n).padStart(2, '0');
+  const status = async pages => {
+    const lists = [];
+    f.respond(url => {
+      if (!url.includes('/tags/list')) return new Response(bytes, { headers: { 'Docker-Content-Digest': published } });
+      lists.push(new URL(url).searchParams.get('last'));
+      return Response.json({ name, tags: pages[lists.length - 1] || [] });
+    });
+    const result = await managedRegistry(f.env, async () => ({ read: true }), f.provider).manage({ action: 'status', actorId: '1', binding: { repositoryId: '1', name: 'team/project' } });
+    return { tags: result.artifacts.map(a => a.tag), truncated: result.truncated, lists };
+  };
+  const twenty = Array.from({ length: 20 }, (_, i) => named(i)), aliases = (from, length) => Array.from({ length }, (_, i) => alias(from + i));
+  // 20 named tags and one alias fill a page: the next page is read and, being empty, nothing was left out.
+  assert.deepEqual(await status([[...twenty, alias(1)], []]), { tags: twenty, truncated: false, lists: [null, alias(1)] });
+  // A 21st named tag on the next page is what makes the inventory truncated.
+  assert.deepEqual(await status([[...twenty, alias(1)], ['v99']]), { tags: twenty, truncated: true, lists: [null, alias(1)] });
+  // Aliases do not crowd named tags out of the inventory.
+  assert.deepEqual(await status([[named(1), ...aliases(1, 20)], [named(2), named(3)]]).then(r => [r.tags, r.truncated]), [[named(1), named(2), named(3)], false]);
+  // A list that continues past the five-page bound is reported as truncated; a provider that repeats a page stops there.
+  assert.deepEqual(await status([0, 1, 2, 3, 4].map(page => aliases(page * 21 + 1, 21))).then(r => [r.tags, r.truncated, r.lists.length]), [[], true, 5]);
+  assert.deepEqual(await status(Array(5).fill([named(1), ...aliases(1, 20)])).then(r => [r.tags, r.truncated, r.lists.length]), [[named(1)], true, 2]);
+});
