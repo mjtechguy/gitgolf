@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { toJsonString } from '@bufbuild/protobuf';
@@ -107,18 +107,25 @@ function presentation(event:AgentTaskEvent) {
  if(event.kind.startsWith('tool_'))return {label:`${event.toolKind==='commandExecution'?'Command':event.toolKind==='fileChange'?'File change':'Tool'} ${event.kind==='tool_started'?'started':'completed'}`,Icon:event.toolKind==='fileChange'?FilePenLine:Terminal};
  return {label:event.kind==='thread_started'?'Conversation started':event.kind==='turn_started'?'Turn started':'Turn completed',Icon:Workflow};
 }
+const tokenFormat=new Intl.NumberFormat();
+// Up to 513 rows. Reads still hide and replace the whole list, but other updates to the run page and its controls
+// render the panel again; a row renders only when its own event changes.
+const JournalEvent=memo(function JournalEvent({event}:{event:AgentTaskEvent}) {
+ const {label,Icon}=presentation(event);
+ return <li><article className="issue-comment"><header className="issue-comment-heading"><div className="issue-comment-byline"><h3 className="row-actions"><Icon size={15} aria-hidden="true"/>{label}</h3><span><DateLabel value={event.createdAt}/></span>{event.status?<span>· {event.status==='inProgress'?'in progress':event.status}</span>:null}</div></header>
+ {event.text?<MarkdownBody text={event.text} label={label}/>:null}
+ {event.plan.length?<ul className="panel-content" aria-label="Recorded plan">{event.plan.map((step,index)=><li key={index}>{step.step} · {step.status==='inProgress'?'in progress':step.status}</li>)}</ul>:null}
+ {event.totalTokens!==undefined?<p className="panel-footnote">Reported total tokens: {tokenFormat.format(BigInt(event.totalTokens))}</p>:null}
+ {(event.kind==='prompt'||event.kind==='assistant_message'||event.kind==='plan_updated')&&event.bodyState!==Body.AVAILABLE?<p className="panel-footnote">{event.bodyState===Body.WITHHELD?'Content withheld pending screening.':'Message content unavailable.'}</p>:null}
+ </article></li>;
+});
 export function AgentTaskConversation({reader}:{reader:ReturnType<typeof useAgentTaskConversation>}) {
  const {query,ready,paused,body,events,running,pendingRefresh}=reader;
  if(!ready)return null;
  return <section className="browser-panel credential-list-panel" aria-label="Conversation and activity"><div className="browser-panel-heading"><h3><MessageSquare size={18}/>Conversation and activity</h3><div className="row-actions">{running?<button className="icon-button" title={paused?'Resume activity refresh':'Pause activity refresh'} aria-label={paused?'Resume activity refresh':'Pause activity refresh'} aria-pressed={paused} onClick={()=>reader.setPaused(!paused)}>{paused?<Play size={16}/>:<Pause size={16}/>}</button>:null}<button className="icon-button" aria-label="Refresh conversation activity" title="Refresh conversation activity" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></div></div>
  {query.error?<PanelError error={query.error} retry={()=>void query.refetch()}/>:pendingRefresh||query.isPending||query.isFetching?<Loading label="Reading recorded activity…"/>:<>
  <p className="panel-footnote">{body===Body.WITHHELD?'Live activity metadata. Message text and plans remain withheld until credential screening finishes.':body===Body.AVAILABLE?'Screened recorded messages and activity for this attempt.':events.length?'Activity metadata is retained; message content is unavailable for this attempt.':'No conversation journal is available for this attempt.'} {paused?'Activity refresh is paused.':running?'Activity is checked periodically; this is not a live token stream.':''}</p>
- <ol className="issue-comment-list" aria-label="Recorded agent events">{events.map(event=>{const {label,Icon}=presentation(event);return <li key={event.sequence}><article className="issue-comment"><header className="issue-comment-heading"><div className="issue-comment-byline"><h3 className="row-actions"><Icon size={15} aria-hidden="true"/>{label}</h3><span><DateLabel value={event.createdAt}/></span>{event.status?<span>· {event.status==='inProgress'?'in progress':event.status}</span>:null}</div></header>
- {event.text?<MarkdownBody text={event.text} label={label}/>:null}
- {event.plan.length?<ul className="panel-content" aria-label="Recorded plan">{event.plan.map((step,index)=><li key={index}>{step.step} · {step.status==='inProgress'?'in progress':step.status}</li>)}</ul>:null}
- {event.totalTokens!==undefined?<p className="panel-footnote">Reported total tokens: {BigInt(event.totalTokens).toLocaleString()}</p>:null}
- {(event.kind==='prompt'||event.kind==='assistant_message'||event.kind==='plan_updated')&&event.bodyState!==Body.AVAILABLE?<p className="panel-footnote">{event.bodyState===Body.WITHHELD?'Content withheld pending screening.':'Message content unavailable.'}</p>:null}
- </article></li>})}</ol>
+ <ol className="issue-comment-list journal-list" aria-label="Recorded agent events">{events.map(event=><JournalEvent key={event.sequence} event={event}/>)}</ol>
  </>}
  <AgentTaskControls controller={reader.controller}/><p className="panel-footnote">Raw commands, terminal output and reasoning are not shown. Managed conversation controls require this attempt's qualified live ACP sandbox.</p></section>;
 }

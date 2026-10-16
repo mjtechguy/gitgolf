@@ -135,6 +135,10 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .source-name { overflow-wrap:anywhere; }
 .source-tree .entry-type,.source-tree>li>a>span:nth-last-child(2) { color:var(--muted); font-size:.8125rem; }
 .source-tree>li>a>svg:last-child { color:var(--muted); }
+/* Up to 1000 rows: the browser skips style, layout and paint for rows far off screen, which stay in the DOM for find-in-page
+   and assistive technology. A row contains its paint, so focus rings inside it are drawn inset. */
+.source-tree>li { content-visibility:auto; contain-intrinsic-size:auto 37px; }
+.source-tree>li :focus-visible { outline-offset:-2px; }
 .panel-footnote { margin:0; padding:8px 16px; color:var(--muted); font-size:.8125rem; line-height:1.7; overflow-wrap:anywhere; }
 .file-meta { display:flex; flex-wrap:wrap; align-items:center; gap:16px; padding:8px var(--panel-padding); font-size:.8125rem; color:var(--muted); border-bottom:1px solid var(--line); }
 .file-meta>span { display:flex; align-items:center; gap:7px; }
@@ -181,6 +185,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .issue-comment-list { padding:16px; }
 .issue-comment-list>li { border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-bottom:16px; }
 .issue-comment-list>li:last-child { margin-bottom:0; }
+/* Up to 513 journal rows: off-screen rows skip style, layout and paint but stay in the DOM. Rows already clip (overflow:hidden). */
+.journal-list>li { content-visibility:auto; contain-intrinsic-size:auto 72px; }
 .issue-comment { padding:0; min-width:0; }
 .issue-comment-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; overflow-wrap:anywhere; padding:8px 16px; background:var(--raised); border-bottom:1px solid var(--line); }
 .issue-comment-byline { display:flex; align-items:baseline; flex-wrap:wrap; gap:5px; min-width:0; font-size:.8125rem; line-height:1.5; color:var(--muted); }

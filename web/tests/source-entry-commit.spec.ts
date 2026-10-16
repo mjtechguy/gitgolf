@@ -267,6 +267,25 @@ test('repeated scrolling preserves the accepted row DOM and performs no duplicat
   expect(exactCalls()).toBe(1);
 });
 
+// Directory rows are memoized against the listing's entries, which a refresh with the same content keeps. React gives a
+// host node a new props object (its `__reactProps$` key) whenever the component that owns it renders, so an unchanged
+// object means the row did not render again.
+test('refreshing an unchanged 1000-row directory keeps every row without rendering it again', async ({ page }) => {
+  const state = await fixture(page, 1000);
+  await page.goto(`/alex/entry-history/tree/${ref}`); await listed(page);
+  await expect(entry(page).getByRole('link')).toHaveText('PRIVATE alex: row-000.ts');
+  const rows = page.locator('.source-tree>li'), marked = [rows.first(), rows.nth(500), rows.last()];
+  type Marked = Window & { markedRows?: Map<Element, unknown> };
+  await page.evaluate(() => { (window as Marked).markedRows = new Map(); });
+  for (const row of marked) await row.evaluate(element => { const key = Object.keys(element).find(name => name.startsWith('__reactProps$'))!; (window as Marked).markedRows!.set(element, (element as unknown as Record<string, unknown>)[key]); });
+  const reads = state.sourceInputs.length;
+  await page.getByRole('button', { name: 'Refresh source' }).click();
+  await expect.poll(() => state.sourceInputs.length).toBe(reads + 1);
+  await expect(page.getByRole('button', { name: 'Refresh source' })).toBeEnabled();
+  await expect(rows).toHaveCount(1000);
+  for (const row of marked) expect(await row.evaluate(element => { const key = Object.keys(element).find(name => name.startsWith('__reactProps$'))!, marked = (window as Marked).markedRows!; return marked.has(element) && marked.get(element) === (element as unknown as Record<string, unknown>)[key]; })).toBe(true);
+});
+
 test('terminal row authority denial remains unavailable across viewport reentry without retrying', async ({ page }) => {
   const state = await fixture(page, 1000); state.invalid = 'denied';
   await page.goto(`/alex/entry-history/tree/${ref}`); await listed(page);

@@ -287,6 +287,29 @@ each. 2,563 tests per run.
   directories) re-render every row after a refetch and take seconds in the development build under load; making those
   renders cheaper is product work that would also remove this class of timeout. Then two consecutive green runs.
 
+**Status, part E (2026-10-16): large lists.** Product changes, no virtualization: every row stays in the DOM. Rows of the
+agent journal, source directories and commit history are memoized components, so other updates no longer render unchanged
+rows; `DateLabel` reuses two `Intl.DateTimeFormat`s instead of building one per call (486 ms of a journal re-render's CPU
+profile); directory entries are sorted once per listing with one collator; journal and directory rows use
+`content-visibility:auto`. The journal still hides its rows during every read and parent check (the privacy rules are
+unchanged), so a read still mounts all rows again; it is the mount that is cheaper. Measured with Playwright at 4× CPU, the
+`main` and branch builds interleaved, median of 5, load average about 4 (time from data arrival to the next frame with all
+rows; for the refresh, the longest task):
+
+| List | Development before → after | Production before → after |
+| --- | ---: | ---: |
+| Journal, 513 withheld rows, refetch | 1,087 → 757 ms | 383 → 140 ms |
+| Journal, 513 screened rows, after the parent check | 1,142 → 790 ms | 417 → 167 ms |
+| Directory, 1000 rows, first render | 2,042 → 1,822 ms | 989 → 623 ms |
+| Directory, refresh of an unchanged listing (longest task) | 1,062 → 136 ms | 231 ms → none |
+
+- Remaining: the development build's first directory render is still one task of about 1.5 s at 4× CPU: React's
+  development checks run per element, twice under StrictMode, for about 17 elements per row. Production commits the same
+  rows in about 0.45 s. If that still times out under load, the next step is mounting the rows in chunks after the first
+  screenful, not windowing.
+- Checks: `agent-task-events` and `source-entry-commit` at `--workers=6 --repeat-each=5`, 500 of 500; specs for the other
+  touched lists and date labels, 486 of 486. Three new tests fail on `main`.
+
 ## Q-3 Keep it green
 
 - A documented local gate for UI changes: affected specs, then the full suite before merging a change that touches shared

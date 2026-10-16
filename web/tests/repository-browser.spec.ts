@@ -165,6 +165,21 @@ test('commit history paginates and opens the selected immutable source commit', 
   await expect(page.locator('.commit-pin')).toHaveText(older.slice(0, 12));
 });
 
+// Loaded commit rows are memoized: React gives a host node a new props object (its `__reactProps$` key) whenever the
+// component that owns it renders, so an unchanged object after "Load more" means the first page did not render again.
+test('loading more commits renders only the new rows', async ({ page }) => {
+  await backend(page);
+  await page.goto(`/repositories/alex/design-system?view=commits&ref=${head}`);
+  const first = page.locator('.commit-list>li').first();
+  await expect(first).toContainText('Improve keyboard navigation');
+  const props = () => first.evaluate(element => { const key = Object.keys(element).find(name => name.startsWith('__reactProps$'))!; const w = window as Window & { firstRow?: [Element, unknown] }; const props = (element as unknown as Record<string, unknown>)[key]; if (!w.firstRow) { w.firstRow = [element, props]; return true; } return w.firstRow[0] === element && w.firstRow[1] === props; });
+  expect(await props()).toBe(true);
+  const rows = await page.locator('.commit-list>li').count();
+  await page.getByRole('button', { name: 'Load more commits' }).click();
+  await expect(page.locator('.commit-list>li')).toHaveCount(rows + 1);
+  expect(await props()).toBe(true);
+});
+
 test.describe('compact commit history', () => {
   test.use({ timezoneId: 'UTC' });
   test('date groups preserve native order across pagination and expose literal message and SHA controls', async ({ page }) => {

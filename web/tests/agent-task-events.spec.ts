@@ -1,12 +1,12 @@
 import { portableRuntimeFixture } from './runtime-fixture';
-import { test,expect,type Page } from '@playwright/test';
+import { test,expect,type Locator,type Page } from '@playwright/test';
 import { create,toJson } from '@bufbuild/protobuf';
 import { reject,request,respond } from './rpc';
 import { AgentEventBodyState as Body, AgentTaskEventSchema, ActionRunKind, GetActionRunResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema, ListAgentTaskEventsRequestSchema, ListAgentTaskEventsResponseSchema, ListCapabilitiesResponseSchema, WatchRepositoryResponseSchema } from '../src/gen/golf/v1/golf_pb';
 const id='12345678-1234-4234-8234-123456789012',attempt='b'.repeat(32),commit='a'.repeat(40),repo='21',actor='7',url=`/alex/private/actions/tasks/${id}`;
 const envelope=(flags:number,json:unknown)=>{const body=Buffer.from(JSON.stringify(json)),header=Buffer.alloc(5);header[0]=flags;header.writeUInt32BE(body.length,1);return Buffer.concat([header,body]);};
 async function fixture(page:Page){
- const state={body:Body.WITHHELD,taskState:'running',attempt,rows:11,bad:'',deny:false,deniedTask:false,ended:false,live:false,cursor:1,streamFailure:undefined as Promise<void>|undefined,barrier:undefined as Promise<void>|undefined,requests:[] as unknown[],methods:[] as string[],onRead:undefined as ((after:number)=>void)|undefined};
+ const state={body:Body.WITHHELD,taskState:'running',attempt,rows:11,bad:'',canCancel:false,deny:false,deniedTask:false,ended:false,live:false,cursor:1,streamFailure:undefined as Promise<void>|undefined,barrier:undefined as Promise<void>|undefined,requests:[] as unknown[],methods:[] as string[],onRead:undefined as ((after:number)=>void)|undefined};
  await page.route('**/rpc/**',async route=>{const method=new URL(route.request().url()).pathname.split('/').at(-1)!;state.methods.push(method);
  if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
  if(method==='GetSession')return state.ended?respond(route,GetSessionResponseSchema,{}):respond(route,GetSessionResponseSchema,{user:{id:actor,login:'alex'}});
@@ -17,7 +17,7 @@ async function fixture(page:Page){
  // (rpc.ts's HTTP 501 reaches a stream as Unknown, which is a dropped stream with fallback revalidation).
  if(method==='WatchRepository'&&state.streamFailure){await state.streamFailure;state.streamFailure=undefined;return reject(route,'unavailable','Live stream dropped.');}
  if(method==='WatchRepository')return route.fulfill({status:200,contentType:'application/connect+json',body:envelope(2,{error:{code:'unimplemented',message:'Live fixture not enabled.'}})});
- if(method==='GetActionRun'){if(state.deniedTask)return reject(route,'permission_denied','Current task access revoked.');const task={id,repository:{owner:'alex',name:'private'},state:state.taskState,commitId:commit,version:'1',createdAt:'2026-10-01T12:00:00Z',workerId:'worker-1',attemptId:state.attempt,modelId:'codex-model',tokens:'0',summary:'Private recorded result',patch:'diff --git a/private.ts b/private.ts\n--- a/private.ts\n+++ b/private.ts\n@@ -0,0 +1 @@\n+const secret = true;\n'};return respond(route,GetActionRunResponseSchema,{repositoryId:repo,summary:{ref:{kind:ActionRunKind.CODING_TASK,id},repositoryId:repo,ownerId:actor,title:'Coding task',state:task.state,commitId:commit,createdAt:task.createdAt,workerId:task.workerId,attemptId:task.attemptId,modelId:task.modelId},detail:{case:'task',value:task}});}
+ if(method==='GetActionRun'){if(state.deniedTask)return reject(route,'permission_denied','Current task access revoked.');const task={id,repository:{owner:'alex',name:'private'},state:state.taskState,commitId:commit,version:'1',createdAt:'2026-10-01T12:00:00Z',workerId:'worker-1',attemptId:state.attempt,canCancel:state.canCancel,modelId:'codex-model',tokens:'0',summary:'Private recorded result',patch:'diff --git a/private.ts b/private.ts\n--- a/private.ts\n+++ b/private.ts\n@@ -0,0 +1 @@\n+const secret = true;\n'};return respond(route,GetActionRunResponseSchema,{repositoryId:repo,summary:{ref:{kind:ActionRunKind.CODING_TASK,id},repositoryId:repo,ownerId:actor,title:'Coding task',state:task.state,commitId:commit,createdAt:task.createdAt,workerId:task.workerId,attemptId:task.attemptId,modelId:task.modelId},detail:{case:'task',value:task}});}
  if(method==='ListAgentTaskEvents'){
   const input=request(route,ListAgentTaskEventsRequestSchema);state.requests.push(input);state.onRead?.(Number(input.afterSequence||'0'));if(state.barrier)await state.barrier;if(state.ended)return reject(route,'unauthenticated','Session expired.');if(state.deny)return reject(route,'permission_denied','Recorded activity access revoked.');
   const after=Number(input.afterSequence||'0'),end=Math.min(state.rows,after+input.limit),events=[];
@@ -57,6 +57,17 @@ test('the maximum journal drains once without duplicates or an endless cursor lo
 // one second later answers Unimplemented, so the second WatchRepository marks the point by which any re-read has started.
 const dropStream=(state:{streamFailure:Promise<void>|undefined})=>{let release!:()=>void;state.streamFailure=new Promise<void>(resolve=>release=resolve);return release;};
 const calls=(state:{methods:string[]},method:string)=>state.methods.filter(name=>name===method).length;
+// Journal rows are memoized: a page update that leaves the events alone renders no row again. React gives a host node a new
+// props object (its `__reactProps$` key) whenever the component that owns it renders, so an unchanged object means no render.
+const markRow=(row:Locator)=>row.evaluate(element=>{const key=Object.keys(element).find(name=>name.startsWith('__reactProps$'))!;(window as Window&{markedRow?:unknown}).markedRow={element,props:(element as unknown as Record<string,unknown>)[key]};});
+const rowUnchanged=(row:Locator)=>row.evaluate(element=>{const key=Object.keys(element).find(name=>name.startsWith('__reactProps$'))!,marked=(window as Window&{markedRow?:{element:Element;props:unknown}}).markedRow;return marked?.element===element&&marked.props===(element as unknown as Record<string,unknown>)[key];});
+test('opening the cancel dialog over a shown journal renders no journal row again',async({page})=>{
+ const state=await fixture(page);state.rows=65;state.canCancel=true;await page.goto(url);const timeline=section(page),rows=timeline.getByRole('list',{name:'Recorded agent events'}).locator(':scope>li');await expect(rows).toHaveCount(65);
+ // Paused first, so no periodic read can replace the rows while the dialog opens.
+ await timeline.getByRole('button',{name:'Pause activity refresh'}).click();await expect(timeline).toContainText('Activity refresh is paused.');await expect(rows).toHaveCount(65);const reads=state.requests.length;
+ await markRow(rows.nth(40));await page.getByRole('button',{name:'Cancel task'}).click();await expect(page.getByRole('button',{name:'Keep running'})).toBeVisible();
+ expect(await rowUnchanged(rows.nth(40))).toBe(true);expect(state.requests).toHaveLength(reads);
+});
 test('a dropped live stream keeps a finished screened journal without reading it again',async({page})=>{
  const state=await fixture(page);state.rows=513;state.body=Body.AVAILABLE;state.taskState='succeeded';const release=dropStream(state);await page.goto(url);const rows=section(page).getByRole('list',{name:'Recorded agent events'}).locator(':scope>li');
  await expect(rows).toHaveCount(513);expect(state.requests).toHaveLength(17);const runs=calls(state,'GetActionRun');
