@@ -286,3 +286,16 @@ test('an approval that can no longer apply fails with the reason, and a locked i
   assert.equal(locked.value.request.needsDeploy, true);
   assert.match((await f.call('alice', '/native/capacity/read', { action: 'read' })).value.editing, /locked at deploy/);
 });
+
+test('approving a raise the setting already reached fails instead of lowering the setting', async t => {
+  const f = await fixture(t);
+  const update = (who, value, version, headers = {}) => f.call(who, '/native/installation', { action: 'update', key: 'evidence', expectedVersion: version, operationId: crypto.randomUUID(), confirmation: 'evidence', value: { dailyLimit: value } }, headers);
+  assert.equal((await update('alice', 4, '0')).status, 200);
+  const asked = await f.call('alice', '/native/capacity', { action: 'request', key: 'evidence', field: 'dailyLimit', value: 6, reason: 'More runs' });
+  assert.equal(asked.status, 200, JSON.stringify(asked.value));
+  // Meanwhile bob raises it directly past the request.
+  assert.equal((await update('bob', 9, '1', f.signedIn)).status, 200);
+  const approved = await f.call('bob', '/native/capacity', { action: 'approve', id: asked.value.request.id, operationId: crypto.randomUUID(), expectedVersion: '2', confirmation: 'evidence' }, f.signedIn);
+  assert.equal(approved.value.request.state, 'FAILED'); assert.match(approved.value.request.decisionNote, /already 9, at or above the requested 6/);
+  assert.equal(JSON.parse(f.sql.prepare("SELECT value FROM installation_settings WHERE key='evidence'").get().value).dailyLimit, 9);
+});

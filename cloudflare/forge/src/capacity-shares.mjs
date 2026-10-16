@@ -57,7 +57,8 @@ const organizationRunning = `SELECT count(*) FROM pipeline_jobs x JOIN pipeline_
 const labelNameSQL = "CASE WHEN instr(e.value,':')>0 THEN substr(e.value,1,instr(e.value,':')-1) ELSE e.value END";
 export function poolRunning(engine, labels) {
   const same = labels.length ? `NOT EXISTS(SELECT 1 FROM json_each(n.labels) e WHERE ${labelNameSQL} NOT IN (SELECT value FROM json_each(?))) AND (SELECT count(DISTINCT ${labelNameSQL}) FROM json_each(n.labels) e)=?` : 'json_array_length(n.labels)=0';
-  return { sql: `SELECT count(*) FROM pipeline_jobs x JOIN pipeline_runners n ON n.id=x.runner_id WHERE x.engine=? AND x.state='RUNNING' AND n.engine=? AND ${same}`,
+  // Installation runners only: a cap limits the installation's pool, so runners a repository or organization registers itself never use it up.
+  return { sql: `SELECT count(*) FROM pipeline_jobs x JOIN pipeline_runners n ON n.id=x.runner_id WHERE x.engine=? AND x.state='RUNNING' AND n.engine=? AND n.scope='installation' AND ${same}`,
     values: [engine, engine, ...(labels.length ? [JSON.stringify(labels), labels.length] : [])] };
 }
 
@@ -83,7 +84,8 @@ const held = (state, job) => Boolean(state) && (state.blockedRepositories.has(jo
 // What a claim by this runner must respect, or null when nothing applies (the claim is then exactly as before).
 export async function claimPlan(db, env, runner) {
   const policies = await runnerPolicies(db, env), labels = poolLabels(parse(runner.labels, []));
-  const cap = capFor(policies.pools, runner.engine, labels), shares = await runningShares(db, policies.shares);
+  // Pool caps apply to installation runners; a repository's or organization's own runners are theirs (shares still apply to the jobs).
+  const cap = runner.scope === 'installation' ? capFor(policies.pools, runner.engine, labels) : null, shares = await runningShares(db, policies.shares);
   return cap === null && !shares ? null : { cap, engine: runner.engine, labels, shares };
 }
 // A runner of a pool at its cap gets no job.
@@ -266,7 +268,8 @@ export async function capacitySharesAPI(db, env, person, request, body, read, au
       granted: target.scope === 'organization' ? { maxRunning: row?.[grantRunning] ?? null, maxRunsPerDay: row?.[grantDaily] ?? null } : null,
       installation, parent: target.scope === 'repository' && target.organization ? { scope: 'organization', name: target.organization.slug } : { scope: 'installation', name: 'the installation' },
       version: String(row?.version || 0), updatedAt: row?.updated_at || '', bounds: shareBounds,
-      usage: { running, queued, held: blocked ? queued : 0, runsToday: started, parentRunning },
+      // The organization's running count covers repositories a reader may not see: only the repository's administrators get it.
+      usage: { running, queued, held: blocked ? queued : 0, runsToday: started, parentRunning: target.owner ? parentRunning : null },
       canEdit: target.owner && human(request) && !installation.enforced && schema, canRequest: target.scope === 'organization' && target.owner && human(request) && schema && shareFields.some(field => mine.ceiling[field] !== null),
       editReason: installation.enforced ? 'The installation enforces its runner share; organizations and repositories cannot set their own.' : !schema ? sharesMigration : !target.owner ? (target.scope === 'organization' ? 'Only organization owners change its runner share.' : 'Only repository administrators change its runner share.') : '',
       requests };

@@ -218,6 +218,8 @@ export async function claimPipelineJob(db, env, runner, { requestKey } = {}) {
   const labels = new Set(parse(runner.labels, []).map(labelName)), scope = scopeClause(runner);
   // Runner capacity (capacity-shares.mjs): a pool at its cap gets no job, exactly as an empty queue; repositories and organizations at
   // their running share are left out of the candidates, so the runner takes the next eligible job. Both are rechecked inside the UPDATE.
+  // Most polls find nothing queued: answer those with one indexed read, before reading any capacity policy.
+  if (!await db.prepare("SELECT 1 AS queued FROM pipeline_jobs WHERE engine=? AND state='QUEUED' LIMIT 1").bind(runner.engine).first()) return null;
   const plan = await claimPlan(db, env, runner);
   if (await poolFull(db, plan)) return null;
   const allowed = new Map();
