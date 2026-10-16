@@ -73,34 +73,37 @@ test('writers count an issue, a comment and a close once, however often they are
   assert.equal(f.sql.prepare('SELECT count(*) AS n FROM contribution_events WHERE pending=1').get().n, 0);
 });
 
-test('the sweep counts what no writer saw, with AI tiers for agent proposals, policy landings and agent tasks', async t => {
+test('the sweep counts what no writer saw, with AI tiers for agent proposals, API tokens, policy landings and agent tasks', async t => {
   const f = await fixture(t);
   const at = ago(3 * hour), day = at.slice(0, 10), task = uuid();
   f.sql.exec(`INSERT INTO discussions(id,repository_id,number,kind,author_id,title,body,state,created_at,updated_at) VALUES
-      (10,1,10,'pull',1,'Agent change','','CLOSED','${at}','${at}'),(11,1,11,'pull',2,'Landed by policy','','CLOSED','${at}','${at}'),(12,1,12,'pull',2,'Plain','','CLOSED','${at}','${at}'),(13,1,13,'issue',3,'Question','','OPEN','${at}','${at}');
-    INSERT INTO pull_requests(id,discussion_id,base_branch,head_branch,base_commit,head_commit,draft) VALUES(10,10,'main','golf-agent/a','${hash(1)}','${hash(2)}',0),(11,11,'main','b','${hash(1)}','${hash(3)}',0),(12,12,'main','c','${hash(1)}','${hash(4)}',0);
+      (10,1,10,'pull',1,'Agent change','','CLOSED','${at}','${at}'),(11,1,11,'pull',2,'Landed by policy','','CLOSED','${at}','${at}'),(12,1,12,'pull',2,'Plain','','CLOSED','${at}','${at}'),(13,1,13,'issue',3,'Question','','OPEN','${at}','${at}'),
+      (14,1,14,'pull',2,'Over MCP','','CLOSED','${at}','${at}');
+    INSERT INTO pull_requests(id,discussion_id,base_branch,head_branch,base_commit,head_commit,draft) VALUES(10,10,'main','golf-agent/a','${hash(1)}','${hash(2)}',0),(11,11,'main','b','${hash(1)}','${hash(3)}',0),(12,12,'main','c','${hash(1)}','${hash(4)}',0),(14,14,'main','d','${hash(1)}','${hash(5)}',0);
     INSERT INTO land_operations(id,repository_id,pull_request_id,number,trigger,actor_id,state,created_at,updated_at) VALUES('land-1',1,11,11,'policy',0,'LANDED','${at}','${at}');
     INSERT INTO discussion_events(id,discussion_id,actor_id,kind,payload,created_at) VALUES
       ('e1',10,1,'opened','{}','${at}'),('e2',10,1,'merge_pull','{}','${at}'),('e3',11,1,'merge_pull','{}','${at}'),('e4',12,2,'opened','{}','${at}'),('e5',12,1,'merge_pull','{}','${at}'),
       ('e6',12,3,'review_approved','{}','${at}'),('e7',12,3,'review_requested','{}','${at}'),('e8',13,3,'opened','{}','${at}'),('e9',12,2,'close','{}','${at}'),('e10',13,1,'label','{}','${at}'),
-      ('young',13,3,'comment','{}','${ago(10_000)}');
+      ('e11',14,2,'opened','{}','${at}'),('e12',14,1,'merge_pull','{}','${at}'),('young',13,3,'comment','{}','${ago(10_000)}');
     INSERT INTO agent_tasks(id,repository_id,artifact_name,host_id,tool,model,requested_by,target_kind,target_number,base_ref,base_commit,branch,prompt,state,deadline,commit_id,idempotency_key,created_at,updated_at,finished_at) VALUES
       ('${task}',1,'repo-${'b'.repeat(32)}',1,'claude','',2,'issue',13,'main','${hash(1)}','golf-agent/x','Fix it','SUCCEEDED',0,'${hash(9)}','k1','${at}','${at}','${at}'),
       ('t-review-0000-4000-8000-000000000000',1,'repo-${'b'.repeat(32)}',1,'codex','',2,'pull_request',12,'main','${hash(1)}','golf-agent/y','Review','SUCCEEDED',0,'','k2','${at}','${at}','${at}'),
       ('${uuid()}',1,'repo-${'b'.repeat(32)}',1,'codex','',2,'issue',13,'main','${hash(1)}','golf-agent/z','Fail','FAILED',0,'','k3','${at}','${at}','${at}');
-    INSERT INTO pull_request_origins(pull_request_id,kind,agent_task_id,created_at) VALUES(10,'agent-task','${task}','${at}');
+    INSERT INTO pull_request_origins(pull_request_id,kind,agent_task_id,created_at) VALUES(10,'agent-task','${task}','${at}'),(14,'api-token',NULL,'${at}');
     INSERT INTO agent_task_reviews(task_id,created_at) VALUES('t-review-0000-4000-8000-000000000000','${at}');
     INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,state,advice_state,agent_state,created_at,updated_at,expires_at) VALUES
       ('job-1',1,3,'o1','h','{}','SUCCEEDED','NONE','succeeded','${at}','${at}','${at}'),('job-2',1,3,'o2','h','{}','SUCCEEDED','NONE','failed','${at}','${at}','${at}')`);
   const result = await f.sweep();
-  assert.ok(result.processed >= 13);
+  assert.ok(result.processed >= 15);
   const rows = f.days(`day='${day}'`);
   const find = (actor, kind) => rows.filter(row => row.actor_id === actor && row.kind === kind).map(row => `${row.ai_tier}:${row.count}`).sort();
-  // A person merged an agent task's pull request: AI-assisted, and its proposal accepted. The policy landed another: Golf's agent.
-  assert.deepEqual(find(1, 'pull_merged'), ['agent:1', 'assisted:1', 'none:1']);
+  // A person merged an agent task's pull request and one opened through an API token: AI-assisted, and only the task's proposal
+  // accepted. The policy landed another: Golf's agent.
+  assert.deepEqual(find(1, 'pull_merged'), ['agent:1', 'assisted:2', 'none:1']);
   assert.deepEqual(find(1, 'proposal_accepted'), ['assisted:1']);
   assert.deepEqual(find(1, 'pull_opened'), ['agent:1']);
-  assert.deepEqual(find(2, 'pull_opened'), ['none:1']);
+  // Opened through an API token: the token tier, not the person's own.
+  assert.deepEqual(find(2, 'pull_opened'), ['none:1', 'token:1']);
   // Reviews count; requesting a review, closing a pull request and labelling do not. A comment younger than the lag waits.
   assert.deepEqual(find(3, 'review'), ['none:1']);
   assert.deepEqual(find(3, 'issue_opened'), ['none:1']);
@@ -189,14 +192,14 @@ test('a profile shows only repositories the viewer can read; private activity is
   const today = new Date().toISOString().slice(0, 10), yesterday = ago(86400_000).slice(0, 10);
   f.sql.exec(`INSERT INTO contribution_days(actor_id,day,repository_id,kind,ai_tier,count) VALUES
       (1,'${today}',1,'commit','none',3),(1,'${today}',1,'pull_merged','assisted',1),(1,'${yesterday}',1,'commit','declared',2),(1,'${today}',1,'proposal_created','agent',4),
-      (1,'${today}',2,'commit','none',5),(1,'2024-03-01',2,'commit','none',1)`);
+      (1,'${today}',1,'pull_opened','token',2),(1,'${today}',2,'commit','none',5),(1,'2024-03-01',2,'commit','none',1)`);
   const view = (who, body = {}) => f.access('/native/contributions/read', { action: 'person', owner: 'alice', ...body }, who);
   // carol reads project, not secret.
   let carol = await view('carol');
   assert.equal(carol.state, 'on');
-  assert.equal(carol.totals.human, 6); assert.equal(carol.totals.ai, 7); assert.equal(carol.totals.private, 0);
-  assert.deepEqual(carol.totals.tiers, { agent: 4, assisted: 1, declared: 2, none: 3 });
-  assert.deepEqual(carol.repositories, [{ fullName: 'alice/project', human: 6, ai: 7 }]);
+  assert.equal(carol.totals.human, 6); assert.equal(carol.totals.ai, 9); assert.equal(carol.totals.private, 0);
+  assert.deepEqual(carol.totals.tiers, { agent: 4, token: 2, assisted: 1, declared: 2, none: 3 });
+  assert.deepEqual(carol.repositories, [{ fullName: 'alice/project', human: 6, ai: 9 }]);
   assert.deepEqual(carol.streaks, { longest: 2, current: 2 });
   assert.deepEqual(carol.years, [new Date().getUTCFullYear()]);
   assert.equal(JSON.stringify(carol).includes('secret'), false);
@@ -227,7 +230,7 @@ test('a profile shows only repositories the viewer can read; private activity is
   f.sql.exec(`INSERT INTO repository_features(repository_id,artifact_name,feature,enabled,version,updated_by,updated_at) VALUES(1,'repo-${'b'.repeat(32)}','contribution-graphs',0,1,1,'t')`);
   carol = await view('carol');
   assert.deepEqual(carol.repositories, []); assert.equal(carol.totals.human, 5); assert.equal(carol.totals.private, 5);
-  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM contribution_days WHERE repository_id=1').get().n, 4);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM contribution_days WHERE repository_id=1').get().n, 5);
   // Unknown people and organizations are not found.
   assert.equal((await f.access('/native/contributions/read', { action: 'person', owner: 'nobody' }, 'carol')).status, 404);
   // Off for the installation: the page says so.
@@ -264,8 +267,8 @@ test('the AI impact page is for operations administrators and holds anonymous in
   assert.equal((await f.call('/native/contributions/read', { action: 'impact' })).status, 403);
   const impact = await f.access('/native/contributions/read', { action: 'impact' });
   assert.equal(impact.state, 'on'); assert.deepEqual(impact.unreadable, []);
-  assert.deepEqual(impact.heatmap, [{ day, agent: 3, assisted: 2, declared: 1, none: 4 }]);
-  assert.deepEqual(impact.kinds.pull_merged, { agent: 0, assisted: 2, declared: 0, none: 0 });
+  assert.deepEqual(impact.heatmap, [{ day, agent: 3, token: 0, assisted: 2, declared: 1, none: 4 }]);
+  assert.deepEqual(impact.kinds.pull_merged, { agent: 0, token: 0, assisted: 2, declared: 0, none: 0 });
   assert.deepEqual(impact.proposals.fromTasks, { opened: 1, merged: 1 });
   assert.deepEqual(impact.landing.map(row => `${row.trigger}:${row.state}:${row.count}`).sort(), ['person:BLOCKED:1', 'policy:LANDED:1']);
   assert.deepEqual(impact.agentTasks.map(row => `${row.tool}:${row.state}:${row.count}:${row.tokens}`).sort(), ['claude:SUCCEEDED:1:150', 'codex:FAILED:1:0']);
@@ -280,7 +283,7 @@ test('the AI impact page is for operations administrators and holds anonymous in
   // A repository with the feature off leaves the aggregates.
   f.sql.exec(`INSERT INTO repository_features(repository_id,artifact_name,feature,enabled,version,updated_by,updated_at) VALUES(2,'repo-${'e'.repeat(32)}','contribution-graphs',0,1,1,'t')`);
   const narrowed = await f.access('/native/contributions/read', { action: 'impact' });
-  assert.deepEqual(narrowed.heatmap, [{ day, agent: 3, assisted: 2, declared: 0, none: 4 }]); assert.equal(narrowed.excludedRepositories, 1);
+  assert.deepEqual(narrowed.heatmap, [{ day, agent: 3, token: 0, assisted: 2, declared: 0, none: 4 }]); assert.equal(narrowed.excludedRepositories, 1);
 });
 
 test('a confirmed push to the default branch makes its Git walk due; a push to another branch does not', async t => {

@@ -88,7 +88,11 @@ deployed: migration 0053 is not applied on the hosted demo.
 - **AI tiers:**
   - **Golf agent:** pull requests opened from agent tasks, landings by the agentic mode policy, agent task and container proposals,
     agent review tasks, commits by Golf's agentic identity or an agent task.
-  - **AI-assisted:** a person merged an agent task's pull request (also counted as a proposal accepted).
+  - **API token:** a pull request opened through an API token, the way agents and automations outside Golf connect (a coding CLI
+    over MCP, a script). Golf reports the token; it cannot tell an agent from a script. These count as AI involvement, not in the
+    person's human count (migration 0054 adds the tier and rebuilds the counts).
+  - **AI-assisted:** a person merged an agent task's pull request (also counted as a proposal accepted) or one opened through an
+    API token.
   - **Declared:** a `Co-Authored-By` trailer naming Claude, Copilot, Codex, Cursor, Gemini and other known tools or their domains.
   - **Unlabelled:** everything else.
 - **Reads:** `POST /native/contributions/read`, served by the stateless Worker (`statelessRoute` `'read'`) and overlapping reads in the
