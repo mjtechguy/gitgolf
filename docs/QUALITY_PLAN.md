@@ -265,6 +265,28 @@ it. It now uses the list's own **Try again**.
 - Checks: `npm run typecheck` passes; `node --test web/tests/*.test.ts` 29 of 29.
 - Remaining for Q-2: the `BranchPicker` focus bug, then two consecutive green runs.
 
+**Status, part D (2026-10-16): full runs on `main` and the last races.** Parked; exit not met. All runs used the Q-1
+wrapper, `--workers=6 --retries=0`, on a machine loaded by other work (load average 15–33 on 12 threads), about 19–23 min
+each. 2,563 tests per run.
+
+| Run | Commit | Passed | Failed | Cause of the failure, and fix |
+| --- | --- | ---: | ---: | --- |
+| 1 | 1b1a3e5 + #158 | 2,480 | 0 | — |
+| 2 | 5cbd5f7 | 2,479 | 1 | `workflow-log-console` 50: the test released a held font before the denial rendered (test race, #159) |
+| 3 | ab06093 | 2,479 | 1 | `pull-review-comments` 67: development's remount made one or two comment reads by timing (product, #160) |
+| 4 | ab06093 | 2,480 | 0 | — |
+| 5 | cad12af | 2,479 | 1 | `agent-controls088` 43: a parent run check discarded an explicit "Refresh controls" (product bug, #161) |
+| 6 | cad12af | 2,479 | 1 | `agent-task-events` 66: 513 journal rows re-rendered after a refetch took over 5 s under load (render cost) |
+
+- Fixes, each with a test that fails without it: `BranchPicker` keeps the picker open while "Load more" disables itself
+  (#158); the console test waits for the denial before the font completes (#159); inline comments read once per open in
+  every build (#160); an explicit control refresh interrupted by a parent check runs again (#161).
+- From 208 failures at the Q-1 baseline to 0–1 per full run. Every failure since part C has been a different one-off, and
+  the last was render time, not logic.
+- Parked on 2026-10-16 in favour of platform work. What remains: large lists (the 513-row agent journal, 1000-row source
+  directories) re-render every row after a refetch and take seconds in the development build under load; making those
+  renders cheaper is product work that would also remove this class of timeout. Then two consecutive green runs.
+
 ## Q-3 Keep it green
 
 - A documented local gate for UI changes: affected specs, then the full suite before merging a change that touches shared
