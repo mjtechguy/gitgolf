@@ -47,7 +47,7 @@ const runs = [
     state: 'REFUSED', phase: 'DONE', reason: 'The kill switch was engaged.', engine: 'default', place: 'cloud', instructionsVersion: 2, requestedBy: '', usage: null, outputs: {}, createdAt: at(1), startedAt: '', finishedAt: at(1) },
 ];
 
-async function backend(page: Page, { capability = true, canManage = true, featureOn = true, list = [automation()] as Automation[] } = {}) {
+async function backend(page: Page, { capability = true, canManage = true, featureOn = true, list = [automation()] as Automation[], inheritedTruncated = false, runsTruncated = false } = {}) {
   const state = { automations: list.map(a => ({ ...a })), runs: [...runs] as Record<string, unknown>[], calls: [] as Record<string, unknown>[] };
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
@@ -70,8 +70,8 @@ async function backend(page: Page, { capability = true, canManage = true, featur
       const scopeName = body.scope === 'repository' ? 'alex/demo' : body.scope === 'organization' ? String(body.organization) : '';
       if (body.action === 'list') return json({ scope: { scope: body.scope, scopeId: body.scope === 'repository' ? repositoryId : body.scope === 'organization' ? '81' : '', name: scopeName }, canManage, featureOn,
         featureReason: featureOn ? '' : 'Automations are turned off for this repository by the organization policy.', automations: state.automations.map(a => ({ ...a, scope: body.scope, scopeName })),
-        inherited: body.scope === 'repository' ? [inherited] : [], tools, engines, enginesRegistered: false, hosts: canManage ? [{ id: '5', name: 'mj-laptop', scope: 'personal' }, { id: '6', name: 'team-runner', scope: 'organization' }] : [], places });
-      if (body.action === 'runs') return json({ runs: state.runs, truncated: false });
+        inherited: body.scope === 'repository' ? [inherited] : [], inheritedTruncated, tools, engines, enginesRegistered: false, hosts: canManage ? [{ id: '5', name: 'mj-laptop', scope: 'personal' }, { id: '6', name: 'team-runner', scope: 'organization' }] : [], places });
+      if (body.action === 'runs') return json({ runs: state.runs, truncated: runsTruncated });
       if (body.action === 'get') return json({ automation: { ...find(), instructions: 'Focus on security.' }, instructionVersions: [{ version: 2, createdBy: 'alex', createdAt: at(60), current: true }, { version: 1, createdBy: 'sam', createdAt: at(3000), current: false }] });
       if (body.action === 'instructions') return json({ version: body.version, text: body.version === 1 ? 'Be brief.\n<b>Only</b> blockers.' : 'Focus on security.', createdBy: body.version === 1 ? 'sam' : 'alex', createdAt: at(3000), current: body.version === 2 });
       if (body.action === 'create') { const created = automation({ id: '0b6f3f5e-1111-4aaa-8bbb-000000000002', tool: body.tool, toolLabel: tools.find(t => t.id === body.tool)!.label, name: String(body.name), version: 1, stats: { today: 0, running: 0, queued: 0, last: null } });
@@ -112,14 +112,34 @@ test('repository Settings → Automations leads with the inventory, inherited au
   await expect(page.getByRole('form')).toHaveCount(0);
   await expect(page.getByRole('table', { name: 'inherited automations', exact: true })).toContainText('Organization acme');
   await expect(page.getByRole('table', { name: 'inherited automations', exact: true }).locator('tbody').getByRole('button')).toHaveCount(0);
+  await expect(page.getByText('others that reach this repository are not shown')).toHaveCount(0);
   await expect(runsTable(page)).toContainText('The kill switch was engaged.');
   await expect(runsTable(page).getByRole('row').filter({ hasText: 'Review draft saved' })).toContainText('1,200 in · 300 out');
   await expect(runsTable(page).getByRole('row').filter({ hasText: 'Nightly report' })).toContainText('Not reported');
   await expect(runsTable(page).getByRole('row').filter({ hasText: 'Opened draft pull request #13.' })).toContainText('Not reported');
   await expect(runsTable(page).getByRole('row').filter({ hasText: 'The kill switch was engaged.' })).toContainText('Refused');
-  await expect(page.getByText('The 50 most recent runs on this repository are loaded')).toBeVisible();
+  await expect(page.getByText('All 4 runs on this repository are loaded.')).toBeVisible();
+  await expect(page.getByText('older runs are not shown')).toHaveCount(0);
+  // The time is when the run was created; a run that never started says so.
+  await expect(runsTable(page).getByRole('columnheader', { name: 'Created' })).toBeVisible();
+  await expect(runsTable(page).getByRole('row').filter({ hasText: 'The kill switch was engaged.' })).toContainText('not started');
+  await expect(runsTable(page).getByRole('row').filter({ hasText: 'Nightly report' })).toContainText('started');
   expect(state.calls.find(call => call.action === 'list')).toEqual({ path: '/native/automations/read', action: 'list', scope: 'repository', repository: key, repositoryId });
   expect(writes(state)).toEqual([]);
+});
+
+test('a full page of inherited automations says the others that reach this repository are not shown', async ({ page }) => {
+  await backend(page, { inheritedTruncated: true });
+  await page.goto('/alex/demo/settings/automations');
+  await expect(page.getByRole('table', { name: 'inherited automations', exact: true })).toContainText('Organization acme');
+  await expect(page.getByText('Only the first 1 by scope and name are listed; others that reach this repository are not shown.')).toBeVisible();
+});
+
+test('a full page of runs says it is the most recently created ones and that older runs are not shown', async ({ page }) => {
+  await backend(page, { runsTruncated: true });
+  await page.goto('/alex/demo/settings/automations');
+  await expect(runsTable(page)).toContainText('The kill switch was engaged.');
+  await expect(page.getByText('The 4 most recently created runs on this repository are loaded; older runs are not shown. Search and sorting cover only those.')).toBeVisible();
 });
 
 test('New automation copies a built-in tool: the form is prefilled from its defaults and creates with the expected body', async ({ page }) => {

@@ -96,7 +96,7 @@ test('the release inventory pages exactly and hides drafts from readers', async 
   assert.deepEqual(await list(1, tokens.admin, 51), { status: 400, code: 'invalid_argument' });
 });
 
-test('publication is refused when the tag moved, is missing, has a release, tag rules exist or the access observation is stale', async t => {
+test('publication is refused when the tag moved, is missing, has a release, a tag rule names it or the access observation is stale', async t => {
   const f = await objectFixture(t);
   const refused = async (extra, message) => { const result = await published(f, extra); assert.equal(result.receipt.phase, Phase.REJECTED, message); assert.deepEqual(await f.value(publish, result.request), result.json); };
   // The tag moved between the client's observation and the submit.
@@ -105,9 +105,13 @@ test('publication is refused when the tag moved, is missing, has a release, tag 
   f.refs.set('refs/tags/v1.0', tagObject);
   await refused({ tagName: 'v9.9' }, 'missing tag');
   await refused({ accessRevision: 'f'.repeat(64) }, 'stale access');
-  f.sql.prepare("INSERT INTO repository_rules(repository_id,artifact_name,version,branches,tags,next_tag) VALUES(1,?,1,'[]',?,2)").run('repo-' + 'b'.repeat(32), JSON.stringify([{ id: '1', namePattern: 'other*', allowedUsernames: ['alice'], allowedActors: [1] }]));
-  await refused({}, 'tag rules');
-  f.sql.exec("UPDATE repository_rules SET tags='[]',version=2");
+  // A rule naming the tag (prefix or exact) refuses it, even for an allowed account.
+  f.sql.prepare("INSERT INTO repository_rules(repository_id,artifact_name,version,branches,tags,next_tag) VALUES(1,?,1,'[]',?,2)").run('repo-' + 'b'.repeat(32), JSON.stringify([{ id: '1', namePattern: 'v1*', allowedUsernames: ['alice'], allowedActors: [1] }]));
+  await refused({}, 'prefix tag rule');
+  f.sql.exec(`UPDATE repository_rules SET tags='${JSON.stringify([{ id: '1', namePattern: 'v1.0', allowedUsernames: [], allowedActors: [] }])}',version=2`);
+  await refused({}, 'exact tag rule');
+  // A rule for other tags leaves this one publishable (checked below, once the other refusals are done).
+  f.sql.exec(`UPDATE repository_rules SET tags='${JSON.stringify([{ id: '1', namePattern: 'other*', allowedUsernames: [], allowedActors: [] }, { id: '2', namePattern: 'v1', allowedUsernames: [], allowedActors: [] }])}',version=3`);
   f.sql.exec("UPDATE repositories SET write_pending='unresolved'"); await refused({}, 'unresolved Git write'); f.sql.exec('UPDATE repositories SET write_pending=NULL');
   assert.equal(f.sql.prepare('SELECT count(*) AS total FROM repository_releases').get().total, 0);
   assert.equal((await published(f)).receipt.phase, Phase.SUCCEEDED);

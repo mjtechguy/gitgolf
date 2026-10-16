@@ -1450,6 +1450,26 @@ test('tested native preview publication is immutable, replay-bound and private t
   assert.equal((await f.preview({ action: 'list' }, readerToken)).status, 404);
 });
 
+test('pull request runs and previews are matched by number before the 100-row limit', async t => {
+  const f = await deliveryFixture(t);
+  f.env.EVIDENCE_DAILY_LIMIT = '40';
+  const preview = (await value(await f.preview(f.publication))).preview;
+  // 100 newer runs and previews of another pull request fill the repository's latest 100.
+  f.sql.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<100)
+    INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,state,delivery,advice_state,created_at,updated_at,expires_at)
+      SELECT printf('00000000-0000-4000-8000-%012d',i),repository_id,user_id,'other-'||i,input_hash,json_set(snapshot,'$.selection.number',2),'REFUSED',delivery,'NONE','2999-01-01T00:00:00.000Z',updated_at,expires_at FROM evidence_jobs CROSS JOIN n WHERE id='${f.job.id}';
+    WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<100)
+    INSERT INTO previews(id,repository_id,user_id,job_id,operation_key,input_hash,selection,pr_revision,commit_id,tree_id,source_path,bundle_key,bundle_hash,bundle_bytes,state,created_at,expires_at,purged,kind)
+      SELECT printf('00000000-0000-4000-9000-%012d',i),repository_id,user_id,printf('00000000-0000-4000-8000-%012d',i),'other-'||i,input_hash,json_set(selection,'$.number',2),pr_revision,commit_id,tree_id,source_path,bundle_key,bundle_hash,bundle_bytes,'EXPIRED','2999-01-01T00:00:00.000Z',expires_at,1,kind FROM previews CROSS JOIN n WHERE id='${preview.id}'`);
+  const jobs = await value(await f.evidence({ repository: key, repositoryId: '1', action: 'list', number: 1 }));
+  assert.deepEqual(jobs.jobs.map(job => job.id), [f.job.id]); assert.equal(jobs.truncated, false);
+  const mine = await value(await f.preview({ action: 'list', number: 1 }));
+  assert.deepEqual(mine.previews.map(p => p.id), [preview.id]); assert.equal(mine.truncated, false);
+  const repository = await value(await f.preview({ action: 'list' }));
+  assert.equal(repository.truncated, true); assert.ok(!repository.previews.some(p => p.id === preview.id));
+  assert.equal((await f.preview({ action: 'list', number: 0 })).status, 400);
+});
+
 test('scanned image preview serves matching OCI assets and revokes access when registry policy changes', async t => {
   const f = await deliveryFixture(t), imageDigest = 'sha256:' + 'a'.repeat(64);
   const job = f.sql.prepare('SELECT report_key FROM evidence_jobs WHERE id=?').get(f.job.id);

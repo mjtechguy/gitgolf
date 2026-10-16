@@ -15,14 +15,20 @@ const refuse = message => { throw new Fault('failed_precondition', 412, message)
 async function issueRow(db, row, number) {
   return db.prepare("SELECT id,number,title,body FROM discussions WHERE repository_id=? AND number=? AND kind='issue'").bind(row.id, number).first();
 }
-// The labels Clef may choose from, in inventory order; archived labels are not offered.
+// The labels Clef may choose from, in inventory order. Archived labels are skipped in the query, so however many there are
+// they never take a slot; one past the limit is enough to refuse.
+const liveLabels = "repository_id=? AND kind='label' AND deleted=0 AND NOT COALESCE(json_extract(payload,'$.archived'),0)";
 async function labelRows(db, row) {
-  const { results } = await db.prepare("SELECT id,payload FROM discussion_resources WHERE repository_id=? AND kind='label' AND deleted=0 ORDER BY id LIMIT 1001").bind(row.id).all();
-  return results.map(label => ({ id: String(label.id), ...JSON.parse(label.payload) })).filter(label => !label.archived);
+  const { results } = await db.prepare(`SELECT id,payload FROM discussion_resources WHERE ${liveLabels} ORDER BY id LIMIT ?`).bind(row.id, triageLimits.labels + 1).all();
+  return results.map(label => ({ id: String(label.id), ...JSON.parse(label.payload) }));
 }
-function offered(labels) {
+async function offered(db, row) {
+  const labels = await labelRows(db, row);
   if (!labels.length) refuse('This repository has no labels for Clef to suggest.');
-  if (labels.length > triageLimits.labels) refuse(`Clef can choose among at most ${triageLimits.labels} labels; this repository has ${labels.length} (archived labels are not counted).`);
+  if (labels.length > triageLimits.labels) {
+    const { total } = await db.prepare(`SELECT count(*) AS total FROM discussion_resources WHERE ${liveLabels}`).bind(row.id).first();
+    refuse(`Clef can choose among at most ${triageLimits.labels} labels; this repository has ${total} (archived labels are not counted).`);
+  }
   return labels;
 }
 const sourceHash = (issue, labels) => digest(JSON.stringify(['native.ai-triage.v1', issue.id, issue.title, issue.body, labels.map(label => [label.id, label.name, label.description || ''])]));
@@ -36,12 +42,12 @@ export const triage = {
   // Answered at admission, so the limit is a 412 before anything is queued; prepare checks it again.
   async admit({ db, row, target }) {
     if (!await issueRow(db, row, target.number)) refuse(`Issue #${target.number} does not exist in this repository.`);
-    offered(await labelRows(db, row));
+    await offered(db, row);
   },
   async prepare({ db, row, target }) {
     const issue = await issueRow(db, row, target.number);
     if (!issue) refuse(`Issue #${target.number} does not exist in this repository.`);
-    const labels = offered(await labelRows(db, row));
+    const labels = await offered(db, row);
     const title = clip(issue.title, 512), body = clip(issue.body, triageLimits.textBytes);
     return { number: issue.number, issueId: String(issue.id), sourceSha256: await sourceHash(issue, labels), title, body, truncated: body !== issue.body,
       labels: labels.map((label, index) => ({ key: 'l' + (index + 1), id: label.id, name: label.name, color: label.color, description: clip(label.description || '', triageLimits.descriptionBytes) })) };

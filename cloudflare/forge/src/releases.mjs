@@ -2,6 +2,7 @@ import { ownerSlug } from './owners.mjs';
 import { repositoryAccess, settingsAuthority } from './repository-settings.mjs';
 import { digest, uuidOK, deny, invalid, unsupported, Fault, page, user } from './common.mjs';
 import { sha, validRef } from './git.mjs';
+import { tagRuled } from './repository-rules.mjs';
 
 export const releaseReadMethods = new Set(['ListRepositoryReleases', 'GetRepositoryRelease']);
 export const releaseMethods = {
@@ -94,7 +95,7 @@ async function read(db, env, row, method, body) {
     : { repository: key, repositoryId: String(row.id), releases, page: { nextPage: total > paging.offset + paging.limit ? paging.number + 1 : 0 }, totalCount: String(total) };
 }
 
-// A release names a tag that already exists; it never creates or moves one. Golf serializes its own
+// A release names a tag that already exists; it never creates or moves one, and no tag rule may name it. Golf serializes its own
 // Git writes with this request, so the observed tag cannot move underneath the publication.
 async function publish(db, env, person, row, body, readRefs) {
   const name = body.tagName, notes = body.bodyMarkdown ?? '';
@@ -108,7 +109,8 @@ async function publish(db, env, person, row, body, readRefs) {
   }
   const { access } = await repositoryAccess(db, env, person, row);
   const rules = await db.prepare('SELECT version,tags FROM repository_rules WHERE repository_id=?').bind(row.id).first();
-  let allowed = body.accessRevision === access.revision && !row.write_pending && !(rules && JSON.parse(rules.tags).length)
+  // Only a tag rule naming this tag refuses it; rules for other tags do not. The insert below is fenced on the rules version.
+  let allowed = body.accessRevision === access.revision && !row.write_pending && !(rules && tagRuled(JSON.parse(rules.tags), name))
     && !await db.prepare('SELECT 1 AS present FROM repository_releases WHERE repository_id=? AND tag_name=? AND deleted=0').bind(row.id, name).first();
   if (allowed) {
     const refs = await readRefs(), ref = 'refs/tags/' + name;

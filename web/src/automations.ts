@@ -21,7 +21,7 @@ export type Tool = { id: ToolId; label: string; description: string; engines: 'm
 export type Engine = { id: string; kind: 'model' | 'cli'; label: string; detail: string };
 export type AutomationHost = { id: string; name: string; scope: string };
 export type Inventory = { scope: { scope: AutomationScopeName; scopeId: string; name: string }; canManage: boolean; featureOn: boolean; featureReason: string; automations: Automation[];
-  inherited: Automation[]; tools: Tool[]; engines: Engine[]; enginesRegistered: boolean; hosts: AutomationHost[]; places: Record<Place, string> };
+  inherited: Automation[]; inheritedTruncated?: boolean; tools: Tool[]; engines: Engine[]; enginesRegistered: boolean; hosts: AutomationHost[]; places: Record<Place, string> };
 export type Review = { summary: string; findings: { path: string; line: number | null; severity: string; title: string; evidence: string; suggestion: string }[]; markdown: string };
 export type RunOutputs = { aiRunId?: string; agentTaskId?: string; commentId?: string; pullNumber?: number; pullUrl?: string; issueNumber?: number; issueUrl?: string; labels?: string[];
   suggestions?: { labelId?: string; name: string; probability?: number | null }[]; duplicates?: number[] | null; review?: Review; report?: string };

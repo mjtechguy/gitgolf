@@ -75,8 +75,9 @@ export async function evidenceAPI(db, env, person, row, artifact, body, origin =
   }
   if (body.action === 'list') {
     if (!Number.isInteger(body.number) || body.number < 1) invalid('Use a PR number, or omit it for recent repository runs.');
-    const { results } = await db.prepare('SELECT * FROM evidence_jobs WHERE repository_id=? ORDER BY created_at DESC,id DESC LIMIT 101').bind(row.id).all();
-    const jobs = [], matching = results.slice(0, 100).filter(job => JSON.parse(job.snapshot).selection.number === body.number);
+    // This pull request's latest 100 runs: the number is matched before the limit, so other pull requests' runs never take a slot.
+    const { results } = await db.prepare("SELECT * FROM evidence_jobs WHERE repository_id=? AND json_extract(snapshot,'$.selection.number')=? ORDER BY created_at DESC,id DESC LIMIT 101").bind(row.id, body.number).all();
+    const jobs = [], matching = results.slice(0, 100);
     // One live ref observation per inventory, rather than one paid Git read per row.
     const pr = matching.length ? (await collaboration(db, env, person, 'GetPullRequest', { repository: { owner: ownerSlug(row,env), name: row.name }, number: body.number }, row, artifact)).pullRequest : null;
     for (const job of matching) jobs.push(await view(db, env, person, row, artifact, job, pr));

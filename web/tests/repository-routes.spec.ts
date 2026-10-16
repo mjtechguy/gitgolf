@@ -387,7 +387,8 @@ test('native Actions lists recent repository runs and opens one pull request’s
     selection: { repository: { owner: 'alex', name: 'demo' }, repositoryId: repository.id, pullRequestId: String(100 + number), number, baseCommitId: snapshot, headCommitId: other }, ...states });
   const recent = [run('11111111-1111-4111-8111-111111111111', 7, 3), run('22222222-2222-4222-8222-222222222222', 4, 50, { state: 'QUEUED', testState: 'NONE', agentState: 'RUNNING' })];
   const requests: { path: string; action?: string; number?: number; repositoryId?: string }[] = [];
-  await page.route('**/rpc/golf.v1.RepositoryService/ListPullRequests', route => route.fulfill({ json: { pullRequests: [pull(7), pull(4)], page: { nextPage: 0 } } }));
+  const pullLists: Record<string, unknown>[] = [];
+  await page.route('**/rpc/golf.v1.RepositoryService/ListPullRequests', route => { pullLists.push(route.request().postDataJSON()); return route.fulfill({ json: { pullRequests: [pull(7), pull(4)], page: { nextPage: 2 } } }); });
   await page.route('**/rpc/golf.v1.RepositoryService/GetPullRequest', route => route.fulfill({ json: { pullRequest: pull(route.request().postDataJSON().number) } }));
   await page.route('**/native/**', async route => {
     const path = new URL(route.request().url()).pathname, body = route.request().postDataJSON(); requests.push({ path, action: body.action, number: body.number, repositoryId: body.repositoryId });
@@ -404,6 +405,9 @@ test('native Actions lists recent repository runs and opens one pull request’s
   await expect(second).toContainText('Agent proposal'); await expect(second).toContainText('QUEUED');
   expect(new URL((await first.getByRole('link', { name: '#7', exact: true }).getAttribute('href'))!, page.url()).pathname).toContain('/pull/7');
   await expect(page.getByText('Only the latest 50 runs are loaded; search and sorting apply to those.', { exact: false })).toBeVisible();
+  // The pull request page is the newest by number, open and closed, and says so when another page exists.
+  await expect(page.getByText('Only the 100 newest pull requests, open and closed, are loaded; search and sorting cover only those.', { exact: false })).toBeVisible();
+  expect(pullLists.length).toBeGreaterThan(0); expect(pullLists.every(body => body.state === 'ISSUE_STATE_ALL' && body.sort === 'newest')).toBe(true);
   // The repository-wide rows make no staleness claim; that needs the pull request's own list.
   await expect(table.getByText('Current', { exact: true })).toHaveCount(0); await expect(table.getByText('Stale', { exact: true })).toHaveCount(0);
   const lists = requests.filter(request => request.path === '/native/pr-evidence/read');
