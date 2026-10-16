@@ -6,7 +6,7 @@ import { repositoryFeatures } from './feature-policy.mjs';
 import { openRepositoryValues } from './execution-values.mjs';
 import { pipelinePolicy } from './pipeline-policy.mjs';
 import { RUNNER_LEGACY_ENV_PREFIX } from './forgejo-upstream.mjs';
-import { claimPlan, poolFull, claimFilter, claimSkipped, claimGuard, claimMissed, dailyRunGuard } from './capacity-shares.mjs';
+import { claimPlan, poolFull, claimFilter, claimSkipped, claimGuard, claimMissed, dailyRunGuard, labelNameSQL } from './capacity-shares.mjs';
 
 export { pipelinePolicy };
 export const pipelineEngines = ['forgejo-actions', 'gitlab-ci'];
@@ -223,32 +223,40 @@ export async function claimPipelineJob(db, env, runner, { requestKey } = {}) {
   if (!await db.prepare("SELECT 1 AS queued FROM pipeline_jobs WHERE engine=? AND state='QUEUED' LIMIT 1").bind(runner.engine).first()) return null;
   const plan = await claimPlan(db, env, runner);
   if (await poolFull(db, plan)) return null;
-  const allowed = new Map();
-  // A share reached by a concurrent claim during this one is excluded on a second read, so the claim does not stop behind a page of its jobs.
+  const allowed = new Map(), off = () => JSON.stringify([...allowed].filter(([, on]) => !on).map(([id]) => id));
+  // Candidates already carry the runner's labels; repositories found with Actions off are left out of later pages, and pages
+  // continue until a claim or the end of the queue. A share reached by a concurrent claim during this one is excluded on a
+  // second pass, so the claim does not stop behind a page of its jobs.
   for (let pass = 0, again = true; again && pass < 3; pass++) {
     again = false;
     const filter = claimFilter(plan);
-    const { results } = await db.prepare(`SELECT j.*,r.repository_id${filter.columns} FROM pipeline_jobs j JOIN pipeline_runs r ON r.id=j.run_id AND r.attempt=j.attempt
-      WHERE j.engine=? AND j.state='QUEUED' AND r.cancel_requested=0 AND r.state IN ('QUEUED','RUNNING','WAITING')${scope.sql}${filter.sql} ORDER BY j.id LIMIT 50`).bind(runner.engine, ...scope.values, ...filter.values).all();
-    for (const candidate of results) {
-      if (!parse(candidate.runs_on, []).every(label => labels.has(labelName(label)))) continue;
-      if (claimSkipped(plan, candidate)) continue;
-      if (!allowed.has(candidate.repository_id)) allowed.set(candidate.repository_id, await pipelineAllowed(db, env, candidate.repository_id));
-      if (!allowed.get(candidate.repository_id)) continue;
-      const run = await db.prepare('SELECT * FROM pipeline_runs WHERE id=?').bind(candidate.run_id).first();
-      const token = await mintToken(candidate, run), time = now(), expires = Date.now() + candidate.timeout_seconds * 1000 + tokenGrace, guard = await claimGuard(db, plan, candidate);
-      const changed = await db.prepare(`UPDATE pipeline_jobs SET state='RUNNING',runner_id=?,request_key=?,token_digest=?,token_expires_at=?,started_at=?,updated_at=? WHERE id=? AND state='QUEUED'${guard.sql}`)
-        .bind(runner.id, requestKey || null, await digest(token), expires, time, time, candidate.id, ...guard.values).run();
-      if (changed.meta.changes !== 1) {
-        const missed = guard.sql ? await claimMissed(db, plan, candidate) : null;
-        if (missed === 'pool') return null;
-        if (missed === 'share') again = true;
-        continue;
+    for (let after = 0, more = true; more;) {
+      const { results } = await db.prepare(`SELECT j.*,r.repository_id${filter.columns} FROM pipeline_jobs j JOIN pipeline_runs r ON r.id=j.run_id AND r.attempt=j.attempt
+        WHERE j.engine=? AND j.state='QUEUED' AND j.id>? AND r.cancel_requested=0 AND r.state IN ('QUEUED','RUNNING','WAITING')${scope.sql}${filter.sql}
+        AND NOT EXISTS(SELECT 1 FROM json_each(j.runs_on) e WHERE ${labelNameSQL} NOT IN (SELECT value FROM json_each(?))) AND r.repository_id NOT IN (SELECT value FROM json_each(?))
+        ORDER BY j.id LIMIT 50`).bind(runner.engine, after, ...scope.values, ...filter.values, JSON.stringify([...labels]), off()).all();
+      more = results.length === 50;
+      for (const candidate of results) {
+        after = candidate.id;
+        if (!parse(candidate.runs_on, []).every(label => labels.has(labelName(label)))) continue;
+        if (claimSkipped(plan, candidate)) continue;
+        if (!allowed.has(candidate.repository_id)) allowed.set(candidate.repository_id, await pipelineAllowed(db, env, candidate.repository_id));
+        if (!allowed.get(candidate.repository_id)) continue;
+        const run = await db.prepare('SELECT * FROM pipeline_runs WHERE id=?').bind(candidate.run_id).first();
+        const token = await mintToken(candidate, run), time = now(), expires = Date.now() + candidate.timeout_seconds * 1000 + tokenGrace, guard = await claimGuard(db, plan, candidate);
+        const changed = await db.prepare(`UPDATE pipeline_jobs SET state='RUNNING',runner_id=?,request_key=?,token_digest=?,token_expires_at=?,started_at=?,updated_at=? WHERE id=? AND state='QUEUED'${guard.sql}`)
+          .bind(runner.id, requestKey || null, await digest(token), expires, time, time, candidate.id, ...guard.values).run();
+        if (changed.meta.changes !== 1) {
+          const missed = guard.sql ? await claimMissed(db, plan, candidate) : null;
+          if (missed === 'pool') return null;
+          if (missed === 'share') again = true;
+          continue;
+        }
+        await db.prepare("UPDATE pipeline_runs SET state='RUNNING',started_at=COALESCE(started_at,?),updated_at=? WHERE id=? AND state IN ('QUEUED','WAITING')").bind(time, time, run.id).run();
+        if (runner.ephemeral) await db.prepare("UPDATE pipeline_runners SET state='DISABLED' WHERE id=?").bind(runner.id).run();
+        const job = await db.prepare('SELECT * FROM pipeline_jobs WHERE id=?').bind(candidate.id).first();
+        return claimed(db, job, { ...run, state: 'RUNNING' }, token);
       }
-      await db.prepare("UPDATE pipeline_runs SET state='RUNNING',started_at=COALESCE(started_at,?),updated_at=? WHERE id=? AND state IN ('QUEUED','WAITING')").bind(time, time, run.id).run();
-      if (runner.ephemeral) await db.prepare("UPDATE pipeline_runners SET state='DISABLED' WHERE id=?").bind(runner.id).run();
-      const job = await db.prepare('SELECT * FROM pipeline_jobs WHERE id=?').bind(candidate.id).first();
-      return claimed(db, job, { ...run, state: 'RUNNING' }, token);
     }
   }
   return null;

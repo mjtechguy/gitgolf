@@ -54,7 +54,7 @@ const runningSQL = `SELECT r.repository_id,CASE WHEN o.kind='ORGANIZATION' THEN 
 const repositoryRunning = `SELECT count(*) FROM pipeline_jobs x JOIN pipeline_runs y ON y.id=x.run_id WHERE x.engine IN ${pipelineEngines} AND x.state='RUNNING' AND y.repository_id=?`;
 const organizationRunning = `SELECT count(*) FROM pipeline_jobs x JOIN pipeline_runs y ON y.id=x.run_id WHERE x.engine IN ${pipelineEngines} AND x.state='RUNNING' AND y.repository_id IN (SELECT repository_id FROM repository_owners WHERE owner_id=?)`;
 // A pool in SQL: the runner's label names (the part before ':') are exactly this set.
-const labelNameSQL = "CASE WHEN instr(e.value,':')>0 THEN substr(e.value,1,instr(e.value,':')-1) ELSE e.value END";
+export const labelNameSQL = "CASE WHEN instr(e.value,':')>0 THEN substr(e.value,1,instr(e.value,':')-1) ELSE e.value END";
 export function poolRunning(engine, labels) {
   const same = labels.length ? `NOT EXISTS(SELECT 1 FROM json_each(n.labels) e WHERE ${labelNameSQL} NOT IN (SELECT value FROM json_each(?))) AND (SELECT count(DISTINCT ${labelNameSQL}) FROM json_each(n.labels) e)=?` : 'json_array_length(n.labels)=0';
   // Installation runners only: a cap limits the installation's pool, so runners a repository or organization registers itself never use it up.

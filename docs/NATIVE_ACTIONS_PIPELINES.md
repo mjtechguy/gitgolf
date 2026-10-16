@@ -299,6 +299,8 @@ export async function claimPipelineJob(db, env, runner, { requestKey? }); // →
 //   Picks the oldest QUEUED job of runner.engine whose runs_on ⊆ runner label names and whose repository is in the runner's scope
 //   (installation: any; organization: repositories owned by that organization; repository: that repository), with `actions`
 //   effective and the run not cancel_requested. Atomically sets RUNNING, runner_id, started_at, token digest. The run becomes RUNNING.
+//   The label match is in the candidate query, and repositories found with `actions` off are left out of later pages of 50, which
+//   continue to the end of the queue: jobs this runner cannot take never hide one it can.
 export async function jobByToken(db, env, token);                 // job token → { job, run, repository } or Fault (expired / not RUNNING / feature off)
 export async function runnerJob(db, env, runner, jobId);          // the RUNNING job this runner holds, re-checking `actions` → { job, run, repository }
 

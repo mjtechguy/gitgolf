@@ -56,6 +56,20 @@ test('the actions feature gates creation and claims; refused runs keep their rea
   await assert.rejects(p.createPipelineRun(f.db, { ...f.env, PIPELINES_ENABLED: 'false' }, run(), [job('build')]), /not allocated/);
 });
 
+test('a claim reads past pages of jobs the runner lacks labels for and repositories with Actions off', async t => {
+  const f = await pipelineFixture(t);
+  f.sql.exec(`INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at,default_branch) VALUES(2,'other','','repo-${'c'.repeat(32)}',1,'key2','hash2','ACTIVE','2026-10-12T00:00:00Z','main')`);
+  const many = (prefix, runsOn) => Array.from({ length: 60 }, (_, i) => job(prefix + i, [], { runsOn }));
+  await p.createPipelineRun(f.db, f.env, run(), many('win', ['windows']));
+  await p.createPipelineRun(f.db, f.env, run({ repositoryId: 2 }), many('off', ['ubuntu-latest']));
+  f.sql.exec("INSERT INTO repository_execution_policy(repository_id,artifact_name,version,manual,push,updated_by,updated_at) VALUES(2,'repo-" + 'c'.repeat(32) + "',1,0,0,1,'t')");
+  await p.createPipelineRun(f.db, f.env, run(), [job('target')]);
+  f.sql.prepare("INSERT INTO pipeline_runners(uuid,engine,scope,scope_id,name,labels,token_digest,created_by,created_at) VALUES('l','forgejo-actions','installation','','l','[\"ubuntu-latest:docker://node:20\"]','l',1,'t')").run();
+  const runner = f.sql.prepare("SELECT * FROM pipeline_runners WHERE uuid='l'").get();
+  assert.equal((await p.claimPipelineJob(f.db, f.env, runner)).job.name, 'target');
+  assert.equal(await p.claimPipelineJob(f.db, f.env, runner), null);
+});
+
 test('GitLab byte traces keep offsets, redact secrets byte for byte and refuse gaps', async t => {
   const f = await pipelineFixture(t);
   const created = await p.createPipelineRun(f.db, f.env, run({ engine: 'gitlab-ci', workflowPath: '.gitlab-ci.yml' }), [job('a', [], { runsOn: [] })]);
