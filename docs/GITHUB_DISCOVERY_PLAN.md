@@ -93,7 +93,8 @@ columns on desktop, and repository rows use compact spacing. Mobile collapses to
 one column. Flare uses the same global tokens and spacing as other themes.
 
 Discovery performs bounded D1 queries over metadata and never clones or scans
-Git to render a list. Profile pins are capped at six. Source reads keep immutable
+Git to render a list. Profile pins are capped at six. The editor lists current pins
+first, then the owner's public repositories newest first, 100 at a time with Load more. Source reads keep immutable
 Git/index caches and background pre-reading, but validate current repository
 access before serving cached bytes. HTML and API responses are `no-store`;
 hashed UI assets remain immutable. Cache public source by immutable commit only
