@@ -190,7 +190,7 @@ func TestIssueUpdateUnknownAndNativeDenials(t *testing.T) {
 }
 
 func TestIssueUpdateRPCBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

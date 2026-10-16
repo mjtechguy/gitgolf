@@ -393,9 +393,9 @@ func newReleasePublicationFixture(t *testing.T) *releasePublicationFixture {
 	}))
 	t.Cleanup(provider.Close)
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL = provider.URL
-	config.GiteaOAuthClientID = "fixture-client"
-	config.GiteaOAuthClientSecret = "fixture-secret"
+	config.ForgePublicURL = provider.URL
+	config.ForgeOAuthClientID = "fixture-client"
+	config.ForgeOAuthClientSecret = "fixture-secret"
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {
@@ -560,7 +560,7 @@ func TestReleasePublicationRefusalAndUnknownPostgres(t *testing.T) {
 			if !known {
 				var blocked bool
 				var active int
-				if e = f.db.QueryRow(`SELECT golf_repository_lifecycle_blocked($1,11),golf_repository_lifecycle_active($1,11)`, f.s.config.GiteaURL).Scan(&blocked, &active); e != nil || !blocked || active < 1 {
+				if e = f.db.QueryRow(`SELECT golf_repository_lifecycle_blocked($1,11),golf_repository_lifecycle_active($1,11)`, f.s.config.ForgeURL).Scan(&blocked, &active); e != nil || !blocked || active < 1 {
 					t.Fatal("unresolved exclusion missing", e)
 				}
 				c := proto.Clone(m).(*golfv1.SubmitRepositoryReleasePublicationRequest)
@@ -674,7 +674,7 @@ func (f *releasePublicationFixture) seedPendingMerge(t *testing.T, session login
 			return e
 		}
 		var id int64
-		e = tx.QueryRowContext(held, `INSERT INTO golf_standard_pull_merges(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,pull_request_id,number,expected_pull_revision,head_commit_id,observed_base_commit_id,source_ref,target_ref,input_fingerprint,source_repository_id,source_owner_id,source_repository_owner,source_repository_name) VALUES($1,$2,42,$3,$4,$5,$6,$7,9007199254740993,7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`, c.UserID, f.s.config.GiteaURL, m.OperationId, target, owner, m.Selection.Repository.Owner, m.Selection.Repository.Name, m.ExpectedPullRevision, m.Selection.HeadCommitId, m.Selection.BaseCommitId, m.SourceRef, m.TargetRef, standardMergeFingerprint(m), source, sourceOwner, sourceKey.Owner, sourceKey.Name).Scan(&id)
+		e = tx.QueryRowContext(held, `INSERT INTO golf_standard_pull_merges(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,pull_request_id,number,expected_pull_revision,head_commit_id,observed_base_commit_id,source_ref,target_ref,input_fingerprint,source_repository_id,source_owner_id,source_repository_owner,source_repository_name) VALUES($1,$2,42,$3,$4,$5,$6,$7,9007199254740993,7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`, c.UserID, f.s.config.ForgeURL, m.OperationId, target, owner, m.Selection.Repository.Owner, m.Selection.Repository.Name, m.ExpectedPullRevision, m.Selection.HeadCommitId, m.Selection.BaseCommitId, m.SourceRef, m.TargetRef, standardMergeFingerprint(m), source, sourceOwner, sourceKey.Owner, sourceKey.Name).Scan(&id)
 		if e != nil {
 			return e
 		}

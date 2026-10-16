@@ -38,7 +38,7 @@ func (s *Server) withManagedSession(ctx context.Context, value string, credentia
 	}
 	defer tx.Rollback()
 	queries := database.New(s.db).WithTx(tx)
-	identity, err := queries.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.GiteaURL})
+	identity, err := queries.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return errUnauthenticated
 	}
@@ -51,7 +51,7 @@ func (s *Server) withManagedSession(ctx context.Context, value string, credentia
 	if user.ID != identity.ForgeUserID {
 		return errUnauthenticated
 	}
-	caller, err := queries.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: hash, UserID: identity.ID, ForgeURL: s.config.GiteaURL})
+	caller, err := queries.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: hash, UserID: identity.ID, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return errUnauthenticated
 	}
@@ -91,7 +91,7 @@ func (s *Server) listSessions(ctx context.Context, value string, credential forg
 	err = s.withManagedSession(ctx, value, credential, func(queries *database.Queries, caller database.LockManagedSessionRow, hash []byte) error {
 		var err error
 		rows, err = queries.ListManagedSessions(ctx, database.ListManagedSessionsParams{
-			CallerTokenHash: hash, UserID: caller.UserID, ForgeURL: s.config.GiteaURL,
+			CallerTokenHash: hash, UserID: caller.UserID, ForgeURL: s.config.ForgeURL,
 			RowLimit: int32(limit + 1), RowOffset: int32((page - 1) * limit),
 		})
 		if err != nil {
@@ -121,7 +121,7 @@ func (s *Server) revokeSession(ctx context.Context, value string, credential for
 	current := false
 	err = s.withManagedSession(ctx, value, credential, func(queries *database.Queries, caller database.LockManagedSessionRow, hash []byte) error {
 		count, err := queries.RevokeManagedSession(ctx, database.RevokeManagedSessionParams{
-			CallerTokenHash: hash, UserID: caller.UserID, ForgeURL: s.config.GiteaURL, SessionID: id,
+			CallerTokenHash: hash, UserID: caller.UserID, ForgeURL: s.config.ForgeURL, SessionID: id,
 		})
 		if err != nil {
 			return errStorageUnavailable
@@ -140,7 +140,7 @@ func (s *Server) revokeOtherSessions(ctx context.Context, value string, credenti
 	err := s.withManagedSession(ctx, value, credential, func(queries *database.Queries, caller database.LockManagedSessionRow, hash []byte) error {
 		var err error
 		count, err = queries.RevokeOtherManagedSessions(ctx, database.RevokeOtherManagedSessionsParams{
-			CallerTokenHash: hash, UserID: caller.UserID, ForgeURL: s.config.GiteaURL,
+			CallerTokenHash: hash, UserID: caller.UserID, ForgeURL: s.config.ForgeURL,
 		})
 		if err != nil {
 			return errStorageUnavailable

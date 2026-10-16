@@ -35,8 +35,8 @@ spec.loader.exec_module(helpers)
 STAGE = 'initialization'
 LIMIT = 1 << 20
 IMAGE = 'alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0'
-NATIVE_HEADERS = ['Content-Type', 'X-Gitea-Delivery', 'X-Gitea-Event',
-    'X-Gitea-Event-Type', 'X-Gitea-Signature', 'X-Gitea-Hook-Installation-Target-Type']
+NATIVE_HEADERS = ['Content-Type', 'X-Forgejo-Delivery', 'X-Forgejo-Event',
+    'X-Forgejo-Event-Type', 'X-Forgejo-Signature']
 
 
 def stage(value):
@@ -51,7 +51,7 @@ def main():
     parser.add_argument('--runner-image', required=True)
     args = parser.parse_args()
     environment = {key: value for key, value in os.environ.items() if not key.startswith(
-        ('GOLF_', 'GITEA_', 'POSTGRES_', 'OTEL_', 'COMPOSE_', 'RUSTFS_', 'AWS_', 'GIT_')) and key != 'DATABASE_URL'}
+        ('GOLF_', 'FORGEJO_', 'POSTGRES_', 'OTEL_', 'COMPOSE_', 'RUSTFS_', 'AWS_', 'GIT_')) and key != 'DATABASE_URL'}
     private = []
 
     def run(*arguments, payload=None, env=None, cwd=ROOT, timeout=120):
@@ -67,8 +67,8 @@ def main():
     print('Runner image: '+worker, flush=True)
     project = 'golf-push-ci-proof-'+secrets.token_hex(5)
     golf_port, forge_port = helpers.free_ports(2)
-    original = smoke.GOLF, smoke.GITEA
-    smoke.GOLF, smoke.GITEA = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{forge_port}'
+    original = smoke.GOLF, smoke.FORGE
+    smoke.GOLF, smoke.FORGE = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{forge_port}'
     signing_secret, connection = secrets.token_hex(32), str(uuid.uuid4())
     private.append(signing_secret)
     path = '/hooks/forgejo/'+connection
@@ -110,7 +110,7 @@ def main():
                     self.send_error(400)
                     return
                 signature = hmac.new(signing_secret.encode(), body, hashlib.sha256).hexdigest()
-                if not hmac.compare_digest(self.headers.get('X-Gitea-Signature', ''), signature):
+                if not hmac.compare_digest(self.headers.get('X-Forgejo-Signature', ''), signature):
                     with capture_lock:
                         recorder_counts['bad_signature'] += 1
                     self.send_error(401)
@@ -139,17 +139,17 @@ def main():
         directory = Path(temporary)
         directory.chmod(0o700)
         env_file, override = directory/'core.env', directory/'proof.yaml'
-        values = {name: secrets.token_hex(24) for name in ['POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD']}
+        values = {name: secrets.token_hex(24) for name in ['POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'FORGEJO_DB_PASSWORD']} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),
             GOLF_PUBLIC_URL=smoke.GOLF, GOLF_ENCRYPTION_KEYS='', GOLF_ACTIVE_ENCRYPTION_KEY='',
-            GITEA_PUBLIC_URL='', GITEA_OAUTH_CLIENT_ID='', GITEA_OAUTH_CLIENT_SECRET='',
+            GOLF_FORGE_PUBLIC_URL='', GOLF_FORGE_OAUTH_CLIENT_ID='', GOLF_FORGE_OAUTH_CLIENT_SECRET='',
             GOLF_REPOSITORY_EVENT_CONNECTIONS='[]', GOLF_PUSH_CI_ENABLED='false',
             GOLF_RUNNER_KEY=base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('='),
             GOLF_RUNNER_IMAGES=json.dumps({'linux': IMAGE}), GOLF_RUNNER_JOB_IMAGE=IMAGE,
             GOLF_RUNNER_APPROVED_IMAGES=json.dumps([IMAGE]),
             RUSTFS_ACCESS_KEY='golf-proof-'+secrets.token_hex(12), RUSTFS_SECRET_KEY=secrets.token_hex(32))
         values['GOLF_RUNNER_KEYS'] = json.dumps({'local-docker': values['GOLF_RUNNER_KEY']})
-        private.extend(value for key, value in values.items() if value and (key.endswith(('_PASSWORD', '_KEY', '_KEYS', '_SECRET_KEY')) or key == 'GITEA_OAUTH_CLIENT_SECRET'))
+        private.extend(value for key, value in values.items() if value and (key.endswith(('_PASSWORD', '_KEY', '_KEYS', '_SECRET_KEY')) or key == 'GOLF_FORGE_OAUTH_CLIENT_SECRET'))
 
         def write_environment():
             text = ''.join(key+"='"+value+"'\n" for key, value in values.items())
@@ -169,11 +169,11 @@ def main():
     ports: !override ["127.0.0.1:{golf_port}:8080"]
     environment:
       GOLF_PUSH_CI_ENABLED: ${{GOLF_PUSH_CI_ENABLED}}
-  gitea:
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
-      GITEA__security__ALLOWED_HOST_LIST: host.docker.internal
-      GITEA__actions__ENABLED: 'false'
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
+      FORGEJO__security__ALLOWED_HOST_LIST: host.docker.internal
+      FORGEJO__actions__ENABLED: 'false'
 {host_mapping}    ports: !override ["127.0.0.1:{forge_port}:3000"]
   runner:
     image: {worker}
@@ -187,7 +187,7 @@ def main():
             return run(*compose, *arguments, **kwargs)
 
         def admin(*arguments):
-            return command('exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini',
+            return command('exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini',  # Forgejo's upstream path
                 'admin', 'user', *arguments).strip()
 
         def sql(query):
@@ -204,7 +204,7 @@ def main():
                     assert matches[0][2] == 202, 'Native delivery was not accepted'
                     return matches[0]
                 time.sleep(0.25)
-            logs = command('logs', '--no-color', '--tail', '100', 'gitea').lower()
+            logs = command('logs', '--no-color', '--tail', '100', 'forgejo').lower()
             categories = {name: text in logs for name, text in {
                 'host_denied': 'webhook can only call allowed', 'dns_failure': 'no such host',
                 'timeout': 'timeout', 'connection_refused': 'connection refused',
@@ -245,9 +245,9 @@ def main():
         try:
             stage('fresh portable core and private RustFS; automatic execution initially disabled')
             started = True
-            command('up', '-d', '--no-build', '--wait', '--wait-timeout', '120', 'postgres', 'gitea', 'golf', timeout=180)
+            command('up', '-d', '--no-build', '--wait', '--wait-timeout', '120', 'postgres', 'forgejo', 'golf', timeout=180)
             smoke.ready()
-            assert smoke.provider('', 'GET', 'version')['version'] == '1.27.3'
+            assert smoke.provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
             command('exec', '-T', 'golf', 'golf', 'objectstore', 'initialize')
             name = 'push-'+secrets.token_hex(5)
             admin('create', '--username', name, '--email', name+'@example.invalid',
@@ -273,7 +273,7 @@ def main():
             auth = base64.b64encode((name+':'+token).encode()).decode()
             git_environment = {**environment, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null',
                 'GIT_TERMINAL_PROMPT': '0', 'GIT_CONFIG_COUNT': '1',
-                'GIT_CONFIG_KEY_0': 'http.'+smoke.GITEA+'/.extraHeader', 'GIT_CONFIG_VALUE_0': 'Authorization: Basic '+auth}
+                'GIT_CONFIG_KEY_0': 'http.'+smoke.FORGE+'/.extraHeader', 'GIT_CONFIG_VALUE_0': 'Authorization: Basic '+auth}
 
             def git(*arguments):
                 return run('git', '-c', 'credential.helper=', '-c', 'core.hooksPath='+str(hooks),
@@ -295,7 +295,7 @@ def main():
                 '          printf "native push proof complete\\n"\n')
             workflow_file.write_text(workflow)
             git('add', '.'); git('commit', '-m', 'Initial bounded source')
-            remote = smoke.GITEA+'/'+full_name+'.git'
+            remote = smoke.FORGE+'/'+full_name+'.git'
             git('push', remote, 'HEAD:refs/heads/main')
             smoke.wait_for_push(token, full_name)
             assert not runs()
@@ -316,7 +316,7 @@ def main():
                 'secret': signing_secret}], separators=(',', ':'))
             write_environment(); command('up', '-d', '--no-deps', 'golf'); smoke.ready()
             hook_route = base+'/hooks'
-            hook = smoke.provider(token, 'POST', hook_route, {'type': 'gitea', 'active': True,
+            hook = smoke.provider(token, 'POST', hook_route, {'type': 'forgejo', 'active': True,
                 'events': ['push'], 'branch_filter': '*', 'config': {'url': 'http://host.docker.internal:'+str(recorder.server_port)+path,
                 'content_type': 'json', 'http_method': 'POST', 'secret': signing_secret}}, expected=201)
             assert smoke.provider(token, 'GET', hook_route+'/'+str(hook['id']))['active']
@@ -331,7 +331,7 @@ def main():
             values['GOLF_PUSH_CI_ENABLED'] = 'true'
             write_environment(); command('up', '-d', '--no-deps', 'golf'); smoke.ready()
             assert rpc('AutomationGrantService/ListAutomationGrants', {'repository': selection})['grants'][0]['executionState'] == 'requires_push_admission'
-            deliver(historical_body, {**historical_headers, 'X-Gitea-Delivery': str(uuid.uuid4())}, 204)
+            deliver(historical_body, {**historical_headers, 'X-Forgejo-Delivery': str(uuid.uuid4())}, 204)
             time.sleep(3)
             assert not runs() and sql('SELECT count(*) FROM golf_push_materializations') == '0'
 
@@ -370,7 +370,7 @@ def main():
             # A worker sharing Golf's network namespace must rejoin after restart.
             command('restart', 'runner')
             deliver(first_body, first_headers, 204)
-            deliver(first_body, {**first_headers, 'X-Gitea-Delivery': str(uuid.uuid4())}, 204)
+            deliver(first_body, {**first_headers, 'X-Forgejo-Delivery': str(uuid.uuid4())}, 204)
             assert sql('SELECT count(*) FROM golf_repository_events') == '2'
             time.sleep(3)
             assert len(runs()) == 1 and runs()[0]['id'] == queued['id']
@@ -404,7 +404,7 @@ def main():
             rpc('SessionService/Logout')
             print('PASS: real signed native pushes, disabled-intake non-revival, independent grant/logout, push-only policies, exact commit/blob/private RustFS source, restart/replay deduplication, actual Docker execution, running revoke, subsequent push denial and executor cleanup', flush=True)
         finally:
-            smoke.GOLF, smoke.GITEA = original
+            smoke.GOLF, smoke.FORGE = original
             try:
                 if started:
                     command('down', '--volumes', '--remove-orphans', timeout=120)

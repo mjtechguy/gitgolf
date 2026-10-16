@@ -1,10 +1,10 @@
 # Native feature and URL audit
 
-Reviewed 2026-10-03 against the baseline and Golf URL/unit source `bfbb5deba7d86c298cc18b81e9326b402da9d533` and the installed Gitea 1.27.3. Both infrastructure tracks retain the same supported native API/Git boundary. This is an implementation inventory, not full parity qualification.
+Reviewed 2026-10-03 against the baseline and Golf URL/unit source `bfbb5deba7d86c298cc18b81e9326b402da9d533` and the then-installed native forge, which used the since-retired backend; the review has not been repeated on Forgejo 15.0.9. Both infrastructure tracks retain the same supported native API/Git boundary. This is an implementation inventory, not full parity qualification.
 
 ## Native integration
 
-Golf's custom UI calls its own typed API; `internal/server/forge.go` translates to supported `/api/v1` requests using the current caller's provider credential. Exact-target reads independently recheck native identity and current permissions. Native Git handles repository objects and transport; Golf owns sessions, journals, private drafts, policies and agent orchestration. The inspected product adapters do not write the native database or canonical repository files directly. Follow the [pinned native API router](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/api.go) and installed OpenAPI when adding features, rather than assuming the latest documentation matches this installation.
+Golf's custom UI calls its own typed API; `internal/server/forge.go` translates to supported `/api/v1` requests using the current caller's provider credential. Exact-target reads independently recheck native identity and current permissions. Native Git handles repository objects and transport; Golf owns sessions, journals, private drafts, policies and agent orchestration. The inspected product adapters do not write the native database or canonical repository files directly. Follow the [pinned native API router](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/api.go) and installed OpenAPI when adding features, rather than assuming the latest documentation matches this installation.
 
 | Area | Current integration | Remaining product coverage |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ The unit-navigation gap now has a bounded source implementation: optional reposi
 
 ## URL contract
 
-Golf already uses familiar `/OWNER/REPO`, `/issues/N`, `/pull/N/files`, `/commit/SHA` and `/actions/runs/ID` shapes. Gitea does not impose the custom browser URLs. Its API and Git transport URLs are separate interfaces.
+Golf already uses familiar `/OWNER/REPO`, `/issues/N`, `/pull/N/files`, `/commit/SHA` and `/actions/runs/ID` shapes. The native forge does not impose the custom browser URLs. Its API and Git transport URLs are separate interfaces.
 
 Current source links are immutable `tree/SHA/path` or `blob/SHA/path`; branch/tag names are query context, not proof that a ref still points to the selected SHA. This avoids ambiguity between slash-containing refs and paths. GitHub supports both ordinary branch/ref URLs and immutable SHA permalinks; see [GitHub permanent-link documentation](https://docs.github.com/en/repositories/working-with-files/using-files/getting-permanent-links-to-files).
 

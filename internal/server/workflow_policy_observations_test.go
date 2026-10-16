@@ -47,7 +47,7 @@ func seedObservationPolicies(t *testing.T, s *Server) {
 		`INSERT INTO golf_execution_policy_repositories(forge_url,scope,scope_id,repository_id,owner_id) VALUES($1,'instance','instance',11,42),($1,'instance','instance',999,55)`,
 		`INSERT INTO golf_execution_policy_workflows(forge_url,scope,scope_id,workflow_path) VALUES($1,'instance','instance','.github/workflows/check.yml')`,
 	} {
-		if _, err := s.db.Exec(statement, s.config.GiteaURL); err != nil {
+		if _, err := s.db.Exec(statement, s.config.ForgeURL); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -188,7 +188,7 @@ func TestWorkflowPolicyRequiredScopePostgres(t *testing.T) {
 	if missing.Configurations[0].PushPolicyAllowed == nil || *missing.Configurations[0].PushPolicyAllowed {
 		t.Fatal("organization ceiling bypassed by repository/instance policy")
 	}
-	if _, err := f.s.db.Exec(`INSERT INTO golf_execution_policies(forge_url,scope,scope_id,owner_id,mode,manual_dispatch_enabled,push_allowed,allow_all_workflows,revision,revocation_epoch) VALUES($1,'organization','42',42,'all',true,true,true,1,1)`, f.s.config.GiteaURL); err != nil {
+	if _, err := f.s.db.Exec(`INSERT INTO golf_execution_policies(forge_url,scope,scope_id,owner_id,mode,manual_dispatch_enabled,push_allowed,allow_all_workflows,revision,revocation_epoch) VALUES($1,'organization','42',42,'all',true,true,true,1,1)`, f.s.config.ForgeURL); err != nil {
 		t.Fatal(err)
 	}
 	allowed := observe()

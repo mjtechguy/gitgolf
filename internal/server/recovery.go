@@ -31,7 +31,7 @@ type RecoveryResult struct {
 
 // InvalidateRestoredSessions requires ALL writers to be stopped and drained.
 // Its table locks protect only this transaction, not future writes. It neither
-// reconciles Gitea/provider revocations nor authorizes reopening restored traffic.
+// reconciles native provider revocations nor authorizes reopening restored traffic.
 // No keys are needed: invalidation deletes ciphertext without decrypting it.
 func InvalidateRestoredSessions(ctx context.Context, db *sql.DB, backupID string) (RecoveryResult, error) {
 	if !ValidRecoveryBackupID(backupID) {

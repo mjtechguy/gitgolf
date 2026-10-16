@@ -138,7 +138,7 @@ def main():
     output.mkdir(parents=True, mode=0o700); output.chmod(0o700)
     for path in ('compose.yaml','deploy/compose/compose.ci.yaml','deploy/compose/compose.actions-engine.yaml','deploy/compose/compose.runner-tls.yaml'):
         assert (stack/path).is_file()
-    environment = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k != 'DATABASE_URL'}
+    environment = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k != 'DATABASE_URL'}
     def run(*argv, payload=None, timeout=180, expected=0):
         result = subprocess.run(argv, input=None if payload is None else json.dumps(payload).encode(), cwd=stack, env=environment, capture_output=True, timeout=timeout)
         assert result.returncode == expected and len(result.stdout) <= 8<<20 and len(result.stderr) <= 8<<20, 'Bounded subprocess failed; private diagnostics withheld'
@@ -152,8 +152,8 @@ def main():
     space = run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',core,'-Pk','/')
     assert int(space.splitlines()[-1].split()[3]) >= 2*1024*1024
     project = 'golf-values-proof-'+secrets.token_hex(5)
-    ports = helpers.free_ports(3); old_urls = smoke.GOLF, smoke.GITEA
-    smoke.GOLF, smoke.GITEA = f'http://127.0.0.1:{ports[0]}', f'http://127.0.0.1:{ports[1]}'
+    ports = helpers.free_ports(3); old_urls = smoke.GOLF, smoke.FORGE
+    smoke.GOLF, smoke.FORGE = f'http://127.0.0.1:{ports[0]}', f'http://127.0.0.1:{ports[1]}'
     secure_url = f'https://127.0.0.1:{ports[2]}'
     synthetic = secrets.token_hex(32)  # Never persisted by this helper.
     forbidden = [synthetic]; actors = {}; started = False; cleanup = []; passed = False
@@ -176,14 +176,14 @@ def main():
         (directory/'ca.key').chmod(0o600); key.chmod(0o444); ca.chmod(0o444); cert.chmod(0o444)
         runner_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
         legacy, next_key = [base64.b64encode(secrets.token_bytes(32)).decode() for _ in range(2)]
-        values = {k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')}
+        values = {k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY='',GOLF_ENCRYPTION_KEYS=json.dumps({'legacy':legacy,'next':next_key}),GOLF_ACTIVE_ENCRYPTION_KEY='legacy',
                       GOLF_PUBLIC_URL=smoke.GOLF,GOLF_RUNNER_KEY=runner_key,GOLF_RUNNER_KEYS=json.dumps({'local-docker':runner_key}),
                       GOLF_RUNNER_IMAGES=json.dumps({'linux':IMAGE}),GOLF_RUNNER_JOB_IMAGE=IMAGE,GOLF_RUNNER_APPROVED_IMAGES=json.dumps([IMAGE]),
                       GOLF_INTERNAL_TLS_LISTEN_ADDR=':8443',GOLF_INTERNAL_TLS_CERT_FILE=str(cert),GOLF_INTERNAL_TLS_KEY_FILE=str(key),
                       GOLF_RUNNER_TLS_CA_FILE=str(ca),GOLF_RUNNER_TLS_URL='https://127.0.0.1:8443')
         forbidden.extend([runner_key,legacy,next_key])
-        forbidden.extend(v for k,v in values.items() if v and k not in ('GOLF_PUBLIC_URL','GOLF_INTERNAL_TLS_LISTEN_ADDR','GOLF_RUNNER_JOB_IMAGE','GOLF_RUNNER_TLS_URL','GOLF_ACTIVE_ENCRYPTION_KEY'))
+        forbidden.extend(v for k,v in values.items() if v and k not in ('GOLF_PUBLIC_URL','GOLF_INTERNAL_TLS_LISTEN_ADDR','GOLF_RUNNER_JOB_IMAGE','GOLF_RUNNER_TLS_URL','GOLF_ACTIVE_ENCRYPTION_KEY','GOLF_FORGE_INSTANCE_ID'))
         env_file, override = directory/'core.env', directory/'proof.yaml'
         def write_env():
             text = ''.join(k+"='"+v+"'\n" for k,v in values.items())
@@ -195,9 +195,9 @@ def main():
     image: {core}
     pull_policy: never
     ports: !override ["127.0.0.1:{ports[0]}:8080", "127.0.0.1:{ports[2]}:8443"]
-  gitea:
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
   runner:
     image: {worker}
@@ -216,7 +216,7 @@ def main():
             compose += ['-f',str(stack/path)]
         compose += ['-f',str(override)]
         def command(*argv,**kwargs): return run(*compose,*argv,**kwargs)
-        def admin(*argv): return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*argv).strip()
+        def admin(*argv): return command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*argv).strip()  # Forgejo's upstream path
         def rpc(actor, method, payload=None, **kwargs): return smoke.rpc(actor['session'],method,payload,**kwargs)
         def broker(actor, method, payload=None, **kwargs): return rpc(actor,SERVICE+method,payload,**kwargs)
         def metadata(sql): return command('exec','-T','postgres','psql','-U','postgres','-d','golf','-v','ON_ERROR_STOP=1','-Atc',sql).strip()
@@ -287,7 +287,7 @@ def main():
         try:
             stage('fresh core, real TLS endpoint and bounded externally seeded daemon')
             started = True
-            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf','runner-daemon')
+            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','forgejo','golf','runner-daemon')
             command('up','-d','--no-build','--pull','never','runner-image-init','runner-actions-image-init')
             smoke.ready(); baseline = runtime(); manifest['runtimeBefore'] = baseline
             context = ssl.create_default_context(cafile=str(ca)); context.minimum_version = ssl.TLSVersion.TLSv1_3
@@ -462,7 +462,7 @@ def main():
                     for argv in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):
                         assert not run('docker',*argv,'--filter','label=com.docker.compose.project='+project).strip()
                 except Exception: cleanup.append('fresh-compose-resources')
-            smoke.GOLF, smoke.GITEA = old_urls
+            smoke.GOLF, smoke.FORGE = old_urls
             manifest.update(passed=passed,complete=passed and not cleanup,cleanupPassed=not cleanup,lastStage=STAGE)
             helpers.private_write(output/'manifest.json',safe_manifest(manifest,forbidden))
             if 'originalFailure' not in manifest:

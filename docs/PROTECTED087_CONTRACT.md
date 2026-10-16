@@ -65,18 +65,12 @@ a new served-image/font/screenshot receipt. No generated files from the isolated
 worktree are required in this packet's integration commit; regenerate the merged
 protobuf normally before building the integrated source.
 
-Actual native qualification uses the retained local Gitea and existing corpus:
-
-```sh
-python3 scripts/protected087-native-proof.py \
-  --stack-root /Users/mj/mjcode/billiondollarsolo/golf-git \
-  --output /Users/mj/mjcode/billiondollarsolo/golf-git/.tmp/protected087-native-attempt2
-```
+Actual native qualification used the then-retained local installation, which ran the since-retired backend, and the existing corpus; it has not been repeated on Forgejo 15.0.9. Its backend-specific proof script was removed with that backend, so a Forgejo re-run needs a new qualifier.
 
 The [attempt2 manifest](../.tmp/protected087-native-attempt2/manifest.json),
 [native matrix](../.tmp/protected087-native-attempt2/native.log) and
 [production consumer check](../.tmp/protected087-native-attempt2/review-native.log)
-pass against native1.27.3. Production source digests are recorded alongside the
+passed against that native installation. Production source digests are recorded alongside the
 baseline revision; this is qualification of that bounded source, not a deployed
 087 runtime. Randomly named ordinary actors, their private organization/repository
 and short-lived SSH keys are created through supported CLI/API operations, then
@@ -103,11 +97,12 @@ bounded IPv4 scan; the failed receipt is preserved.
 | Scoped merger | Exclusive ordinary merge account succeeds; other actors' immediate/scheduled merges and merger policy edits/direct pushes deny under the tested settings. Owner can still change settings. |
 | Explicit Git lease | Stale B rejects; matching B publishes exact C. Source can advance independently, so this does not condition H/review/policy/authority. |
 
-The pinned [merge API handler](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/pull.go),
-[merge service](https://github.com/go-gitea/gitea/blob/v1.27.3/services/pull/merge.go)
-and [protected-branches documentation](https://docs.gitea.com/1.27/usage/access-control/protected-branches/)
-were rechecked. Native1.27.3 retains the expected-head-only synchronous signature,
-PR-scoped lock and provider-lifetime merge context. Client cancellation therefore
+The upstream Forgejo [merge API handler](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/pull.go),
+[merge service](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/services/pull/merge.go)
+and [protected-branches documentation](https://forgejo.org/docs/v15.0/user/protection/)
+are the current references. The native forge retains the expected-head-only synchronous signature,
+PR-scoped lock and provider-lifetime merge context (characterized on the since-retired
+backend; Forgejo inherits this code but it has not been re-qualified). Client cancellation therefore
 does not establish that an accepted native write cannot later take effect.
 
 ## Enforcement decision and next implementation

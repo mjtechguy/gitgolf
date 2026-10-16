@@ -59,7 +59,7 @@ func (s *Server) workflowEmailEvent(ctx context.Context, d emailDelivery) (workf
  FROM golf_workflow_notification_events e JOIN golf_email_subscriptions ss ON ss.id=$2::uuid
  WHERE e.event_id=$1 AND e.forge_url=ss.forge_url AND e.repository_id=ss.repository_id AND e.owner_id=ss.owner_id
  AND ss.user_id=$3 AND ss.version=$4 AND ss.epoch=$5`, d.EventID, d.SubscriptionID, d.UserID, d.SubscriptionVersion, d.Epoch).Scan(&e.RunID, &e.EventID, &e.ForgeURL, &e.RepositoryID, &e.OwnerID, &e.AttemptID, &e.State, &e.ObservedAt)
-	if err != nil || e.ForgeURL != s.config.GiteaURL || !creationKey.MatchString(e.RunID) || e.EventID != "workflow-terminal:"+e.RunID || e.RepositoryID <= 0 || e.OwnerID <= 0 || e.AttemptID != "" && !attemptIdentifier.MatchString(e.AttemptID) {
+	if err != nil || e.ForgeURL != s.config.ForgeURL || !creationKey.MatchString(e.RunID) || e.EventID != "workflow-terminal:"+e.RunID || e.RepositoryID <= 0 || e.OwnerID <= 0 || e.AttemptID != "" && !attemptIdentifier.MatchString(e.AttemptID) {
 		return e, errCredentialUnavailable
 	}
 	if _, err = workflowOutcomeLabel(e.State); err != nil {

@@ -46,8 +46,8 @@ func TestInlineReviewNativeProof(t *testing.T) {
 		t.Fatal("invalid disposable native envelope")
 	}
 	config := testConfig(in.URL)
-	config.GiteaPublicURL = in.URL
-	config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = "fixture-client", "fixture-secret"
+	config.ForgePublicURL = in.URL
+	config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = "fixture-client", "fixture-secret"
 	s, err := New(config, testDatabase(t))
 	if err != nil {
 		t.Fatal("native handler initialization failed")
@@ -196,7 +196,7 @@ func TestInlineReviewNativeProof(t *testing.T) {
 		t.Log("qualified decision", decision.String(), "exact old/new same-path batch; historical receipt only")
 	}
 	var shared int
-	if err = s.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id=0 AND topic='pulls'", s.config.GiteaURL, in.RepositoryID).Scan(&shared); err != nil || shared != 3 {
+	if err = s.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id=0 AND topic='pulls'", s.config.ForgeURL, in.RepositoryID).Scan(&shared); err != nil || shared != 3 {
 		t.Fatal("qualified native effects did not produce exactly scoped shared invalidations")
 	}
 	_ = golfv1connect.RepositoryServicePublishPullRequestReviewDraftProcedure

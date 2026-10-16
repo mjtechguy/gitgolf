@@ -63,7 +63,7 @@ func (s *Server) storeWorkflowSource(ctx context.Context, source []byte) (object
 func (s *Server) workflowSourceObject(ctx context.Context, run workflowRunRecord) ([]byte, error) {
 	if run.SourceStorage == "postgres" {
 		var source []byte
-		err := s.db.QueryRowContext(ctx, `SELECT source_archive FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2`, run.ID, s.config.GiteaURL).Scan(&source)
+		err := s.db.QueryRowContext(ctx, `SELECT source_archive FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2`, run.ID, s.config.ForgeURL).Scan(&source)
 		if err != nil {
 			return nil, errStorageUnavailable
 		}

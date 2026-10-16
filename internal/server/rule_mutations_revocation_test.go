@@ -173,10 +173,10 @@ func TestRuleMutationsQueuedArchiveDoesNotDeadlockNativeWritePostgres(t *testing
 		}
 		defer tx.Rollback()
 		_, err = tx.ExecContext(t.Context(), `-- name: RuleArchiveExclusiveWaiter
-SELECT golf_repository_lifecycle_lock($1,$2,true)`, f.s.config.GiteaURL, int64(9007199254740993))
+SELECT golf_repository_lifecycle_lock($1,$2,true)`, f.s.config.ForgeURL, int64(9007199254740993))
 		if err == nil {
 			var active int64
-			err = tx.QueryRowContext(t.Context(), `SELECT golf_repository_lifecycle_active($1,$2)`, f.s.config.GiteaURL, int64(9007199254740993)).Scan(&active)
+			err = tx.QueryRowContext(t.Context(), `SELECT golf_repository_lifecycle_active($1,$2)`, f.s.config.ForgeURL, int64(9007199254740993)).Scan(&active)
 			if err == nil && active < 1 {
 				err = connect.NewError(connect.CodeInternal, errors.New("required receipt or active intent absent"))
 			}

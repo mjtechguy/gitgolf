@@ -93,7 +93,7 @@ func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRec
 	if s.db == nil {
 		return workflowRunRecord{}, errStorageUnavailable
 	}
-	r, err := scanWorkflowRun(s.db.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2", id, s.config.GiteaURL))
+	r, err := scanWorkflowRun(s.db.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2", id, s.config.ForgeURL))
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, errResourceNotFound
 	}
@@ -231,7 +231,7 @@ func (s *Server) workflowTransaction(ctx context.Context, session string, native
 	defer tx.Rollback()
 	q := database.New(s.db).WithTx(tx)
 	if len(additionalUsers) > 0 {
-		rows, e := tx.QueryContext(ctx, `SELECT id FROM golf_users WHERE forge_url=$1 AND (id=ANY($2::bigint[]) OR id IN (SELECT user_id FROM golf_sessions WHERE token_hash=$3)) ORDER BY id FOR UPDATE`, s.config.GiteaURL, additionalUsers, hash)
+		rows, e := tx.QueryContext(ctx, `SELECT id FROM golf_users WHERE forge_url=$1 AND (id=ANY($2::bigint[]) OR id IN (SELECT user_id FROM golf_sessions WHERE token_hash=$3)) ORDER BY id FOR UPDATE`, s.config.ForgeURL, additionalUsers, hash)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -243,7 +243,7 @@ func (s *Server) workflowTransaction(ctx context.Context, session string, native
 			return errStorageUnavailable
 		}
 	}
-	identity, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.GiteaURL})
+	identity, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return errUnauthenticated
 	}
@@ -256,7 +256,7 @@ func (s *Server) workflowTransaction(ctx context.Context, session string, native
 	if identity.ForgeUserID != nativeID {
 		return errUnauthenticated
 	}
-	actor, err := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: hash, UserID: identity.ID, ForgeURL: s.config.GiteaURL})
+	actor, err := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: hash, UserID: identity.ID, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return errUnauthenticated
 	}
@@ -618,7 +618,7 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 		}
 		existing := false
 		e := s.workflowTransaction(ctx, s.cookieValue(req.Header()), user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, _ []byte) error {
-			r, e := scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND user_id=$2 AND origin='manual' AND idempotency_key=$3", s.config.GiteaURL, actor.UserID, m.IdempotencyKey))
+			r, e := scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND user_id=$2 AND origin='manual' AND idempotency_key=$3", s.config.ForgeURL, actor.UserID, m.IdempotencyKey))
 			if e == nil {
 				if !bytes.Equal(r.InputHash, inputHash) {
 					return errWorkflowRunConflict
@@ -697,7 +697,7 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			return errStorageUnavailable
 		}
 		sum := sha256.Sum256(source)
-		admissionRun := workflowRunRecord{OrganizationOwned: access.OrganizationOwned, ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, Origin: "manual", EventRef: m.Ref, CommitID: commit, BlobID: blob, WorkflowPath: m.WorkflowPath, SourceSHA256: hex.EncodeToString(sum[:]), EngineCatalog: workflowExecutionCatalog}
+		admissionRun := workflowRunRecord{OrganizationOwned: access.OrganizationOwned, ID: id, ForgeURL: s.config.ForgeURL, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, Origin: "manual", EventRef: m.Ref, CommitID: commit, BlobID: blob, WorkflowPath: m.WorkflowPath, SourceSHA256: hex.EncodeToString(sum[:]), EngineCatalog: workflowExecutionCatalog}
 		if plan.Actions != nil {
 			admissionRun.EngineCatalog = plan.Actions.Catalog
 		}
@@ -716,7 +716,7 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			approvalUsers = executionApprovalUserIDs(approval)
 		}
 		return s.workflowTransaction(ctx, s.cookieValue(req.Header()), user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte) error {
-			if e := executionLifecycleGate(ctx, tx, s.config.GiteaURL, repoID); e != nil {
+			if e := executionLifecycleGate(ctx, tx, s.config.ForgeURL, repoID); e != nil {
 				return e
 			}
 			admission, e := s.readEffectiveExecutionPolicy(ctx, tx, repoID, ownerID, access.OrganizationOwned, m.WorkflowPath)
@@ -736,11 +736,11 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			if e != nil {
 				return errStorageUnavailable
 			}
-			_, e = tx.ExecContext(ctx, `INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash,source_storage,source_key,source_fingerprint,source_profile_id,source_profile_version,input_contract,input_schema_sha256,submitted_inputs_sha256,effective_inputs_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) ON CONFLICT(forge_url,user_id,origin,idempotency_key) DO NOTHING`, id, s.config.GiteaURL, repoID, ownerID, key.Owner, key.Name, access.OrganizationOwned, actor.UserID, hash, commit, m.WorkflowPath, blob, int32(plan.Format), planJSON, sourceBinding.Archive, hex.EncodeToString(sum[:]), epochs, m.IdempotencyKey, inputHash, sourceBinding.Storage, sourceBinding.Key, sourceBinding.Fingerprint, sourceBinding.ProfileID, sourceBinding.ProfileVersion, admissionRun.InputContract, admissionRun.SchemaSHA256, admissionRun.SubmittedSHA256, admissionRun.EffectiveSHA256)
+			_, e = tx.ExecContext(ctx, `INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash,source_storage,source_key,source_fingerprint,source_profile_id,source_profile_version,input_contract,input_schema_sha256,submitted_inputs_sha256,effective_inputs_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) ON CONFLICT(forge_url,user_id,origin,idempotency_key) DO NOTHING`, id, s.config.ForgeURL, repoID, ownerID, key.Owner, key.Name, access.OrganizationOwned, actor.UserID, hash, commit, m.WorkflowPath, blob, int32(plan.Format), planJSON, sourceBinding.Archive, hex.EncodeToString(sum[:]), epochs, m.IdempotencyKey, inputHash, sourceBinding.Storage, sourceBinding.Key, sourceBinding.Fingerprint, sourceBinding.ProfileID, sourceBinding.ProfileVersion, admissionRun.InputContract, admissionRun.SchemaSHA256, admissionRun.SubmittedSHA256, admissionRun.EffectiveSHA256)
 			if e != nil {
 				return errStorageUnavailable
 			}
-			result, e = scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND user_id=$2 AND origin='manual' AND idempotency_key=$3", s.config.GiteaURL, actor.UserID, m.IdempotencyKey))
+			result, e = scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND user_id=$2 AND origin='manual' AND idempotency_key=$3", s.config.ForgeURL, actor.UserID, m.IdempotencyKey))
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -826,7 +826,7 @@ func (s *Server) listWorkflowRuns(ctx context.Context, req *connect.Request[golf
 		}
 		repoID, _ := strconv.ParseInt(a.RepositoryId, 10, 64)
 		ownerID, _ := strconv.ParseInt(a.OwnerId, 10, 64)
-		rows, e := s.db.QueryContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 ORDER BY created_at DESC,id DESC LIMIT $4 OFFSET $5", s.config.GiteaURL, repoID, ownerID, limit+1, (page-1)*limit)
+		rows, e := s.db.QueryContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 ORDER BY created_at DESC,id DESC LIMIT $4 OFFSET $5", s.config.ForgeURL, repoID, ownerID, limit+1, (page-1)*limit)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -880,7 +880,7 @@ func (s *Server) CancelWorkflowRun(ctx context.Context, req *connect.Request[gol
 	err = s.withWorkflowRepository(ctx, s.cookieValue(req.Header()), credential, repositoryKey{record.RepositoryOwner, record.RepositoryName}, record.RepositoryID, record.OwnerID, true, func(user User, _ *golfv1.RepositoryAccess) error {
 		return s.workflowTransaction(ctx, s.cookieValue(req.Header()), user.ID, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte) error {
 			var e error
-			record, e = scanWorkflowRun(tx.QueryRowContext(ctx, "UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason='Cancelled by repository writer.',cancel_requested=true,lease_token_hash=NULL WHERE id=$1 AND forge_url=$2 AND version=$3 AND state IN ('queued','running') RETURNING "+workflowRunColumns, record.ID, s.config.GiteaURL, version))
+			record, e = scanWorkflowRun(tx.QueryRowContext(ctx, "UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason='Cancelled by repository writer.',cancel_requested=true,lease_token_hash=NULL WHERE id=$1 AND forge_url=$2 AND version=$3 AND state IN ('queued','running') RETURNING "+workflowRunColumns, record.ID, s.config.ForgeURL, version))
 			if errors.Is(e, sql.ErrNoRows) {
 				return errWorkflowRunConflict
 			}

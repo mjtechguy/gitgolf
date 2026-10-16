@@ -52,7 +52,7 @@ func (s *Server) jobGitBinding(runID string) ([]byte, error) {
 	if err != nil || id.String() != runID || id.Version() != 4 || originErr != nil {
 		return nil, errUnauthenticated
 	}
-	value := sha256.Sum256([]byte(jobGitDomain + "\x00" + s.config.GiteaURL + "\x00" + origin + "\x00" + runID))
+	value := sha256.Sum256([]byte(jobGitDomain + "\x00" + s.config.ForgeURL + "\x00" + origin + "\x00" + runID))
 	return value[:], nil
 }
 
@@ -252,7 +252,7 @@ func (s *Server) jobGitFinalFence(ctx context.Context, tx *sql.Tx, run workflowR
 	}
 	var state string
 	var cancelled bool
-	err = tx.QueryRowContext(ctx, `SELECT state,cancel_requested FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2 AND runner_id=$3 AND attempt_id=$4 AND lease_token_hash=$5 AND lease_expires_at>clock_timestamp() FOR UPDATE`, run.ID, s.config.GiteaURL, run.RunnerID, run.AttemptID, run.LeaseTokenHash).Scan(&state, &cancelled)
+	err = tx.QueryRowContext(ctx, `SELECT state,cancel_requested FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2 AND runner_id=$3 AND attempt_id=$4 AND lease_token_hash=$5 AND lease_expires_at>clock_timestamp() FOR UPDATE`, run.ID, s.config.ForgeURL, run.RunnerID, run.AttemptID, run.LeaseTokenHash).Scan(&state, &cancelled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errUnauthenticated
 	}
@@ -308,7 +308,7 @@ func (s *Server) jobGitTransport(w http.ResponseWriter, r *http.Request) {
 	// this explicit cap also bounds direct calls without that middleware.
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2 AND state='running' AND lease_expires_at>clock_timestamp()`, claims.Run, s.config.GiteaURL))
+	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2 AND state='running' AND lease_expires_at>clock_timestamp()`, claims.Run, s.config.ForgeURL))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			err = errUnauthenticated

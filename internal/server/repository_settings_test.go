@@ -69,7 +69,7 @@ func TestRepositorySettingsValidation(t *testing.T) {
 }
 
 func TestRepositorySettingsBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

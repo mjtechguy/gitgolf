@@ -168,7 +168,7 @@ func (s *Server) genericPackageBytes(ctx context.Context, token forgeCredential,
 	if token.Token == "" || token.Kind != "pat" && token.Kind != "oauth" || !genericPackageName.MatchString(name) || !genericPackageName.MatchString(version) || !releaseAssetName(file) {
 		return nil, errCredentialUnavailable
 	}
-	endpoint := s.config.GiteaURL + "/api/packages/" + url.PathEscape(owner) + "/generic/" + url.PathEscape(name) + "/" + url.PathEscape(version) + "/" + url.PathEscape(file)
+	endpoint := s.config.ForgeURL + "/api/packages/" + url.PathEscape(owner) + "/generic/" + url.PathEscape(name) + "/" + url.PathEscape(version) + "/" + url.PathEscape(file)
 	r, e := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if e != nil {
 		return nil, errInvalidForgeResponse
@@ -307,7 +307,7 @@ func (s *Server) GetPackagePublication(ctx context.Context, req *connect.Request
 	var r packagePublicationRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanPackagePublication(s.db.QueryRowContext(ctx, `SELECT `+packagePublicationColumns+` FROM golf_package_publications WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanPackagePublication(s.db.QueryRowContext(ctx, `SELECT `+packagePublicationColumns+` FROM golf_package_publications WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -355,10 +355,10 @@ func (s *Server) SubmitPackagePublication(ctx context.Context, req *connect.Requ
 		if e != nil {
 			return e
 		}
-		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.GiteaURL+"/package-name/"+m.OwnerId+"/"+m.PackageName); e != nil {
+		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.ForgeURL+"/package-name/"+m.OwnerId+"/"+m.PackageName); e != nil {
 			return errStorageUnavailable
 		}
-		r, e = scanPackagePublication(tx.QueryRowContext(held, `SELECT `+packagePublicationColumns+` FROM golf_package_publications WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanPackagePublication(tx.QueryRowContext(held, `SELECT `+packagePublicationColumns+` FROM golf_package_publications WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(r.Fingerprint, fp) {
 				return errRepositoryAccessConflict
@@ -368,7 +368,7 @@ func (s *Server) SubmitPackagePublication(ctx context.Context, req *connect.Requ
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanPackagePublication(tx.QueryRowContext(held, `INSERT INTO golf_package_publications(user_id,forge_url,actor_id,operation_id,repository_owner,repository_name,repository_id,owner_id,access_revision,package_name,version,file_name,input_fingerprint,content_sha256,content_size) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING `+packagePublicationColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, m.Repository.Owner, m.Repository.Name, repoID, ownerID, m.AccessRevision, m.PackageName, m.Version, m.FileName, fp, releasePublicationTextHash(string(m.Content)), len(m.Content)))
+		r, e = scanPackagePublication(tx.QueryRowContext(held, `INSERT INTO golf_package_publications(user_id,forge_url,actor_id,operation_id,repository_owner,repository_name,repository_id,owner_id,access_revision,package_name,version,file_name,input_fingerprint,content_sha256,content_size) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING `+packagePublicationColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, m.Repository.Owner, m.Repository.Name, repoID, ownerID, m.AccessRevision, m.PackageName, m.Version, m.FileName, fp, releasePublicationTextHash(string(m.Content)), len(m.Content)))
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -428,7 +428,7 @@ func (s *Server) SubmitPackagePublication(ctx context.Context, req *connect.Requ
 				if _, e = tx.ExecContext(held, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, r.Forge+"/package-name/"+strconv.FormatInt(r.OwnerID, 10)+"/"+r.Package); e != nil {
 					return errStorageUnavailable
 				}
-				endpoint := s.config.GiteaURL + "/api/packages/" + url.PathEscape(r.Owner) + "/generic/" + url.PathEscape(r.Package) + "/" + url.PathEscape(r.Version) + "/" + url.PathEscape(r.File)
+				endpoint := s.config.ForgeURL + "/api/packages/" + url.PathEscape(r.Owner) + "/generic/" + url.PathEscape(r.Package) + "/" + url.PathEscape(r.Version) + "/" + url.PathEscape(r.File)
 				request, e := http.NewRequestWithContext(held, http.MethodPut, endpoint, bytes.NewReader(m.Content))
 				if e != nil {
 					return errInvalidForgeResponse

@@ -117,7 +117,7 @@ func (s *Server) runnerGitCredential(ctx context.Context, run workflowRunRecord)
 	if err != nil {
 		return credential, 0, err
 	}
-	row, err := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: run.SessionHash, ForgeURL: s.config.GiteaURL})
+	row, err := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: run.SessionHash, ForgeURL: s.config.ForgeURL})
 	return credential, row.ForgeUserID, err
 }
 

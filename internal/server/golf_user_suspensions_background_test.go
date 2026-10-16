@@ -16,7 +16,7 @@ import (
 // through the supported administrator RPC lifecycle and race checks.
 func seedGolfSuspension(t *testing.T, s *Server) {
 	t.Helper()
-	_, e := s.db.Exec(`INSERT INTO golf_user_access(user_id,version,suspended,reason) SELECT id,1,true,'Owned background suspension fixture' FROM golf_users WHERE forge_url=$1 AND forge_user_id=42`, s.config.GiteaURL)
+	_, e := s.db.Exec(`INSERT INTO golf_user_access(user_id,version,suspended,reason) SELECT id,1,true,'Owned background suspension fixture' FROM golf_users WHERE forge_url=$1 AND forge_user_id=42`, s.config.ForgeURL)
 	if e != nil {
 		t.Fatal(e)
 	}

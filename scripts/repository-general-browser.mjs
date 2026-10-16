@@ -10,7 +10,7 @@ const methods = ['GetRepositorySettings', 'UpdateRepositorySettings', 'UpdateRep
 function check(value) { if (!value) throw new Error('assertion'); }
 function identity(body) { check(body.repositoryId === config.repositoryId && body.ownerId === config.ownerId && /^[a-f0-9]{64}$/.test(body.revision)); }
 async function native() {
-  const response = await context.request.get(config.gitea+'/api/v1/repos/'+config.repository, { headers: { Authorization: 'token '+config.ownerToken } });
+  const response = await context.request.get(config.forge+'/api/v1/repos/'+config.repository, { headers: { Authorization: 'token '+config.ownerToken } });
   check(response.status() === 200); const row = await response.json();
   check(String(row.id) === config.repositoryId && String(row.owner.id) === config.ownerId);
   return row;

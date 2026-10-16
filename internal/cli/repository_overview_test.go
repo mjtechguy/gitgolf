@@ -29,10 +29,10 @@ func overviewReadFixture(t *testing.T, api bool, failure string) (*httptest.Serv
 			t.Error("lost origin")
 		}
 		if api {
-			if r.Header.Get("Authorization") != "Bearer "+fixtureAPIToken || r.Header.Get("Cookie") != "" || method == "LoginWithGiteaToken" || method == "Logout" {
+			if r.Header.Get("Authorization") != "Bearer "+fixtureAPIToken || r.Header.Get("Cookie") != "" || method == "LoginWithForgeToken" || method == "Logout" {
 				t.Error("bearer crossed session boundary")
 			}
-		} else if method == "LoginWithGiteaToken" {
+		} else if method == "LoginWithForgeToken" {
 			http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "opaque", Path: "/", HttpOnly: true})
 			fmt.Fprint(w, `{"user":{"id":"1"}}`)
 			return
@@ -124,7 +124,7 @@ func TestRepositoryOverviewCredentialModesAndReceipts(t *testing.T) {
 					t.Fatal("credential escaped")
 				}
 				trace := calls()
-				if !api && (trace[0] != "LoginWithGiteaToken" || trace[len(trace)-1] != "Logout") {
+				if !api && (trace[0] != "LoginWithForgeToken" || trace[len(trace)-1] != "Logout") {
 					t.Fatal("session not cleaned up")
 				}
 				if strings.HasPrefix(failure, "metadata") && strings.Contains(strings.Join(trace, ","), "GetRepositoryOverview") {

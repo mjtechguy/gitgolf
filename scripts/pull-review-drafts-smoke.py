@@ -74,7 +74,7 @@ try{
  for(const theme of ['dark','light'])for(const width of [1280,390]){
   stage='private draft '+theme+' '+width;await page.setViewportSize({width,height:900});const toggle=page.getByRole('button',{name:'Switch to '+theme+' theme',exact:true});if(await toggle.count())await toggle.click();check((await page.locator('html').getAttribute('data-theme'))===theme);await region.getByText('Browser-edited private note',{exact:true}).waitFor();check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await region.scrollIntoViewIfNeeded();await page.screenshot({path:join(config.screenshots,'native-private-draft-'+theme+'-'+width+'.png')});await writeFile(join(config.screenshots,'native-private-draft-'+theme+'-'+width+'.txt'),await page.locator('body').innerText());
  }
- stage='live native private-access removal';check((await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);await page.locator('.diff-file').first().waitFor({state:'detached',timeout:15000});await region.waitFor({state:'detached',timeout:15000});check(!(await page.locator('body').innerText()).includes('Browser-edited private note'));check(errors.length===0);
+ stage='live native private-access removal';check((await context.request.delete(config.forge+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);await page.locator('.diff-file').first().waitFor({state:'detached',timeout:15000});await region.waitFor({state:'detached',timeout:15000});check(!(await page.locator('body').innerText()).includes('Browser-edited private note'));check(errors.length===0);
  console.log('PASS: actual private draft canonical Unicode source alias/fragment/reload, settings/read-only Wiki, Add/Edit/Save/reopen, fourteen Code/workspace/draft captures, native tag selection/snapshot banner and measured layout positions, no overflow and live native revocation');
 }catch(failure){console.error('Private draft browser failed at '+stage+'; '+(failure.name==='TimeoutError'?'TimeoutError':'assertion/error')+'; private diagnostics withheld');process.exitCode=1;}
 finally{if(context&&config)try{check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/Logout',{headers:{Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'},data:{}})).status()===200);}catch{console.error('Private draft browser logout failed');process.exitCode=1;}await browser?.close();}
@@ -110,7 +110,7 @@ def main():
         return result.stdout.strip()
 
     def admin(*arguments):
-        return command(*compose, 'exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini', 'admin', 'user', *arguments)
+        return command(*compose, 'exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *arguments)  # Forgejo's upstream path
 
     def operator(action, payload):
         out = json.loads(command(*compose, 'exec', '-T', 'golf', '/usr/local/bin/golf', 'local-account', action, payload=payload))
@@ -154,7 +154,7 @@ def main():
         diff = call(actor, 'GetPullRequestDiff', selection)
         assert diff['mergeBaseCommitId'] == current['merge_base']
         assert diff['repositoryId'] == target['repositoryId'] and diff['pullRequestId'] == target['pullRequestId']
-        req = urllib.request.Request(smoke.GITEA+'/api/v1/'+proute+'.diff', headers={'Authorization': 'token '+owner['token']})
+        req = urllib.request.Request(smoke.FORGE+'/api/v1/'+proute+'.diff', headers={'Authorization': 'token '+owner['token']})
         with smoke.client().open(req, timeout=15) as response:
             raw = response.read((512 << 10)+1)
         assert len(raw) <= 512 << 10 and raw.decode() == diff['rawDiff']
@@ -190,7 +190,7 @@ def main():
 
     try:
         smoke.ready()
-        assert smoke.provider('', 'GET', 'version')['version'] == '1.27.3'
+        assert smoke.provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
         def runtime_identity():
             container = command(*compose, 'ps', '-q', 'golf')
             image_reference, compose_hash = command('docker', 'inspect', '--format', '{{.Image}}|{{index .Config.Labels "com.docker.compose.config-hash"}}', container).split('|')
@@ -270,7 +270,7 @@ def main():
         snapshot = {'sha': native_snapshot['sha'], 'message': native_snapshot['commit']['message'], 'authorName': native_snapshot['commit']['author']['name'], 'authoredAt': native_snapshot['commit']['author']['date']}
         tag_request = {'repository': {'owner': owner['name'], 'name': 'private'}, 'repositoryId': str(repo['id']), 'page': {'page': 1, 'limit': 100}}
         tags = call(reader, 'ListTags', tag_request)
-        native_tag_request = urllib.request.Request(smoke.GITEA+'/api/v1/'+route+'/tags?limit=100&page=1', headers={'Authorization': 'token '+owner['token']})
+        native_tag_request = urllib.request.Request(smoke.FORGE+'/api/v1/'+route+'/tags?limit=100&page=1', headers={'Authorization': 'token '+owner['token']})
         with smoke.client().open(native_tag_request, timeout=15) as tag_response:
             native_tags = json.loads(tag_response.read((2 << 20)+1))
             native_total = tag_response.headers.get('X-Total-Count')
@@ -385,7 +385,7 @@ def main():
             if screens.stat().st_mode & 0o077:
                 raise AssertionError('Screenshot output must be owner-only')
             proof = subprocess.run(['node', '--input-type=module', '-e', BROWSER], cwd=stack,
-                input=json.dumps({'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'repository': full, 'number': pull['number'], 'path': path,
+                input=json.dumps({'golf': smoke.GOLF, 'forge': smoke.FORGE, 'repository': full, 'number': pull['number'], 'path': path,
                     'email': reader['email'], 'password': reader['password'], 'user': reader['name'], 'ownerToken': owner['token'], 'screenshots': str(screens), 'runtime': runtime, 'tagName': tag_name, 'defaultBranch': repo['default_branch'], 'snapshot': snapshot}),
                 capture_output=True, text=True, timeout=180)
             assert not any(secret in proof.stdout or secret in proof.stderr for secret in private)

@@ -306,7 +306,7 @@ def main():
         return result.stdout.strip()
 
     def admin(*arguments):
-        return command(*compose, 'exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini', 'admin', 'user', *arguments)
+        return command(*compose, 'exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *arguments)  # Forgejo's upstream path
 
     def operator(action, payload):
         result = json.loads(command(*compose, 'exec', '-T', 'golf', '/usr/local/bin/golf', 'local-account', action, payload=payload))
@@ -319,8 +319,8 @@ def main():
         projection = '{"golfImageReference":{{json .Config.Image}},"golfOCIConfig":{{json .Image}},"productSourceRevision":{{json (index .Config.Labels "org.opencontainers.image.revision")}}}'
         observed = json.loads(command('docker', 'inspect', '--format', projection, container))
         assert re.fullmatch(r'[0-9a-f]{40}', observed['productSourceRevision'] or ''), 'Require an explicitly revision-labeled product image'
-        observed['nativeVersion'] = smoke.request(smoke.client(), 'GET', smoke.GITEA+'/api/v1/version')['version']
-        assert observed['nativeVersion'] == '1.27.3', 'This qualifier targets pinned native1.27.3'
+        observed['nativeVersion'] = smoke.request(smoke.client(), 'GET', smoke.FORGE+'/api/v1/version')['version']
+        assert observed['nativeVersion'] == '15.0.9+gitea-1.22.0', 'This qualifier targets pinned Forgejo 15.0.9'  # Forgejo's upstream version string
         return observed
 
     def call(actor, method, payload, expected=200, code=None, headers=None):
@@ -467,7 +467,7 @@ def main():
                 git(work, 'add', 'deploy-key-proof.txt')
                 git(work, '-c', 'user.name=Golf qualifier', '-c', 'user.email=qualifier@example.invalid', 'commit', '-m', 'Owned deploy-key transport qualification')
                 return git(work, 'rev-parse', 'HEAD')
-            # Pinned native authorization text: https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/private/serv.go
+            # Pinned native authorization text: https://codeberg.org/forgejo/forgejo/raw/tag/v15.0.9/routers/private/serv.go
             stage = 'real read-only private clone and denied push'
             ro_work = local/'read-only'; git(local, 'clone', ssh_repository_url(native_repos[0]['ssh_url'], args.ssh_port, first['repository']), str(ro_work))
             assert git(ro_work, 'rev-parse', 'HEAD') == native_ref(first, native_repos[0]['default_branch'])
@@ -550,7 +550,7 @@ def main():
                 for index in range(8):
                     key = local/('browser-'+str(index)); command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key))
                     browser_keys.append(key.with_suffix('.pub').read_text())
-                config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': owner['email'], 'password': owner['password'], 'ownerToken': owner['token'], 'repository': namespace+'/first', 'repositoryScope': 'organization' if args.organization else 'personal', 'target': first, 'publicKeys': browser_keys, 'screenshots': str(args.screenshots.resolve()), 'runtime': runtime_before, 'stackRoot': str(stack)}
+                config = {'golf': smoke.GOLF, 'forge': smoke.FORGE, 'email': owner['email'], 'password': owner['password'], 'ownerToken': owner['token'], 'repository': namespace+'/first', 'repositoryScope': 'organization' if args.organization else 'personal', 'target': first, 'publicKeys': browser_keys, 'screenshots': str(args.screenshots.resolve()), 'runtime': runtime_before, 'stackRoot': str(stack)}
                 proof = subprocess.run(['node', str(Path(__file__).with_name('repository-deploy-keys-browser.mjs'))], cwd=stack, input=json.dumps(config), capture_output=True, text=True, timeout=240)
                 for line in proof.stderr.splitlines():
                     if line.startswith('Deploy-key browser failed at ') or line == 'Deploy-key browser logout failed':

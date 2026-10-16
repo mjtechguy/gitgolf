@@ -10,14 +10,14 @@ const targetIndex = process.argv.indexOf('--target');
 if (targetIndex < 0 || !process.argv[targetIndex + 1]) throw new Error('A disposable target file is required.');
 const target = JSON.parse(await readFile(process.argv[targetIndex + 1], 'utf8'));
 const golf = new URL(target.golf);
-if (!target.project?.startsWith('golf-api-proof-') || !target.container?.startsWith(`${target.project}-gitea-`) || !target.golfContainer?.startsWith(`${target.project}-golf-`) || golf.hostname !== '127.0.0.1' || ['8080', '3001'].includes(golf.port)) throw new Error('Only an isolated qualification target is allowed.');
+if (!target.project?.startsWith('golf-api-proof-') || !target.container?.startsWith(`${target.project}-forgejo-`) || !target.golfContainer?.startsWith(`${target.project}-golf-`) || golf.hostname !== '127.0.0.1' || ['8080', '3001'].includes(golf.port)) throw new Error('Only an isolated qualification target is allowed.');
 const artifacts = resolve('.tmp/local-auth-browser');
 await mkdir(artifacts, { recursive: true, mode: 0o700 });
 const username = `golf-ui-${randomBytes(5).toString('hex')}`;
 const password = `Golf-${randomBytes(24).toString('base64url')}`;
 let created = false, enrolled = false, browser, context, phase = 'fixture enrollment', failed = false;
 function require(condition) { if (!condition) throw new Error('Qualification assertion failed.'); }
-function admin(...args) { return execFileSync('docker', ['exec', '--user', '1000:1000', target.container, 'gitea', 'admin', 'user', ...args], { encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
+function admin(...args) { return execFileSync('docker', ['exec', '--user', '1000:1000', target.container, 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', ...args], { encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] }).trim(); } // Forgejo's upstream path
 function account(action, data) { return execFileSync('docker', ['exec', '-i', target.golfContainer, '/usr/local/bin/golf', 'local-account', action], { input: JSON.stringify(data), encoding: 'utf8', timeout: 30_000, stdio: ['pipe', 'pipe', 'pipe'] }); }
 function stage(value) { phase = value; console.log(`Checking: ${value}`); }
 try {

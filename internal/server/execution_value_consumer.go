@@ -30,7 +30,7 @@ func (s *Server) executionApprovalAuthority(ctx context.Context, run workflowRun
 	if e != nil {
 		return e
 	}
-	session, e := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: b.session, ForgeURL: s.config.GiteaURL})
+	session, e := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: b.session, ForgeURL: s.config.ForgeURL})
 	if e != nil || session.ForgeUserID != b.approverNative {
 		return errExecutionApproval
 	}
@@ -71,7 +71,7 @@ func (s *Server) executionApprovalAuthority(ctx context.Context, run workflowRun
 	return nil
 }
 func (s *Server) executionApprovalForSource(ctx context.Context, run workflowRunRecord) (*executionBindingRecord, error) {
-	rows, e := s.db.QueryContext(ctx, `SELECT `+executionBindingColumns+` FROM golf_execution_bindings b JOIN golf_execution_binding_versions v ON v.id=b.id AND v.version=b.version WHERE b.forge_url=$1 AND b.repository_id=$2 AND b.owner_id=$3 AND NOT b.deleted AND v.workflow_path=$4 AND v.event=$5 LIMIT 21`, s.config.GiteaURL, run.RepositoryID, run.OwnerID, run.WorkflowPath, run.Origin)
+	rows, e := s.db.QueryContext(ctx, `SELECT `+executionBindingColumns+` FROM golf_execution_bindings b JOIN golf_execution_binding_versions v ON v.id=b.id AND v.version=b.version WHERE b.forge_url=$1 AND b.repository_id=$2 AND b.owner_id=$3 AND NOT b.deleted AND v.workflow_path=$4 AND v.event=$5 LIMIT 21`, s.config.ForgeURL, run.RepositoryID, run.OwnerID, run.WorkflowPath, run.Origin)
 	if e != nil {
 		return nil, errStorageUnavailable
 	}

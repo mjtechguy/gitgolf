@@ -45,11 +45,9 @@ Before deployment qualification: run those PostgreSQL and browser cases, qualify
 
 - [Git smart HTTP protocol](https://git-scm.com/docs/http-protocol)
 - [Pinned Git send-pack](https://github.com/git/git/blob/v2.39.5/send-pack.c)
-- [Pinned native repository Git handler](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/web/repo/githttp.go)
-- [Pinned native Git authentication middleware](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/web/githttp.go)
-- [Pinned PAT Basic authentication](https://github.com/go-gitea/gitea/blob/v1.27.3/services/auth/basic.go)
-- [Pinned OAuth authentication](https://github.com/go-gitea/gitea/blob/v1.27.3/services/auth/oauth2.go)
-- [Pinned paginated push-mirror inventory and conversion](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/mirror.go)
+- [Pinned native repository Git handler](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/web/repo/githttp.go)
+- [Pinned native Git authentication middleware](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/web/githttp.go)
+- [Pinned paginated push-mirror inventory and conversion](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/mirror.go)
 
 The private-native deployment overlay is a reversible topology configuration, not a certificate of production quiescence. Default Compose/Helm native ports are untouched until explicitly selected; the existing `deploy/compose/compose.https.yaml` reverse proxy does not prove `r.TLS` at the Golf listener and is not sufficient for these Git routes by itself.
 

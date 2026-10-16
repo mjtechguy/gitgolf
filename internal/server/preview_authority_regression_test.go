@@ -93,7 +93,7 @@ func TestStaticDeploymentConcurrentAffirmativeReviewPostgres(t *testing.T) {
 		}
 		return underlying.RoundTrip(r)
 	})
-	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
+	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
 		t.Fatal(e)
 	}
 	alice, e := f.server.loginLocalSession(t.Context(), "alice", localTestPassword, "")

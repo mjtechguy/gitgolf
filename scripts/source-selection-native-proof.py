@@ -5,7 +5,7 @@ No served UI, full64-object, Cloudflare, workflow, provider or recovery claim.
 import argparse, json, os, re, secrets, subprocess, sys, tempfile, time
 from pathlib import Path
 sys.dont_write_bytecode = True
-from smoke import ROOT, GITEA, client, command, provider, ready, request, wait_for_push
+from smoke import ROOT, FORGE, client, command, provider, ready, request, wait_for_push
 
 
 def main():
@@ -14,8 +14,8 @@ def main():
     args=parser.parse_args(); stack=args.stack_root.resolve()
     assert (stack/'compose.yaml').is_file() and (stack/'.env').is_file()
     def admin(*values):
-        return command('docker','compose','--project-directory',str(stack),'--file',str(stack/'compose.yaml'),'--env-file',str(stack/'.env'),'exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*values)
-    ready(); assert request(client(),'GET',GITEA+'/api/v1/version')['version']=='1.27.3'
+        return command('docker','compose','--project-directory',str(stack),'--file',str(stack/'compose.yaml'),'--env-file',str(stack/'.env'),'exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*values)  # Forgejo's upstream path
+    ready(); assert request(client(),'GET',FORGE+'/api/v1/version')['version']=='15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
     prefix='golf-source-probe-'+secrets.token_hex(4); users=[]; repositories=[]; actors={}; pg=prefix+'-pg'; pg_started=False; stage='accounts'
     try:
         for role in ('owner','reader'):
@@ -30,7 +30,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix='golf-source-native-') as directory:
             root=Path(directory); ask=root/'askpass'; ask.write_text('#!/bin/sh\ncase "$1" in *Username*) printf "%s" "$GOLF_FIXTURE_LOGIN";; *) printf "%s" "$GOLF_FIXTURE_TOKEN";; esac\n'); ask.chmod(0o700)
             env={**os.environ,'GIT_ASKPASS':str(ask),'GIT_TERMINAL_PROMPT':'0','GOLF_FIXTURE_LOGIN':owner['name'],'GOLF_FIXTURE_TOKEN':owner['token']}
-            stage='own Git clone'; clone=root/'repo'; command('git','clone','--quiet',GITEA+'/'+full+'.git',str(clone),env=env)
+            stage='own Git clone'; clone=root/'repo'; command('git','clone','--quiet',FORGE+'/'+full+'.git',str(clone),env=env)
             def git(*values):
                 nonlocal stage
                 stage='own Git '+values[0]
@@ -44,7 +44,7 @@ def main():
             git('tag','-a','release/雪','-m','Annotated collision tag');tag=git('rev-parse','refs/tags/release/雪');git('branch',old)
             git('push','--quiet','origin','--all');git('push','--quiet','origin','--tags');wait_for_push(owner['token'],full)
             assert git('show',old+':src/literal % 雪.txt')==text.strip() and git('rev-parse','refs/tags/release/雪^{}')==new
-            envelope={'URL':GITEA,'Owner':owner['name'],'Reader':reader['name'],'OwnerToken':owner['token'],'ReaderToken':reader['token'],'Commit':old,'NewCommit':new,'AnnotatedTagObject':tag,'RepositoryID':repo['id'],'Path':'src/literal % 雪.txt','Text':text,'Image':image}
+            envelope={'URL':FORGE,'Owner':owner['name'],'Reader':reader['name'],'OwnerToken':owner['token'],'ReaderToken':reader['token'],'Commit':old,'NewCommit':new,'AnnotatedTagObject':tag,'RepositoryID':repo['id'],'Path':'src/literal % 雪.txt','Text':text,'Image':image}
             stage='isolated source metadata DB'; pg_image=command('docker','inspect','golf-postgres-1','--format','{{.Config.Image}}');command('docker','run','-d','--rm','--name',pg,'-e','POSTGRES_HOST_AUTH_METHOD=trust','-p','127.0.0.1::5432',pg_image);pg_started=True
             deadline=time.monotonic()+30
             while subprocess.run(['docker','exec',pg,'pg_isready','-U','postgres'],capture_output=True).returncode:

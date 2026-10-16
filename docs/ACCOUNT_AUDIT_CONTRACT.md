@@ -6,7 +6,7 @@ The current developer preview implements this bounded contract through the gener
 
 This increment records successful changes to a user's **Golf sessions** in Golf's PostgreSQL database and lets that same account read its activity through the generated API, browser and CLI. It is a bounded contribution to P1.3, P1.8 and P5.5, shared by both infrastructure tracks. It does not introduce Cloudflare or AI dependencies.
 
-The event set is limited to `SIGN_IN`, `SIGN_OUT`, `SESSION_REVOKED`, `OTHER_SESSIONS_REVOKED` and `SESSION_REPLACED`. These describe selected committed Golf session lifecycle changes, not provider consent changes, Git credentials or native Gitea sessions. Events retain their recorded session references after a session is removed. Existing session-management behavior and separate upstream credential ownership remain documented in [account session management](SESSION_MANAGEMENT.md).
+The event set is limited to `SIGN_IN`, `SIGN_OUT`, `SESSION_REVOKED`, `OTHER_SESSIONS_REVOKED` and `SESSION_REPLACED`. These describe selected committed Golf session lifecycle changes, not provider consent changes, Git credentials or native Forgejo sessions. Events retain their recorded session references after a session is removed. Existing session-management behavior and separate upstream credential ownership remain documented in [account session management](SESSION_MANAGEMENT.md).
 
 Automatic expired-session cleanup, OAuth refresh and credential deletion after an invalid grant or identity rejection do not create events. Failed attempts and provider operations are also outside this event set. Logout with a missing, malformed or already-deleted cookie succeeds without an event; explicitly logging out a retained expired session can record `SIGN_OUT`. A successful bulk revoke with no other active sessions records a zero-count event.
 
@@ -36,7 +36,7 @@ Each recorded event is written in the same PostgreSQL transaction as its corresp
 
 Account locks serialize event allocation and session changes. Operations touching two account identities during cookie/session replacement acquire those locks in a consistent order. A reader capturing its account's highest committed event ID must not later encounter a previously uncommitted event inserted below that boundary. Concurrent sign-ins, sign-outs, session revocations and cross-account replacements need the same ordering rule.
 
-Audit reads require `read:user` and a valid Golf session, current provider identity matching the stored immutable user, and local expiry/revocation checks around provider waits and database access. Logout must remain possible without a currently valid provider credential; deleting a local Golf session does not require refreshing or successfully contacting Gitea first. Failed/denied reads do not become successful empty histories.
+Audit reads require `read:user` and a valid Golf session, current provider identity matching the stored immutable user, and local expiry/revocation checks around provider waits and database access. Logout must remain possible without a currently valid provider credential; deleting a local Golf session does not require refreshing or successfully contacting Forgejo first. Failed/denied reads do not become successful empty histories.
 
 These are Golf database guarantees. They do not cancel already-authorized provider requests, revoke upstream grants, or implement a general cross-service transaction. An unknown client outcome after a lost response still requires inspecting the actual resulting state.
 
@@ -48,7 +48,7 @@ The request has `limit` (zero/omitted defaults to 20, maximum 100), optional `be
 
 The first page captures the account's snapshot boundary. Continue with the returned `snapshotId` and `nextBeforeId`, keeping that snapshot for every subsequent page. New events above the captured boundary remain outside that traversal. Refresh starts a new snapshot and can include them. The next cursor is the last returned event ID only when another page exists; an empty cursor means the traversal is complete. `snapshotId` is empty only when the account has no recorded events. IDs up to the snapshot are eligible, and continuation selects IDs strictly below `beforeId`. Records and cursors must never be rounded through JavaScript numbers. Capture/list operations hold the account lock used by writers, so the upper bound is based on committed account history.
 
-A snapshot provides a bounded view of recorded account events. It is not a signed export, a snapshot of Gitea state, a global ordering across accounts, or a retention/backup guarantee.
+A snapshot provides a bounded view of recorded account events. It is not a signed export, a snapshot of Forgejo state, a global ordering across accounts, or a retention/backup guarantee.
 
 ## Browser and CLI behavior
 
@@ -78,10 +78,10 @@ This increment adds no retention scheduler, deletion/export API, signed evidence
 The [implementation ledger](IMPLEMENTATION_STATUS.md) records these completed checks:
 
 - Real PostgreSQL race tests cover all five action classes, forced audit-insert rollback, own-account scoping and expiry, stable keyset ordering under account-lock contention, same/cross-account replacement, ordinary SQL update/delete/truncate rejection and additive migration preserving existing PAT/OAuth sessions without backfill.
-- `python3 scripts/audit-smoke.py --upgrade --restart --cli bin/golf` passed against the actual Compose provider. Sessions created on the pre-audit `70b3f02` binary retained their exact IDs, kinds and expiry after the new image started; their initial history was empty. This live upgrade used PAT sessions; legacy OAuth preservation is covered separately by the PostgreSQL migration tests.
+- `python3 scripts/audit-smoke.py --upgrade --restart --cli bin/golf` passed against the actual Compose provider, which was then the since-retired backend; the live run has not been repeated on Forgejo 15.0.9. Sessions created on the pre-audit `70b3f02` binary retained their exact IDs, kinds and expiry after the new image started; their initial history was empty. This live upgrade used PAT sessions; legacy OAuth preservation is covered separately by the PostgreSQL migration tests.
 - The same live run checks all five actions, `read:user`-only access, malformed/foreign/future cursor rejection, stable captured traversal after later sign-in/sign-out, exact bulk counts including zero, no credential fields, ephemeral CLI-session cleanup, history/session persistence after Golf restart, and successful local logout after provider-account deletion.
 - The production-served browser passes pagination, metadata details, direct `/audit` navigation/reload, dark/light/mobile presentation and private-data removal after current-session revocation. The complete generated-contract Playwright suite passes 51 checks, including the activity view's cursor validation and failure states.
 
-The live harness removes its Gitea users and active Golf sessions. Their immutable Golf identities and recorded history intentionally remain; fixture cleanup is not an audit deletion facility. `--upgrade` expects an already-built new image and a running pre-audit service; `--restart` interrupts the local Golf service. Ordinary checks against an already-upgraded installation can omit both flags. No repository CI is added; these checks run locally.
+The live harness removes its Forgejo users and active Golf sessions. Their immutable Golf identities and recorded history intentionally remain; fixture cleanup is not an audit deletion facility. `--upgrade` expects an already-built new image and a running pre-audit service; `--restart` interrupts the local Golf service. Ordinary checks against an already-upgraded installation can omit both flags. No repository CI is added; these checks run locally.
 
 Passing this bounded event corpus does not complete P1.3's audit/outbox/jobs requirements or the full product audit contract.

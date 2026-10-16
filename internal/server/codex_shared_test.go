@@ -152,7 +152,7 @@ func TestCodexSharedDisabledSelectionAndManagerWaitPostgres(t *testing.T) {
 	bob := localLogin(t, f, "bob")
 	c := sharedCodexCreate(t, f, admin, "Shared")
 	c = sharedCodexAccess(t, f, admin, c, target.UserID)
-	if _, e := ManageLocalAccount(context.Background(), f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "bob"}); e != nil {
+	if _, e := ManageLocalAccount(context.Background(), f.db, f.s.keyring, f.s.config.ForgeURL, "disable", LocalAccountInput{Username: "bob"}); e != nil {
 		t.Fatal(e)
 	}
 	if w := codexCall(f.s, bob, "GetCodexConnection", `{"connectionId":"`+c["id"].(string)+`"}`); w.Code != 401 {
@@ -168,7 +168,7 @@ func TestCodexSharedDisabledSelectionAndManagerWaitPostgres(t *testing.T) {
 		done <- codexCall(f.s, admin, "RefreshCodexConnection", `{"connectionId":"`+c["id"].(string)+`","expectedVersion":"`+c["version"].(string)+`"}`).Code
 	}()
 	waitCodexMarker(t, marker+".entered")
-	if _, e := ManageLocalAccount(context.Background(), f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "alice"}); e != nil {
+	if _, e := ManageLocalAccount(context.Background(), f.db, f.s.keyring, f.s.config.ForgeURL, "disable", LocalAccountInput{Username: "alice"}); e != nil {
 		t.Fatal(e)
 	}
 	os.WriteFile(marker+".resume", nil, 0600)

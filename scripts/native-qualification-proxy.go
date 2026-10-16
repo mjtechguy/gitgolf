@@ -34,7 +34,7 @@ import (
 	"unicode/utf8"
 )
 
-const nativeDestination = "http://gitea:3000"
+const nativeDestination = "http://forgejo:3000"
 const nonceHeader = "X-Native-Qualification-Nonce"
 const maxRequest = 1 << 20
 const maxResponse = 2 << 20

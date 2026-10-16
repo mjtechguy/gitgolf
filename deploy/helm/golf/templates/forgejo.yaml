@@ -64,6 +64,7 @@ spec:
             {{- if .Values.postgresql.existingCASecret }}
             - {name: SSL_CERT_DIR, value: "/etc/ssl/certs:/etc/golf/postgres"}
             {{- end }}
+            # Forgejo's upstream name: the image reads GITEA_APP_INI; /etc/gitea is its config path.
             - {name: GITEA_APP_INI, value: /etc/gitea/app.ini}
             - {name: FORGEJO__database__DB_TYPE, value: postgres}
             - name: FORGEJO__database__HOST
@@ -108,6 +109,7 @@ spec:
             {{- if .Values.postgresql.existingCASecret }}
             - {name: postgres-ca, mountPath: /etc/golf/postgres, readOnly: true}
             {{- end }}
+            # Forgejo's upstream names: the rootless image's data and config paths.
             - {name: data, mountPath: /var/lib/gitea}
             - {name: config, mountPath: /etc/gitea}
             - {name: tmp, mountPath: /tmp}

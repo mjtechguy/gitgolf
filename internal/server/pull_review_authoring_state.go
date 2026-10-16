@@ -273,11 +273,11 @@ func (s *Server) authoringPrivateSource(ctx context.Context, session string, tok
 			if err != nil {
 				return err
 			}
-			identity, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.GiteaURL})
+			identity, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.ForgeURL})
 			if err != nil {
 				return err
 			}
-			caller, err := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: hash, UserID: identity.ID, ForgeURL: s.config.GiteaURL})
+			caller, err := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: hash, UserID: identity.ID, ForgeURL: s.config.ForgeURL})
 			if err != nil {
 				return err
 			}

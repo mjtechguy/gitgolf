@@ -161,7 +161,7 @@
     },
     {
       "id": 5,
-      "title": "Gitea requests / second",
+      "title": "Forgejo requests / second",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -176,7 +176,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (status) (rate(golf_gitea_requests_total[1m]))",
+          "expr": "sum by (status) (rate(golf_forge_requests_total[1m]))",
           "legendFormat": "__auto",
           "range": true
         }
@@ -197,7 +197,7 @@
     },
     {
       "id": 6,
-      "title": "Gitea p95 duration",
+      "title": "Forgejo p95 duration",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -212,7 +212,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(golf_gitea_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(golf_forge_request_duration_seconds_bucket[5m])))",
           "legendFormat": "__auto",
           "range": true
         }
@@ -351,7 +351,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Golf HTTP, Gitea client calls and PostgreSQL queries. Use Explore \u2192 Golf Jaeger for sampled request traces; correlate opaque trace/request IDs with Golf JSON logs. Missing series mean no matching observations, not zero failures. Jaeger keeps at most 5,000 traces in memory; Prometheus retains at most 24 hours / 256 MB. No job, runner, SLO, provider-internal or production monitoring is claimed."
+        "content": "Golf HTTP, Forgejo client calls and PostgreSQL queries. Use Explore \u2192 Golf Jaeger for sampled request traces; correlate opaque trace/request IDs with Golf JSON logs. Missing series mean no matching observations, not zero failures. Jaeger keeps at most 5,000 traces in memory; Prometheus retains at most 24 hours / 256 MB. No job, runner, SLO, provider-internal or production monitoring is claimed."
       }
     }
   ],

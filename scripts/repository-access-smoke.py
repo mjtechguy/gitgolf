@@ -9,7 +9,7 @@ import sys
 import urllib.error
 import urllib.request
 sys.dont_write_bytecode = True
-from smoke import GITEA, admin, client, provider, ready, rpc
+from smoke import FORGE, admin, client, provider, ready, rpc
 
 
 def main():
@@ -29,7 +29,7 @@ def main():
             token = admin('generate-access-token', '--username', name, '--token-name', prefix,
                           '--scopes', 'write:user,write:organization,write:repository', '--raw')
             session = client(); sessions.append(session)
-            rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})
+            rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})
             actors[role] = (name, token, session)
         owner_name, owner_token, owner = actors['owner']
         target_name, target_token, _ = actors['target']
@@ -125,7 +125,7 @@ def main():
             except Exception:pass
         cleanup_failed=False
         def remove_native(route):
-            request=urllib.request.Request(GITEA+'/api/v1/'+route,method='DELETE',headers={'Authorization':'token '+owner_token})
+            request=urllib.request.Request(FORGE+'/api/v1/'+route,method='DELETE',headers={'Authorization':'token '+owner_token})
             try:response=client().open(request,timeout=15)
             except urllib.error.HTTPError as error:response=error
             with response:

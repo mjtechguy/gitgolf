@@ -306,7 +306,7 @@ func TestAutomationGrantPostgres(t *testing.T) {
 		t.Fatal("recovery attribution", err)
 	}
 	// Disable/re-enable a local sponsor cannot revive delegated grants.
-	local, err := ManageLocalAccount(t.Context(), db, s.keyring, s.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "browser-private-token"})
+	local, err := ManageLocalAccount(t.Context(), db, s.keyring, s.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "browser-private-token"})
 	if err != nil {
 		t.Fatal(err)
 	}

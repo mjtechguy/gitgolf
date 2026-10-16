@@ -42,7 +42,7 @@ type loginResult struct {
 
 func (s *Server) loginSession(ctx context.Context, token, oldValue string) (loginResult, error) {
 	if len(token) < 8 || len(token) > 512 || strings.ContainsAny(token, "\r\n\t ") {
-		return loginResult{}, invalid("Enter a valid Gitea access token.")
+		return loginResult{}, invalid("Enter a valid Forgejo access token.")
 	}
 	user, err := s.currentUser(ctx, forgeCredential{Kind: "pat", Token: token})
 	if err != nil {
@@ -75,15 +75,15 @@ func (s *Server) createSessionBound(ctx context.Context, user User, kind, payloa
 	// or event-ID allocation. Opposite-direction cookie replacements cannot
 	// each hold the account their competitor needs. INSERT DO NOTHING avoids
 	// updating/locking an existing new account before this ordered step.
-	if err := queries.EnsureLoginUser(ctx, database.EnsureLoginUserParams{ForgeURL: s.config.GiteaURL, ForgeUserID: user.ID, Login: user.Login, FullName: user.FullName, AvatarURL: user.AvatarURL}); err != nil {
+	if err := queries.EnsureLoginUser(ctx, database.EnsureLoginUserParams{ForgeURL: s.config.ForgeURL, ForgeUserID: user.ID, Login: user.Login, FullName: user.FullName, AvatarURL: user.AvatarURL}); err != nil {
 		return loginResult{}, errStorageUnavailable
 	}
 	oldHash, _ := sessionHash(oldValue)
-	accounts, err := queries.LockLoginUsers(ctx, database.LockLoginUsersParams{ForgeURL: s.config.GiteaURL, ForgeUserID: user.ID, OldTokenHash: oldHash})
+	accounts, err := queries.LockLoginUsers(ctx, database.LockLoginUsersParams{ForgeURL: s.config.ForgeURL, ForgeUserID: user.ID, OldTokenHash: oldHash})
 	if err != nil {
 		return loginResult{}, errStorageUnavailable
 	}
-	id, err := queries.UpsertUser(ctx, database.UpsertUserParams{ForgeURL: s.config.GiteaURL, ForgeUserID: user.ID, Login: user.Login, FullName: user.FullName, AvatarURL: user.AvatarURL})
+	id, err := queries.UpsertUser(ctx, database.UpsertUserParams{ForgeURL: s.config.ForgeURL, ForgeUserID: user.ID, Login: user.Login, FullName: user.FullName, AvatarURL: user.AvatarURL})
 	if err != nil {
 		return loginResult{}, errStorageUnavailable
 	}
@@ -125,7 +125,7 @@ func (s *Server) createSessionBound(ctx context.Context, user User, kind, payloa
 		if oldHash == nil {
 			break
 		}
-		old, err := queries.DeleteAuditedSession(ctx, database.DeleteAuditedSessionParams{TokenHash: oldHash, UserID: account.ID, ForgeURL: s.config.GiteaURL})
+		old, err := queries.DeleteAuditedSession(ctx, database.DeleteAuditedSessionParams{TokenHash: oldHash, UserID: account.ID, ForgeURL: s.config.ForgeURL})
 		if errors.Is(err, sql.ErrNoRows) {
 			continue
 		}
@@ -229,14 +229,14 @@ func (s *Server) logoutSession(ctx context.Context, value string) error {
 	}
 	defer tx.Rollback()
 	queries := database.New(s.db).WithTx(tx)
-	id, err := queries.LockLogoutUser(ctx, database.LockLogoutUserParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	id, err := queries.LockLogoutUser(ctx, database.LockLogoutUserParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return errStorageUnavailable
 	}
-	old, err := queries.DeleteAuditedSession(ctx, database.DeleteAuditedSessionParams{TokenHash: hash, UserID: id, ForgeURL: s.config.GiteaURL})
+	old, err := queries.DeleteAuditedSession(ctx, database.DeleteAuditedSessionParams{TokenHash: hash, UserID: id, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}

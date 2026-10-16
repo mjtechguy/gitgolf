@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-// Gitea clamps requested limits before paging and may filter rows afterwards.
+// Forgejo clamps requested limits before paging and may filter rows afterwards.
 // Returned length therefore cannot establish the native page span. Observe the
 // supported setting around the read; this detects observed drift, not an ABA
 // change or a lock on native configuration.

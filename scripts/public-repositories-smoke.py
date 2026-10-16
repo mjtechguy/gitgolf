@@ -50,7 +50,7 @@ def main():
     binary = args.cli.resolve()
     assert binary.is_file(), 'Build the current Golf CLI first'
     environment = {key: value for key, value in os.environ.items()
-        if not key.startswith(('GOLF_', 'GITEA_', 'GITHUB_', 'GITLAB_', 'GIT_', 'POSTGRES_', 'COMPOSE_', 'OTEL_'))
+        if not key.startswith(('GOLF_', 'FORGEJO_', 'GITHUB_', 'GITLAB_', 'GIT_', 'POSTGRES_', 'COMPOSE_', 'OTEL_'))
         and key != 'DATABASE_URL'}
     git_environment = {**environment, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null',
         'GIT_TERMINAL_PROMPT': '0', 'GIT_LFS_SKIP_SMUDGE': '1'}
@@ -67,8 +67,8 @@ def main():
     print('Golf image: ' + image, flush=True)
     project = 'golf-api-proof-' + secrets.token_hex(5)
     golf_port, forge_port = helpers.free_ports(2)
-    original_urls = smoke.GOLF, smoke.GITEA
-    smoke.GOLF, smoke.GITEA = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{forge_port}'
+    original_urls = smoke.GOLF, smoke.FORGE
+    smoke.GOLF, smoke.FORGE = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{forge_port}'
     with tempfile.TemporaryDirectory(prefix='golf-public-proof-') as temporary:
         directory = Path(temporary).resolve(); directory.chmod(0o700)
         hooks = directory/'no-hooks'; hooks.mkdir()
@@ -79,7 +79,7 @@ def main():
                 # The sole credential-bearing Git configuration is bound to the
                 # isolated destination origin and never used for public fetches.
                 auth = base64.b64encode((owner_name + ':' + owner_token).encode()).decode()
-                env = {**env, 'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': f'http.{smoke.GITEA}/.extraHeader',
+                env = {**env, 'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': f'http.{smoke.FORGE}/.extraHeader',
                     'GIT_CONFIG_VALUE_0': 'Authorization: Basic ' + auth}
             return run('git', '-c', 'credential.helper=', '-c', f'core.hooksPath={hooks}',
                 '-c', 'protocol.file.allow=never', '-c', 'protocol.ext.allow=never',
@@ -105,20 +105,20 @@ def main():
             prepared.append((source, path, history, bodies))
 
         env_file, override = directory/'core.env', directory/'proof.yaml'
-        values = {key: secrets.token_hex(24) for key in ['POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD']}
+        values = {key: secrets.token_hex(24) for key in ['POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'FORGEJO_DB_PASSWORD']} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),
             GOLF_PUBLIC_URL=smoke.GOLF, GOLF_ENCRYPTION_KEYS='', GOLF_ACTIVE_ENCRYPTION_KEY='',
-            GITEA_PUBLIC_URL='', GITEA_OAUTH_CLIENT_ID='', GITEA_OAUTH_CLIENT_SECRET='')
+            GOLF_FORGE_PUBLIC_URL='', GOLF_FORGE_OAUTH_CLIENT_ID='', GOLF_FORGE_OAUTH_CLIENT_SECRET='')
         helpers.private_write(env_file, ''.join(key+'='+value+'\n' for key, value in values.items()))
         helpers.private_write(override, f'''services:
   golf:
     image: {image}
     pull_policy: never
     ports: !override ["127.0.0.1:{golf_port}:8080"]
-  gitea:
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
-      GITEA__actions__ENABLED: 'false'
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
+      FORGEJO__actions__ENABLED: 'false'
     ports: !override ["127.0.0.1:{forge_port}:3000"]
 ''')
         compose = ['docker', 'compose', '-p', project, '--env-file', str(env_file),
@@ -128,22 +128,22 @@ def main():
             return run(*compose, *arguments, **kwargs)
 
         def admin(*arguments):
-            return command('exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini',
+            return command('exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini',  # Forgejo's upstream path
                 'admin', 'user', *arguments).decode().strip()
 
         started = False
         try:
             stage('isolated canonical core with Actions disabled and no runner services')
             rendered = json.loads(command('config', '--format', 'json'))
-            assert set(rendered['services']) == {'golf', 'gitea', 'postgres'}
-            assert str(rendered['services']['gitea']['environment']['GITEA__actions__ENABLED']).lower() == 'false'
+            assert set(rendered['services']) == {'golf', 'forgejo', 'postgres'}
+            assert str(rendered['services']['forgejo']['environment']['FORGEJO__actions__ENABLED']).lower() == 'false'
             assert not rendered['services']['postgres'].get('ports')
             assert all(port['host_ip'] == '127.0.0.1' for service in rendered['services'].values() for port in service.get('ports', []))
             started = True
             command('up', '-d', '--no-build', '--wait', '--wait-timeout', '120', timeout=180)
             smoke.ready()
             assert json.loads(run('docker', 'inspect', project+'-golf-1'))[0]['Image'] == image
-            assert smoke.provider('', 'GET', 'version')['version'] == '1.27.3'
+            assert smoke.provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
             capabilities = smoke.rpc(smoke.client(), 'CapabilityService/ListCapabilities')['capabilities']
             assert next(item for item in capabilities if item['id'] == 'pipelines')['state'] == 'CAPABILITY_STATE_DISABLED'
             identities = {}
@@ -154,7 +154,7 @@ def main():
                 token = admin('generate-access-token', '--username', name, '--token-name', project,
                     '--scopes', 'write:user,write:repository' if role == 'owner' else 'read:user,read:repository', '--raw')
                 session = smoke.client()
-                assert smoke.rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})['user']['login'] == name
+                assert smoke.rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})['user']['login'] == name
                 identities[role] = (name, token, session)
             owner_name, owner_token, owner = identities['owner']
             outsider = identities['outsider'][2]
@@ -166,7 +166,7 @@ def main():
                     'idempotencyKey': str(uuid.uuid4())})
                 assert created['creation']['state'] == 'REPOSITORY_CREATION_STATE_SUCCEEDED'
                 assert created['repository']['private'] and created['repository']['empty']
-                remote = smoke.GITEA+'/'+owner_name+'/'+key['name']+'.git'
+                remote = smoke.FORGE+'/'+owner_name+'/'+key['name']+'.git'
                 git(path, 'push', '--atomic', remote, source['commit']+':refs/heads/main',
                     source['commit']+':refs/tags/qualification-source', authenticated=True)
                 smoke.wait_for_push(owner_token, owner_name+'/'+key['name'])
@@ -212,7 +212,7 @@ def main():
                 smoke.rpc(session, 'SessionService/Logout')
             print('PASS: pinned GitHub/GitLab source transfer, selected refs/history, Golf API/CLI reads and privacy; workflows NOT executed', flush=True)
         finally:
-            smoke.GOLF, smoke.GITEA = original_urls
+            smoke.GOLF, smoke.FORGE = original_urls
             if started:
                 command('down', '--volumes', '--remove-orphans', '--timeout', '10')
             for resource, action in [('container', 'ls'), ('volume', 'ls'), ('network', 'ls')]:

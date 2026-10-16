@@ -2,6 +2,10 @@
 
 Forgejo 15.0.9 is the default Git backend for fresh portable Golf installs. The default Compose project is `golf-forgejo`; Helm also renders the pinned Forgejo image by default. Cloudflare-native Golf keeps its separate Artifacts/D1/Workers Git backend.
 
+## Backend history
+
+Forgejo was selected as the portable backend on 2026-10-11 ([ADR 0009](decisions/0009-forgejo-portable-backend.md)). The earlier backend was retired on 2026-10-16; no installations used it, so there was nothing to migrate. ADR 0009 records what is qualified and what remains open.
+
 ## Local Compose
 
 ### One command
@@ -30,7 +34,7 @@ make local-stop
 
 `make setup` creates a private, owner-only `.env` with separate Golf and Forgejo database passwords, an encryption key and a stable Forgejo installation UUID. It preserves an existing file. The default stack uses `compose.yaml`, loopback ports 8080 (Golf), 3001 (Forgejo HTTP) and 2222 (Forgejo SSH), and named PostgreSQL/Forgejo volumes. Back up `.env` with the volumes. Configure HTTPS and secure cookies before remote access.
 
-Create the first Forgejo administrator through its native CLI, then enroll a scoped provider credential through Golf's `local-account` command. The upstream rootless Forgejo image still stores its files under `/var/lib/gitea` and uses `/var/lib/gitea/custom/conf/app.ini`; those are upstream filesystem names, not a Gitea service.
+Create the first Forgejo administrator through its native CLI, then enroll a scoped provider credential through Golf's `local-account` command. The upstream rootless Forgejo image stores its files under `/var/lib/gitea` and reads `/var/lib/gitea/custom/conf/app.ini`; these are the upstream image's own filesystem paths (Forgejo's upstream names).
 
 ```sh
 docker compose exec forgejo forgejo --config /var/lib/gitea/custom/conf/app.ini admin user create --help

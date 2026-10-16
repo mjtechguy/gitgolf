@@ -23,7 +23,7 @@ import (
 // native forge ingress. Call under the immutable user lock for admission writes.
 func (s *Server) requireGolfUserAccess(ctx context.Context, q workflowQueryer, userID int64) error {
 	var allowed bool
-	if err := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_users u WHERE u.id=$1 AND u.forge_url=$2 AND NOT EXISTS(SELECT 1 FROM golf_user_access a WHERE a.user_id=u.id AND a.suspended))`, userID, s.config.GiteaURL).Scan(&allowed); err != nil {
+	if err := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_users u WHERE u.id=$1 AND u.forge_url=$2 AND NOT EXISTS(SELECT 1 FROM golf_user_access a WHERE a.user_id=u.id AND a.suspended))`, userID, s.config.ForgeURL).Scan(&allowed); err != nil {
 		return errStorageUnavailable
 	}
 	if !allowed {
@@ -36,12 +36,12 @@ func (s *Server) requireGolfUserAccess(ctx context.Context, q workflowQueryer, u
 // must never revive a source that suspension permanently revoked.
 func (s *Server) currentGolfSessionCredential(ctx context.Context, hash []byte) (database.GetSessionCredentialRow, error) {
 	var row database.GetSessionCredentialRow
-	err := s.db.QueryRowContext(ctx, `SELECT s.encrypted_token,s.credential_kind,u.forge_user_id,s.expires_at,s.credential_key_id FROM golf_sessions s JOIN golf_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND u.forge_url=$2 AND s.expires_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM golf_user_access a WHERE a.user_id=u.id AND a.suspended) AND (s.local_account_id IS NULL OR EXISTS(SELECT 1 FROM golf_local_accounts l WHERE l.id=s.local_account_id AND l.user_id=u.id AND l.disabled_at IS NULL AND l.credential_version=s.local_credential_version))`, hash, s.config.GiteaURL).Scan(&row.EncryptedToken, &row.CredentialKind, &row.ForgeUserID, &row.ExpiresAt, &row.CredentialKeyID)
+	err := s.db.QueryRowContext(ctx, `SELECT s.encrypted_token,s.credential_kind,u.forge_user_id,s.expires_at,s.credential_key_id FROM golf_sessions s JOIN golf_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND u.forge_url=$2 AND s.expires_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM golf_user_access a WHERE a.user_id=u.id AND a.suspended) AND (s.local_account_id IS NULL OR EXISTS(SELECT 1 FROM golf_local_accounts l WHERE l.id=s.local_account_id AND l.user_id=u.id AND l.disabled_at IS NULL AND l.credential_version=s.local_credential_version))`, hash, s.config.ForgeURL).Scan(&row.EncryptedToken, &row.CredentialKind, &row.ForgeUserID, &row.ExpiresAt, &row.CredentialKeyID)
 	return row, err
 }
 func (s *Server) requireNativeGolfUserAccess(ctx context.Context, nativeID int64) error {
 	var userID int64
-	if err := s.db.QueryRowContext(ctx, `SELECT id FROM golf_users WHERE forge_url=$1 AND forge_user_id=$2`, s.config.GiteaURL, nativeID).Scan(&userID); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM golf_users WHERE forge_url=$1 AND forge_user_id=$2`, s.config.ForgeURL, nativeID).Scan(&userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return errUnauthenticated
 		}
@@ -66,7 +66,7 @@ func scanGolfUserAccess(row workflowRunScanner) (*golfv1.GolfUserAccess, error) 
 	return u, err
 }
 func (s *Server) golfUserAccess(ctx context.Context, q workflowQueryer, userID, nativeID int64) (*golfv1.GolfUserAccess, error) {
-	return scanGolfUserAccess(q.QueryRowContext(ctx, `SELECT `+golfUserAccessColumns+` FROM golf_users u LEFT JOIN golf_user_access a ON a.user_id=u.id WHERE u.id=$1 AND u.forge_user_id=$2 AND u.forge_url=$3`, userID, nativeID, s.config.GiteaURL))
+	return scanGolfUserAccess(q.QueryRowContext(ctx, `SELECT `+golfUserAccessColumns+` FROM golf_users u LEFT JOIN golf_user_access a ON a.user_id=u.id WHERE u.id=$1 AND u.forge_user_id=$2 AND u.forge_url=$3`, userID, nativeID, s.config.ForgeURL))
 }
 func (s *Server) ListGolfUserAccess(ctx context.Context, req *connect.Request[golfv1.ListGolfUserAccessRequest]) (*connect.Response[golfv1.ListGolfUserAccessResponse], error) {
 	c, e := rpcToken(ctx)
@@ -81,7 +81,7 @@ func (s *Server) ListGolfUserAccess(ctx context.Context, req *connect.Request[go
 	if e != nil {
 		return nil, rpcError(e)
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT `+golfUserAccessColumns+` FROM golf_users u LEFT JOIN golf_user_access a ON a.user_id=u.id WHERE u.forge_url=$1 ORDER BY u.id LIMIT $2 OFFSET $3`, s.config.GiteaURL, limit+1, (page-1)*limit)
+	rows, e := s.db.QueryContext(ctx, `SELECT `+golfUserAccessColumns+` FROM golf_users u LEFT JOIN golf_user_access a ON a.user_id=u.id WHERE u.forge_url=$1 ORDER BY u.id LIMIT $2 OFFSET $3`, s.config.ForgeURL, limit+1, (page-1)*limit)
 	if e != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
@@ -214,7 +214,7 @@ func (s *Server) ChangeGolfUserAccess(ctx context.Context, req *connect.Request[
 	transaction = tx
 	// All administrators and the target lock in immutable ID order. Concurrent
 	// administrator suspensions cannot each rely on the other remaining active.
-	rows, e := tx.QueryContext(ctx, `SELECT u.id FROM golf_users u WHERE u.forge_url=$1 AND (u.id IN($2,$3) OR EXISTS(SELECT 1 FROM golf_local_accounts l WHERE l.user_id=u.id AND l.is_instance_admin)) ORDER BY u.id FOR UPDATE OF u`, s.config.GiteaURL, initial.UserID, i.UserID)
+	rows, e := tx.QueryContext(ctx, `SELECT u.id FROM golf_users u WHERE u.forge_url=$1 AND (u.id IN($2,$3) OR EXISTS(SELECT 1 FROM golf_local_accounts l WHERE l.user_id=u.id AND l.is_instance_admin)) ORDER BY u.id FOR UPDATE OF u`, s.config.ForgeURL, initial.UserID, i.UserID)
 	if e != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
@@ -242,10 +242,10 @@ func (s *Server) ChangeGolfUserAccess(ctx context.Context, req *connect.Request[
 	if !actor.IsInstanceAdmin || actor.DisabledAt.Valid || actor.CredentialVersion != initial.CredentialVersion || actor.PasswordHash != initial.PasswordHash {
 		return nil, rpcError(errUnauthenticated)
 	}
-	if _, e = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL}); e != nil {
+	if _, e = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.ForgeURL}); e != nil {
 		return nil, rpcError(errUnauthenticated)
 	}
-	current, e := q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	current, e := q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if e != nil || current != initial {
 		return nil, rpcError(errUnauthenticated)
 	}
@@ -274,7 +274,7 @@ func (s *Server) ChangeGolfUserAccess(ctx context.Context, req *connect.Request[
 	}
 	if i.Suspended && user.IsInstanceAdmin {
 		var active, targetActive int64
-		e = tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER(WHERE u.id=$2) FROM golf_users u WHERE u.forge_url=$1 AND EXISTS(SELECT 1 FROM golf_local_accounts l WHERE l.user_id=u.id AND l.is_instance_admin AND l.disabled_at IS NULL) AND NOT EXISTS(SELECT 1 FROM golf_user_access a WHERE a.user_id=u.id AND a.suspended)`, s.config.GiteaURL, i.UserID).Scan(&active, &targetActive)
+		e = tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER(WHERE u.id=$2) FROM golf_users u WHERE u.forge_url=$1 AND EXISTS(SELECT 1 FROM golf_local_accounts l WHERE l.user_id=u.id AND l.is_instance_admin AND l.disabled_at IS NULL) AND NOT EXISTS(SELECT 1 FROM golf_user_access a WHERE a.user_id=u.id AND a.suspended)`, s.config.ForgeURL, i.UserID).Scan(&active, &targetActive)
 		if e != nil {
 			return nil, rpcError(errStorageUnavailable)
 		}
@@ -324,7 +324,7 @@ func (s *Server) ChangeGolfUserAccess(ctx context.Context, req *connect.Request[
 	if e != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
-	if final, err := q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL}); err != nil || final != initial {
+	if final, err := q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL}); err != nil || final != initial {
 		return nil, rpcError(errUnauthenticated)
 	}
 	commitAttempted = true

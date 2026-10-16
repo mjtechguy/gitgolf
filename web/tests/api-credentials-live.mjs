@@ -1,4 +1,4 @@
-// Explicit opt-in native UI qualification against an already isolated Golf/Gitea
+// Explicit opt-in native UI qualification against an already isolated Golf/Forgejo
 // stack. No normal localhost services, persistent browser profile or secret file.
 // node web/tests/api-credentials-live.mjs --target PRIVATE_TARGET_JSON
 import { execFileSync } from 'node:child_process';
@@ -11,7 +11,7 @@ const targetIndex = process.argv.indexOf('--target');
 if (targetIndex < 0 || !process.argv[targetIndex + 1]) throw new Error('A disposable target file is required.');
 const target = JSON.parse(await readFile(process.argv[targetIndex + 1], 'utf8'));
 const golf = new URL(target.golf);
-if (!target.project?.startsWith('golf-api-proof-') || !target.container?.startsWith(`${target.project}-gitea-`) || golf.hostname !== '127.0.0.1' || golf.port === '8080') throw new Error('Only the named isolated qualification target is allowed.');
+if (!target.project?.startsWith('golf-api-proof-') || !target.container?.startsWith(`${target.project}-forgejo-`) || golf.hostname !== '127.0.0.1' || golf.port === '8080') throw new Error('Only the named isolated qualification target is allowed.');
 const artifacts = resolve('.tmp/api-credentials-browser');
 await mkdir(artifacts, { recursive: true, mode: 0o700 });
 const username = `golf-ui-${randomBytes(5).toString('hex')}`;
@@ -23,7 +23,7 @@ let phase = 'fixture creation';
 let failed = false;
 function require(condition) { if (!condition) throw new Error('Qualification assertion failed.'); }
 function admin(...args) {
-  return execFileSync('docker', ['exec', '--user', '1000:1000', target.container, 'gitea', 'admin', 'user', ...args], { encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  return execFileSync('docker', ['exec', '--user', '1000:1000', target.container, 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', ...args], { encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] }).trim(); // Forgejo's upstream path
 }
 function stage(value) { phase = value; console.log(`Checking: ${value}`); }
 async function rpc(client, service, method, data = {}, expected = 200, bearer) {

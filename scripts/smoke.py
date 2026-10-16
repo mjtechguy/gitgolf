@@ -21,7 +21,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLF = os.environ.get('GOLF_SMOKE_URL', 'http://localhost:8080')
-GITEA = os.environ.get('GOLF_SMOKE_FORGE_URL', 'http://localhost:3001')
+FORGE = os.environ.get('GOLF_SMOKE_FORGE_URL', 'http://localhost:3001')
 
 
 def command(*args, env=None, cwd=ROOT):
@@ -32,13 +32,12 @@ def command(*args, env=None, cwd=ROOT):
 
 
 def admin(*args):
+    # /var/lib/gitea is the Forgejo rootless image's upstream path.
+    native = ['forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *args]  # Forgejo's upstream path
     if container := os.environ.get('GOLF_SMOKE_FORGE_CONTAINER'):
-        binary = os.environ.get('GOLF_SMOKE_FORGE_KIND', 'forgejo')
-        if binary not in ('gitea', 'forgejo'): raise ValueError('unsupported fixture provider')
-        config = '/var/lib/gitea/custom/conf/app.ini' if binary == 'forgejo' else '/etc/gitea/app.ini'
-        return command('docker', 'exec', container, binary, '--config', config, 'admin', 'user', *args)
-    return command('docker', 'compose', 'exec', '-T', 'forgejo', 'forgejo',
-                   '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *args)
+        if os.environ.get('GOLF_SMOKE_FORGE_KIND', 'forgejo') != 'forgejo': raise ValueError('unsupported fixture provider')
+        return command('docker', 'exec', container, *native)
+    return command('docker', 'compose', 'exec', '-T', 'forgejo', *native)
 
 
 def client():
@@ -85,7 +84,7 @@ def ready():
 
 
 def provider(token, method, route, payload=None, expected=200):
-    return request(client(), method, GITEA + '/api/v1/' + route, payload,
+    return request(client(), method, FORGE + '/api/v1/' + route, payload,
                    {'Authorization': 'token ' + token}, expected)
 
 
@@ -128,7 +127,7 @@ def commit(path, message):
 
 def cli_check(binary, token, full_name, revision, nested_path, nested_text):
     # Stdin keeps the credential out of process arguments and shell history.
-    env = {key: value for key, value in os.environ.items() if key not in {'GOLF_FORGE_TOKEN', 'GOLF_GITEA_TOKEN', 'GOLF_API_TOKEN', 'GOLF_NATIVE_TOKEN'}}
+    env = {key: value for key, value in os.environ.items() if key not in {'GOLF_FORGE_TOKEN', 'GOLF_API_TOKEN', 'GOLF_NATIVE_TOKEN'}}
     env['GOLF_URL'] = GOLF
     args = [str(binary), '--token-stdin', 'repo', 'contents', full_name,
             '--ref', revision, '--path', nested_path]
@@ -170,7 +169,7 @@ def main():
             token = admin('generate-access-token', '--username', name, '--token-name', 'golf-local-check',
                           '--scopes', 'write:user,write:repository,write:issue', '--raw')
             session = client()
-            identity = rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})['user']
+            identity = rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})['user']
             assert identity['login'] == name and isinstance(identity['id'], str) and identity['id'].isdigit()
             if label == 'alice':
                 alice, alice_token, alice_password = session, token, password
@@ -188,7 +187,7 @@ def main():
         repository = {'owner': alice_name, 'name': repo['name']}
         assert any(r['fullName'] == full_name for r in rpc(alice, 'RepositoryService/ListRepositories').get('repositories', []))
         assert all(r['fullName'] != full_name for r in rpc(bob, 'RepositoryService/ListRepositories').get('repositories', []))
-        request(client(), 'GET', GITEA + '/api/v1/repos/' + full_name, expected=404)
+        request(client(), 'GET', FORGE + '/api/v1/repos/' + full_name, expected=404)
         assert rpc(alice, 'RepositoryService/GetRepository', {'repository': repository})['repository']['empty'] is True
         assert rpc(alice, 'RepositoryService/ListBranches', {'repository': repository}).get('branches', []) == []
         assert rpc(alice, 'RepositoryService/ListCommits', {'repository': repository}).get('commits', []) == []
@@ -229,9 +228,9 @@ def main():
             askpass.chmod(0o700)
             env = {**os.environ, 'GIT_ASKPASS': str(askpass), 'GIT_TERMINAL_PROMPT': '0',
                    'GOLF_CHECK_USER': alice_name, 'GOLF_CHECK_TOKEN': alice_token}
-            remote_url = GITEA + '/' + full_name + '.git'
+            remote_url = FORGE + '/' + full_name + '.git'
             command('git', '-c', 'credential.helper=', 'push', remote_url, 'main', env=env, cwd=work)
-            remote = command('git', '-c', 'credential.helper=', 'ls-remote', GITEA + '/' + full_name + '.git',
+            remote = command('git', '-c', 'credential.helper=', 'ls-remote', FORGE + '/' + full_name + '.git',
                              'refs/heads/main', env=env, cwd=work)
             assert remote.split()[0] == revision
             wait_for_push(alice_token, full_name)
@@ -325,7 +324,7 @@ def main():
                 token = admin('generate-access-token', '--username', alice_name, '--token-name', 'golf-check-' + label,
                               '--scopes', scopes, '--raw')
                 scoped = client()
-                rpc(scoped, 'SessionService/LoginWithGiteaToken', {'token': token})
+                rpc(scoped, 'SessionService/LoginWithForgeToken', {'token': token})
                 rpc(scoped, 'RepositoryService/GetRepository', {'repository': repository}, expected=403 if label == 'identity' else 200)
                 rpc(scoped, 'RepositoryService/GetContents', {'repository': repository}, expected=403 if label == 'identity' else 200)
                 rpc(scoped, 'RepositoryService/GetIssue', issue_request, expected=200 if label == 'reader' else 403)
@@ -351,7 +350,7 @@ def main():
                 ready()
             print('PASS: persisted session/repository after restart; dependency outage fails visibly')
         basic = base64.b64encode(f'{alice_name}:{alice_password}'.encode()).decode()
-        tokens_url = GITEA + '/api/v1/users/' + alice_name + '/tokens'
+        tokens_url = FORGE + '/api/v1/users/' + alice_name + '/tokens'
         tokens = request(client(), 'GET', tokens_url, headers={'Authorization': 'Basic ' + basic})
         token_id = next(t['id'] for t in tokens if t['name'] == 'golf-local-check')
         request(client(), 'DELETE', tokens_url + '/' + str(token_id), headers={'Authorization': 'Basic ' + basic}, expected=204)

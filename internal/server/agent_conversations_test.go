@@ -338,7 +338,7 @@ func TestAgentConversationAuthorityPostgres(t *testing.T) {
 			case "account_version":
 				s.db.Exec(`UPDATE golf_codex_connections SET version=version+1 WHERE id=$1`, f.t.Connection)
 			case "policy":
-				s.db.Exec(`INSERT INTO golf_agent_usage_settings(forge_url,scope,scope_id,owner_id,config,revision) VALUES($1,'instance','instance',0,'{}',1)`, s.config.GiteaURL)
+				s.db.Exec(`INSERT INTO golf_agent_usage_settings(forge_url,scope,scope_id,owner_id,config,revision) VALUES($1,'instance','instance',0,'{}',1)`, s.config.ForgeURL)
 			case "lease":
 				s.db.Exec(`UPDATE golf_agent_tasks SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1`, f.t.ID)
 			case "foreign_attempt":
@@ -599,15 +599,15 @@ func TestAgentConversationLegacyBootstrapLaterPagePostgres(t *testing.T) {
 	config.EncryptionKey = keyFixture(1)
 	keys := parseTestKeys(t, keyFixture(1), nil, "")
 	s := &Server{db: db, keyring: keys, config: config}
-	user, e := database.New(db).UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: config.GiteaURL, ForgeUserID: 42, Login: "alice"})
+	user, e := database.New(db).UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: config.ForgeURL, ForgeUserID: 42, Login: "alice"})
 	if e != nil {
 		t.Fatal(e)
 	}
 	connection, id, attempt := uuid.NewString(), uuid.NewString(), strings.Repeat("a", 32)
-	if _, e = db.Exec(`INSERT INTO golf_codex_connections(id,user_id,state,forge_url,harness,provider,name) VALUES($1,$2,'CONNECTED',$3,'codex','openai','legacy fixture')`, connection, user, config.GiteaURL); e != nil {
+	if _, e = db.Exec(`INSERT INTO golf_codex_connections(id,user_id,state,forge_url,harness,provider,name) VALUES($1,$2,'CONNECTED',$3,'codex','openai','legacy fixture')`, connection, user, config.ForgeURL); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = db.Exec(`INSERT INTO golf_agent_tasks(id,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,config,policy_fingerprint,idempotency_key,input_hash,state,worker_id,attempt_id,lease_expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,$5,1,$6,'','{}','fixture',$7,$4,'running','worker',$8,clock_timestamp()+interval '1 hour')`, id, config.GiteaURL, user, bytes.Repeat([]byte{1}, 32), connection, strings.Repeat("a", 40), uuid.NewString(), attempt); e != nil {
+	if _, e = db.Exec(`INSERT INTO golf_agent_tasks(id,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,config,policy_fingerprint,idempotency_key,input_hash,state,worker_id,attempt_id,lease_expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,$5,1,$6,'','{}','fixture',$7,$4,'running','worker',$8,clock_timestamp()+interval '1 hour')`, id, config.ForgeURL, user, bytes.Repeat([]byte{1}, 32), connection, strings.Repeat("a", 40), uuid.NewString(), attempt); e != nil {
 		t.Fatal(e)
 	}
 	task, e := s.taskRecord(t.Context(), id)
@@ -619,7 +619,7 @@ func TestAgentConversationLegacyBootstrapLaterPagePostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer tx.Rollback()
-	if _, e = tx.Exec(`INSERT INTO golf_agent_conversations(task_id,attempt_id,forge_url,repository_id,owner_id,user_id,native_user_id,worker_id,connection_id,connection_version,commit_id) VALUES($1,$2,$3,11,42,$4,42,'worker',$5,1,$6)`, id, attempt, config.GiteaURL, user, connection, task.Commit); e != nil {
+	if _, e = tx.Exec(`INSERT INTO golf_agent_conversations(task_id,attempt_id,forge_url,repository_id,owner_id,user_id,native_user_id,worker_id,connection_id,connection_version,commit_id) VALUES($1,$2,$3,11,42,$4,42,'worker',$5,1,$6)`, id, attempt, config.ForgeURL, user, connection, task.Commit); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.appendConversationEvent(t.Context(), tx, task, attempt, 1, conversationPayload{Prompt: "Retained initial prompt"}); e != nil {

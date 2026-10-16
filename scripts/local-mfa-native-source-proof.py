@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 sys.dont_write_bytecode = True
-from smoke import ROOT, GITEA, command, provider
+from smoke import ROOT, FORGE, command, provider
 
 
 def main():
@@ -31,8 +31,8 @@ def main():
               'servedRuntimeQualified': False, 'ownedUsername': name}
     def admin(*values):
         return command('docker', 'compose', '--project-directory', str(stack), '--file', str(stack/'compose.yaml'),
-                       '--env-file', str(stack/'.env'), 'exec', '-T', 'gitea', 'gitea', '--config',
-                       '/etc/gitea/app.ini', 'admin', 'user', *values)
+                       '--env-file', str(stack/'.env'), 'exec', '-T', 'forgejo', 'forgejo', '--config',
+                       '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *values)  # Forgejo's upstream path
     created = False
     token = ''
     try:
@@ -49,7 +49,7 @@ def main():
         report['sourceFilesSHA256'] = {p: hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in files}
         with tempfile.TemporaryDirectory(prefix='golf-owned-mfa-') as folder:
             envelope = Path(folder)/'fixture.json'
-            envelope.write_text(json.dumps({'URL': GITEA, 'Username': name, 'Token': token}))
+            envelope.write_text(json.dumps({'URL': FORGE, 'Username': name, 'Token': token}))
             envelope.chmod(0o600)
             result = subprocess.run(['go', 'test', '-race', '-p', '1', './internal/server', '-run', '^TestLocalMFANativeProof$', '-count=1', '-v'],
                                     cwd=ROOT, env=os.environ | {'GOLF_MFA_NATIVE_PROOF': str(envelope)},

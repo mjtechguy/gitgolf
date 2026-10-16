@@ -85,7 +85,7 @@ def private_read(path):
 def clean_environment():
     # Compose shell variables otherwise override even an explicitly selected env file.
     return {key: value for key, value in os.environ.items() if not key.startswith(
-        ('GOLF_', 'GITEA_', 'FORGEJO_', 'POSTGRES_', 'COMPOSE_', 'RUSTFS_', 'AWS_', 'OTEL_')) and key != 'DATABASE_URL'}
+        ('GOLF_', 'FORGEJO_', 'POSTGRES_', 'COMPOSE_', 'RUSTFS_', 'AWS_', 'OTEL_')) and key != 'DATABASE_URL'}
 
 
 def initialize(directory, account, public_host, bridge_host, bucket, components):

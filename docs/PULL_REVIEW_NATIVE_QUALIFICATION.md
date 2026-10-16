@@ -1,6 +1,6 @@
 # Native human pull-request review qualification
 
-Qualified on 2026-10-03 against Gitea `1.27.3` (`go1.26.7-X:jsonv2`, rootless Compose service), with Golf image `sha256:3a54e7c9af7577811f6839f49be4a805cccc911bd2762ae48804d4b173eb74ef` running. This is supported native API characterization for implementing Golf human reviews. It does not qualify a Golf review mutation, UI, protected approval, merge authority, or latest-schema recovery.
+Qualified on 2026-10-03 in an earlier native qualification on a since-retired backend, with Golf image `sha256:3a54e7c9af7577811f6839f49be4a805cccc911bd2762ae48804d4b173eb74ef` running; it has not been repeated on Forgejo 15.0.9. The observed results below are from that backend; the linked pinned source is Forgejo 15.0.9, which inherits this code but has not been re-qualified. This is supported native API characterization for implementing Golf human reviews. It does not qualify a Golf review mutation, UI, protected approval, merge authority, or latest-schema recovery.
 
 Run locally while deployment is stable:
 
@@ -12,11 +12,11 @@ The [probe](../scripts/pull-review-native-probe.py) creates five disposable ordi
 
 ## Native request and receipts
 
-`POST /api/v1/repos/{owner}/{repo}/pulls/{number}/reviews` returns HTTP200 with a review. Submit a selected full `commit_id`, exact `body`, and one of `COMMENT`, `APPROVED`, or `REQUEST_CHANGES`. Inline comments use `{path, body, old_position, new_position}`; these positions are old/new **file line numbers**, not unified-diff row offsets. A positive old position selects the old side. The [pinned structs](https://github.com/go-gitea/gitea/blob/v1.27.3/modules/structs/pull_review.go) define the wire contract.
+`POST /api/v1/repos/{owner}/{repo}/pulls/{number}/reviews` returns HTTP200 with a review. Submit a selected full `commit_id`, exact `body`, and one of `COMMENT`, `APPROVED`, or `REQUEST_CHANGES`. Inline comments use `{path, body, old_position, new_position}`; these positions are old/new **file line numbers**, not unified-diff row offsets. A positive old position selects the old side. The [pinned structs](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/structs/pull_review.go) define the wire contract.
 
-The [pinned handler](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/pull_review.go) and [service](https://github.com/go-gitea/gitea/blob/v1.27.3/services/pull/review.go) are essential context: an omitted commit uses the retained current head; an explicit commit is not an expected-head compare-and-swap. Submitting an existing pending review through `/reviews/{id}` instead selects the current head. The adapter must not silently use that endpoint for an exact frozen snapshot.
+The [pinned handler](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/pull_review.go) and [service](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/services/pull/review.go) are essential context: an omitted commit uses the retained current head; an explicit commit is not an expected-head compare-and-swap. Submitting an existing pending review through `/reviews/{id}` instead selects the current head. The adapter must not silently use that endpoint for an exact frozen snapshot.
 
-Every successful probe write independently rereads `/reviews/{id}` using a read-scoped token and compares ID, state, body, commit and comment count. It validates positive IDs, exact actor ID/login and parseable submitted/updated timestamps. Native fields also include `stale`, `official` and `dismissed`; they are provider observations, not Golf protected-policy proof. [Pinned conversion](https://github.com/go-gitea/gitea/blob/v1.27.3/services/convert/pull_review.go).
+Every successful probe write independently rereads `/reviews/{id}` using a read-scoped token and compares ID, state, body, commit and comment count. It validates positive IDs, exact actor ID/login and parseable submitted/updated timestamps. Native fields also include `stale`, `official` and `dismissed`; they are provider observations, not Golf protected-policy proof. [Pinned conversion](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/services/convert/pull_review.go).
 
 ## Observed acceptance matrix
 
@@ -44,7 +44,7 @@ The branch-advance case proves acceptance of an explicitly older snapshot; it do
 
 ## Pending drafts, hidden pagination and side effects
 
-The probe creates a pending review with two real inline drafts: new-side line1 and old-side line1. Their independent comment receipts report `(position, original_position)` as `(1,0)` and `(0,1)`, respectively, with exact path, reviewer ID and review ID. A later body-only COMMENT POST, with **no `comments` field**, submits those drafts too: it reuses the pending review ID and returns `comments_count=2`. The [pinned model](https://github.com/go-gitea/gitea/blob/v1.27.3/models/issues/review.go) reuses the actor's current pending review. Omitting comments cannot guarantee a body-only mutation.
+The probe creates a pending review with two real inline drafts: new-side line1 and old-side line1. Their independent comment receipts report `(position, original_position)` as `(1,0)` and `(0,1)`, respectively, with exact path, reviewer ID and review ID. A later body-only COMMENT POST, with **no `comments` field**, submits those drafts too: it reuses the pending review ID and returns `comments_count=2`. The [pinned model](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/models/issues/review.go) reuses the actor's current pending review. Omitting comments cannot guarantee a body-only mutation.
 
 A subsequent real pagination test puts another actor's hidden pending review before the caller's pending review. With `limit=1`, the caller receives an empty visible page **before** a later page containing their own pending review. `X-Total-Count` includes hidden drafts. Iterate all bounded pages implied by validated native total/page span, including empty visible pages; stopping on `len(rows)==0` would miss a submission hazard. The converter filters another user's pending reviews after native pagination.
 

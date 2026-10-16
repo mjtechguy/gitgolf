@@ -246,7 +246,7 @@ func TestRepositoryLifecycleArchivePostgres(t *testing.T) {
 		t.Fatal("unarchive", e)
 	}
 	var activities, events int
-	if e = f.s.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2", f.s.config.GiteaURL, int64(9007199254740993)).Scan(&activities); e != nil {
+	if e = f.s.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2", f.s.config.ForgeURL, int64(9007199254740993)).Scan(&activities); e != nil {
 		t.Fatal(e)
 	}
 	if e = f.s.db.QueryRow("SELECT count(*) FROM golf_repository_lifecycle_events").Scan(&events); e != nil {
@@ -327,7 +327,7 @@ func TestRepositoryLifecycleWriteGatePostgres(t *testing.T) {
 	}
 	blocked := make(chan error, 1)
 	go func() {
-		_, e := f.s.db.ExecContext(ctx, "SELECT golf_repository_lifecycle_lock($1,$2,true)", f.s.config.GiteaURL, int64(9007199254740993))
+		_, e := f.s.db.ExecContext(ctx, "SELECT golf_repository_lifecycle_lock($1,$2,true)", f.s.config.ForgeURL, int64(9007199254740993))
 		blocked <- e
 	}()
 	select {
@@ -406,11 +406,11 @@ func TestRepositoryLifecycleAdmissionRacePostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer tx.Rollback()
-	if _, e = tx.ExecContext(ctx, "SELECT golf_repository_lifecycle_lock($1,$2,true)", f.s.config.GiteaURL, int64(9007199254740993)); e != nil {
+	if _, e = tx.ExecContext(ctx, "SELECT golf_repository_lifecycle_lock($1,$2,true)", f.s.config.ForgeURL, int64(9007199254740993)); e != nil {
 		t.Fatal(e)
 	}
 	lifecycleSQL := `INSERT INTO golf_repository_lifecycle_operations(user_id,forge_url,actor_id,idempotency_key,repository_id,owner_id,repository_owner,repository_name,expected_revision,from_archived,to_archived,fingerprint) VALUES($1,$2,42,$3,9007199254740993,42,'alice','example',repeat('a',64),false,true,decode(repeat('00',32),'hex'))`
-	if _, e = tx.ExecContext(ctx, lifecycleSQL, userID, f.s.config.GiteaURL, "6c38174c-a431-4a01-93ce-000000000009"); e != nil {
+	if _, e = tx.ExecContext(ctx, lifecycleSQL, userID, f.s.config.ForgeURL, "6c38174c-a431-4a01-93ce-000000000009"); e != nil {
 		t.Fatal(e)
 	}
 	waiting := make(chan error, 1)
@@ -440,7 +440,7 @@ func TestRepositoryLifecycleAdmissionRacePostgres(t *testing.T) {
 		t.Fatal("refused work was stored", e, n)
 	}
 	// An unresolved record is durable and cannot be bypassed by a second key.
-	if _, e = f.s.db.ExecContext(ctx, lifecycleSQL, userID, f.s.config.GiteaURL, "6c38174c-a431-4a01-93ce-000000000011"); e == nil {
+	if _, e = f.s.db.ExecContext(ctx, lifecycleSQL, userID, f.s.config.ForgeURL, "6c38174c-a431-4a01-93ce-000000000011"); e == nil {
 		t.Fatal("second unresolved operation inserted")
 	}
 	if _, e = f.s.db.ExecContext(ctx, "DELETE FROM golf_repository_lifecycle_operations"); e == nil {
@@ -563,7 +563,7 @@ func TestRepositoryLifecycleHeldTransactionNestedWriterPostgres(t *testing.T) {
 	blocked := make(chan error, 1)
 	go func() {
 		_, e := f.s.db.ExecContext(ctx, `-- name: HeldLifecycleArchiveWaiter
-SELECT golf_repository_lifecycle_lock($1,$2,true)`, f.s.config.GiteaURL, int64(9007199254740993))
+SELECT golf_repository_lifecycle_lock($1,$2,true)`, f.s.config.ForgeURL, int64(9007199254740993))
 		blocked <- e
 	}()
 	waitManagementLock(t, f.s.db, "HeldLifecycleArchiveWaiter", 1)
@@ -579,7 +579,7 @@ SELECT golf_repository_lifecycle_lock($1,$2,true)`, f.s.config.GiteaURL, int64(9
 	default:
 	}
 	// A copied private scope cannot authorize a different current native identity.
-	wrong := context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{f.s.config.GiteaURL, 999, tx})
+	wrong := context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{f.s.config.ForgeURL, 999, tx})
 	if release, e := f.s.beginRepositoryLifecycleWrite(wrong, "PUT", "/repos/alice/example/contents/a", f.credential, nil, request); !errors.Is(e, errLifecycleBlocked) {
 		if e == nil {
 			release()

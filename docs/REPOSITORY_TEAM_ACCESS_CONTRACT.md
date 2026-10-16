@@ -54,7 +54,7 @@ Temporary API/router/Access-component integration used only for isolated checks 
 
 ## Primary native sources
 
-- [Pinned repository-team whole collection and repository routes](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/repo/teams.go), `ListTeams` lines 37–54.
-- [Pinned TeamRepos GET/PUT/DELETE and native owner/admin checks](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/org/team.go), lines 508–761. The team-repositories collection can trim invisible repositories; its 404 is not used to infer absence here.
-- [Pinned route guards](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/api.go), repository teams lines 1203–1208 and team-repository routes lines 1660–1685.
-- [Native repository-admin/team-access setting and site-admin alternative](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/models/organization/org.go), `CanChangeRepoTeamAccess` lines 88–94. Golf's initial editor requires actual organization ownership.
+- [Pinned repository-team whole collection and repository routes](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/teams.go), `ListTeams` lines 37–54.
+- [Pinned TeamRepos GET/PUT/DELETE and native owner/admin checks](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/org/team.go), lines 508–761. The team-repositories collection can trim invisible repositories; its 404 is not used to infer absence here.
+- [Pinned route guards](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/api.go), repository teams lines 1203–1208 and team-repository routes lines 1660–1685.
+- [Native repository-admin/team-access setting and site-admin alternative](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/models/organization/org.go), `CanChangeRepoTeamAccess` lines 88–94. Golf's initial editor requires actual organization ownership.

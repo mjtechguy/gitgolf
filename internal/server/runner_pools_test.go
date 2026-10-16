@@ -122,7 +122,7 @@ func runnerPoolLocalFixture(t *testing.T) (*workflowRunFixture, loginResult) {
 	f := newWorkflowRunFixture(t)
 	f.row.HTMLURL = "https://forge.invalid/alice/example"
 	f.server.runnerKeys["second"] = sha256.Sum256([]byte("second"))
-	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture", IsInstanceAdmin: true}); e != nil {
+	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture", IsInstanceAdmin: true}); e != nil {
 		t.Fatal(e)
 	}
 	admin, e := f.server.loginLocalSession(t.Context(), "alice", localTestPassword, "")

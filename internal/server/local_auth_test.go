@@ -22,7 +22,7 @@ const localTestPassword = "Golf independent password 42!"
 
 func enrollLocal(t *testing.T, f *managementFixture, name string, admin bool) LocalAccountResult {
 	t.Helper()
-	result, err := ManageLocalAccount(context.Background(), f.db, f.s.keyring, f.s.config.GiteaURL, "create", LocalAccountInput{Username: name, Password: localTestPassword, ForgeToken: name + "-management-token", IsInstanceAdmin: admin})
+	result, err := ManageLocalAccount(context.Background(), f.db, f.s.keyring, f.s.config.ForgeURL, "create", LocalAccountInput{Username: name, Password: localTestPassword, ForgeToken: name + "-management-token", IsInstanceAdmin: admin})
 	if err != nil {
 		t.Fatal("enrollment", err)
 	}
@@ -83,7 +83,7 @@ func TestLocalAccountLifecyclePostgres(t *testing.T) {
 			t.Fatal("generic failure", err)
 		}
 	}
-	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "create", LocalAccountInput{Username: "another", Password: localTestPassword, ForgeToken: "alice-management-token"}); err == nil {
+	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "create", LocalAccountInput{Username: "another", Password: localTestPassword, ForgeToken: "alice-management-token"}); err == nil {
 		t.Fatal("immutable identity silently linked twice")
 	}
 	session := localLogin(t, f, "alice")
@@ -108,7 +108,7 @@ func TestLocalAccountLifecyclePostgres(t *testing.T) {
 	if err != nil || !current.Msg.User.IsInstanceAdmin {
 		t.Fatal("restart role", err)
 	}
-	reset, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "reset-password", LocalAccountInput{Username: "alice", Password: "Replacement Golf password!"})
+	reset, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "reset-password", LocalAccountInput{Username: "alice", Password: "Replacement Golf password!"})
 	if err != nil || reset.SessionsRevoked != 1 || reset.CredentialVersion == account.CredentialVersion {
 		t.Fatal("reset", err)
 	}
@@ -118,21 +118,21 @@ func TestLocalAccountLifecyclePostgres(t *testing.T) {
 	if response := apiRequest(f.s, source.Token, golfv1connect.SessionServiceGetSessionProcedure, "{}"); response.Code != 401 {
 		t.Fatal("reset retained bearer", response.Code)
 	}
-	disabled, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "alice"})
+	disabled, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "disable", LocalAccountInput{Username: "alice"})
 	if err != nil || !disabled.Disabled {
 		t.Fatal("disable", err)
 	}
-	_, err = ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "reset-password", LocalAccountInput{Username: "alice", Password: localTestPassword})
+	_, err = ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "reset-password", LocalAccountInput{Username: "alice", Password: localTestPassword})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.s.loginLocalSession(ctx, "alice", localTestPassword, ""); !errors.Is(err, errLocalCredentials) {
 		t.Fatal("reset reenabled disabled", err)
 	}
-	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "enable", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "bob-management-token"}); err == nil {
+	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "enable", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "bob-management-token"}); err == nil {
 		t.Fatal("enable replaced immutable identity")
 	}
-	enabled, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "enable", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "alice-management-token"})
+	enabled, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "enable", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "alice-management-token"})
 	if err != nil || enabled.Disabled || !enabled.IsInstanceAdmin {
 		t.Fatal("enable", err)
 	}
@@ -178,7 +178,7 @@ func TestLocalLoginReplicaThrottlePostgres(t *testing.T) {
 	if err := f.db.QueryRow("SELECT count(*) FROM golf_local_login_limits").Scan(&count); err != nil || count != 1025 {
 		t.Fatal("unbounded limiter table", err)
 	}
-	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "reset-password", LocalAccountInput{Username: "alice", Password: localTestPassword}); err != nil {
+	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "reset-password", LocalAccountInput{Username: "alice", Password: localTestPassword}); err != nil {
 		t.Fatal(err)
 	}
 	localLogin(t, f, "alice")
@@ -209,7 +209,7 @@ func TestLocalLoginAndReadDisableRacePostgres(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("provider did not block")
 			}
-			if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "alice"}); err != nil {
+			if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "disable", LocalAccountInput{Username: "alice"}); err != nil {
 				t.Fatal(err)
 			}
 			close(f.resume)
@@ -241,7 +241,7 @@ func TestLocalAccountAtomicRollbackAndGuardsPostgres(t *testing.T) {
 	if _, err := f.db.Exec(`CREATE FUNCTION reject_local_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture'; END $$; CREATE TRIGGER reject_local_event BEFORE INSERT ON golf_local_account_events FOR EACH ROW EXECUTE FUNCTION reject_local_event()`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "reset-password", LocalAccountInput{Username: "alice", Password: "Changed password that rolls back"}); err == nil {
+	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "reset-password", LocalAccountInput{Username: "alice", Password: "Changed password that rolls back"}); err == nil {
 		t.Fatal("reset claimed success despite event failure")
 	}
 	if _, err := f.s.sessionCredential(ctx, session.Value); err != nil {
@@ -261,10 +261,10 @@ func TestLocalCredentialsRotationAndRecoveryPostgres(t *testing.T) {
 	enrollLocal(t, f, "bob", false)
 	localLogin(t, f, "alice")
 	seedAttempt(t, f.s, false)
-	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "bob"}); err != nil {
+	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "disable", LocalAccountInput{Username: "bob"}); err != nil {
 		t.Fatal(err)
 	}
-	row, err := database.New(f.db).GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.GiteaURL})
+	row, err := database.New(f.db).GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.ForgeURL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestLocalCredentialsRotationAndRecoveryPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal("restart without retired key", err)
 	}
-	before, err := database.New(f.db).GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.GiteaURL})
+	before, err := database.New(f.db).GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.ForgeURL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +294,7 @@ func TestLocalCredentialsRotationAndRecoveryPostgres(t *testing.T) {
 	if err != nil || recovered.LocalAccountsDisabledCount != 2 || recovered.SessionsCount != 1 || recovered.OAuthAttemptsCount != 1 {
 		t.Fatal("recovery local fencing", err)
 	}
-	after, err := database.New(f.db).GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.GiteaURL})
+	after, err := database.New(f.db).GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.ForgeURL})
 	if err != nil || !after.DisabledAt.Valid || after.CredentialVersion != before.CredentialVersion+1 || before.PasswordHash != after.PasswordHash || !bytes.Equal(before.EncryptedForgeToken, after.EncryptedForgeToken) {
 		t.Fatal("recovery changed retained credential or failed version fence", err)
 	}
@@ -340,7 +340,7 @@ func TestLocalCredentialFailuresPreserveAuthorityRecordsPostgres(t *testing.T) {
 	enrollLocal(t, f, "alice", false)
 	session := localLogin(t, f, "alice")
 	q := database.New(f.db)
-	before, err := q.GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.GiteaURL})
+	before, err := q.GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.ForgeURL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +358,7 @@ func TestLocalCredentialFailuresPreserveAuthorityRecordsPostgres(t *testing.T) {
 	if err == nil || failed.Complete || failed.RotatedLocalAccounts != 0 || failed.RotatedSessions != 0 {
 		t.Fatal("failed rotation reported committed rows", err)
 	}
-	after, err := q.GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.GiteaURL})
+	after, err := q.GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.ForgeURL})
 	if err != nil || after.CredentialKeyID != "legacy" || !bytes.Equal(after.EncryptedForgeToken, before.EncryptedForgeToken) {
 		t.Fatal("rotation audit failure partially rewrote local account", err)
 	}
@@ -371,7 +371,7 @@ func TestLocalCredentialFailuresPreserveAuthorityRecordsPostgres(t *testing.T) {
 	if _, err := InvalidateRestoredSessions(ctx, f.db, strings.Repeat("b", 32)); err == nil {
 		t.Fatal("failed recovery reported success")
 	}
-	after, err = q.GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.GiteaURL})
+	after, err = q.GetLocalAccount(ctx, database.GetLocalAccountParams{Username: "alice", ForgeURL: f.s.config.ForgeURL})
 	if err != nil || after.DisabledAt.Valid || after.CredentialVersion != before.CredentialVersion {
 		t.Fatal("failed recovery partly disabled local account", err)
 	}
@@ -426,7 +426,7 @@ func TestLocalEmailAliasPostgres(t *testing.T) {
 	f := newManagementFixture(t)
 	ctx := context.Background()
 	input := LocalAccountInput{Username: "alice", Email: "Alice@Example.invalid", Password: localTestPassword, ForgeToken: "alice-management-token", IsInstanceAdmin: true}
-	enrolled, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "create", input)
+	enrolled, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "create", input)
 	if err != nil || enrolled.Email != "alice@example.invalid" {
 		t.Fatal("email enrollment", err)
 	}
@@ -437,10 +437,10 @@ func TestLocalEmailAliasPostgres(t *testing.T) {
 	if _, err := f.s.loginLocalSession(ctx, "unknown@example.invalid", localTestPassword, ""); !errors.Is(err, errLocalCredentials) {
 		t.Fatal("generic email denial", err)
 	}
-	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "create", LocalAccountInput{Username: "bob", Email: "ALICE@example.invalid", Password: localTestPassword, ForgeToken: "bob-management-token"}); err == nil {
+	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "create", LocalAccountInput{Username: "bob", Email: "ALICE@example.invalid", Password: localTestPassword, ForgeToken: "bob-management-token"}); err == nil {
 		t.Fatal("duplicate email enrolled")
 	}
-	changed, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "set-email", LocalAccountInput{Username: "alice", Email: "new@example.invalid"})
+	changed, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "set-email", LocalAccountInput{Username: "alice", Email: "new@example.invalid"})
 	if err != nil || changed.Email != "new@example.invalid" || changed.SessionsRevoked != 1 {
 		t.Fatal("email change fencing", err)
 	}

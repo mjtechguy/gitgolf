@@ -15,10 +15,10 @@ Cloudflare-accelerated platform	The same product uses Workers, optional R2 stora
 My recommendation is to make the first profile the architectural foundation and the second the optimized hosted offering.
 That is a hybrid architecture—not a claim that everything runs inside Workers.
 2. Start with an open-source forge, not a blank repository
-For your Go-heavy direction, I would start by evaluating Gitea as the baseline forge.
+For your Go-heavy direction, I would start by evaluating an existing open-source Go forge as the baseline (the native forge).
 It is written in Go, MIT-licensed, and already provides repository hosting, code review, issues, organizations and teams, wikis, packages, project boards, and CI functionality. Those are valuable foundations that are not, by themselves, your product’s differentiation. 
 I would initially divide responsibility this way:
-Gitea owns the established forge objects: repositories, issues, pull requests, reviews, and their permissions.
+The native forge owns the established forge objects: repositories, issues, pull requests, reviews, and their permissions.
 Your Go services own the new product capabilities: agent tasks, workspace orchestration, workflow compatibility, migration reports, execution policy, performance optimization, and evidence connecting changes to tests and approvals.
 Your React application owns the experience: a fast, cohesive interface rather than forcing users to navigate between unrelated administrative tools.
 The important rule is one authoritative owner for each kind of data. Do not maintain two competing permission databases or two independent pull-request state machines.
@@ -59,7 +59,7 @@ For the portable backend, I would keep native Git repositories on persistent, fa
 Object storage would hold LFS objects, release assets, workflow artifacts, caches, and backup material. I would not make an S3-mounted .git directory the default authoritative repository design.
 For the Cloudflare profile, I would initially use Artifacts for eligible agent workspaces or small repositories. Its documented Git interface supports normal smart-HTTP clone, fetch, pull, and push operations. 
 Crucially:
-Using Artifacts as Gitea’s repository backend is not a storage configuration switch.
+Using Artifacts as the native forge’s repository backend is not a storage configuration switch.
 That would be substantial integration work. A safer first implementation is to keep canonical repositories in the forge and use Artifacts-backed task repositories through a workspace provider, bringing changes back through the normal review and merge process.
 Execution: separate from the web application
 I would provide runner pools with explicit capabilities: architecture, CPU, memory, toolchain, isolation level, network policy, and trust level.
@@ -70,7 +70,7 @@ For larger jobs, specialized hardware, or unusual networking requirements, use e
 This is probably the most important engineering investment after the core forge.
 “It understands Actions YAML” is not the same as “your GitHub workflows work.”
 I would build an explicit compatibility frontend that reads existing .github/workflows/*.yml files, validates their semantics, and compiles them into an internal execution plan without requiring users to rewrite their source files.
-That would be our functionality—not an assumption that upstream Gitea already provides identical behavior.
+That would be our functionality—not an assumption that the upstream forge already provides identical behavior.
 The compatibility surface
 Layer	What we would need to implement and test
 Workflow language	Expressions, contexts, events, matrices, dependencies, reusable workflows, concurrency, cancellation, and timeouts.
@@ -79,10 +79,10 @@ Runner environment	Documented Linux images, installed tools, service containers,
 Security semantics	Job-scoped tokens, fork restrictions, environment approvals, secret isolation, and OIDC issuance.
 Platform services	Artifact upload/download, caches, logs, checks, statuses, releases, and deployment records.
 API compatibility	The REST endpoints, webhook payloads, selected GraphQL operations, and CLI behavior actually used by supported workflows.
-Current Gitea documentation illustrates why this matters: job environments are ignored, and although job-token permissions are supported, their scopes differ from GitHub’s. Several GitHub scopes—including id-token, checks, deployments, and security events—are not supported there. Those are meaningful gaps, especially when a workflow expects a security boundary rather than just a build command. 
+The native forge's current Actions documentation illustrates why this matters: job environments are ignored, and although job-token permissions are supported, their scopes differ from GitHub’s. Several GitHub scopes—including id-token, checks, deployments, and security events—are not supported there. Those are meaningful gaps, especially when a workflow expects a security boundary rather than just a build command.
 Unsupported security behavior must fail closed. A workflow that requests production approval should not silently deploy without it.
 Reuse execution engines, but own the missing service behavior
-Gitea’s runner and act are useful starting points. But upstream act documents gaps including ignored concurrency and permissions settings, missing OIDC, and incomplete cancellation behavior. It should not be mistaken for a complete production orchestration and policy system. 
+The native forge's runner and act are useful starting points. But upstream act documents gaps including ignored concurrency and permissions settings, missing OIDC, and incomplete cancellation behavior. It should not be mistaken for a complete production orchestration and policy system.
 The official GitHub Actions runner is also MIT-licensed. That makes it available for evaluation, but it is a runner—not the GitHub service that coordinates it. Supporting it against a new backend would require additional server-side work. 
 Even common actions can depend on provider-specific services. For example, the current actions/upload-artifact documentation says v4 and later are not supported on GitHub Enterprise Server. That is a useful demonstration that compatibility extends beyond parsing a YAML file. 
 Publish a compatibility contract
@@ -155,7 +155,7 @@ The principal benchmark should be:
 From a developer’s change to the first trustworthy result, how much time and compute did we actually save?
 Compare against the same workflow, resources, cache state, repository, and network conditions.
 7. Scaling requires several independent strategies
-I would not assume that putting Gitea into Kubernetes makes it a globally distributed forge.
+I would not assume that putting the native forge into Kubernetes makes it a globally distributed forge.
 Initially, I would scale across independent forge cells: each cell is a bounded deployment serving a set of organizations, with its own authoritative data and execution allocation. A directory routes requests to the correct cell.
 That provides an operational path for isolating large tenants, placing data regionally, and containing failures without immediately inventing a global multi-writer repository system.
 Within a cell, scale web/API serving, background jobs, search, and runner pools independently. Treat repository relocation as an explicit operation with fencing and recovery—not an incidental load-balancer decision.
@@ -188,7 +188,7 @@ Then: enterprise operation and broader feature coverage
 Add tested backup restoration, regional placement, tenant isolation, audit export, identity lifecycle management, stronger repository policy, and operational quotas.
 Build out richer projects, discussions, notifications, development environments, security findings, and package workflows according to actual customer migration blockers.
 For the underlying stack, my starting selection would be:
-Gitea + Go/chi + PostgreSQL + React/TanStack, with RustFS for the portable object-store profile, NATS JetStream for scalable work delivery, isolated Linux runners, and optional Keycloak/OpenBao integrations. RustFS is Apache-2.0 and exposes an S3-compatible API; I would contract-test the specific operations used rather than assume all object stores behave identically. 
+Native forge + Go/chi + PostgreSQL + React/TanStack, with RustFS for the portable object-store profile, NATS JetStream for scalable work delivery, isolated Linux runners, and optional Keycloak/OpenBao integrations. RustFS is Apache-2.0 and exposes an S3-compatible API; I would contract-test the specific operations used rather than assume all object stores behave identically.
 Cloudflare Workers, R2, Artifacts, and Containers would be explicit adapters or deployment options—not invisible assumptions throughout the business logic.
 For the contest in the article specifically, the entry must use Workers and Artifacts, support concurrent agents, and be permissively open source; submissions are due October 14, 2026. A focused Artifacts-backed agent-workspace demonstration could satisfy that direction without making today’s Artifacts limits the permanent limits of the whole product. 
 My recommendation
@@ -223,7 +223,7 @@ Store	Shared interface state where component state and URL state aren’t suffic
 
 
 Filters, sorting, pagination, and selected views should live in typed URL state so users can bookmark and share their exact view. Tables and virtualized views should work together for large repositories.
-We’ll also evaluate TanStack DB for live task boards and optimistic collaboration once the synchronization contract is defined. PostgreSQL and the Go/Gitea APIs remain authoritative.
+We’ll also evaluate TanStack DB for live task boards and optimistic collaboration once the synchronization contract is defined. PostgreSQL and the Go/native-forge APIs remain authoritative.
 The resulting stack is React + TanStack throughout the application, with a consistent component system and server-enforced permissions.
 
 
@@ -255,7 +255,7 @@ Activity
 
 
 
-I’ll write the detailed Markdown plan first, then build a working first version from it: a modern TanStack-based forge UI and a Go API, with clear boundaries for Gitea, migration, workflows, and agent workspaces. I’ll distinguish working features from integrations that still need credentials or infrastructure.
+I’ll write the detailed Markdown plan first, then build a working first version from it: a modern TanStack-based forge UI and a Go API, with clear boundaries for the native forge, migration, workflows, and agent workspaces. I’ll distinguish working features from integrations that still need credentials or infrastructure.
 
 
 
@@ -458,7 +458,7 @@ I wrote the [15,000-word implementation plan](/workspace/PLAN.md) and built the 
 - Workflow/history auditing and a tested offline bundle.
 Run make dev; instructions are in [README.md](/workspace/README.md). See the [UI preview](/workspace/artifacts/golf-overview.png).
 Validation: nine browser tests, Go race tests, type checks, and extracted offline smoke tests pass. Dependency scans report no vulnerabilities.
-Live Gitea integration, agent execution, provider OAuth/ACP connections, and production government/FIPS capabilities remain explicit roadmap milestones. The plan defines the deployment sizes and proposed OSS/enterprise split.
+Live native-forge integration, agent execution, provider OAuth/ACP connections, and production government/FIPS capabilities remain explicit roadmap milestones. The plan defines the deployment sizes and proposed OSS/enterprise split.
 
   Edited 33 files+858-27View changesUndo
 
@@ -498,7 +498,7 @@ Worked for 49m 42s
 
 
 
-For the Cloudflare track, is a Go/Gitea origin acceptable initially, or must the forge run natively on Workers and Artifacts from the start?Both
+For the Cloudflare track, is a Go/native-forge origin acceptable initially, or must the forge run natively on Workers and Artifacts from the start?Both
 
 
 
@@ -517,7 +517,7 @@ For the Cloudflare track, is a Go/Gitea origin acceptable initially, or must the
 
 
 Both are now defined in the [expanded plan](/workspace/PLAN.md):
-- Gitea-backed: Gitea owns forge state and native Git; Artifacts supplies optional agent workspaces.
+- Forge-backed: the native forge owns forge state and native Git; Artifacts supplies optional agent workspaces.
 - Golf-native: Golf owns collaboration and policy; canonical Git uses Artifacts or portable native Git.
 Golf’s API is the shared abstraction. Both production backends remain pending implementation.
 Built this pass: backend capability reporting, stricter deployment gates, compression/caching, performance budgets, system dark mode, and the full-height sidebar. Initial JavaScript gzip size dropped from 207 KB to 184 KB.

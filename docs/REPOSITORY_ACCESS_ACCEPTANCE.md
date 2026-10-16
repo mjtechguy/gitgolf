@@ -6,7 +6,7 @@ No additional promised control was found missing from the implemented portable A
 
 ## Evidence identities
 
-All following actual tests use supported Gitea **1.27.3** APIs/Git and disposable actors. Each parent manifest reports successful cleanup; a child browser manifest alone is not that proof.
+All following actual tests used supported native APIs/Git and disposable actors in an earlier native qualification on a since-retired backend; they have not been repeated on Forgejo 15.0.9. Each parent manifest reports successful cleanup; a child browser manifest alone is not that proof.
 
 | Receipt | Exact product source and image | Recorded scope |
 | --- | --- | --- |

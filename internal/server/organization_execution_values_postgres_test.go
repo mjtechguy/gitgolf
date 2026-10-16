@@ -88,7 +88,7 @@ func newOrganizationExecutionFixture(t *testing.T) *organizationExecutionFixture
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = ManageLocalAccount(t.Context(), f.db, f.s.keyring, cfg.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "organization-source-only"}); e != nil {
+	if _, e = ManageLocalAccount(t.Context(), f.db, f.s.keyring, cfg.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "organization-source-only"}); e != nil {
 		t.Fatal(e)
 	}
 	login, e := f.s.loginLocalSession(t.Context(), "alice", localTestPassword, "")
@@ -256,7 +256,7 @@ func TestOrganizationExecutionAuthorityAfterBrokerWaitPostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer blocker.Rollback()
-	if _, e = blocker.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, f.s.config.GiteaURL+":organization-execution:73"); e != nil {
+	if _, e = blocker.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, f.s.config.ForgeURL+":organization-execution:73"); e != nil {
 		t.Fatal(e)
 	}
 	m := organizationExecutionSave(f, uuid.NewString(), "0", "0", "BUILD_CREDENTIAL", "organization-private-secret")

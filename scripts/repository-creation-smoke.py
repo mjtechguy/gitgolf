@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Qualify durable own-account creation against the actual local Compose Gitea.
+"""Qualify durable own-account creation against the actual local Compose Forgejo.
 
 Creates/purges ordinary provider users through supported interfaces; immutable
 Golf identities/operation history remain. --restart briefly restarts Golf only.
@@ -22,7 +22,7 @@ import traceback
 import uuid
 
 sys.dont_write_bytecode = True
-from smoke import GITEA, GOLF, ROOT, admin, client, provider, ready, request, rpc, wait_for_push
+from smoke import FORGE, GOLF, ROOT, admin, client, provider, ready, request, rpc, wait_for_push
 
 CREATE = 'RepositoryService/CreateRepository'
 LOOKUP = 'RepositoryService/GetRepositoryCreation'
@@ -167,13 +167,13 @@ def main():
     if binary and not binary.is_file():
         parser.error('build the CLI before supplying --cli')
     ready()
-    assert request(client(), 'GET', GITEA + '/api/v1/version')['version'] == '1.27.3'
+    assert request(client(), 'GET', FORGE + '/api/v1/version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
     users, sessions, actors = [], [], []
     prefix = 'golf-create-' + secrets.token_hex(5)
 
     def login(token):
         session = client()
-        rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})
+        rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})
         sessions.append(session)
         return session
 
@@ -246,7 +246,7 @@ def main():
         missing = lookup(other['session'], key(), expected=404)
         assert lookup(other['session'], operation_key, expected=404) == missing
         provider(other['token'], 'GET', 'repos/' + full_name, expected=404)
-        request(client(), 'GET', GITEA + '/api/v1/repos/' + full_name, expected=404)
+        request(client(), 'GET', FORGE + '/api/v1/repos/' + full_name, expected=404)
         separate = rpc(other['session'], CREATE, payload)
         separate_row = creation(separate, operation_key, payload['name'], True, SUCCEEDED)
         assert separate_row['id'] != record['id'] and separate_row['repositoryId'] != record['repositoryId']

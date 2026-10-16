@@ -12,7 +12,7 @@ import (
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 )
 
-// Gitea list heads are retained PR snapshots even when Ref names a source
+// Forgejo list heads are retained PR snapshots even when Ref names a source
 // branch. Detail reads can also fall back to refs/pull/N/head. Neither response
 // establishes an atomic source/base observation or qualified merge eligibility.
 type forgePullRef struct {

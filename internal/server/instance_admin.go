@@ -48,7 +48,7 @@ func (s *Server) ListLocalAccounts(ctx context.Context, req *connect.Request[gol
 		return nil, rpcError(err)
 	}
 	rows, err := database.New(s.db).ListLocalAccounts(ctx, database.ListLocalAccountsParams{
-		ForgeURL: s.config.GiteaURL, RowLimit: int32(limit + 1), RowOffset: int32((page - 1) * limit),
+		ForgeURL: s.config.ForgeURL, RowLimit: int32(limit + 1), RowOffset: int32((page - 1) * limit),
 	})
 	if err != nil {
 		return nil, rpcError(errStorageUnavailable)
@@ -86,7 +86,7 @@ func (s *Server) ListLocalAccounts(ctx context.Context, req *connect.Request[gol
 	if e != nil {
 		return nil, rpcError(e)
 	}
-	actor, e := database.New(s.db).GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	actor, e := database.New(s.db).GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if e != nil {
 		return nil, rpcError(errUnauthenticated)
 	}

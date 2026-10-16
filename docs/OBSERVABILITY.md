@@ -20,9 +20,9 @@ Every enabled listener is bound before serving. A failed private bind fails star
 
 Each HTTP request gets a fresh server-generated `X-Request-ID`. Caller-supplied correlation headers do not choose Golf's request or trace identity. When recording traces, request completion logs include their trace/span IDs. Logs and metrics use fixed known API procedure/route categories and bounded HTTP methods/statuses.
 
-API server spans contain native Gitea HTTP client and PostgreSQL query child spans when those calls occur. PostgreSQL operations are classified by a bounded SQL verb; statements and arguments are omitted. Provider instrumentation omits endpoint paths, query strings, headers, bodies and raw errors. There is no propagation of arbitrary incoming baggage or repository identity into telemetry.
+API server spans contain native Forgejo HTTP client and PostgreSQL query child spans when those calls occur. PostgreSQL operations are classified by a bounded SQL verb; statements and arguments are omitted. Provider instrumentation omits endpoint paths, query strings, headers, bodies and raw errors. There is no propagation of arbitrary incoming baggage or repository identity into telemetry.
 
-Excluded data includes provider tokens, cookies, OAuth state/verifiers, encrypted session values, source/issue text, repository/user names, SQL statements/arguments and DSNs. HTTP panic/transport diagnostics use fixed messages without panic values or stack dumps. These constraints apply to Golf telemetry; independently operated Gitea/PostgreSQL/collector logs need their own policies.
+Excluded data includes provider tokens, cookies, OAuth state/verifiers, encrypted session values, source/issue text, repository/user names, SQL statements/arguments and DSNs. HTTP panic/transport diagnostics use fixed messages without panic values or stack dumps. These constraints apply to Golf telemetry; independently operated Forgejo/PostgreSQL/collector logs need their own policies.
 
 Telemetry is best effort. Export failures produce a fixed diagnostic and a bounded failure counter; they do not fail authorized application operations or emit the collector's raw error. Sampling, a full queue, collector outage or shutdown can lose traces. Metrics and logs are not the durable security audit journal or evidence for a protected write.
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Drop an actual native Gitea creation response and prove durable uncertainty.
+"""Drop an actual native Forgejo creation response and prove durable uncertainty.
 
 Requires explicit coordination before using the supplied dedicated PostgreSQL
 database. Its public schema must be empty; unit-test random schemas are separate.
 The adjacent private container-name marker identifies that disposable database.
 Normal Golf/configuration are untouched. The supplied database remains owned by
-the caller; this script removes its ordinary Gitea users/repos and child servers.
+the caller; this script removes its ordinary Forgejo users/repos and child servers.
 """
 import argparse
 import base64
@@ -75,7 +75,7 @@ def main():
         '-c', "SELECT current_setting('server_version_num'), count(*) FROM pg_class WHERE relnamespace='public'::regnamespace AND relkind IN ('r','p','v','m','S');"],
         env=pg_environment, capture_output=True, text=True, timeout=15)
     assert result.returncode == 0 and result.stdout.strip() == '180004|0', 'Use a fresh dedicated PostgreSQL 18.4 public schema'
-    assert smoke.request(smoke.client(), 'GET', smoke.GITEA + '/api/v1/version')['version'] == '1.27.3'
+    assert smoke.request(smoke.client(), 'GET', smoke.FORGE + '/api/v1/version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
 
     # ponytail: one fixed provider and explicit native creation faults, not a configurable gateway.
     # The proxy sees real scoped credentials but never logs headers or bodies.
@@ -146,7 +146,7 @@ def main():
                     with count_lock:
                         counts['accepted'] += 1
                         counts['native_id'] = native['id']
-                    # Native Gitea has returned its real 201. Send no HTTP status,
+                    # Native Forgejo has returned its real 201. Send no HTTP status,
                     # headers or body to Golf: the provider acknowledgment is lost.
                     self.close_connection = True
                     self.connection.shutdown(socket.SHUT_RDWR)
@@ -176,10 +176,10 @@ def main():
     smoke.GOLF = 'http://127.0.0.1:' + str(available_port())
     proxy_origin = 'http://127.0.0.1:' + str(proxy.server_port)
     environment = {name: value for name, value in os.environ.items()
-                   if not name.startswith(('GOLF_', 'GITEA_')) and name != 'DATABASE_URL'}
+                   if not name.startswith(('GOLF_', 'FORGEJO_')) and name != 'DATABASE_URL'}
     key_material = base64.b64encode(secrets.token_bytes(32)).decode()
     environment.update(DATABASE_URL=dsn, GOLF_PUBLIC_URL=smoke.GOLF,
-        GOLF_LISTEN_ADDR=urlsplit(smoke.GOLF).netloc, GITEA_URL=proxy_origin,
+        GOLF_LISTEN_ADDR=urlsplit(smoke.GOLF).netloc, GOLF_FORGE_URL=proxy_origin,
         GOLF_ENCRYPTION_KEY=key_material, GOLF_ALLOW_INSECURE_COOKIES='true',
         GOLF_WEB_DIR=str(smoke.ROOT / 'web/dist'))
     process, actors = None, []
@@ -248,7 +248,7 @@ def main():
                         '--token-name', prefix, '--scopes', 'write:user,write:repository' + (',write:issue' if args.issue_discussions else ''), '--raw')
                     forbidden.append(actor['token'])
                     actor['session'] = smoke.client()
-                    rpc(actor, 'SessionService/LoginWithGiteaToken', {'token': actor['token']})
+                    rpc(actor, 'SessionService/LoginWithForgeToken', {'token': actor['token']})
                 owner, other = actors
                 operation_key = str(uuid.uuid4())
                 payload = {'name': 'lost-native-response', 'description': 'Native provider acknowledgment loss fixture',

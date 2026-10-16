@@ -43,12 +43,12 @@ func (s *Server) lockStandardMergeLifecycles(ctx context.Context, tx *sql.Tx, ta
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	for _, id := range ids {
-		if _, e := tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.GiteaURL, id); e != nil {
+		if _, e := tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.ForgeURL, id); e != nil {
 			return nil, errStorageUnavailable
 		}
 		if check {
 			var blocked bool
-			if e := tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.GiteaURL, id).Scan(&blocked); e != nil {
+			if e := tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.ForgeURL, id).Scan(&blocked); e != nil {
 				return nil, errStorageUnavailable
 			}
 			if blocked {
@@ -56,7 +56,7 @@ func (s *Server) lockStandardMergeLifecycles(ctx context.Context, tx *sql.Tx, ta
 			}
 		}
 	}
-	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, target, tx}), nil
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, target, tx}), nil
 }
 
 // Historical original inspection verifies current source identity/read access;

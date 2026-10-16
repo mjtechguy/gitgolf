@@ -46,8 +46,8 @@ func TestReviewerPublicationNativeProof(t *testing.T) {
 		t.Fatal("invalid disposable native publication envelope")
 	}
 	config := testConfig(in.URL)
-	config.GiteaPublicURL = in.URL
-	config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = "fixture-client", "fixture-secret"
+	config.ForgePublicURL = in.URL
+	config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = "fixture-client", "fixture-secret"
 	config.ReviewPublisherToken = in.PublisherToken
 	s, err := New(config, testDatabase(t))
 	if err != nil {

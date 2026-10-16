@@ -16,7 +16,7 @@ def main():
   smoke.admin('create','--username',name,'--email',name+'@example.invalid','--random-password','--must-change-password=false');created=True
   native=smoke.admin('generate-access-token','--username',name,'--token-name',name,'--scopes','write:user,write:repository','--raw')
   with tempfile.TemporaryDirectory(prefix='golf-real-provider090-') as folder:
-   f=Path(folder)/'fixture.json';smoke.ROOT.mkdir(exist_ok=True);f.write_text(json.dumps({'NativeURL':smoke.GITEA,'NativeToken':native,'GitHubToken':github,'Owner':name}));f.chmod(0o600)
+   f=Path(folder)/'fixture.json';smoke.ROOT.mkdir(exist_ok=True);f.write_text(json.dumps({'NativeURL':smoke.FORGE,'NativeToken':native,'GitHubToken':github,'Owner':name}));f.chmod(0o600)
    r=subprocess.run(['go','test','-race','-p','1','./internal/server','-run','^TestProviderReal090GitHubPublicNative$','-count=1','-v'],env={**os.environ,'GOLF_REAL_PROVIDER090_FIXTURE':str(f)},capture_output=True,text=True,timeout=180)
    assert github not in r.stdout+r.stderr and native not in r.stdout+r.stderr,'private diagnostic withheld'
    (a.output/'native.log').write_text(r.stdout+r.stderr);assert r.returncode==0,'actual public provider proof failed'

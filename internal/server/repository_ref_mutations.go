@@ -69,13 +69,13 @@ func refMutationWire(r refMutationRecord) *golfv1.RepositoryRefMutationOperation
 	return &golfv1.RepositoryRefMutationOperation{Contract: refMutationContract, OperationId: r.OperationID, ActorId: strconv.FormatInt(r.ActorID, 10), Repository: &golfv1.RepositoryKey{Owner: r.Owner, Name: r.Name}, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), AccessRevision: r.AccessRevision, Kind: golfv1.RepositoryRefMutationKind(golfv1.RepositoryRefMutationKind_value["REPOSITORY_REF_MUTATION_KIND_"+r.Kind]), Name: r.Ref, CommitId: r.Commit, TagObjectId: r.TagObject, Phase: golfv1.RepositoryRefMutationPhase(golfv1.RepositoryRefMutationPhase_value["REPOSITORY_REF_MUTATION_PHASE_"+r.Phase]), FailureCode: r.Failure, CreatedAt: r.Created.UTC().Format(time.RFC3339Nano), UpdatedAt: r.Updated.UTC().Format(time.RFC3339Nano)}
 }
 func (s *Server) lockRefMutation(ctx context.Context, tx *sql.Tx, id int64) (context.Context, error) {
-	if _, e := tx.ExecContext(ctx, `SELECT golf_ref_mutation_lock($1,$2)`, s.config.GiteaURL, id); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_ref_mutation_lock($1,$2)`, s.config.ForgeURL, id); e != nil {
 		return nil, errStorageUnavailable
 	}
 	if e := s.protectionDispatchAllowed(ctx, tx, id); e != nil {
 		return nil, e
 	}
-	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, id, tx}), nil
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, id, tx}), nil
 }
 
 // Native create/delete have no expected-value CAS. Exact identity, protections,
@@ -139,7 +139,7 @@ func (s *Server) refMutationPreflight(ctx context.Context, session string, token
 			if e = s.exactSourceCommit(ctx, base, token, m.CommitId); e != nil {
 				return e
 			}
-			// Gitea GetCommit resolves SHA-looking names before objects. Require both
+			// Forgejo's GetCommit resolves SHA-looking names before objects. Require both
 			// exact namespaces absent; never send a known ambiguous short commit name.
 			if _, e = s.exactSourceBranch(ctx, base, token, m.CommitId); !sourceNotFound(e) {
 				if e == nil {
@@ -303,7 +303,7 @@ func (s *Server) validateRefMutationPermit(ctx context.Context, tx *sql.Tx, p re
 	if tx == nil || repo.ID != r.RepositoryID || key.Owner != r.Owner || key.Name != r.Name || method != wantMethod || path != base+suffix {
 		return errLifecycleBlocked
 	}
-	row, e := scanRefMutation(tx.QueryRowContext(ctx, `SELECT `+refMutationColumns+` FROM golf_repository_ref_mutations WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND phase='DISPATCH_UNKNOWN'`, r.ID, r.UserID, s.config.GiteaURL))
+	row, e := scanRefMutation(tx.QueryRowContext(ctx, `SELECT `+refMutationColumns+` FROM golf_repository_ref_mutations WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND phase='DISPATCH_UNKNOWN'`, r.ID, r.UserID, s.config.ForgeURL))
 	if e != nil || row.ActorID != r.ActorID || !bytes.Equal(row.Fingerprint, r.Fingerprint) {
 		return errLifecycleBlocked
 	}
@@ -379,7 +379,7 @@ func (s *Server) GetRepositoryRefMutationOperation(ctx context.Context, req *con
 	var r refMutationRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanRefMutation(s.db.QueryRowContext(ctx, `SELECT `+refMutationColumns+` FROM golf_repository_ref_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanRefMutation(s.db.QueryRowContext(ctx, `SELECT `+refMutationColumns+` FROM golf_repository_ref_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -425,7 +425,7 @@ func (s *Server) SubmitRepositoryRefMutation(ctx context.Context, req *connect.R
 		if e != nil {
 			return e
 		}
-		r, e = scanRefMutation(tx.QueryRowContext(held, `SELECT `+refMutationColumns+` FROM golf_repository_ref_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanRefMutation(tx.QueryRowContext(held, `SELECT `+refMutationColumns+` FROM golf_repository_ref_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(r.Fingerprint, fingerprint) {
 				return errRepositoryAccessConflict
@@ -435,7 +435,7 @@ func (s *Server) SubmitRepositoryRefMutation(ctx context.Context, req *connect.R
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanRefMutation(tx.QueryRowContext(held, `INSERT INTO golf_repository_ref_mutations(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,kind,ref_name,commit_id,tag_object_id,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING `+refMutationColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, repoID, ownerID, key.Owner, key.Name, m.AccessRevision, refMutationKind(m.Kind), m.Name, m.CommitId, m.TagObjectId, fingerprint))
+		r, e = scanRefMutation(tx.QueryRowContext(held, `INSERT INTO golf_repository_ref_mutations(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,kind,ref_name,commit_id,tag_object_id,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING `+refMutationColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, repoID, ownerID, key.Owner, key.Name, m.AccessRevision, refMutationKind(m.Kind), m.Name, m.CommitId, m.TagObjectId, fingerprint))
 		if e != nil {
 			return errStorageUnavailable
 		}

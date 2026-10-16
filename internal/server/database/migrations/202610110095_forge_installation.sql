@@ -1,7 +1,7 @@
 -- +goose Up
 CREATE TABLE golf_forge_installation (
  singleton boolean PRIMARY KEY CHECK(singleton),
- kind text NOT NULL CHECK(kind IN ('gitea','forgejo')),
+ kind text NOT NULL CHECK(kind = 'forgejo'),
  origin text NOT NULL,
  instance_id text NOT NULL,
  workflow_directories text NOT NULL,

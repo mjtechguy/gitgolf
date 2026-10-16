@@ -177,7 +177,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		public := false
 		switch procedure {
-		case golfv1connect.PasswordRecoveryServiceRequestPasswordRecoveryProcedure, golfv1connect.PasswordRecoveryServiceCompletePasswordRecoveryProcedure, golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceCompletePasswordMFAProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
+		case golfv1connect.PasswordRecoveryServiceRequestPasswordRecoveryProcedure, golfv1connect.PasswordRecoveryServiceCompletePasswordRecoveryProcedure, golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginForgeOAuthProcedure, golfv1connect.SessionServiceLoginWithForgeTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceCompletePasswordMFAProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
 		case golfv1connect.OperationsServiceGetOperationsDashboardProcedure, golfv1connect.AgentControlServiceGetAgentControlProcedure, golfv1connect.AgentControlServiceSubmitAgentCommandProcedure, golfv1connect.AgentControlServiceListWorkflowAgentChildrenProcedure, golfv1connect.DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadStateProcedure, golfv1connect.DiscussionAttachmentUploadServiceSubmitDiscussionAttachmentUploadProcedure, golfv1connect.DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadOperationProcedure, golfv1connect.RepositoryFileBatchServiceSubmitRepositoryFileBatchProcedure, golfv1connect.RepositoryFileBatchServiceGetRepositoryFileBatchOperationProcedure, golfv1connect.DiscussionAttachmentServiceListDiscussionAttachmentsProcedure, golfv1connect.DiscussionAttachmentServiceDownloadDiscussionAttachmentProcedure, golfv1connect.PasswordRecoveryEnrollmentServiceGetOwnPasswordRecoveryEnrollmentProcedure, golfv1connect.PasswordRecoveryEnrollmentServiceSaveOwnPasswordRecoveryEnrollmentProcedure, golfv1connect.ReviewerServiceGetReviewerProcedure, golfv1connect.ReviewerServiceSaveReviewerProcedure, golfv1connect.ReviewerServiceListReviewerRunsProcedure, golfv1connect.ReviewerServiceRequestReviewProcedure, golfv1connect.AgentTaskServiceCreateAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTasksProcedure, golfv1connect.AgentTaskServiceGetAgentTaskProcedure, golfv1connect.AgentTaskServiceCancelAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTaskEventsProcedure, golfv1connect.AgentUsageServicePreviewAgentTaskProcedure, golfv1connect.AgentUsageServiceGetAgentUsageProcedure, golfv1connect.AgentUsageServiceSaveAgentUsageProcedure, golfv1connect.AgentUsageServiceListAgentModelsProcedure, golfv1connect.CodexAccountServiceCompleteAgentLoginProcedure, golfv1connect.CodexAccountServiceListCodexConnectionsProcedure, golfv1connect.CodexAccountServiceCreateCodexConnectionProcedure, golfv1connect.CodexAccountServiceSetCodexConnectionAccessProcedure, golfv1connect.CodexAccountServiceGetCodexConnectionProcedure, golfv1connect.CodexAccountServiceStartCodexLoginProcedure, golfv1connect.CodexAccountServiceCancelCodexLoginProcedure, golfv1connect.CodexAccountServiceRefreshCodexConnectionProcedure, golfv1connect.CodexAccountServiceDisconnectCodexConnectionProcedure,
 			golfv1connect.AutomationGrantServiceListAutomationGrantsProcedure, golfv1connect.AutomationGrantServiceCreateAutomationGrantProcedure, golfv1connect.AutomationGrantServiceRevokeAutomationGrantProcedure,
@@ -339,12 +339,12 @@ func (s *Server) LoginWithPassword(ctx context.Context, req *connect.Request[gol
 	response.Header().Add("Set-Cookie", s.mfaCookie("", time.Unix(1, 0), -1).String())
 	return response, nil
 }
-func (s *Server) LoginWithGiteaToken(ctx context.Context, req *connect.Request[golfv1.LoginWithGiteaTokenRequest]) (*connect.Response[golfv1.LoginWithGiteaTokenResponse], error) {
+func (s *Server) LoginWithForgeToken(ctx context.Context, req *connect.Request[golfv1.LoginWithForgeTokenRequest]) (*connect.Response[golfv1.LoginWithForgeTokenResponse], error) {
 	result, err := s.loginSession(ctx, req.Msg.Token, s.cookieValue(req.Header()))
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	response := connect.NewResponse(&golfv1.LoginWithGiteaTokenResponse{User: wireUser(result.User)})
+	response := connect.NewResponse(&golfv1.LoginWithForgeTokenResponse{User: wireUser(result.User)})
 	response.Header().Add("Set-Cookie", s.sessionCookie(result.Value, result.Expires, int(sessionLifetime.Seconds())).String())
 	return response, nil
 }
@@ -728,7 +728,7 @@ func (s *Server) ListCapabilities(ctx context.Context, _ *connect.Request[golfv1
 		}
 		encoded, _ := json.Marshal(ids)
 		var alive bool
-		if s.db != nil && ready && s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_runner_presence WHERE forge_url=$1 AND last_seen>clock_timestamp()-interval '15 seconds' AND runner_id IN (SELECT jsonb_array_elements_text($2::jsonb)))`, s.config.GiteaURL, string(encoded)).Scan(&alive) == nil && alive {
+		if s.db != nil && ready && s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_runner_presence WHERE forge_url=$1 AND last_seen>clock_timestamp()-interval '15 seconds' AND runner_id IN (SELECT jsonb_array_elements_text($2::jsonb)))`, s.config.ForgeURL, string(encoded)).Scan(&alive) == nil && alive {
 			pipelineState, pipelineReason = golfv1.CapabilityState_CAPABILITY_STATE_READY, "An enrolled Docker worker is polling. Only the bounded manual shell catalog is available; exact repository/workflow policies govern each run. Provider engine parity and trusted merge checks remain unavailable."
 		}
 	}

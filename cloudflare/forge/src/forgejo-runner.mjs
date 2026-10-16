@@ -7,6 +7,7 @@ import { encode, decode, Struct, Timestamp, toStruct, timestampISO } from './pro
 import { bounded, gitRequest } from './git.mjs';
 import { ownerSlug } from './owners.mjs';
 import { defaultActionsURL } from './pipeline-policy.mjs';
+import { RUNNER_LEGACY_CONTEXT, RUNNER_LEGACY_TOKEN_SECRET } from './forgejo-upstream.mjs';
 import { registerPipelineRunner, runnerByToken, claimPipelineJob, jobByToken, appendJobLogLines, completeJobLog, updateJobSteps, finishPipelineJob,
   pipelineValues, pipelineAllowed, advancePipelineRun } from './pipelines.mjs';
 
@@ -154,7 +155,7 @@ async function buildTask(db, env, { job, run, repository, token }) {
     repository_id: String(repository.id), repository_owner: owner, repository_owner_id: String(repository.owner_id || 0), repositoryUrl: origin + '/' + full + '.git', retention_days: '30',
     run_attempt: String(job.attempt), run_id: String(run.id), run_number: String(run.number), secret_source: 'Actions', server_url: origin, sha: run.commit_id,
     token, triggering_actor: actor?.login || '', workflow: run.workflow_name, workflow_ref: `${full}/${run.workflow_path}@${ref}`, workspace: '',
-    forgejo_default_actions_url: actions, gitea_default_actions_url: actions, forgejo_runtime_token: token, gitea_runtime_token: token, forgejo_server_version: '1.0.0+golf-native',
+    forgejo_default_actions_url: actions, [RUNNER_LEGACY_CONTEXT.defaultActionsUrl]: actions, forgejo_runtime_token: token, [RUNNER_LEGACY_CONTEXT.runtimeToken]: token, forgejo_server_version: '1.0.0+golf-native',
   };
   const needs = {};
   for (const key of parse(job.needs, [])) {
@@ -165,7 +166,7 @@ async function buildTask(db, env, { job, run, repository, token }) {
     needs[key] = { outputs, result: states.includes('FAILURE') ? 2 : states.includes('CANCELLED') ? 3 : states.length && states.every(state => state === 'SKIPPED') ? 4 : 1 };
   }
   return { id: job.id, workflow_payload: new TextEncoder().encode(job.payload), context: toStruct(context),
-    secrets: { ...values.secrets, GITHUB_TOKEN: token, GITEA_TOKEN: token, FORGEJO_TOKEN: token }, needs, vars: values.variables };
+    secrets: { ...values.secrets, GITHUB_TOKEN: token, [RUNNER_LEGACY_TOKEN_SECRET]: token, FORGEJO_TOKEN: token }, needs, vars: values.variables };
 }
 
 // actions/checkout: ${server_url}/${repository} with Basic x-access-token:<job token>. Read-only, exactly the run's repository.

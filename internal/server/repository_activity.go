@@ -81,7 +81,7 @@ func (s *Server) WatchRepository(ctx context.Context, req *connect.Request[golfv
 			actor = current
 			if initial && cursor > 0 {
 				var owned bool
-				e = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND id=$3 AND recipient_user_id IN (0,$4))`, s.config.GiteaURL, repoID, cursor, actor).Scan(&owned)
+				e = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND id=$3 AND recipient_user_id IN (0,$4))`, s.config.ForgeURL, repoID, cursor, actor).Scan(&owned)
 				if e != nil {
 					return errStorageUnavailable
 				}
@@ -90,13 +90,13 @@ func (s *Server) WatchRepository(ctx context.Context, req *connect.Request[golfv
 				}
 			}
 			if initial && req.Msg.Cursor == "" {
-				e = s.db.QueryRowContext(ctx, `SELECT COALESCE(max(id),0) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id IN (0,$3)`, s.config.GiteaURL, repoID, actor).Scan(&last)
+				e = s.db.QueryRowContext(ctx, `SELECT COALESCE(max(id),0) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id IN (0,$3)`, s.config.ForgeURL, repoID, actor).Scan(&last)
 				if e != nil {
 					return errStorageUnavailable
 				}
 				return nil
 			}
-			rows, e := s.db.QueryContext(ctx, `SELECT id,topic FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id IN (0,$3) AND id>$4 ORDER BY id LIMIT 100`, s.config.GiteaURL, repoID, actor, cursor)
+			rows, e := s.db.QueryContext(ctx, `SELECT id,topic FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id IN (0,$3) AND id>$4 ORDER BY id LIMIT 100`, s.config.ForgeURL, repoID, actor, cursor)
 			if e != nil {
 				return errStorageUnavailable
 			}

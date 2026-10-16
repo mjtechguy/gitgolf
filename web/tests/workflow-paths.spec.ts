@@ -13,5 +13,5 @@ test('all workflow editors share the literal native path boundary', () => {
   }
   expect(isWorkflowPath('.gitlab-ci.yml')).toBe(true);
   expect(isActionsWorkflowPath('.gitlab-ci.yml')).toBe(false);
-  expect(isWorkflowPath('.gitea/workflows/a.yml')).toBe(false);
+  expect(isWorkflowPath('.ci/workflows/a.yml')).toBe(false);
 });

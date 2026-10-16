@@ -160,7 +160,7 @@ func (s *Server) beginMFALogin(ctx context.Context, row database.GetLocalAccount
 	defer tx.Rollback()
 	// Preserve the same user -> local account -> MFA lock order as session creation.
 	var owner int64
-	e = tx.QueryRowContext(ctx, `SELECT id FROM golf_users WHERE id=$1 AND forge_url=$2 AND forge_user_id=$3 FOR UPDATE`, row.UserID, s.config.GiteaURL, row.ForgeUserID).Scan(&owner)
+	e = tx.QueryRowContext(ctx, `SELECT id FROM golf_users WHERE id=$1 AND forge_url=$2 AND forge_user_id=$3 FOR UPDATE`, row.UserID, s.config.ForgeURL, row.ForgeUserID).Scan(&owner)
 	if e != nil {
 		return "", time.Time{}, false, errLocalCredentials
 	}
@@ -228,7 +228,7 @@ func (s *Server) CompletePasswordMFA(ctx context.Context, req *connect.Request[g
 	var forgeID int64
 	var cipher, binding []byte
 	var key string
-	e = s.db.QueryRowContext(ctx, `SELECT u.forge_user_id,a.encrypted_forge_token,a.credential_binding,a.credential_key_id FROM golf_local_accounts a JOIN golf_users u ON u.id=a.user_id WHERE a.id=$1 AND a.user_id=$2 AND a.credential_version=$3 AND a.disabled_at IS NULL AND u.forge_url=$4`, account, user, credentialVersion, s.config.GiteaURL).Scan(&forgeID, &cipher, &binding, &key)
+	e = s.db.QueryRowContext(ctx, `SELECT u.forge_user_id,a.encrypted_forge_token,a.credential_binding,a.credential_key_id FROM golf_local_accounts a JOIN golf_users u ON u.id=a.user_id WHERE a.id=$1 AND a.user_id=$2 AND a.credential_version=$3 AND a.disabled_at IS NULL AND u.forge_url=$4`, account, user, credentialVersion, s.config.ForgeURL).Scan(&forgeID, &cipher, &binding, &key)
 	if e != nil {
 		return nil, rpcError(errLocalCredentials)
 	}
@@ -327,7 +327,7 @@ func (s *Server) withOwnMFA(ctx context.Context, header http.Header, password st
 	}
 	defer tx.Rollback()
 	q := database.New(s.db).WithTx(tx)
-	owner, e := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.GiteaURL})
+	owner, e := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if e != nil || owner.ID != initial.UserID {
 		return errUnauthenticated
 	}
@@ -335,10 +335,10 @@ func (s *Server) withOwnMFA(ctx context.Context, header http.Header, password st
 	if e != nil || account.DisabledAt.Valid || account.CredentialVersion != initial.CredentialVersion || account.PasswordHash != initial.PasswordHash {
 		return errUnauthenticated
 	}
-	if _, e = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL}); e != nil {
+	if _, e = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.ForgeURL}); e != nil {
 		return errUnauthenticated
 	}
-	current, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	current, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if e != nil || !sameOwnSecurity(initial, current) {
 		return errUnauthenticated
 	}

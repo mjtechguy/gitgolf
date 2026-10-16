@@ -6,7 +6,7 @@
 
 The caller must have a current Golf password session whose immutable local-account binding has `is_instance_admin=true`. The stored session must be unexpired, match the local credential version, and belong to an enabled account. The mapped native credential must still resolve to the exact enrolled native user ID. Golf verifies native identity and local authority before and after reading the inventory; the existing local-session interceptor rechecks authority before encoding a successful response.
 
-A native Gitea administrator is not automatically a Golf instance administrator. PAT/OAuth sessions do not acquire Golf administration by sharing an enrolled administrator's native identity. Delegated API credentials cannot call this endpoint, including credentials issued from an administrator's password session. CLI/MCP delegated read allowlists are unchanged.
+A native Forgejo administrator is not automatically a Golf instance administrator. PAT/OAuth sessions do not acquire Golf administration by sharing an enrolled administrator's native identity. Delegated API credentials cannot call this endpoint, including credentials issued from an administrator's password session. CLI/MCP delegated read allowlists are unchanged.
 
 The standard Connect boundary requires POST, the exact configured Origin, an unambiguous HttpOnly session cookie, bounded decoding and `Connect-Protocol-Version: 1`. Responses use `Cache-Control: no-store`. A missing/expired/revoked session or changed native identity is denied; a valid session without the required local administrator role receives permission denied. No inventory is returned with an error. This is current-session authorization, not a new password-confirmation, MFA or step-up mechanism.
 

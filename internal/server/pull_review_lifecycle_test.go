@@ -27,7 +27,7 @@ type reviewLifecycleFixture struct {
 
 func newReviewLifecycleFixture(t *testing.T) *reviewLifecycleFixture {
 	f := &reviewLifecycleFixture{reviewRequestFixture: newReviewRequestFixture(t)}
-	target, _ := url.Parse(f.s.config.GiteaURL)
+	target, _ := url.Parse(f.s.config.ForgeURL)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		route := "/api/v1/repos/alice/private/pulls/7/reviews/9"
@@ -64,7 +64,7 @@ func newReviewLifecycleFixture(t *testing.T) *reviewLifecycleFixture {
 	}))
 	t.Cleanup(provider.Close)
 	config := f.s.config
-	config.GiteaURL, config.GiteaPublicURL = provider.URL, provider.URL
+	config.ForgeURL, config.ForgePublicURL = provider.URL, provider.URL
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {

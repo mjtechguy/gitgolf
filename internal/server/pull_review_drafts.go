@@ -337,7 +337,7 @@ func (s *Server) wireReviewDraft(ctx context.Context, q *database.Queries, d dat
 }
 func (s *Server) getReviewDraftState(ctx context.Context, q *database.Queries, user int64, target *golfv1.PullReviewDraftTarget, scope reviewDraftScope, draftID, operationID string) (*golfv1.GetPullRequestReviewDraftResponse, error) {
 	result := &golfv1.GetPullRequestReviewDraftResponse{TargetGeneration: "0", CurrentVersion: "0"}
-	slot, err := q.GetReviewDraftTarget(ctx, database.GetReviewDraftTargetParams{UserID: user, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+	slot, err := q.GetReviewDraftTarget(ctx, database.GetReviewDraftTargetParams{UserID: user, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 	if err == nil {
 		if slot.PullNumber != scope.number {
 			return nil, errPullSnapshotChanged
@@ -348,9 +348,9 @@ func (s *Server) getReviewDraftState(ctx context.Context, q *database.Queries, u
 	}
 	var d database.GolfReviewDraft
 	if draftID == "" {
-		d, err = q.GetActiveReviewDraft(ctx, database.GetActiveReviewDraftParams{UserID: user, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+		d, err = q.GetActiveReviewDraft(ctx, database.GetActiveReviewDraftParams{UserID: user, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 	} else {
-		d, err = q.GetReviewDraft(ctx, database.GetReviewDraftParams{ID: uuid.MustParse(draftID), UserID: user, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+		d, err = q.GetReviewDraft(ctx, database.GetReviewDraftParams{ID: uuid.MustParse(draftID), UserID: user, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		if draftID == "" {
@@ -428,10 +428,10 @@ func (s *Server) reviewDraftReplay(ctx context.Context, q *database.Queries, use
 	if err != nil {
 		return nil, errStorageUnavailable
 	}
-	if v.DraftID.String() != draftID || v.ForgeURL != s.config.GiteaURL || v.RepositoryID != scope.repositoryID || v.PullRequestID != scope.pullID {
+	if v.DraftID.String() != draftID || v.ForgeURL != s.config.ForgeURL || v.RepositoryID != scope.repositoryID || v.PullRequestID != scope.pullID {
 		return nil, errReviewDraftIntent
 	}
-	d, err := q.GetReviewDraft(ctx, database.GetReviewDraftParams{ID: v.DraftID, UserID: user, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+	d, err := q.GetReviewDraft(ctx, database.GetReviewDraftParams{ID: v.DraftID, UserID: user, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 	if err != nil {
 		return nil, errStorageUnavailable
 	}
@@ -564,7 +564,7 @@ func (s *Server) SavePullRequestReviewDraft(ctx context.Context, req *connect.Re
 				return err
 			}
 			if expected > 0 {
-				d, err := q.GetReviewDraft(ctx, database.GetReviewDraftParams{ID: uuid.MustParse(m.DraftId), UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+				d, err := q.GetReviewDraft(ctx, database.GetReviewDraftParams{ID: uuid.MustParse(m.DraftId), UserID: caller.UserID, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 				if errors.Is(err, sql.ErrNoRows) {
 					return errResourceNotFound
 				}
@@ -600,19 +600,19 @@ func (s *Server) SavePullRequestReviewDraft(ctx context.Context, req *connect.Re
 			if err != nil || result != nil {
 				return err
 			}
-			if err = q.EnsureReviewDraftTarget(ctx, database.EnsureReviewDraftTargetParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID, PullNumber: scope.number}); err != nil {
+			if err = q.EnsureReviewDraftTarget(ctx, database.EnsureReviewDraftTargetParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID, PullNumber: scope.number}); err != nil {
 				return errStorageUnavailable
 			}
-			slot, err := q.GetReviewDraftTarget(ctx, database.GetReviewDraftTargetParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+			slot, err := q.GetReviewDraftTarget(ctx, database.GetReviewDraftTargetParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 			if err != nil {
 				return errStorageUnavailable
 			}
 			if slot.Generation != generation || slot.PullNumber != scope.number {
 				return errReviewDraftConflict
 			}
-			d := database.GolfReviewDraft{ID: uuid.MustParse(m.DraftId), UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID, PullNumber: scope.number, ComparisonID: uuid.MustParse(comparison.Id)}
+			d := database.GolfReviewDraft{ID: uuid.MustParse(m.DraftId), UserID: caller.UserID, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID, PullNumber: scope.number, ComparisonID: uuid.MustParse(comparison.Id)}
 			if expected == 0 {
-				_, err = q.GetActiveReviewDraft(ctx, database.GetActiveReviewDraftParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+				_, err = q.GetActiveReviewDraft(ctx, database.GetActiveReviewDraftParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 				if err == nil {
 					return errReviewDraftConflict
 				}
@@ -721,14 +721,14 @@ func (s *Server) DeletePullRequestReviewDraft(ctx context.Context, req *connect.
 			if err != nil || result != nil {
 				return err
 			}
-			slot, err := q.GetReviewDraftTarget(ctx, database.GetReviewDraftTargetParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+			slot, err := q.GetReviewDraftTarget(ctx, database.GetReviewDraftTargetParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 			if errors.Is(err, sql.ErrNoRows) {
 				return errResourceNotFound
 			}
 			if err != nil {
 				return errStorageUnavailable
 			}
-			d, err := q.GetReviewDraft(ctx, database.GetReviewDraftParams{ID: uuid.MustParse(m.DraftId), UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+			d, err := q.GetReviewDraft(ctx, database.GetReviewDraftParams{ID: uuid.MustParse(m.DraftId), UserID: caller.UserID, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 			if errors.Is(err, sql.ErrNoRows) {
 				return errResourceNotFound
 			}

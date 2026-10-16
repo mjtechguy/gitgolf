@@ -165,7 +165,7 @@ def main():
     files={'.github/workflows/graph.yml':(fixture/'production-graph.yml').read_bytes(),
            '.github/workflows/mixed.yml':(fixture/'mixed-matrix.yml').read_bytes(),
            'actions/owned/action.yml':(fixture/'actions/owned/action.yml').read_bytes()}
-    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
+    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
     def run(*args,payload=None,timeout=180):
         result=subprocess.run(args,input=None if payload is None else json.dumps(payload).encode(),cwd=stack,env=environment,capture_output=True,timeout=timeout)
         assert result.returncode==0 and len(result.stdout)<=8<<20 and len(result.stderr)<=8<<20, 'Bounded subprocess failed; output withheld'
@@ -178,8 +178,8 @@ def main():
     assert int(space.strip().splitlines()[-1].split()[3])>=2*1024*1024, 'Less than 2 GiB Docker VM startup reserve'
     project='golf-act-proof-'+secrets.token_hex(5)
     ports=helpers.free_ports(2)
-    old_urls=smoke.GOLF,smoke.GITEA
-    smoke.GOLF,smoke.GITEA=f'http://127.0.0.1:{ports[0]}',f'http://127.0.0.1:{ports[1]}'
+    old_urls=smoke.GOLF,smoke.FORGE
+    smoke.GOLF,smoke.FORGE=f'http://127.0.0.1:{ports[0]}',f'http://127.0.0.1:{ports[1]}'
     manifest={'complete':False,'passed':False,'catalog':CATALOG,'engineCommit':ENGINE,'golfImageId':core,'runnerImageId':worker,
               'workingTreeHead':run('git','rev-parse','HEAD').strip(),'servedSourceCommit':None,
               'sourceProvenance':'OCI revision label only; working-tree HEAD is not served-source evidence', 'fixtureSha256':{p:hashlib.sha256(b).hexdigest() for p,b in files.items()},'runs':[],
@@ -190,7 +190,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory=Path(temporary);directory.chmod(0o700)
         key=base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
-        values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')}
+        values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,
                       GOLF_RUNNER_KEY=key,GOLF_RUNNER_KEYS=json.dumps({'local-docker':key}),GOLF_RUNNER_IMAGES=json.dumps({'linux':IMAGE}),
                       GOLF_RUNNER_JOB_IMAGE=IMAGE,GOLF_RUNNER_APPROVED_IMAGES=json.dumps([IMAGE]))
@@ -201,9 +201,9 @@ def main():
     image: {core}
     pull_policy: never
     ports: !override ["127.0.0.1:{ports[0]}:8080"]
-  gitea:
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
   runner:
     image: {worker}
@@ -213,7 +213,7 @@ def main():
         for file in ('compose.yaml','deploy/compose/compose.ci.yaml','deploy/compose/compose.actions-engine.yaml'):compose+=['-f',str(stack/file)]
         compose+=['-f',str(override)]
         def command(*args,**kw):return run(*compose,*args,**kw)
-        def admin(*args):return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*args).strip()
+        def admin(*args):return command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*args).strip()  # Forgejo's upstream path
         def rpc(method,body=None,**kw):return smoke.rpc(session,method,body,**kw)
         def runtime():
             identifier=command('ps','-q','golf').strip(); observed=json.loads(run('docker','inspect',identifier))[0]
@@ -221,7 +221,7 @@ def main():
             return {'containerImageReference':observed['Image'],'resolvedLocalImageId':core,'suppliedImageReference':args.image,'composeConfigHash':observed['Config']['Labels']['com.docker.compose.config-hash']}
         try:
             stage('fresh core defaults deny; supported managed/native fixture')
-            started=True;command('up','-d','--no-build','--wait','--wait-timeout','120','postgres','gitea','golf');smoke.ready()
+            started=True;command('up','-d','--no-build','--wait','--wait-timeout','120','postgres','forgejo','golf');smoke.ready()
             baseline=runtime();manifest['runtimeBefore']=baseline
             actor='act-'+secrets.token_hex(5)
             admin('create','--username',actor,'--email',actor+'@example.invalid','--random-password','--must-change-password=false');native_created=True
@@ -331,7 +331,7 @@ def main():
             except Exception:
                 cleanup.append('fresh Compose resource teardown')
             finally:
-                smoke.GOLF,smoke.GITEA=old_urls
+                smoke.GOLF,smoke.FORGE=old_urls
                 manifest['lastCheck']=STAGE;manifest['cleanupPassed']=not cleanup;manifest['complete']=manifest['passed'] and not cleanup
                 helpers.private_write(output/'manifest.json',json.dumps(manifest,indent=2)+'\n')
             assert not cleanup, 'Fixture cleanup failed; private details withheld'

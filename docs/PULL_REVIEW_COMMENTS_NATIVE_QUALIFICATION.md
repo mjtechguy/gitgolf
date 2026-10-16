@@ -1,6 +1,6 @@
 # Native inline review comments qualification
 
-Qualified on 2026-10-03 against supported Gitea 1.27.3 APIs. This document characterizes native behavior for Golf's generated review-comment reads and later inline authoring. It does not qualify a Golf read endpoint, review-comment UI, journaled inline publication, complete threads or protected merge authority. The [overall review contract](PULL_REVIEW_MUTATION_CONTRACT.md) and [earlier native review qualification](PULL_REVIEW_NATIVE_QUALIFICATION.md) remain separate.
+Qualified on 2026-10-03 in an earlier native qualification on a since-retired backend; it has not been repeated on Forgejo 15.0.9. Forgejo inherits the relevant code, but the observations below are not Forgejo results. This document characterizes native behavior for Golf's generated review-comment reads and later inline authoring. It does not qualify a Golf read endpoint, review-comment UI, journaled inline publication, complete threads or protected merge authority. The [overall review contract](PULL_REVIEW_MUTATION_CONTRACT.md) and [earlier native review qualification](PULL_REVIEW_NATIVE_QUALIFICATION.md) remain separate.
 
 Run while primary deployment and other native qualification are stopped:
 
@@ -14,11 +14,11 @@ The [probe](../scripts/pull-review-comments-native-probe.py) asserts the support
 
 `GET /api/v1/repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}/comments` returns one complete native JSON array. It has no native paging or count/Link response headers. The actual fixture creates 53 comments and observes the same 53 IDs with no query, `limit=1&page=1`, `limit=1&page=2` and `limit=100&page=9999`, despite the instance's API maximum 50. Treat query pagination as ignored. This differs from the parent review list's clamped, hidden-row pagination.
 
-The [pinned handler](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/pull_review.go) checks the review's PR identity and current pending-review visibility. The [converter](https://github.com/go-gitea/gitea/blob/v1.27.3/services/convert/pull_review.go) flattens native maps; their iteration is not a presentation-order guarantee. Golf should bound the entire response before exposing it and sort deterministically, for example by creation time/ID. A Golf 100-comment cap is a Golf policy, not a native page or limit; exceeding it must produce an honest bound error rather than a false complete list.
+The upstream [handler](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/pull_review.go) checks the review's PR identity and current pending-review visibility. The [converter](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/services/convert/pull_review.go) flattens native maps; their iteration is not a presentation-order guarantee. Golf should bound the entire response before exposing it and sort deterministically, for example by creation time/ID. A Golf 100-comment cap is a Golf policy, not a native page or limit; exceeding it must produce an honest bound error rather than a false complete list.
 
 ## Exact observed wire fields
 
-The fixture checks the following 15-field set, types, author/review IDs, URLs, timestamps and side values. [Pinned structs](https://github.com/go-gitea/gitea/blob/v1.27.3/modules/structs/pull_review.go).
+The fixture checks the following 15-field set, types, author/review IDs, URLs, timestamps and side values. [Upstream structs](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/structs/pull_review.go).
 
 | Native field | Meaning / observed value |
 | --- | --- |
@@ -51,13 +51,13 @@ Another ordinary owner, PR author or reader receives 404 for the review author's
 
 ## Resolution and deleted actors
 
-Resolution uses `POST /pulls/comments/{comment_id}/resolve` or `/unresolve` and returns 204. The actual reader is refused 403; the PR author resolves the parent and a writer reopens it. Independent reads show the marked parent's resolver, while its same-line reply remains null. The [pinned model](https://github.com/go-gitea/gitea/blob/v1.27.3/models/issues/review.go) updates the addressed comment rather than every inferred thread row. Do not promote one marked location to “entire thread resolved.”
+Resolution uses `POST /pulls/comments/{comment_id}/resolve` or `/unresolve` and returns 204. The actual reader is refused 403; the PR author resolves the parent and a writer reopens it. Independent reads show the marked parent's resolver, while its same-line reply remains null. The upstream [model](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/models/issues/review.go) updates the addressed comment rather than every inferred thread row. Do not promote one marked location to “entire thread resolved.”
 
 After marking the parent and purging that disposable resolver account, the native read keeps a **nonnull ghost resolver object with ID -1**. Golf's optional known-user mapping may drop ghost identity, but must retain a separate per-comment resolved observation derived from raw resolver presence. Otherwise an actually marked comment falsely becomes unresolved. This is current native metadata, not proof that a required protected conversation policy is satisfied.
 
 ## Retained context and snapshot navigation
 
-The fixture advances the PR head, renames the reviewed file using the supported content API, then deletes it. All original comments remain readable by the same IDs, with original body/path/old/new lines/blame commit/empty original commit/hunk preserved byte-for-byte. The endpoint does not relocate them or expose native invalidation/outdated state. [Pinned comment loading](https://github.com/go-gitea/gitea/blob/v1.27.3/models/issues/comment_code.go) includes a specific review's retained comments.
+The fixture advances the PR head, renames the reviewed file using the supported content API, then deletes it. All original comments remain readable by the same IDs, with original body/path/old/new lines/blame commit/empty original commit/hunk preserved byte-for-byte. The endpoint does not relocate them or expose native invalidation/outdated state. [Upstream comment loading](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/models/issues/comment_code.go) includes a specific review's retained comments.
 
 An old-side line with empty `original_commit_id` has no established original base object in this receipt. Do not link it to today's PR base or to the reviewed head's deleted/changed line. Show the retained old/new-side context and add snapshot navigation only when the corresponding exact base/head selection is independently known. A current PR-head observation can label an earlier review snapshot; it cannot turn the old location into a current line.
 

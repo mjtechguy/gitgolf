@@ -77,13 +77,13 @@ func fileMutationWire(r fileMutationRecord) *golfv1.RepositoryFileMutationOperat
 	return &golfv1.RepositoryFileMutationOperation{Contract: fileMutationContract, OperationId: r.OperationID, ActorId: strconv.FormatInt(r.ActorID, 10), Repository: &golfv1.RepositoryKey{Owner: r.Owner, Name: r.Name}, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), AccessRevision: r.AccessRevision, Kind: golfv1.RepositoryFileMutationKind(golfv1.RepositoryFileMutationKind_value["REPOSITORY_FILE_MUTATION_KIND_"+r.Kind]), Branch: r.Branch, ExpectedCommitId: r.ExpectedCommit, Path: r.Path, ExpectedBlobId: r.ExpectedBlob, ContentSha256: r.ContentHash, ContentSizeBytes: uint64(r.Size), CommitMessageSha256: r.MessageHash, Phase: golfv1.RepositoryFileMutationPhase(golfv1.RepositoryFileMutationPhase_value["REPOSITORY_FILE_MUTATION_PHASE_"+r.Phase]), CommitId: r.Commit, BlobId: r.Blob, FailureCode: r.Failure, CreatedAt: r.Created.UTC().Format(time.RFC3339Nano), UpdatedAt: r.Updated.UTC().Format(time.RFC3339Nano)}
 }
 func (s *Server) lockFileMutation(ctx context.Context, tx *sql.Tx, id int64) (context.Context, error) {
-	if _, e := tx.ExecContext(ctx, `SELECT golf_file_mutation_lock($1,$2)`, s.config.GiteaURL, id); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_file_mutation_lock($1,$2)`, s.config.ForgeURL, id); e != nil {
 		return nil, errStorageUnavailable
 	}
 	if e := s.protectionDispatchAllowed(ctx, tx, id); e != nil {
 		return nil, e
 	}
-	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, id, tx}), nil
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, id, tx}), nil
 }
 
 // The native API supports expected blob SHA, not last_commit_id or atomic branch
@@ -302,7 +302,7 @@ func (s *Server) validateFileMutationPermit(ctx context.Context, tx *sql.Tx, p f
 	if tx == nil || repo.ID != r.RepositoryID || key.Owner != r.Owner || key.Name != r.Name || method != want || path != base+suffix || fileMutationHash(p.content) != r.ContentHash || int64(len(p.content)) != r.Size || fileMutationHash([]byte(p.message)) != r.MessageHash {
 		return errLifecycleBlocked
 	}
-	row, e := scanFileMutation(tx.QueryRowContext(ctx, `SELECT `+fileMutationColumns+` FROM golf_repository_file_mutations WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND phase='DISPATCH_UNKNOWN'`, r.ID, r.UserID, s.config.GiteaURL))
+	row, e := scanFileMutation(tx.QueryRowContext(ctx, `SELECT `+fileMutationColumns+` FROM golf_repository_file_mutations WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND phase='DISPATCH_UNKNOWN'`, r.ID, r.UserID, s.config.ForgeURL))
 	if e != nil || row.ActorID != r.ActorID || !bytes.Equal(row.Fingerprint, r.Fingerprint) {
 		return errLifecycleBlocked
 	}
@@ -375,7 +375,7 @@ func (s *Server) GetRepositoryFileMutationOperation(ctx context.Context, req *co
 	var r fileMutationRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanFileMutation(s.db.QueryRowContext(ctx, `SELECT `+fileMutationColumns+` FROM golf_repository_file_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanFileMutation(s.db.QueryRowContext(ctx, `SELECT `+fileMutationColumns+` FROM golf_repository_file_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -421,7 +421,7 @@ func (s *Server) SubmitRepositoryFileMutation(ctx context.Context, req *connect.
 		if e != nil {
 			return e
 		}
-		r, e = scanFileMutation(tx.QueryRowContext(held, `SELECT `+fileMutationColumns+` FROM golf_repository_file_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanFileMutation(tx.QueryRowContext(held, `SELECT `+fileMutationColumns+` FROM golf_repository_file_mutations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(r.Fingerprint, fingerprint) {
 				return errRepositoryAccessConflict
@@ -431,7 +431,7 @@ func (s *Server) SubmitRepositoryFileMutation(ctx context.Context, req *connect.
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanFileMutation(tx.QueryRowContext(held, `INSERT INTO golf_repository_file_mutations(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,kind,branch_name,expected_commit_id,file_path,expected_blob_id,content_sha256,content_size_bytes,message_sha256,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING `+fileMutationColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, repoID, ownerID, key.Owner, key.Name, m.AccessRevision, fileMutationKind(m.Kind), m.Branch, m.ExpectedCommitId, m.Path, m.ExpectedBlobId, fileMutationHash(m.Content), len(m.Content), fileMutationHash([]byte(m.CommitMessage)), fingerprint))
+		r, e = scanFileMutation(tx.QueryRowContext(held, `INSERT INTO golf_repository_file_mutations(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,kind,branch_name,expected_commit_id,file_path,expected_blob_id,content_sha256,content_size_bytes,message_sha256,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING `+fileMutationColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, repoID, ownerID, key.Owner, key.Name, m.AccessRevision, fileMutationKind(m.Kind), m.Branch, m.ExpectedCommitId, m.Path, m.ExpectedBlobId, fileMutationHash(m.Content), len(m.Content), fileMutationHash([]byte(m.CommitMessage)), fingerprint))
 		if e != nil {
 			return errStorageUnavailable
 		}

@@ -125,7 +125,7 @@ func (s *Server) ListRepositoryWebhooks(ctx context.Context, req *connect.Reques
 	out := &golfv1.ListRepositoryWebhooksResponse{Target: req.Msg.Target, Page: &golfv1.PageResponse{}}
 	e = s.withWebhookAdmin(ctx, req.Header(), req.Msg.Target, func(_ forgeCredential, _ User, _ *golfv1.RepositoryAccess) error {
 		q := database.New(s.db)
-		rows, e := q.ListWebhookSubscriptions(ctx, database.ListWebhookSubscriptionsParams{ForgeURL: s.config.GiteaURL, RepositoryID: repo, OwnerID: owner, RowLimit: int32(limit + 1), RowOffset: int32((page - 1) * limit)})
+		rows, e := q.ListWebhookSubscriptions(ctx, database.ListWebhookSubscriptionsParams{ForgeURL: s.config.ForgeURL, RepositoryID: repo, OwnerID: owner, RowLimit: int32(limit + 1), RowOffset: int32((page - 1) * limit)})
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -144,7 +144,7 @@ func (s *Server) ListRepositoryWebhooks(ctx context.Context, req *connect.Reques
 		if e != nil {
 			return e
 		}
-		_, e = q.GetWebhookLocalAuthority(ctx, database.GetWebhookLocalAuthorityParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		_, e = q.GetWebhookLocalAuthority(ctx, database.GetWebhookLocalAuthorityParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		out.BackgroundAuthorizationSupported = e == nil
 		if e != nil && !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
@@ -188,7 +188,7 @@ func (s *Server) SaveRepositoryWebhook(ctx context.Context, req *connect.Request
 	out := &golfv1.SaveRepositoryWebhookResponse{Target: m.Target}
 	e = s.withWebhookAdmin(ctx, req.Header(), m.Target, func(token forgeCredential, actor User, _ *golfv1.RepositoryAccess) error {
 		return s.withManagedSession(ctx, s.cookieValue(req.Header()), token, func(q *database.Queries, caller database.LockManagedSessionRow, hash []byte) error {
-			authority, e := q.GetWebhookLocalAuthority(ctx, database.GetWebhookLocalAuthorityParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+			authority, e := q.GetWebhookLocalAuthority(ctx, database.GetWebhookLocalAuthorityParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 			if errors.Is(e, sql.ErrNoRows) {
 				return invalid("Background webhook authorization currently requires a local Golf account.")
 			}
@@ -202,7 +202,7 @@ func (s *Server) SaveRepositoryWebhook(ctx context.Context, req *connect.Request
 				return errStorageUnavailable
 			}
 			id := uuid.MustParse(m.Id)
-			row, e := q.LockWebhookSubscription(ctx, database.LockWebhookSubscriptionParams{ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repo})
+			row, e := q.LockWebhookSubscription(ctx, database.LockWebhookSubscriptionParams{ID: id, ForgeURL: s.config.ForgeURL, RepositoryID: repo})
 			exists := e == nil
 			if e != nil && !errors.Is(e, sql.ErrNoRows) {
 				return errStorageUnavailable
@@ -242,14 +242,14 @@ func (s *Server) SaveRepositoryWebhook(ctx context.Context, req *connect.Request
 			}
 			next := version + 1
 			if !exists {
-				count, e := q.CountWebhookSubscriptions(ctx, database.CountWebhookSubscriptionsParams{ForgeURL: s.config.GiteaURL, RepositoryID: repo})
+				count, e := q.CountWebhookSubscriptions(ctx, database.CountWebhookSubscriptionsParams{ForgeURL: s.config.ForgeURL, RepositoryID: repo})
 				if e != nil {
 					return errStorageUnavailable
 				}
 				if count.RepositoryCount >= 20 || count.InstanceCount >= 5000 {
 					return connect.NewError(connect.CodeResourceExhausted, errors.New("Webhook subscription limit reached."))
 				}
-				e = q.CreateWebhookSubscription(ctx, database.CreateWebhookSubscriptionParams{ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repo, OwnerID: owner, RepositoryOwner: key.Owner, RepositoryName: key.Name, Name: m.Name, EventTopics: encodedTopics, WorkflowNotifications: mode, SponsorUserID: caller.UserID, SponsorNativeID: actor.ID, LocalAccountID: authority.ID, CredentialVersion: authority.CredentialVersion})
+				e = q.CreateWebhookSubscription(ctx, database.CreateWebhookSubscriptionParams{ID: id, ForgeURL: s.config.ForgeURL, RepositoryID: repo, OwnerID: owner, RepositoryOwner: key.Owner, RepositoryName: key.Name, Name: m.Name, EventTopics: encodedTopics, WorkflowNotifications: mode, SponsorUserID: caller.UserID, SponsorNativeID: actor.ID, LocalAccountID: authority.ID, CredentialVersion: authority.CredentialVersion})
 				if e != nil {
 					return errStorageUnavailable
 				}
@@ -278,7 +278,7 @@ func (s *Server) SaveRepositoryWebhook(ctx context.Context, req *connect.Request
 			if e != nil || count != 1 {
 				return errStorageUnavailable
 			}
-			saved, e := q.LockWebhookSubscription(ctx, database.LockWebhookSubscriptionParams{ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repo})
+			saved, e := q.LockWebhookSubscription(ctx, database.LockWebhookSubscriptionParams{ID: id, ForgeURL: s.config.ForgeURL, RepositoryID: repo})
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -312,7 +312,7 @@ func (s *Server) ListRepositoryWebhookDeliveries(ctx context.Context, req *conne
 	e = s.withWebhookAdmin(ctx, req.Header(), req.Msg.Target, func(_ forgeCredential, _ User, _ *golfv1.RepositoryAccess) error {
 		q := database.New(s.db)
 		id := uuid.MustParse(req.Msg.SubscriptionId)
-		sub, e := q.LockWebhookSubscription(ctx, database.LockWebhookSubscriptionParams{ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repo})
+		sub, e := q.LockWebhookSubscription(ctx, database.LockWebhookSubscriptionParams{ID: id, ForgeURL: s.config.ForgeURL, RepositoryID: repo})
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -371,7 +371,7 @@ func (s *Server) queueWebhook(ctx context.Context, header http.Header, target *g
 				if !bytes.Equal(existing.OperationFingerprint, h[:]) {
 					return invalid("This operation identity belongs to a different webhook action.")
 				}
-				sub, e := q.LockWebhookSubscription(ctx, database.LockWebhookSubscriptionParams{ID: existing.SubscriptionID, ForgeURL: s.config.GiteaURL, RepositoryID: repo})
+				sub, e := q.LockWebhookSubscription(ctx, database.LockWebhookSubscriptionParams{ID: existing.SubscriptionID, ForgeURL: s.config.ForgeURL, RepositoryID: repo})
 				if e != nil || sub.OwnerID != owner {
 					return errResourceNotFound
 				}
@@ -399,7 +399,7 @@ func (s *Server) queueWebhook(ctx context.Context, header http.Header, target *g
 			if e = q.LockWebhookQueue(ctx, uuid.MustParse(subscriptionID)); e != nil {
 				return errStorageUnavailable
 			}
-			sub, e := q.LockWebhookSubscription(ctx, database.LockWebhookSubscriptionParams{ID: uuid.MustParse(subscriptionID), ForgeURL: s.config.GiteaURL, RepositoryID: repo})
+			sub, e := q.LockWebhookSubscription(ctx, database.LockWebhookSubscriptionParams{ID: uuid.MustParse(subscriptionID), ForgeURL: s.config.ForgeURL, RepositoryID: repo})
 			if errors.Is(e, sql.ErrNoRows) {
 				return errResourceNotFound
 			}

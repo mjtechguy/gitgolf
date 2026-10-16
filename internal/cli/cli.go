@@ -170,10 +170,6 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		fmt.Fprintln(diagnostic, err)
 		return 2
 	}
-	if getenv("GOLF_GITEA_TOKEN") != "" {
-		fmt.Fprintln(diagnostic, "GOLF_GITEA_TOKEN is unsupported; use GOLF_FORGE_TOKEN.")
-		return 2
-	}
 	pat, apiToken, nativeToken := getenv("GOLF_FORGE_TOKEN"), getenv("GOLF_API_TOKEN"), getenv("GOLF_NATIVE_TOKEN")
 	kinds := 0
 	for _, present := range []bool{*stdin || pat != "", *apiStdin || apiToken != "", *nativeStdin || nativeToken != ""} {
@@ -661,7 +657,7 @@ func execute(ctx context.Context, origin string, command command, auth credentia
 		jar, _ := cookiejar.New(nil)
 		client.Jar = jar
 		sessions := golfv1connect.NewSessionServiceClient(client, origin+"/rpc", options...)
-		_, err = sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: auth.token}))
+		_, err = sessions.LoginWithForgeToken(ctx, connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: auth.token}))
 		// Also clear a cookie set by a malformed login response. SIGKILL cannot run
 		// cleanup; the server's normal session expiry remains the final bound.
 		u, _ := url.Parse(origin)

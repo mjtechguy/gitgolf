@@ -18,7 +18,7 @@ def main():
             users.append(name)
             token=smoke.admin('generate-access-token','--username',name,'--token-name','proof','--scopes','write:user,write:repository,write:issue','--raw')
             session=smoke.client()
-            user=smoke.rpc(session,'SessionService/LoginWithGiteaToken',{'token':token})['user']
+            user=smoke.rpc(session,'SessionService/LoginWithForgeToken',{'token':token})['user']
             actors.append((name,token,session,user))
         name,token,session,user=actors[0]
         native=smoke.provider(token,'POST','user/repos',{'name':'selection','private':True,'auto_init':True,'default_branch':'main'},201)

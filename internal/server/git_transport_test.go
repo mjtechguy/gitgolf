@@ -266,7 +266,7 @@ func seedManagedGitWriteFixture(t *testing.T, f *gitTransportFixture, created *g
 	f.server.managedGit.Incarnation = incarnation
 	// Own disposable Golf schema only: synthetic enrollment is source fault evidence,
 	// never claimed as independent native/background/deployment qualification.
-	if _, e := f.server.db.Exec(`INSERT INTO golf_git_transport_profiles(forge_url,incarnation,native_version,receipt_sha256,qualifier_source_commit,golf_image_digest,native_image_digest,native_runtime_id) VALUES($1,$2,'1.27.3',$3,$4,$5,$5,$3)`, f.server.config.GiteaURL, incarnation, strings.Repeat("a", 64), strings.Repeat("b", 40), "sha256:"+strings.Repeat("c", 64)); e != nil {
+	if _, e := f.server.db.Exec(`INSERT INTO golf_git_transport_profiles(forge_url,incarnation,native_version,receipt_sha256,qualifier_source_commit,golf_image_digest,native_image_digest,native_runtime_id) VALUES($1,$2,'1.27.3',$3,$4,$5,$5,$3)`, f.server.config.ForgeURL, incarnation, strings.Repeat("a", 64), strings.Repeat("b", 40), "sha256:"+strings.Repeat("c", 64)); e != nil {
 		t.Fatal(e)
 	}
 	hash, _ := gitTokenHash(created.Secret)
@@ -276,7 +276,7 @@ func seedManagedGitWriteFixture(t *testing.T, f *gitTransportFixture, created *g
 		t.Fatal(e)
 	}
 	var writeID int64
-	if e := f.server.db.QueryRow(`INSERT INTO golf_git_credentials(user_id,forge_url,repository_id,owner_id,native_user_id,source_session_id,source_token_hash,token_hash,label,mode,expires_at) VALUES($1,$2,91,42,42,$3,$4,$5,'write fixture','WRITE',clock_timestamp()+interval '1 hour') RETURNING id`, uid, f.server.config.GiteaURL, sid, source, bytes.Repeat([]byte{9}, 32)).Scan(&writeID); e != nil {
+	if e := f.server.db.QueryRow(`INSERT INTO golf_git_credentials(user_id,forge_url,repository_id,owner_id,native_user_id,source_session_id,source_token_hash,token_hash,label,mode,expires_at) VALUES($1,$2,91,42,42,$3,$4,$5,'write fixture','WRITE',clock_timestamp()+interval '1 hour') RETURNING id`, uid, f.server.config.ForgeURL, sid, source, bytes.Repeat([]byte{9}, 32)).Scan(&writeID); e != nil {
 		t.Fatal(e)
 	}
 	record, e := scanGitCredential(f.server.db.QueryRow(`SELECT `+gitCredentialColumns+` FROM golf_git_credentials c WHERE c.id=$1`, writeID))
@@ -306,7 +306,7 @@ func TestManagedGitUnknownExcludesNewIntentAndSurvivesRestartPostgres(t *testing
 		t.Fatal(e)
 	}
 	var blocked bool
-	if e = f.server.db.QueryRow(`SELECT golf_repository_lifecycle_blocked($1,91)`, f.server.config.GiteaURL).Scan(&blocked); e != nil || !blocked {
+	if e = f.server.db.QueryRow(`SELECT golf_repository_lifecycle_blocked($1,91)`, f.server.config.ForgeURL).Scan(&blocked); e != nil || !blocked {
 		t.Fatal("unknown did not block existing scoped consumers", e)
 	}
 	restarted, restartErr := New(f.server.config, f.server.db)

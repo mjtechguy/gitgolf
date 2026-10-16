@@ -13,7 +13,7 @@ import time
 import uuid
 
 sys.dont_write_bytecode = True
-from smoke import ROOT, GOLF, GITEA, admin, client, provider, ready, rpc, wait_for_push
+from smoke import ROOT, GOLF, FORGE, admin, client, provider, ready, rpc, wait_for_push
 
 BROWSER=r'''
 import {pathToFileURL} from 'node:url';import {join} from 'node:path';import {writeFile} from 'node:fs/promises';
@@ -23,7 +23,7 @@ try{
  let input='';for await(const part of process.stdin)input+=part;config=JSON.parse(input);input='';
  browser=await chromium.launch();context=await browser.newContext({viewport:{width:1280,height:900}});
  const headers={Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'};
- check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithGiteaToken',{headers,data:{token:config.token}})).status()===200);
+ check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithForgeToken',{headers,data:{token:config.token}})).status()===200);
  const page=await context.newPage();const errors=[];page.on('pageerror',()=>errors.push(true));
  const url=config.golf+'/'+config.repository+'/pull/'+config.number;
  for(const theme of ['dark','light'])for(const width of [1280,390]){
@@ -39,10 +39,10 @@ try{
  stage='actual browser review submission';await page.goto(url+'/files');await page.locator('.diff-file').first().waitFor();await page.getByRole('button',{name:'Review changes',exact:true}).click();
  const editor=page.getByRole('region',{name:'Review changes',exact:true});await editor.getByLabel('Review summary, Markdown',{exact:true}).fill('Native browser review proof');
  await editor.getByRole('button',{name:'Submit review',exact:true}).click();await editor.getByRole('status').filter({hasText:'Review submitted.'}).waitFor();
- const reviews=await context.request.get(config.gitea+'/api/v1/repos/'+config.repository+'/pulls/'+config.number+'/reviews?limit=100',{headers:{Authorization:'token '+config.token}});check(reviews.status()===200);const rows=await reviews.json();const row=rows.find(r=>r.body==='Native browser review proof');check(row&&row.commit_id===config.head&&row.user.id===config.userId&&row.comments_count===0&&row.state==='COMMENT');
+ const reviews=await context.request.get(config.forge+'/api/v1/repos/'+config.repository+'/pulls/'+config.number+'/reviews?limit=100',{headers:{Authorization:'token '+config.token}});check(reviews.status()===200);const rows=await reviews.json();const row=rows.find(r=>r.body==='Native browser review proof');check(row&&row.commit_id===config.head&&row.user.id===config.userId&&row.comments_count===0&&row.state==='COMMENT');
  await editor.getByRole('button',{name:'Done',exact:true}).click();await page.getByRole('navigation',{name:'Pull request workspace',exact:true}).getByRole('link',{name:'Conversation',exact:true}).click();await page.getByText('Native browser review proof',{exact:true}).waitFor();
  stage='live review draft access revocation';await page.getByRole('button',{name:'Review changes',exact:true}).click();await page.getByLabel('Review summary, Markdown',{exact:true}).fill('Private unsent reviewer draft');
- check((await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);
+ check((await context.request.delete(config.forge+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);
  stage='live review revocation signal';await page.getByRole('alert').first().waitFor({timeout:15000});stage='private review draft cleanup';await page.getByLabel('Review summary, Markdown',{exact:true}).waitFor({state:'detached',timeout:15000});check(await page.getByLabel('Review summary, Markdown',{exact:true}).count()===0);check(!await page.locator('body').innerText().then(t=>t.includes('Private unsent reviewer draft')));check(errors.length===0);
  console.log('PASS: production review editor on exact changed files, safe Markdown, both themes/mobile, actual review/readback and live private draft revocation');
 }catch{console.error('Human review browser failed at '+stage+'; private diagnostics withheld');process.exitCode=1;}
@@ -55,7 +55,7 @@ def main():
   for role in ['owner','reviewer','reader','outsider']:
    name=prefix+'-'+role;admin('create','--username',name,'--email',name+'@example.invalid','--random-password','--must-change-password=false');users.append(name)
    token=admin('generate-access-token','--username',name,'--token-name',prefix,'--scopes','write:user,write:repository','--raw').strip()
-   session=client();rpc(session,'SessionService/LoginWithGiteaToken',{'token':token});actors[role]={'name':name,'token':token,'session':session,'id':provider(token,'GET','user')['id']}
+   session=client();rpc(session,'SessionService/LoginWithForgeToken',{'token':token});actors[role]={'name':name,'token':token,'session':session,'id':provider(token,'GET','user')['id']}
   owner,reviewer,reader,outsider=[actors[r] for r in ['owner','reviewer','reader','outsider']]
   stage='native PR setup';repo=provider(owner['token'],'POST','user/repos',{'name':'private','private':True,'auto_init':True},201);full=repo['full_name'];route='repos/'+full;key={'owner':owner['name'],'name':'private'};wait_for_push(owner['token'],full)
   for actor,permission in [(reviewer,'write'),(reader,'read')]:provider(owner['token'],'PUT',route+'/collaborators/'+actor['name'],{'permission':permission},204)
@@ -99,7 +99,7 @@ def main():
   provider(reviewer['token'],'DELETE',proute+'/reviews/'+str(draft['id']),expected=204)
   print('PASS: actual Golf review decisions, zero-comment independent receipts, once-only replay/conflict, self/wrong-target/pending exclusion, owner-status, PAT/bearer/Origin boundaries',flush=True)
   stage='served browser';screens=ROOT/'.tmp/pull-review-mutations-smoke';screens.mkdir(exist_ok=True)
-  proof=subprocess.run(['node','--input-type=module','-e',BROWSER],cwd=ROOT,input=json.dumps({'golf':GOLF,'gitea':GITEA,'repository':full,'number':number,'head':head,'token':reviewer['token'],'user':reviewer['name'],'userId':reviewer['id'],'ownerToken':owner['token'],'screenshots':str(screens)}),capture_output=True,text=True,timeout=120)
+  proof=subprocess.run(['node','--input-type=module','-e',BROWSER],cwd=ROOT,input=json.dumps({'golf':GOLF,'forge':FORGE,'repository':full,'number':number,'head':head,'token':reviewer['token'],'user':reviewer['name'],'userId':reviewer['id'],'ownerToken':owner['token'],'screenshots':str(screens)}),capture_output=True,text=True,timeout=120)
   for line in proof.stdout.splitlines():print(line)
   for line in proof.stderr.splitlines():
    if line.startswith('Human review browser failed at ') or line=='Review browser logout failed':print(line)

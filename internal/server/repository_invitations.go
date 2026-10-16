@@ -137,7 +137,7 @@ func (s *Server) invitationTransaction(ctx context.Context, value string, token 
 	defer tx.Rollback()
 	q := database.New(s.db).WithTx(tx)
 	var callerID int64
-	e = tx.QueryRowContext(ctx, `SELECT u.id FROM golf_users u JOIN golf_sessions s ON s.user_id=u.id WHERE s.token_hash=$1 AND u.forge_url=$2 AND s.expires_at>clock_timestamp()`, hash, s.config.GiteaURL).Scan(&callerID)
+	e = tx.QueryRowContext(ctx, `SELECT u.id FROM golf_users u JOIN golf_sessions s ON s.user_id=u.id WHERE s.token_hash=$1 AND u.forge_url=$2 AND s.expires_at>clock_timestamp()`, hash, s.config.ForgeURL).Scan(&callerID)
 	if e != nil {
 		if errors.Is(e, sql.ErrNoRows) {
 			return errUnauthenticated
@@ -147,7 +147,7 @@ func (s *Server) invitationTransaction(ctx context.Context, value string, token 
 	if issuerID == 0 {
 		issuerID = callerID
 	}
-	rows, e := q.LockInvitationUsers(ctx, database.LockInvitationUsersParams{ForgeURL: s.config.GiteaURL, ID: callerID, ID_2: issuerID})
+	rows, e := q.LockInvitationUsers(ctx, database.LockInvitationUsersParams{ForgeURL: s.config.ForgeURL, ID: callerID, ID_2: issuerID})
 	if e != nil {
 		return errStorageUnavailable
 	}
@@ -166,7 +166,7 @@ func (s *Server) invitationTransaction(ctx context.Context, value string, token 
 	if !issuerFound {
 		return errInvitationAuthority
 	}
-	caller, e := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: hash, UserID: callerID, ForgeURL: s.config.GiteaURL})
+	caller, e := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: hash, UserID: callerID, ForgeURL: s.config.ForgeURL})
 	if e != nil {
 		return errUnauthenticated
 	}
@@ -201,7 +201,7 @@ func (s *Server) invitationLoad(ctx context.Context, id uuid.UUID) (database.Gol
 	if s.db == nil {
 		return database.GolfRepositoryInvitation{}, errStorageUnavailable
 	}
-	r, e := database.New(s.db).GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+	r, e := database.New(s.db).GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 	if errors.Is(e, sql.ErrNoRows) {
 		return r, errResourceNotFound
 	}
@@ -302,7 +302,7 @@ func (s *Server) CreateRepositoryInvitation(ctx context.Context, req *connect.Re
 			if e != nil {
 				return e
 			}
-			security, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+			security, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 			if e != nil {
 				return errUnauthenticated
 			}
@@ -315,7 +315,7 @@ func (s *Server) CreateRepositoryInvitation(ctx context.Context, req *connect.Re
 			var existing uuid.UUID
 			e = tx.QueryRowContext(ctx, `SELECT id FROM golf_repository_invitations WHERE issuer_user_id=$1 AND create_key=$2`, actor.UserID, m.IdempotencyKey).Scan(&existing)
 			if e == nil {
-				previous, e := q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: existing, ForgeURL: s.config.GiteaURL})
+				previous, e := q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: existing, ForgeURL: s.config.ForgeURL})
 				if e != nil {
 					return errStorageUnavailable
 				}
@@ -331,14 +331,14 @@ func (s *Server) CreateRepositoryInvitation(ctx context.Context, req *connect.Re
 			// Keep user/session/credential -> lifecycle -> quota ordering. The
 			// shared lifecycle gate precedes this exclusive repository quota
 			// lock so different issuers cannot both admit the final slot.
-			if _, e = tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.GiteaURL, rid); e != nil {
+			if _, e = tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.ForgeURL, rid); e != nil {
 				return errStorageUnavailable
 			}
-			if _, e = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-invitation-quota/'||$2::bigint::text,0))`, s.config.GiteaURL, rid); e != nil {
+			if _, e = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-invitation-quota/'||$2::bigint::text,0))`, s.config.ForgeURL, rid); e != nil {
 				return errStorageUnavailable
 			}
 			var count int
-			e = tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_repository_invitations WHERE forge_url=$1 AND repository_id=$2 AND state IN ('PENDING','GRANTING')`, s.config.GiteaURL, rid).Scan(&count)
+			e = tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_repository_invitations WHERE forge_url=$1 AND repository_id=$2 AND state IN ('PENDING','GRANTING')`, s.config.ForgeURL, rid).Scan(&count)
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -346,7 +346,7 @@ func (s *Server) CreateRepositoryInvitation(ctx context.Context, req *connect.Re
 				return invalid("At most 100 pending or unresolved invitations are allowed per repository.")
 			}
 			id := uuid.New()
-			_, e = tx.ExecContext(ctx, `INSERT INTO golf_repository_invitations(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,issuer_user_id,issuer_native_id,issuer_login,issuer_account_id,issuer_account_version,recipient_native_id,recipient_login,recipient_revision,permission,access_revision,persistent_consent,expires_at,create_key,input_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,true,$18,$19,$20)`, id, s.config.GiteaURL, rid, oid, key.Owner, key.Name, a.OrganizationOwned, actor.UserID, caller.ID, caller.Login, account.ID, account.CredentialVersion, recipient, observed.User.Login, m.RecipientRevision, m.Permission, a.Revision, expiry, m.IdempotencyKey, fp[:])
+			_, e = tx.ExecContext(ctx, `INSERT INTO golf_repository_invitations(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,issuer_user_id,issuer_native_id,issuer_login,issuer_account_id,issuer_account_version,recipient_native_id,recipient_login,recipient_revision,permission,access_revision,persistent_consent,expires_at,create_key,input_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,true,$18,$19,$20)`, id, s.config.ForgeURL, rid, oid, key.Owner, key.Name, a.OrganizationOwned, actor.UserID, caller.ID, caller.Login, account.ID, account.CredentialVersion, recipient, observed.User.Login, m.RecipientRevision, m.Permission, a.Revision, expiry, m.IdempotencyKey, fp[:])
 			if e != nil {
 				return invitationStorageError(e)
 			}
@@ -361,7 +361,7 @@ func (s *Server) CreateRepositoryInvitation(ctx context.Context, req *connect.Re
 			if after.Revision != a.Revision || again.Revision != observed.Revision {
 				return errRepositoryAccessConflict
 			}
-			result, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+			result, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 			return invitationStorageError(e)
 		})
 	})
@@ -418,14 +418,14 @@ func (s *Server) invitationPrivateView(ctx context.Context, value string, token 
 	var wire *golfv1.RepositoryInvitation
 	e = s.invitationTransaction(ctx, value, token, r.IssuerUserID, func(tx *sql.Tx, q *database.Queries, actor database.LockManagedSessionRow) error {
 		_, _, _, authorityErr := s.invitationIssuer(ctx, q, r, true)
-		locked, e := q.LockRepositoryInvitation(ctx, database.LockRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+		locked, e := q.LockRepositoryInvitation(ctx, database.LockRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 		if e != nil {
 			return errStorageUnavailable
 		}
 		if e = invitationExpire(ctx, tx, locked); e != nil {
 			return e
 		}
-		locked, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+		locked, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -465,7 +465,7 @@ func (s *Server) ListOwnRepositoryInvitations(ctx context.Context, req *connect.
 		if e != nil {
 			return e
 		}
-		ids, e = q.ListOwnRepositoryInvitationIDs(ctx, database.ListOwnRepositoryInvitationIDsParams{ForgeURL: s.config.GiteaURL, RecipientNativeID: user.ID, Limit: int32(limit + 1), Offset: int32((page - 1) * limit)})
+		ids, e = q.ListOwnRepositoryInvitationIDs(ctx, database.ListOwnRepositoryInvitationIDsParams{ForgeURL: s.config.ForgeURL, RecipientNativeID: user.ID, Limit: int32(limit + 1), Offset: int32((page - 1) * limit)})
 		return invitationStorageError(e)
 	})
 	if e != nil {
@@ -543,7 +543,7 @@ func (s *Server) ListRepositoryInvitations(ctx context.Context, req *connect.Req
 				if e != nil {
 					return e
 				}
-				security, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+				security, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 				if e != nil {
 					if !errors.Is(e, sql.ErrNoRows) {
 						return errStorageUnavailable
@@ -556,7 +556,7 @@ func (s *Server) ListRepositoryInvitations(ctx context.Context, req *connect.Req
 					localIssuerAvailable = !account.DisabledAt.Valid && account.CredentialVersion == security.CredentialVersion
 				}
 			}
-			ids, e := q.ListRepositoryInvitationIDs(ctx, database.ListRepositoryInvitationIDsParams{ForgeURL: s.config.GiteaURL, RepositoryID: rid, OwnerID: oid, Limit: int32(limit + 1), Offset: int32((page - 1) * limit)})
+			ids, e := q.ListRepositoryInvitationIDs(ctx, database.ListRepositoryInvitationIDsParams{ForgeURL: s.config.ForgeURL, RepositoryID: rid, OwnerID: oid, Limit: int32(limit + 1), Offset: int32((page - 1) * limit)})
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -566,14 +566,14 @@ func (s *Server) ListRepositoryInvitations(ctx context.Context, req *connect.Req
 			}
 			rows = make([]*golfv1.RepositoryInvitation, 0, len(ids))
 			for _, id := range ids {
-				r, e := q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+				r, e := q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 				if e != nil {
 					return errStorageUnavailable
 				}
 				if e = invitationExpire(ctx, tx, r); e != nil {
 					return e
 				}
-				r, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+				r, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 				if e != nil {
 					return errStorageUnavailable
 				}
@@ -623,7 +623,7 @@ func (s *Server) RevokeRepositoryInvitation(ctx context.Context, req *connect.Re
 			return errRepositoryAccessConflict
 		}
 		return s.invitationTransaction(ctx, value, token, r.IssuerUserID, func(tx *sql.Tx, q *database.Queries, actor database.LockManagedSessionRow) error {
-			current, e := q.LockRepositoryInvitation(ctx, database.LockRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+			current, e := q.LockRepositoryInvitation(ctx, database.LockRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -641,7 +641,7 @@ func (s *Server) RevokeRepositoryInvitation(ctx context.Context, req *connect.Re
 			if e != nil {
 				return invitationStorageError(e)
 			}
-			result, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+			result, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 			return invitationStorageError(e)
 		})
 	})
@@ -686,7 +686,7 @@ func (s *Server) RespondRepositoryInvitation(ctx context.Context, req *connect.R
 	e = s.invitationTransaction(ctx, value, token, invite.IssuerUserID, func(tx *sql.Tx, q *database.Queries, actor database.LockManagedSessionRow) error {
 		// Issuer credential before invitation row matches disable/version-change lock order.
 		issuerToken, issuer, a, authorityErr := s.invitationIssuer(ctx, q, invite, true)
-		current, e := q.LockRepositoryInvitation(ctx, database.LockRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+		current, e := q.LockRepositoryInvitation(ctx, database.LockRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -726,7 +726,7 @@ func (s *Server) RespondRepositoryInvitation(ctx context.Context, req *connect.R
 			if e != nil {
 				return e
 			}
-			invite, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+			invite, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 			details = authorityErr == nil
 			return invitationStorageError(e)
 		}
@@ -787,7 +787,7 @@ func (s *Server) RespondRepositoryInvitation(ctx context.Context, req *connect.R
 		if e != nil {
 			return e
 		}
-		invite, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.GiteaURL})
+		invite, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: id, ForgeURL: s.config.ForgeURL})
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -816,7 +816,7 @@ func (s *Server) invitationGrant(ctx context.Context, value string, token forgeC
 		if e != nil {
 			return e
 		}
-		current, e := q.LockRepositoryInvitation(ctx, database.LockRepositoryInvitationParams{ID: invite.ID, ForgeURL: s.config.GiteaURL})
+		current, e := q.LockRepositoryInvitation(ctx, database.LockRepositoryInvitationParams{ID: invite.ID, ForgeURL: s.config.ForgeURL})
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -907,7 +907,7 @@ func (s *Server) invitationGrant(ctx context.Context, value string, token forgeC
 		if e != nil {
 			return errStorageUnavailable
 		}
-		*invite, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: current.ID, ForgeURL: s.config.GiteaURL})
+		*invite, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: current.ID, ForgeURL: s.config.ForgeURL})
 		return invitationStorageError(e)
 	})
 }

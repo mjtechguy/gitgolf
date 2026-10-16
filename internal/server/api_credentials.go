@@ -93,7 +93,7 @@ func (s *Server) liveApiCredential(ctx context.Context, queries *database.Querie
 	if queries == nil {
 		queries = database.New(s.db)
 	}
-	row, err := queries.GetLiveApiCredential(ctx, database.GetLiveApiCredentialParams{TokenHash: auth.hash, ForgeURL: s.config.GiteaURL})
+	row, err := queries.GetLiveApiCredential(ctx, database.GetLiveApiCredentialParams{TokenHash: auth.hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, errUnauthenticated
 	}
@@ -237,7 +237,7 @@ func (s *Server) CreateApiCredential(ctx context.Context, req *connect.Request[g
 	tokenHash, _ := apiTokenHash(token)
 	var result *golfv1.ApiCredential
 	err = s.withManagedSession(ctx, s.cookieValue(req.Header()), credential, func(queries *database.Queries, caller database.LockManagedSessionRow, hash []byte) error {
-		count, err := queries.CountActiveApiCredentials(ctx, database.CountActiveApiCredentialsParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL})
+		count, err := queries.CountActiveApiCredentials(ctx, database.CountActiveApiCredentialsParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL})
 		if err != nil {
 			return errStorageUnavailable
 		}
@@ -283,7 +283,7 @@ func (s *Server) ListApiCredentials(ctx context.Context, req *connect.Request[go
 	}
 	result := &golfv1.ListApiCredentialsResponse{Page: wirePage(0)}
 	err = s.withManagedSession(ctx, s.cookieValue(req.Header()), credential, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
-		rows, err := queries.ListApiCredentials(ctx, database.ListApiCredentialsParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RowLimit: int32(limit + 1), RowOffset: int32((page - 1) * limit)})
+		rows, err := queries.ListApiCredentials(ctx, database.ListApiCredentialsParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, RowLimit: int32(limit + 1), RowOffset: int32((page - 1) * limit)})
 		if err != nil {
 			return errStorageUnavailable
 		}
@@ -319,7 +319,7 @@ func (s *Server) RevokeApiCredential(ctx context.Context, req *connect.Request[g
 	}
 	var result *golfv1.ApiCredential
 	err = s.withManagedSession(ctx, s.cookieValue(req.Header()), credential, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
-		count, err := queries.RevokeApiCredential(ctx, database.RevokeApiCredentialParams{ID: id, UserID: caller.UserID, ForgeURL: s.config.GiteaURL})
+		count, err := queries.RevokeApiCredential(ctx, database.RevokeApiCredentialParams{ID: id, UserID: caller.UserID, ForgeURL: s.config.ForgeURL})
 		if err != nil {
 			return errStorageUnavailable
 		}
@@ -328,7 +328,7 @@ func (s *Server) RevokeApiCredential(ctx context.Context, req *connect.Request[g
 				return err
 			}
 		}
-		row, err := queries.GetOwnApiCredential(ctx, database.GetOwnApiCredentialParams{ID: id, UserID: caller.UserID, ForgeURL: s.config.GiteaURL})
+		row, err := queries.GetOwnApiCredential(ctx, database.GetOwnApiCredentialParams{ID: id, UserID: caller.UserID, ForgeURL: s.config.ForgeURL})
 		if errors.Is(err, sql.ErrNoRows) {
 			return errResourceNotFound
 		}

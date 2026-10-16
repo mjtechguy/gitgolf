@@ -102,7 +102,7 @@ func (s *Server) workflowRunDetail(ctx context.Context, id string) (workflowRunR
 		return workflowRunRecord{}, nil, errStorageUnavailable
 	}
 	defer tx.Rollback()
-	run, err := scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2", id, s.config.GiteaURL))
+	run, err := scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2", id, s.config.ForgeURL))
 	if err != nil {
 		return run, nil, errStorageUnavailable
 	}

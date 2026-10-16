@@ -201,7 +201,7 @@ func TestWorkflowDispatchAuthorityFencesPostgres(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			f := newWorkflowRunFixture(t)
 			if kind == "reset" {
-				if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
+				if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
 					t.Fatal(e)
 				}
 				var e error
@@ -223,7 +223,7 @@ func TestWorkflowDispatchAuthorityFencesPostgres(t *testing.T) {
 					return
 				}
 				if kind == "reset" {
-					if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "reset-password", LocalAccountInput{Username: "alice", Password: localTestPassword}); e != nil {
+					if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.ForgeURL, "reset-password", LocalAccountInput{Username: "alice", Password: localTestPassword}); e != nil {
 						t.Fatal(e)
 					}
 					return

@@ -9,10 +9,10 @@ option go_package = "github.com/mjtechguy/golf-git/gen/golf/v1;golfv1";
 // explicitly named; local passwords are Golf-owned and mapped to existing forge identities.
 service SessionService {
   rpc GetAuthenticationOptions(GetAuthenticationOptionsRequest) returns (GetAuthenticationOptionsResponse);
-  rpc BeginGiteaOAuth(BeginGiteaOAuthRequest) returns (BeginGiteaOAuthResponse);
+  rpc BeginForgeOAuth(BeginForgeOAuthRequest) returns (BeginForgeOAuthResponse);
   rpc LoginWithPassword(LoginWithPasswordRequest) returns (LoginWithPasswordResponse);
   rpc CompletePasswordMFA(CompletePasswordMFARequest) returns (CompletePasswordMFAResponse);
-  rpc LoginWithGiteaToken(LoginWithGiteaTokenRequest) returns (LoginWithGiteaTokenResponse);
+  rpc LoginWithForgeToken(LoginWithForgeTokenRequest) returns (LoginWithForgeTokenResponse);
   rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
   rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
@@ -322,8 +322,8 @@ message LoginWithPasswordRequest {
 }
 message LoginWithPasswordResponse { User user = 1; bool mfa_required = 2; string challenge_expires_at = 3; }
 message CompletePasswordMFARequest { string code = 1; }
-message LoginWithGiteaTokenRequest { string token = 1; }
-message LoginWithGiteaTokenResponse { User user = 1; }
+message LoginWithForgeTokenRequest { string token = 1; }
+message LoginWithForgeTokenResponse { User user = 1; }
 message GetSessionRequest {}
 message GetSessionResponse { User user = 1; }
 message SessionInfo {
@@ -493,7 +493,7 @@ message GetCommitDiffResponse {
   // Empty for root commits; otherwise the first parent, including merges.
   string base_commit_id = 3;
   CommitDiffBase base = 4;
-  // Native Gitea output, including root-commit preamble. UTF-8, at most 512 KiB;
+  // Native Forgejo output, including root-commit preamble. UTF-8, at most 512 KiB;
   // never silently truncated. This is not a parsed patch or merge evidence.
   string raw_diff = 5;
   uint32 byte_size = 6;
@@ -1087,13 +1087,13 @@ message ListCapabilitiesResponse {
 
 message GetAuthenticationOptionsRequest {}
 message GetAuthenticationOptionsResponse {
-  bool gitea_oauth_enabled = 1;
+  bool forge_oauth_enabled = 1;
   string provider_label = 2;
   repeated string scopes = 3;
   bool local_password_enabled = 4;
 }
-message BeginGiteaOAuthRequest {}
-message BeginGiteaOAuthResponse { string authorization_url = 1; }
+message BeginForgeOAuthRequest {}
+message BeginForgeOAuthResponse { string authorization_url = 1; }
 
 enum OrganizationVisibility {
   ORGANIZATION_VISIBILITY_UNSPECIFIED = 0;

@@ -304,7 +304,7 @@ def main():
         done=subprocess.run(arguments,cwd=stack,input=None if payload is None else json.dumps(payload),text=True,capture_output=True,timeout=60)
         assert len(done.stdout)<=2<<20 and len(done.stderr)<=2<<20 and done.returncode==0
         return done.stdout.strip()
-    def admin(*parts):return command(compose+['exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*parts])
+    def admin(*parts):return command(compose+['exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*parts])  # Forgejo's upstream path
     def operator(action,payload):
         result=json.loads(command(compose+['exec','-T','golf','/usr/local/bin/golf','local-account',action],payload));assert result['state']=='complete';return result['result']
     def rpc(actor,method,payload=None,status=200,code=None,extra=None):
@@ -367,7 +367,7 @@ def main():
     try:
         persist();runtime=runtime_now();manifest['runtime']=runtime
         assert request(client(),'GET',golf+'/readyz',None,{},200)
-        assert api(None,'GET','version')['version']=='1.27.3'
+        assert api(None,'GET','version')['version']=='15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
         stage='ordinary native actors and managed enrollment'
         for role in ('owner','author','writer','reader','outsider'):
             name=prefix+'-'+role;actor={'name':name,'created':False,'enrolled':False,'session':client(),'loggedIn':False};actors[role]=actor

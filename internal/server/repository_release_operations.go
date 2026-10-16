@@ -120,10 +120,10 @@ func releaseOperationWire(r releaseOperationRecord) *golfv1.RepositoryReleaseOpe
 	return v
 }
 func (s *Server) lockReleaseOperation(ctx context.Context, tx *sql.Tx, id int64) (context.Context, error) {
-	if _, e := tx.ExecContext(ctx, `SELECT golf_release_operation_lock($1,$2)`, s.config.GiteaURL, id); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_release_operation_lock($1,$2)`, s.config.ForgeURL, id); e != nil {
 		return nil, errStorageUnavailable
 	}
-	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, id, tx}), nil
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, id, tx}), nil
 }
 func (s *Server) releaseOperationAuthority(ctx context.Context, session string, token forgeCredential, r releaseOperationRecord) error {
 	actor, e := s.releasePublicationAuthority(ctx, session, token, repositoryKey{r.Owner, r.Name}, strconv.FormatInt(r.RepositoryID, 10), strconv.FormatInt(r.OwnerID, 10))
@@ -270,7 +270,7 @@ func (s *Server) uploadNativeAttachment(ctx context.Context, token forgeCredenti
 	if e = writer.Close(); e != nil {
 		return row, e
 	}
-	request, e := http.NewRequestWithContext(ctx, http.MethodPost, s.config.GiteaURL+"/api/v1"+path, &body)
+	request, e := http.NewRequestWithContext(ctx, http.MethodPost, s.config.ForgeURL+"/api/v1"+path, &body)
 	if e != nil {
 		return row, e
 	}
@@ -418,7 +418,7 @@ func (s *Server) GetRepositoryReleaseOperation(ctx context.Context, req *connect
 	var r releaseOperationRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanReleaseOperation(s.db.QueryRowContext(ctx, `SELECT `+releaseOperationColumns+` FROM golf_repository_release_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanReleaseOperation(s.db.QueryRowContext(ctx, `SELECT `+releaseOperationColumns+` FROM golf_repository_release_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -468,7 +468,7 @@ func (s *Server) SubmitRepositoryReleaseOperation(ctx context.Context, req *conn
 		if e != nil {
 			return e
 		}
-		r, e = scanReleaseOperation(tx.QueryRowContext(held, `SELECT `+releaseOperationColumns+` FROM golf_repository_release_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanReleaseOperation(tx.QueryRowContext(held, `SELECT `+releaseOperationColumns+` FROM golf_repository_release_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(r.Fingerprint, fingerprint) {
 				return errRepositoryAccessConflict
@@ -478,7 +478,7 @@ func (s *Server) SubmitRepositoryReleaseOperation(ctx context.Context, req *conn
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanReleaseOperation(tx.QueryRowContext(held, `INSERT INTO golf_repository_release_operations(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,release_id,asset_id,kind,expected_revision,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING `+releaseOperationColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, repoID, ownerID, m.Repository.Owner, m.Repository.Name, m.AccessRevision, releaseID, assetID, int32(m.Kind), m.ExpectedRevision, fingerprint))
+		r, e = scanReleaseOperation(tx.QueryRowContext(held, `INSERT INTO golf_repository_release_operations(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,release_id,asset_id,kind,expected_revision,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING `+releaseOperationColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, repoID, ownerID, m.Repository.Owner, m.Repository.Name, m.AccessRevision, releaseID, assetID, int32(m.Kind), m.ExpectedRevision, fingerprint))
 		if e != nil {
 			return errStorageUnavailable
 		}

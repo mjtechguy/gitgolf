@@ -62,7 +62,7 @@ func (s *Server) codexAuthorized(ctx context.Context, a codexActor, connectionID
 			sel := selectedAgent(ctx)
 			r, e = scanCodex(tx.QueryRowContext(ctx, `SELECT `+codexColumns+` FROM golf_codex_connections WHERE user_id=$1 AND harness=$2 AND provider=$3 FOR SHARE`, userID, sel.Harness, sel.Provider))
 		} else {
-			r, e = scanCodex(tx.QueryRowContext(ctx, `SELECT `+codexColumns+` FROM golf_codex_connections WHERE id=$1 AND forge_url=$2 FOR SHARE`, connectionID, s.config.GiteaURL))
+			r, e = scanCodex(tx.QueryRowContext(ctx, `SELECT `+codexColumns+` FROM golf_codex_connections WHERE id=$1 AND forge_url=$2 FOR SHARE`, connectionID, s.config.ForgeURL))
 		}
 		if errors.Is(e, sql.ErrNoRows) && connectionID == "" {
 			sel := selectedAgent(ctx)
@@ -156,7 +156,7 @@ func (s *Server) ListCodexConnections(ctx context.Context, req *connect.Request[
 	var ids []string
 	e = s.codexGuard(ctx, a, func(tx *sql.Tx, userID int64) error {
 		query := `SELECT id::text FROM golf_codex_connections c WHERE c.forge_url=$1 AND ((c.scope='INSTANCE' AND ($2 OR EXISTS(SELECT 1 FROM golf_codex_connection_access x WHERE x.connection_id=c.id AND x.user_id=$3))) OR (NOT $2 AND c.scope='PERSONAL' AND c.user_id=$3 AND c.harness<>'codex')) ORDER BY lower(name),id LIMIT 64`
-		rows, e := tx.QueryContext(ctx, query, s.config.GiteaURL, req.Msg.InstanceAdmin, userID)
+		rows, e := tx.QueryContext(ctx, query, s.config.ForgeURL, req.Msg.InstanceAdmin, userID)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -213,13 +213,13 @@ func (s *Server) CreateCodexConnection(ctx context.Context, req *connect.Request
 			return errStorageUnavailable
 		}
 		var n int
-		if e := tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_codex_connections WHERE scope='INSTANCE' AND forge_url=$1`, s.config.GiteaURL).Scan(&n); e != nil {
+		if e := tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_codex_connections WHERE scope='INSTANCE' AND forge_url=$1`, s.config.ForgeURL).Scan(&n); e != nil {
 			return errStorageUnavailable
 		}
 		if n >= 64 {
 			return invalid("The instance Codex connection limit is 64.")
 		}
-		if _, e := tx.ExecContext(ctx, `INSERT INTO golf_codex_connections(id,user_id,scope,name,forge_url,state,harness,provider) VALUES($1,NULL,'INSTANCE',$2,$3,'UNCONFIGURED',$4,$5)`, id, req.Msg.Name, s.config.GiteaURL, sel.Harness, sel.Provider); e != nil {
+		if _, e := tx.ExecContext(ctx, `INSERT INTO golf_codex_connections(id,user_id,scope,name,forge_url,state,harness,provider) VALUES($1,NULL,'INSTANCE',$2,$3,'UNCONFIGURED',$4,$5)`, id, req.Msg.Name, s.config.ForgeURL, sel.Harness, sel.Provider); e != nil {
 			return errStorageUnavailable
 		}
 		return s.codexAuditTx(ctx, tx, a, "CODEX_CONNECTION_CREATED", id)
@@ -293,7 +293,7 @@ func (s *Server) SetCodexConnectionAccess(ctx context.Context, req *connect.Requ
 	defer releaseCodexOwner(conn, codexLockID(r.ID))
 	e = s.codexGuard(ctx, a, func(tx *sql.Tx, userID int64) error {
 		var version int64
-		if e := tx.QueryRowContext(ctx, `SELECT version FROM golf_codex_connections WHERE id=$1 AND forge_url=$2 FOR UPDATE`, r.ID, s.config.GiteaURL).Scan(&version); e != nil {
+		if e := tx.QueryRowContext(ctx, `SELECT version FROM golf_codex_connections WHERE id=$1 AND forge_url=$2 FOR UPDATE`, r.ID, s.config.ForgeURL).Scan(&version); e != nil {
 			return errResourceNotFound
 		}
 		if e := s.codexManageTx(ctx, tx, userID, r); e != nil {
@@ -304,7 +304,7 @@ func (s *Server) SetCodexConnectionAccess(ctx context.Context, req *connect.Requ
 		}
 		for _, id := range ids {
 			var selected int64
-			if e := tx.QueryRowContext(ctx, `SELECT l.user_id FROM golf_local_accounts l JOIN golf_users u ON u.id=l.user_id WHERE l.user_id=$1 AND l.disabled_at IS NULL AND u.forge_url=$2 FOR SHARE OF l`, id, s.config.GiteaURL).Scan(&selected); e != nil {
+			if e := tx.QueryRowContext(ctx, `SELECT l.user_id FROM golf_local_accounts l JOIN golf_users u ON u.id=l.user_id WHERE l.user_id=$1 AND l.disabled_at IS NULL AND u.forge_url=$2 FOR SHARE OF l`, id, s.config.ForgeURL).Scan(&selected); e != nil {
 				return invalid("An allowed user is unavailable or not a current enrolled Golf user.")
 			}
 		}

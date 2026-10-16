@@ -28,7 +28,7 @@ func (s *Server) RunAgentWorker(ctx context.Context, worker, seccomp string) err
 	if e != nil {
 		return errStorageUnavailable
 	}
-	workerLock := codexLockID("golf-agent-worker/" + s.config.GiteaURL + "/" + worker)
+	workerLock := codexLockID("golf-agent-worker/" + s.config.ForgeURL + "/" + worker)
 	var owns bool
 	if e = workerOwner.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, workerLock).Scan(&owns); e != nil || !owns {
 		workerOwner.Close()
@@ -63,7 +63,7 @@ func (s *Server) RunAgentWorker(ctx context.Context, worker, seccomp string) err
 	if e != nil {
 		return e
 	}
-	if _, e = s.db.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='lost',version=version+1,finished_at=clock_timestamp(),reason='Worker restarted; no automatic retry.' WHERE forge_url=$1 AND worker_id=$2 AND state='running'`, s.config.GiteaURL, worker); e != nil {
+	if _, e = s.db.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='lost',version=version+1,finished_at=clock_timestamp(),reason='Worker restarted; no automatic retry.' WHERE forge_url=$1 AND worker_id=$2 AND state='running'`, s.config.ForgeURL, worker); e != nil {
 		return errStorageUnavailable
 	}
 	cleanup, stopCleanup := context.WithTimeout(ctx, 45*time.Second)
@@ -103,13 +103,13 @@ func (s *Server) RunAgentWorker(ctx context.Context, worker, seccomp string) err
 		if ctx.Err() != nil {
 			return nil
 		}
-		_, e = s.db.ExecContext(ctx, `INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version) VALUES($1,$2,$3,$4,$5) ON CONFLICT(forge_url,worker_id) DO UPDATE SET image=EXCLUDED.image,acp_image=EXCLUDED.acp_image,acp_version=EXCLUDED.acp_version,acp_file_tools=false,last_seen=clock_timestamp()`, s.config.GiteaURL, worker, s.config.AgentImage, acpImage, acpVersion)
+		_, e = s.db.ExecContext(ctx, `INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version) VALUES($1,$2,$3,$4,$5) ON CONFLICT(forge_url,worker_id) DO UPDATE SET image=EXCLUDED.image,acp_image=EXCLUDED.acp_image,acp_version=EXCLUDED.acp_version,acp_file_tools=false,last_seen=clock_timestamp()`, s.config.ForgeURL, worker, s.config.AgentImage, acpImage, acpVersion)
 		if e != nil {
 			return errStorageUnavailable
 		}
 		// Loss is terminal. An expired attempt may already have consumed quota or
 		// changed files; never replay it automatically after a worker restart.
-		_, e = s.db.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='lost',reason='Worker lease expired; no automatic retry.',version=version+1,finished_at=clock_timestamp() WHERE forge_url=$1 AND state='running' AND lease_expires_at<=clock_timestamp()`, s.config.GiteaURL)
+		_, e = s.db.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='lost',reason='Worker lease expired; no automatic retry.',version=version+1,finished_at=clock_timestamp() WHERE forge_url=$1 AND state='running' AND lease_expires_at<=clock_timestamp()`, s.config.ForgeURL)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -118,7 +118,7 @@ func (s *Server) RunAgentWorker(ctx context.Context, worker, seccomp string) err
 			s.publishReviews(ctx)
 		}
 		// A reviewer task is dispatchable only after its durable review receipt is linked.
-		t, e := scanAgentTask(s.db.QueryRowContext(ctx, `SELECT `+agentTaskColumns+` FROM golf_agent_tasks WHERE forge_url=$1 AND state='queued' AND (COALESCE(config->>'model_id','') NOT LIKE 'opencode-go/%' OR $2 OR EXISTS(SELECT 1 FROM golf_reviewer_runs rr WHERE rr.task_id=golf_agent_tasks.id AND rr.state IN ('queued','running'))) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL, acpImage != ""))
+		t, e := scanAgentTask(s.db.QueryRowContext(ctx, `SELECT `+agentTaskColumns+` FROM golf_agent_tasks WHERE forge_url=$1 AND state='queued' AND (COALESCE(config->>'model_id','') NOT LIKE 'opencode-go/%' OR $2 OR EXISTS(SELECT 1 FROM golf_reviewer_runs rr WHERE rr.task_id=golf_agent_tasks.id AND rr.state IN ('queued','running'))) ORDER BY created_at,id LIMIT 1`, s.config.ForgeURL, acpImage != ""))
 		if e == nil {
 			_ = s.executeAgentTask(ctx, executor, worker, seccomp, t)
 		} else if !errors.Is(e, sql.ErrNoRows) {
@@ -151,7 +151,7 @@ func (s *Server) taskActor(ctx context.Context, t agentTaskRecord) (codexActor, 
 	return a, e
 }
 func (s *Server) rejectAgentTask(ctx context.Context, t agentTaskRecord, reason string) {
-	_, _ = s.db.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='cancelled',reason=$2,version=version+1,finished_at=clock_timestamp() WHERE id=$1 AND forge_url=$3 AND state='queued'`, t.ID, reason, s.config.GiteaURL)
+	_, _ = s.db.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='cancelled',reason=$2,version=version+1,finished_at=clock_timestamp() WHERE id=$1 AND forge_url=$3 AND state='queued'`, t.ID, reason, s.config.ForgeURL)
 }
 func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor, worker, seccomp string, t agentTaskRecord) error {
 	var c golfv1.AgentUsageConfig
@@ -196,14 +196,14 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 		// Conservative global concurrency ceiling; account ownership further limits
 		// a rotating account to one task. Multiple accounts/workers can run in parallel.
 		var busy int
-		e := tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_agent_tasks WHERE forge_url=$1 AND state='running'`, s.config.GiteaURL).Scan(&busy)
+		e := tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_agent_tasks WHERE forge_url=$1 AND state='running'`, s.config.ForgeURL).Scan(&busy)
 		if e != nil {
 			return errStorageUnavailable
 		}
 		if busy >= int(c.MaxConcurrent) {
 			return errRunnerUnavailable
 		}
-		result, e := tx.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='running',version=version+1,worker_id=$2,attempt_id=$3,lease_expires_at=clock_timestamp()+interval '45 seconds',started_at=clock_timestamp() WHERE id=$1 AND forge_url=$4 AND state='queued'`, t.ID, worker, attempt, s.config.GiteaURL)
+		result, e := tx.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='running',version=version+1,worker_id=$2,attempt_id=$3,lease_expires_at=clock_timestamp()+interval '45 seconds',started_at=clock_timestamp() WHERE id=$1 AND forge_url=$4 AND state='queued'`, t.ID, worker, attempt, s.config.ForgeURL)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -276,7 +276,7 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 					alive = err == nil
 				}
 				if alive {
-					_, err = s.db.ExecContext(check, `UPDATE golf_agent_worker_presence SET last_seen=clock_timestamp() WHERE forge_url=$1 AND worker_id=$2 AND image=$3`, s.config.GiteaURL, worker, s.config.AgentImage)
+					_, err = s.db.ExecContext(check, `UPDATE golf_agent_worker_presence SET last_seen=clock_timestamp() WHERE forge_url=$1 AND worker_id=$2 AND image=$3`, s.config.ForgeURL, worker, s.config.AgentImage)
 					alive = err == nil
 				}
 				cancel()

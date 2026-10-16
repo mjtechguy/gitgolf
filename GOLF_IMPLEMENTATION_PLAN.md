@@ -38,15 +38,13 @@ and digest receipts; no new CFCR storage service is required.
 custom-registry direction. Existing installations and historical evidence remain
 separate; scanning/policies and general image builds are not implicitly completed.
 
-Portable backend direction (2026-10-11): the user selected **Forgejo** to replace
-Gitea. [ADR 0009](docs/decisions/0009-forgejo-portable-backend.md) and the
-[Forgejo transition plan](docs/FORGEJO_MIGRATION_PLAN.md) supersede the earlier
-Gitea-default direction. Existing deployments remain unchanged until their fresh
-target, identity/data migration and rollback gates pass. Cloudflare-native remains
-Artifacts/D1/Workers. The [Forgejo foundation](docs/FORGEJO_SETUP.md) is now
-implemented and locally qualified in bounded profiles; full migration and Gitea
-retirement remain open. The importer lost a private pending review in rehearsal,
-so no retained installation has been cut over.
+Portable backend (2026-10-11, updated 2026-10-16): **Forgejo** is Golf's portable
+forge. [ADR 0009](docs/decisions/0009-forgejo-portable-backend.md) supersedes the
+earlier forge choice; the earlier backend was retired on 2026-10-16 with no
+installations to migrate. Cloudflare-native remains Artifacts/D1/Workers. The
+[Forgejo foundation](docs/FORGEJO_SETUP.md) is implemented and locally qualified in
+bounded profiles; ADR 0009 lists the Forgejo qualification that remains open.
+Throughout this plan, "the forge" means Forgejo on the portable track.
 
 Native source progress (2026-10-11): schema18 adds reviewer requests/cancellation,
 private pending summaries, publication/discard, review dismissal/restoration and
@@ -114,7 +112,7 @@ Native Cloudflare increment (2026-10-08): [PR container execution and optional A
 
 Source094 adds the optional Golf/Access identity bridge and one operator-configured Cloudflare static preview. PostgreSQL/race, Worker boundaries/build, native TLS/D1/R2 and actual Access email-code browser admission/content/repository revocation pass. All owned test resources are removed. Golf-issued alias admission remains seat-limited; the existing Google provider has a deleted OAuth client. See the [094 evidence boundary](docs/IMPLEMENTATION_STATUS.md#cloudflare-protected-preview094-2026-10-08-bounded-native-browser-qualified). Automatic PR delivery/native SaaS scale remain subsequent gates.
 
-Status: product direction and implementation roadmap; shared Gitea first-release decision incorporated on 2026-10-01, latest scoped implementation review 2026-10-06. Provider proofs and implementation evidence remain required. Explicit defaults are engineering decisions that can be revisited through ADRs.
+Status: product direction and implementation roadmap; shared-forge first-release decision incorporated on 2026-10-01 (Forgejo since ADR 0009, 2026-10-11), latest scoped implementation review 2026-10-06. Provider proofs and implementation evidence remain required. Explicit defaults are engineering decisions that can be revisited through ADRs.
 
 Current local deployment (2026-10-06): the 087–091 bounded batch is deployed on clean frozen `f548567` at schema 091. [Matching source/native/browser/rollout/running/served evidence](docs/IMPLEMENTATION_STATUS.md#portable-priorities087091-deployed-bounded-consumers-2026-10-06) binds exact runtime identities, preserved authentication/configuration/resources, 134 controlled browser cases and latest-schema Golf-only restore. New consumers include exact-head protected-review observations, managed private ACP controls/once-only commands, pending saved-inline append, batch/rename, discussion attachments and opt-in verified-email recovery. Actual served batch/body/comment upload/download and MFA/restart proofs pass. File-tool permission grants and the new agent Actions catalog remain disabled pending their own runtime acceptance; protected publication, private migration fidelity, retained recovery email delivery and coordinated whole-stack restore remain open. Neither track, full forge parity nor an entire phase becomes Ready from these consumers.
 
@@ -127,9 +125,9 @@ Current local deployment (2026-10-06): the 087–091 bounded batch is deployed o
 
 The [local completion queue](docs/LOCAL_COMPLETION_NEXT.md) now tracks remaining contracts after the verified 091 rollout. Existing portable Go/PostgreSQL/native API/keyring/shared UI/SSE consumers are reused. No Cloudflare allocation, new Docker capacity, paid model call or execution job is attributed to this batch.
 
-The [Gitea API and CI compatibility plan](docs/GITEA_CI_COMPATIBILITY_PLAN.md) expands the 2026-10-07 review into an ordered backlog for complete supported Gitea API coverage, GitHub Actions/GitLab execution, native connected CI, and protected publication. It defines dependencies and acceptance gates beyond the initial bounded v1 catalogs; it is a plan, not new implementation or deployment evidence.
+The 2026-10-07 review produced an ordered backlog for complete supported forge API coverage, GitHub Actions/GitLab execution, native connected CI, and protected publication. That planning document was removed with the retired backend; the [compatibility register](docs/compatibility/README.md) now tracks supported Forgejo operations, and the backlog's dependencies and acceptance gates remain plan, not implementation or deployment evidence.
 
-The [Cloudflare build and scale plan](docs/CLOUDFLARE_BUILD_PLAN.md) refines P5/P6/P7/P8 into provider discovery, concurrent Artifacts agents, real D1/R2/AI application provisioning, DNS/Access-protected PR previews, competition rehearsal and global SaaS work. On 2026-10-07 the user selected fully Cloudflare-native managed SaaS as the destination, with the current Gitea/PostgreSQL core serving as a migration bridge. Current ownership remains until native authority/forge cutover qualifies; portable hosting stays independent. The status ledger records bounded live foundation/concurrent-agent proofs and source-ahead encrypted Cloudflare profiles with a qualified operator D1/R2 storage consumer at migration093. Golf agent integration, complete application provisioning, protected previews and global SaaS gates remain open.
+The [Cloudflare build and scale plan](docs/CLOUDFLARE_BUILD_PLAN.md) refines P5/P6/P7/P8 into provider discovery, concurrent Artifacts agents, real D1/R2/AI application provisioning, DNS/Access-protected PR previews, competition rehearsal and global SaaS work. On 2026-10-07 the user selected fully Cloudflare-native managed SaaS as the destination, with the current Forgejo/PostgreSQL core serving as a migration bridge. Current ownership remains until native authority/forge cutover qualifies; portable hosting stays independent. The status ledger records bounded live foundation/concurrent-agent proofs and source-ahead encrypted Cloudflare profiles with a qualified operator D1/R2 storage consumer at migration093. Golf agent integration, complete application provisioning, protected previews and global SaaS gates remain open.
 
 Native asynchronous evidence increment (2026-10-08): [Queues, Workflows, private R2 and advisory Clef through AI Gateway](docs/IMPLEMENTATION_STATUS.md#native-queued-pr-evidence-2026-10-08-bounded-live-api-qualified) now have a bounded native PR consumer and final live acceptance, with every owned resource removed. Exact commit/metadata binding, current reader/writer grants, durable inference reservations, job limits and expiry remain explicit. Browser/CLI job controls, actual CI/agent execution, automatic protected previews and global SaaS routing remain subsequent work.
 
@@ -139,7 +137,7 @@ Native repository increment (2026-10-08): the [separate native setup](docs/CLOUD
 
 Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including bounded repository/source/history/commit-diff, issue and PR/native-review reads, member-scoped organization browsing, own-account session activity, the JSON CLI and initial local MCP adapter, durable own-account repository creation and coordinated encrypted backup/fresh restore for the canonical Docker profile. Own-account SSH key management and real local HTTP/SSH Git transport qualification are recorded in the [Git access contract](docs/GIT_ACCESS_CONTRACT.md). Each adapter's protocol/native qualification is recorded separately. The [next local completion packets](docs/LOCAL_COMPLETION_NEXT.md) track remaining consumers after the deployed fork-merge, private RustFS artifact, release-browsing/private-download, bounded existing-tag publication and own-Star increments, with maintained multi-job Actions execution qualified and deployed. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
 
-Current local Actions acceptance (2026-10-07): [unchanged Requests push proof](docs/compatibility/evidence/requests-local.json) now passes with original commit/tree/workflow bytes, genuine private checkout, pinned public Node24 actions, CPython3.14.8 and all nine pre-commit checks. Actual denied/direct egress, failed command, job timeout, running cancellation and exact-owned cleanup pass. [Operator setup](docs/ACTIONS_REMOTE.md) documents the separate opt-in profile. [Source and PostgreSQL authority/race checks](docs/compatibility/evidence/m2-checks.json) are distinct from native execution. PR/fork contexts, private actions, broader checkout/runtime semantics, long-step credential refresh and full compatibility remain open. The retained installation remains schema091; this source-ahead qualification does not upgrade it. Historical Git/image/worker-death receipts remain in the register.
+Current local Actions acceptance (2026-10-07, on the native forge at the time; an earlier backend, since retired): an unchanged Requests push proof passed with original commit/tree/workflow bytes, genuine private checkout, pinned public Node24 actions, CPython3.14.8 and all nine pre-commit checks. Actual denied/direct egress, failed command, job timeout, running cancellation and exact-owned cleanup pass. [Operator setup](docs/ACTIONS_REMOTE.md) documents the separate opt-in profile. Source and PostgreSQL authority/race checks are distinct from native execution; both receipts were removed with the earlier backend, and the Forgejo run of the same workflow has [its own receipt](docs/compatibility/evidence/requests-forgejo-deep-20261011.json). PR/fork contexts, private actions, broader checkout/runtime semantics, long-step credential refresh and full compatibility remain open. The retained installation remains schema091; this source-ahead qualification does not upgrade it. Forgejo worker-loss evidence has [its own receipt](docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json).
 
 The historical 076 deployed baseline was schema076/frozen `fffb28a`. It includes ordinary contributor file editing, individual reviewer requests, reactions/subscriptions/activity/own issue and PR notifications, Markdown templates and inherited label selection, release/asset administration, public GitHub/GitLab code imports and pull mirrors, wiki reads, and repository-bound collaboration delegation. The [076 ledger](docs/IMPLEMENTATION_STATUS.md#portable-completion076-four-parallel-streams-2026-10-05) separates190 controlled browser cases, native/PostgreSQL checks and actual served/runtime receipts. Source qualification alone does not advance the retained localhost image or schema; matching deployment and independently served evidence belong in that ledger.
 
@@ -157,7 +155,7 @@ Integrated081 adds targeted global-admin MFA recovery with the administrator's o
 
 The real xterm console retains running-job/newline, automatic-history and page-wheel qualification. Ordinary native merge/squash and these review consumers do not satisfy P0.8: trusted checks, exact candidate/base/source binding, native atomic mutation fencing or a qualified equivalent, and every relevant write ingress remain release gates. Managed READ Git uses genuine local direct TLS; native web/API/SSH remain independent ingress. File writes are capped at256 KiB, ref administration remains bounded and native atomic expected-HEAD CAS is not claimed. The [071 receipts](docs/IMPLEMENTATION_STATUS.md#portable-collaboration-source-changes-and-access-control071-2026-10-05) retain their historical administrator-only source-write and then-current runtime scopes;076 and later source contracts supersede only the explicitly widened consumers.
 
-Recorded agent activity still needs a real growing Codex journal; interactive ACP/all-five harness acceptance remains open. Unsupported positive monetary caps fail closed; zero allows supported subscription tasks without a Golf monetary cap, while paid API billing remains unavailable. Trusted worker Git preparation now has the explicitly negotiated bounded source profile above; bounded scoped job credentials are locally qualified in the separate remote profile and remain undeployed. Complete checkout/security gates remain open under the unchanged2-GiB Docker reserve. Static-preview067 runtime/TLS acceptance, broader upstream CI compatibility, full delivery/Settings, latest-schema coordinated recovery, Kubernetes and the Cloudflare track remain open. Neither full GitHub/Gitea parity nor either infrastructure track is marked complete.
+Recorded agent activity still needs a real growing Codex journal; interactive ACP/all-five harness acceptance remains open. Unsupported positive monetary caps fail closed; zero allows supported subscription tasks without a Golf monetary cap, while paid API billing remains unavailable. Trusted worker Git preparation now has the explicitly negotiated bounded source profile above; bounded scoped job credentials are locally qualified in the separate remote profile and remain undeployed. Complete checkout/security gates remain open under the unchanged2-GiB Docker reserve. Static-preview067 runtime/TLS acceptance, broader upstream CI compatibility, full delivery/Settings, latest-schema coordinated recovery, Kubernetes and the Cloudflare track remain open. Neither full GitHub/forge parity nor either infrastructure track is marked complete.
 
 
 Prepared: 2026-10-01. Provider-neutral capability administration and next execution sequence reviewed: 2026-10-02. Provider documentation and limits must be rechecked when implementing each integration.
@@ -224,7 +222,7 @@ These are infrastructure tracks, not separate products or editions. Use the same
 | --- | --- |
 | Name | Golf throughout UI, commands, documentation, and distributions. |
 | Core | Shared portable Go/PostgreSQL core; thin TypeScript Workers integrations where appropriate. |
-| Forge foundation | Gitea-backed in both infrastructure tracks for v1; Golf-native is conditional later work. |
+| Forge foundation | Forgejo-backed in both infrastructure tracks for v1; Golf-native is conditional later work. |
 | Pipeline inputs | GitHub Actions and GitLab CI/CD, with a published compatibility contract. |
 | Runner OS | Linux in v1; unsupported OS jobs are blocked explicitly. |
 | Execution | Customer hosts/VMs/Kubernetes and eligible scalable Cloudflare execution. |
@@ -242,7 +240,7 @@ These are infrastructure tracks, not separate products or editions. Use the same
 
 V1 includes organizations/teams, repositories and Git protocols, LFS, issues/boards, PRs/reviews, branch protection, checks, releases, import/export, live GitHub/GitLab connections, supported Actions/GitLab pipelines, scalable Linux runners, all five agents, inference providers, protected previews, and production CD.
 
-Both infrastructure tracks must work for this common surface using the same Gitea-backed forge contract. The Cloudflare track is hybrid: Gitea and Golf's authoritative core run on supported persistent origin infrastructure while Cloudflare supplies qualified developer services. A second forge implementation is not a v1 requirement.
+Both infrastructure tracks must work for this common surface using the same Forgejo-backed forge contract. The Cloudflare track is hybrid: Forgejo and Golf's authoritative core run on supported persistent origin infrastructure while Cloudflare supplies qualified developer services. A second forge implementation is not a v1 requirement.
 
 Discussions, wikis, package registries, richer security dashboards, hosted interactive IDEs, additional OS support, and broader provider API compatibility follow as explicit expansion work. The core-forge-plus-CI/CD release boundary is the working default; broader GitHub/GitLab parity requires additional published contracts.
 
@@ -261,7 +259,7 @@ flowchart TD
   Client[Browser / Git / CLI / API / agents] --> Edge[Optional Cloudflare edge]
   Client --> Core[Golf Go core]
   Edge --> Core
-  Core --> Forge[Gitea forge through supported APIs]
+  Core --> Forge[Forgejo forge through supported APIs]
   Core --> DB[PostgreSQL and transactional outbox]
   Forge --> Git[Canonical native Git storage]
   Core --> Objects[Filesystem / S3-compatible storage / R2]
@@ -274,40 +272,40 @@ flowchart TD
 
 Start with a modular Go application, separately runnable background workers, and runner/deployment processes. Scale these independently when needed. Do not create a dozen services before their operational boundaries are justified.
 
-The initial Cloudflare track is hybrid: Golf's authoritative core, Gitea and canonical Git run on customer or managed origin infrastructure while Cloudflare supplies extensive managed functions. Qualify its reachability, persistent storage, backups and failure behavior alongside the Cloudflare adapters. An all-Cloudflare forge is a separate architecture decision, not a claim of this release.
+The initial Cloudflare track is hybrid: Golf's authoritative core, Forgejo and canonical Git run on customer or managed origin infrastructure while Cloudflare supplies extensive managed functions. Qualify its reachability, persistent storage, backups and failure behavior alongside the Cloudflare adapters. An all-Cloudflare forge is a separate architecture decision, not a claim of this release.
 
 ### 2.2 Owners
 
 | Data/operation | v1 authority in both tracks |
 | --- | --- |
-| Repository metadata, issues, PRs, reviews, releases, forge permissions | Gitea, through supported Golf integration. |
-| Canonical Git | Gitea-managed native repositories and supported Git receive paths. |
+| Repository metadata, issues, PRs, reviews, releases, forge permissions | Forgejo, through supported Golf integration. |
+| Canonical Git | Forgejo-managed native repositories and supported Git receive paths. |
 | Tasks, automations, workspaces, agent runs | Golf. |
-| Pipeline orchestration, job attempts, runner leases | Golf; duplicate Gitea Actions execution disabled. |
+| Pipeline orchestration, job attempts, runner leases | Golf; duplicate Forgejo Actions execution disabled. |
 | Projects, environments, deployment policy and records | Golf. |
-| Golf membership and credential references | Golf, mapped to Gitea identities; never writes Gitea's database directly. |
-| Effective repository access | Gitea authorization plus restrictive Golf policy. |
+| Golf membership and credential references | Golf, mapped to Forgejo identities; never writes Forgejo's database directly. |
+| Effective repository access | Forgejo authorization plus restrictive Golf policy. |
 | Search, read caches, activity projections | Rebuildable derived state. |
 
-Do not create a second editable PR or repository-permission database. Store Gitea identifiers and read projections, not competing authorities. Golf-specific policies can restrict operations but cannot grant access denied by Gitea. Gitea and Golf use separately owned databases and roles, even when they share a PostgreSQL deployment; each runs only its own supported migrations.
+Do not create a second editable PR or repository-permission database. Store Forgejo identifiers and read projections, not competing authorities. Golf-specific policies can restrict operations but cannot grant access denied by Forgejo. Forgejo and Golf use separately owned databases and roles, even when they share a PostgreSQL deployment; each runs only its own supported migrations.
 
-A repository has one canonical forge: Gitea for Golf-hosted repositories, or its original GitHub/GitLab provider in connected mode. Origin cutover and Gitea instance relocation are fenced migrations with validation, not toggles that start two writers. Any later native-forge adoption requires the same explicit migration boundary.
+A repository has one canonical forge: Forgejo for Golf-hosted repositories, or its original GitHub/GitLab provider in connected mode. Origin cutover and Forgejo instance relocation are fenced migrations with validation, not toggles that start two writers. Any later native-forge adoption requires the same explicit migration boundary.
 
 ### 2.3 Provider boundaries
 
-Create interfaces only where the plan has actual multiple implementations: object storage, executor, inference, origin connection, and deployment targets. Use a concrete Gitea integration with small operation sets and behavior tests; do not build a speculative native-forge abstraction. Connected-origin adapters retain their distinct source-of-truth semantics.
+Create interfaces only where the plan has actual multiple implementations: object storage, executor, inference, origin connection, and deployment targets. Use a concrete Forgejo integration with small operation sets and behavior tests; do not build a speculative native-forge abstraction. Connected-origin adapters retain their distinct source-of-truth semantics.
 
-The Gitea and connected-origin capability catalogs report supported operations and known limitations. Infrastructure track, Gitea version or deployment profile must not silently change protection or approval semantics.
+The Forgejo and connected-origin capability catalogs report supported operations and known limitations. Infrastructure track, Forgejo version or deployment profile must not silently change protection or approval semantics.
 
 ### 2.3.1 Capabilities are Golf features; providers supply implementations
 
 A capability identifies a developer outcome, not a vendor: event intake, workflow execution, agent tasks, notifications, webhook delivery, protected previews, production deployment, object storage or optional inference. Each remains available to implement and operate on the portable track without Cloudflare. Running Claude Code, Codex, OpenCode, Grok or pi on customer machines does not require Workers, Workers AI, Sandbox or any Cloudflare account. AI-disabled installations still run deterministic tasks, Git operations, CI and delivery.
 
-Keep four independently selected axes: **forge/origin**, **execution machine/pool**, **coding harness and its supported authentication/model connection**, and **delivery/infrastructure provider**. A repository can use native Gitea with a Docker worker, a user-authorized coding harness, R2 objects and an SMTP provider. Another can use the same core with Kubernetes jobs and Cloudflare previews. A harness subscription login is neither Golf login nor a general inference API credential. An installed binary is not a working authenticated connection. Sections 9.3–9.6 retain each provider's actual compatibility and authentication limits.
+Keep four independently selected axes: **forge/origin**, **execution machine/pool**, **coding harness and its supported authentication/model connection**, and **delivery/infrastructure provider**. A repository can use native Forgejo with a Docker worker, a user-authorized coding harness, R2 objects and an SMTP provider. Another can use the same core with Kubernetes jobs and Cloudflare previews. A harness subscription login is neither Golf login nor a general inference API credential. An installed binary is not a working authenticated connection. Sections 9.3–9.6 retain each provider's actual compatibility and authentication limits.
 
 | Golf capability | Portable implementation target | Optional Cloudflare implementation | Current boundary |
 | --- | --- | --- | --- |
-| Canonical Git/collaboration | Gitea supported APIs and Git transports; connected origins later | Hybrid origin with optional edge protection; eligible Artifacts task repositories | Shared native forge; protected publication gate remains open. |
+| Canonical Git/collaboration | Forgejo supported APIs and Git transports; connected origins later | Hybrid origin with optional edge protection; eligible Artifacts task repositories | Shared native forge; protected publication gate remains open. |
 | Event intake and task fan-out | Verified native/provider webhooks, PostgreSQL event records/outbox and workers | Workers ingress/Queues or provider-native events with identical normalization | Native HMAC push intake and bounded sponsor-authored shell admission are qualified; broader event adapters remain planned. |
 | Durable coordination | PostgreSQL queue/materialization records, deduplication, leases and bounded Golf coordinator processes | Workflows for durable multi-step waits/approvals/provider steps; Queues for buffering/delivery | PostgreSQL stores authority and run history. Managed Cloudflare coordination is a planned adapter, not an installed local dependency. |
 | CI execution | Existing isolated Docker worker, later qualified Kubernetes/VM pools | Eligible Sandbox/Containers adapters with scheduler admission | Bounded manual and sponsor-authored branch-push one-job shell execution are qualified; native engine parity is not complete. |
@@ -353,7 +351,7 @@ Cost preview is an estimate with dated official price sources, currency, account
 
 **Cloudflare runtime qualification (official documentation reviewed 2026-10-02):** [Containers FAQ](https://developers.cloudflare.com/containers/faq/) documents ephemeral disks by default, immutable point-in-time snapshots for the durable_object scheduling policy, R2/FUSE mounts with different performance, explicit instance routing and no built-in stateless autoscaler yet. Docker-in-Docker is documented with constrained network setup and a root daemon; this does not inherit Golf's local worker isolation proof. [Pricing](https://developers.cloudflare.com/containers/platform/pricing/) bills provisioned memory/disk, active CPU, egress and the associated Workers/Durable Objects; [limits](https://developers.cloudflare.com/containers/platform/limits/) constrain instance sizes and account capacity. [Hyperdrive](https://developers.cloudflare.com/hyperdrive/reference/supported-databases-and-features/) connects to supported existing PostgreSQL/MySQL instances; it is not a PostgreSQL hosting replacement. Revalidate these moving contracts before qualification and refresh estimates from current published rates.
 
-A Cloudflare-focused topology may host qualified application/execution components in Workers/Containers while externalizing durable state. An **entirely Cloudflare-hosted** topology remains a separate unresolved gate: prove canonical Git filesystem locking/atomic refs/durability, database transactions/backup/restore, HTTP/SSH transport, repository affinity/scaling, restart/update/host loss and executor isolation before offering it as a supported preset. Snapshots or an R2 mount alone do not prove Git or PostgreSQL durability. The current Gitea/PostgreSQL core is retained until a supported alternative passes the same corpus; do not describe deploying the existing Compose stack inside a Cloudflare container as a qualified solution.
+A Cloudflare-focused topology may host qualified application/execution components in Workers/Containers while externalizing durable state. An **entirely Cloudflare-hosted** topology remains a separate unresolved gate: prove canonical Git filesystem locking/atomic refs/durability, database transactions/backup/restore, HTTP/SSH transport, repository affinity/scaling, restart/update/host loss and executor isolation before offering it as a supported preset. Snapshots or an R2 mount alone do not prove Git or PostgreSQL durability. The current Forgejo/PostgreSQL core is retained until a supported alternative passes the same corpus; do not describe deploying the existing Compose stack inside a Cloudflare container as a qualified solution.
 
 Deliver this through N4/N9 and P6.1/P7/P8: first the local bootstrap and existing bindings; then one actual Cloudflare account/resource adapter and mixed-provider operation; then the validated deployment plan/cost UI; finally supported Cloudflare compute with complete state/recovery proof. Each picker option requires its own adapter, tests and observable readiness. The fully Cloudflare-hosted gate is not implied by completing the hybrid path.
 
@@ -375,17 +373,17 @@ Local HTTPS qualification increment: [deploy/compose/compose.https.yaml](deploy/
 
 Enforce policy on HTTPS/SSH Git writes, API mutations, the web editor, background merges, and agent submissions. Authenticate before authorizing; never rely on post-push webhooks to reject unauthorized writes.
 
-Gitea owns canonical repository storage and writes through its supported Git receive, API and merge operations. Golf does not write Gitea's repository refs or database directly. Qualify server-controlled protection, expected-candidate/base checks, repository ownership fencing and supported maintenance. Golf-owned task repositories may use standard Git executables and conditional ref updates independently. Never pass untrusted repository names as shell fragments.
+Forgejo owns canonical repository storage and writes through its supported Git receive, API and merge operations. Golf does not write Forgejo's repository refs or database directly. Qualify server-controlled protection, expected-candidate/base checks, repository ownership fencing and supported maintenance. Golf-owned task repositories may use standard Git executables and conditional ref updates independently. Never pass untrusted repository names as shell fragments.
 
-Golf's PostgreSQL state and Gitea operations cannot commit atomically. Record a mutation intent before requesting a canonical write, perform the qualified Gitea operation, finalize from its observed result and reconcile incomplete intents through Gitea after a crash. Do not retry an ambiguous merge or transfer blindly. Emit product events from finalized observations, deduplicated with Gitea events. Test interruption at every boundary.
+Golf's PostgreSQL state and Forgejo operations cannot commit atomically. Record a mutation intent before requesting a canonical write, perform the qualified Forgejo operation, finalize from its observed result and reconcile incomplete intents through Forgejo after a crash. Do not retry an ambiguous merge or transfer blindly. Emit product events from finalized observations, deduplicated with Forgejo events. Test interruption at every boundary.
 
 Checks and approvals reference exact commits. A merge candidate is tested against the current base, and its final update verifies the expected base. If the base changes, reconstruct and retest. Approval invalidation follows the configured review policy, never a stale green badge.
 
-Gitea protection must be configured and contract-tested across protocols and background operations. See [protected branches](https://docs.gitea.com/1.27/usage/access-control/protected-branches/).
+Forgejo protection must be configured and contract-tested across protocols and background operations. See [Forgejo branch protection](https://forgejo.org/docs/latest/user/protection/).
 
-Gitea integration must close bypass routes for Golf-specific restrictions. Public Git HTTPS/SSH, web/API mutations and background merges must pass an enforceable Golf policy boundary, or equivalent backend policy proven by tests. Backend administration/internal APIs are private; generic privileged service tokens are not exposed to clients. Qualify the exact expected-head/base merge contract in P0.8; a Golf queue lock alone cannot fence other Gitea writers. Where a restriction cannot be enforced on every write path, report the capability as unsupported and block that protected workflow. Resolve any required v1 blocker through a documented supported approach or explicit scope decision, not direct ref/database writes or a silent fork. A post-write event or restrictive UI alone does not satisfy this contract.
+Forgejo integration must close bypass routes for Golf-specific restrictions. Public Git HTTPS/SSH, web/API mutations and background merges must pass an enforceable Golf policy boundary, or equivalent backend policy proven by tests. Backend administration/internal APIs are private; generic privileged service tokens are not exposed to clients. Qualify the exact expected-head/base merge contract in P0.8; a Golf queue lock alone cannot fence other Forgejo writers. Where a restriction cannot be enforced on every write path, report the capability as unsupported and block that protected workflow. Resolve any required v1 blocker through a documented supported approach or explicit scope decision, not direct ref/database writes or a silent fork. A post-write event or restrictive UI alone does not satisfy this contract.
 
-Implementation qualification: the [pinned protected-write investigation](docs/GITEA_PROTECTED_WRITE_QUALIFICATION.md) reproduced a stale-approval acceptance window, found no caller expected-base merge predicate, and showed that code writers can satisfy native required status contexts. Exclusive merger accounts and explicit Git base leases are useful tested primitives, but do not alone close the full source/base/candidate/approval contract. P0.8 remains open; protected integration stays unavailable until a supported enforcement design passes its complete corpus. The [role qualification](docs/GITEA_IDENTITY_ROLE_QUALIFICATION.md) separately records viewer/maintainer and recoverable-owner mapping gaps. These findings apply to both infrastructure tracks and do not relax the requirements above. [Proposed ADR 0004](docs/decisions/0004-protected-integration-enforcement.md) defines a fully mediated publication candidate, its uncertainty/fork boundaries and the next P0.8-PUBLISH-1 qualification harness; it is not an accepted or implemented enforcement design. Its [pinned mutation inventory](docs/GITEA_MUTATION_BOUNDARY_INVENTORY.md) explicitly covers native API/web/Git/OAuth routes, private forks and background writers; static inventory does not prove enforced admission. The [live publisher fault qualification](docs/GITEA_PUBLISHER_QUALIFICATION.md) verifies narrow exact-C push and manual bookkeeping while reproducing old-authority/private-fork source races and deleted-head fallback; its experimental journal does not close P0.8.
+Implementation qualification: protected-write, role, mutation-inventory and publisher-fault characterization ran on the earlier backend, since retired; it is not Forgejo evidence and must be repeated against pinned Forgejo. It reproduced a stale-approval acceptance window, found no caller expected-base merge predicate, showed that code writers can satisfy native required status contexts, recorded viewer/maintainer and recoverable-owner role-mapping gaps, and reproduced old-authority/private-fork source races and deleted-head fallback around a narrow exact-C push. Exclusive merger accounts and explicit Git base leases are useful tested primitives, but do not alone close the full source/base/candidate/approval contract. P0.8 remains open; protected integration stays unavailable until a supported enforcement design passes its complete corpus on Forgejo. These findings apply to both infrastructure tracks and do not relax the requirements above. [Proposed ADR 0004](docs/decisions/0004-protected-integration-enforcement.md) defines a fully mediated publication candidate, its uncertainty/fork boundaries and the next P0.8-PUBLISH-1 qualification harness; it is not an accepted or implemented enforcement design. A Forgejo mutation inventory covering native API/web/Git/OAuth routes, private forks and background writers is still required; static inventory does not prove enforced admission.
 
 ### 2.5 Cloudflare Artifacts
 
@@ -397,7 +395,7 @@ Large repositories use native Git workspaces. Canonical Artifacts support is def
 
 V1 creates SHA-1 repositories with the standard files ref backend for broad interoperability. Store the object-format identifier alongside opaque object IDs; never assume every future ID is 40 characters. Import preflight blocks unsupported SHA-256/reftable combinations rather than rewriting history. Git documents that SHA-1 and SHA-256 repositories currently lack interoperability; end-to-end qualification is required before expanding the catalog. See [git-init](https://git-scm.com/docs/git-init).
 
-Qualify Gitea's Git receive quarantine and validation of incoming objects, limits and protected refs before accepting them. Imported hooks are data, never executable server policy. Expected-old-object updates and Git ref transactions underpin applicable Git operations; Golf must preserve them through supported Gitea paths rather than bypass Gitea to call them on canonical repositories. They do not create an atomic transaction with Golf's PostgreSQL state. See [receive-pack](https://git-scm.com/docs/git-receive-pack) and [update-ref](https://git-scm.com/docs/git-update-ref).
+Qualify Forgejo's Git receive quarantine and validation of incoming objects, limits and protected refs before accepting them. Imported hooks are data, never executable server policy. Expected-old-object updates and Git ref transactions underpin applicable Git operations; Golf must preserve them through supported Forgejo paths rather than bypass Forgejo to call them on canonical repositories. They do not create an atomic transaction with Golf's PostgreSQL state. See [receive-pack](https://git-scm.com/docs/git-receive-pack) and [update-ref](https://git-scm.com/docs/git-update-ref).
 
 Schedule bounded repository maintenance, commit-graph/multi-pack optimization, integrity checks, and retention of active task/candidate refs. Coordinate maintenance with writes and backup; prune only after the retention policy releases objects. Avoid shared-clone alternates whose upstream garbage collection can destroy a dependent checkout. Qualify protocol-v2 partial clone and sparse checkout against each backend; hydrate missing objects before offline execution or export. Apply explicit limits to checkout, pack expansion, LFS, and recursive submodules; submodule URLs cannot inherit unrelated repository credentials. See [maintenance](https://git-scm.com/docs/git-maintenance), [clone](https://git-scm.com/docs/git-clone), [protocol v2](https://git-scm.com/docs/gitprotocol-v2), and [submodules](https://git-scm.com/docs/gitmodules).
 
@@ -409,19 +407,19 @@ Qualify current Workers bindings, repository fork/import/token operations, repos
 
 Long-term managed SaaS direction selected on 2026-10-07: fully Cloudflare-native hosting, using the existing shared core as a migration bridge. This is the firm all-Cloudflare requirement that triggers the native ownership/migration ADR described below. The first-release bridge decision and current native owners remain in force until a qualified cutover; they are not the permanent SaaS target. See the [Cloudflare build and scale plan](docs/CLOUDFLARE_BUILD_PLAN.md).
 
-Use Gitea as the shared forge foundation for both infrastructure tracks. Golf owns the developer interface, task/evidence system, CI orchestration, agent integrations and deployment experience. The Cloudflare track remains hybrid; Artifacts serves eligible task repositories and approved handoffs. P0.8 verifies the supported API inventory, identity mapping and policy boundary before the dependent implementation tasks proceed. This decision replaces the earlier dual-forge v1 proposal.
+Use Forgejo as the shared forge foundation for both infrastructure tracks. Golf owns the developer interface, task/evidence system, CI orchestration, agent integrations and deployment experience. The Cloudflare track remains hybrid; Artifacts serves eligible task repositories and approved handoffs. P0.8 verifies the supported API inventory, identity mapping and policy boundary before the dependent implementation tasks proceed. This decision replaces the earlier dual-forge v1 proposal.
 
 | Option | Reuse / operational shape | Main tradeoff |
 | --- | --- | --- |
-| Gitea-backed Golf in both tracks — selected for v1 | Gitea supplies canonical Git and conventional collaboration; Golf supplies its UI, task/evidence system, pipelines and deployment integrations. CF track remains hybrid and uses Artifacts for eligible task repositories. | Fastest route to broad forge functionality; requires proven APIs, identity mapping and enforcement of Golf policy without an invasive fork. |
+| Forge-backed Golf in both tracks — selected for v1 (Forgejo since ADR 0009) | The forge supplies canonical Git and conventional collaboration; Golf supplies its UI, task/evidence system, pipelines and deployment integrations. CF track remains hybrid and uses Artifacts for eligible task repositories. | Fastest route to broad forge functionality; requires proven APIs, identity mapping and enforcement of Golf policy without an invasive fork. |
 | Golf-native core in both tracks — conditional later alternative | Golf would own collaboration/permissions; portable native Git and qualified CF Artifacts could be storage/execution choices beneath that one product model. | More independent ownership, but requires a separately approved implementation/migration plan for the missing forge features; Artifacts does not supply a complete collaboration application. |
-| Gitea collaboration only on portable, native collaboration only on CF — deferred | Shared UI over separate collaboration implementations. | Duplicated policy/identity/migration/behavior testing; reopen only for a demonstrated requirement that the shared foundation cannot meet. |
+| Forge collaboration only on portable, native collaboration only on CF — deferred | Shared UI over separate collaboration implementations. | Duplicated policy/identity/migration/behavior testing; reopen only for a demonstrated requirement that the shared foundation cannot meet. |
 
-Phase 3 therefore hardens Gitea integration, policy, migration and recovery rather than implementing another forge. Reconsider Golf-native only after a documented API/policy blocker or firm all-Cloudflare hosting requirement justifies its cost. A future ADR must define ownership, feature contracts, migration/export and verification before adding that work; do not assume Gitea can use Artifacts as its internal repository filesystem.
+Phase 3 therefore hardens Forgejo integration, policy, migration and recovery rather than implementing another forge. Reconsider Golf-native only after a documented API/policy blocker or firm all-Cloudflare hosting requirement justifies its cost. A future ADR must define ownership, feature contracts, migration/export and verification before adding that work; do not assume Forgejo can use Artifacts as its internal repository filesystem.
 
-Use released Gitea APIs/events and supported deployment/storage configuration. Do not link its internal packages as a stable library, write its database directly, or undertake a deep fork without a measured blocker. Validate the actual UI/API operation inventory and policy boundary first. Gitea can retain forge ownership while Golf provides its own interface, but its authentication/permission model cannot simply be ignored. Canonical Git storage requires its supported persistent repository layout; R2-compatible object storage applies only to the qualified object categories. See [Gitea features](https://docs.gitea.com/), [API](https://docs.gitea.com/api/1.27/), [configuration](https://docs.gitea.com/administration/config-cheat-sheet/) and [Docker deployment](https://docs.gitea.com/installation/install-with-docker/).
+Use released Forgejo APIs/events and supported deployment/storage configuration. Do not link its internal packages as a stable library, write its database directly, or undertake a deep fork without a measured blocker. Validate the actual UI/API operation inventory and policy boundary first. Forgejo can retain forge ownership while Golf provides its own interface, but its authentication/permission model cannot simply be ignored. Canonical Git storage requires its supported persistent repository layout; R2-compatible object storage applies only to the qualified object categories. See [Forgejo documentation](https://forgejo.org/docs/latest/), [API usage](https://forgejo.org/docs/latest/user/api-usage/), [configuration](https://forgejo.org/docs/latest/admin/config-cheat-sheet/) and [administration](https://forgejo.org/docs/latest/admin/).
 
-Cloudflare Artifacts supplies Git-compatible repository primitives and task forks, not the entire Golf issue/review/approval/identity domain. Its documented 1 GB repository and 32 MB blob limits also constrain canonical use. Removing Gitea therefore moves collaboration/protection responsibilities into Golf; it is not merely changing a storage endpoint. See [Artifacts](https://developers.cloudflare.com/artifacts/) and [limits](https://developers.cloudflare.com/artifacts/platform/limits/).
+Cloudflare Artifacts supplies Git-compatible repository primitives and task forks, not the entire Golf issue/review/approval/identity domain. Its documented 1 GB repository and 32 MB blob limits also constrain canonical use. Removing the forge therefore moves collaboration/protection responsibilities into Golf; it is not merely changing a storage endpoint. See [Artifacts](https://developers.cloudflare.com/artifacts/) and [limits](https://developers.cloudflare.com/artifacts/platform/limits/).
 
 ## 3. Technology guide adoption
 
@@ -448,9 +446,9 @@ Follow applicable MUST requirements, document SHOULD deviations, and record any 
 
 ### 3.2 Required ADRs
 
-- Shared Go core, Gitea in both infrastructure tracks, and selective TypeScript Workers adapters.
+- Shared Go core, Forgejo in both infrastructure tracks, and selective TypeScript Workers adapters.
 - TanStack Router for typed navigation and TanStack Form for the requested frontend foundation.
-- Authoritative ownership and Gitea identity/permission mapping.
+- Authoritative ownership and Forgejo identity/permission mapping.
 - PostgreSQL jobs for minimal installations; optional NATS/Cloudflare delivery at scale.
 - Lightweight production profile versus the guide's full local observability stack.
 - Session cookie policy: use `HttpOnly; Secure; SameSite=Lax` with explicit state/nonce/PKCE for OAuth/OIDC callbacks, CSRF protection on mutations, and origin checks. Record departure from the security chapter's Strict recommendation, which differs from the surface chapter.
@@ -477,13 +475,13 @@ Initial source layout: thin `cmd/golf` (server/worker modes), `cmd/golfctl` (ins
 
 ## 4. Forge backends and collaboration
 
-The active full repository-experience workstream is tracked in [the GitHub/Gitea capability matrix](docs/REPOSITORY_EXPERIENCE_PARITY.md), including code/Markdown/diffs, issue and PR mutation/review/merge, Actions, live SSE and agent progress. This expands implementation detail without closing unresolved gates.
+The active full repository-experience workstream is tracked in [the GitHub/forge capability matrix](docs/REPOSITORY_EXPERIENCE_PARITY.md), including code/Markdown/diffs, issue and PR mutation/review/merge, Actions, live SSE and agent progress. This expands implementation detail without closing unresolved gates.
 
 ### 4.1 Common v1 contract
 
-The shared Gitea-backed forge contract covers repository creation/deletion/visibility, effective access, trees/files/history/blame/diffs, Git HTTPS/SSH, LFS, organizations/teams, issues/comments/labels/milestones, boards, PRs/reviews/comments, checks/statuses, protection, tags/releases/attachments, events, and import/export on both infrastructure tracks.
+The shared Forgejo-backed forge contract covers repository creation/deletion/visibility, effective access, trees/files/history/blame/diffs, Git HTTPS/SSH, LFS, organizations/teams, issues/comments/labels/milestones, boards, PRs/reviews/comments, checks/statuses, protection, tags/releases/attachments, events, and import/export on both infrastructure tracks.
 
-Reuse upstream Gitea behavior through supported APIs and events. Add Golf-owned workflow/evidence behavior only where it extends that foundation without creating competing collaboration authorities. Disable duplicate workflow execution by Gitea when Golf owns the workflow.
+Reuse upstream Forgejo behavior through supported APIs and events. Add Golf-owned workflow/evidence behavior only where it extends that foundation without creating competing collaboration authorities. Disable duplicate workflow execution by Forgejo when Golf owns the workflow.
 
 ### 4.2 Collaboration rules
 
@@ -503,15 +501,15 @@ Current shared-core discussion increment: [ordinary issue/comment writes](docs/I
 
 OSS includes local invite-only accounts, configurable OIDC login, organizations, teams, and safe bootstrap. Bootstrap issues a one-time administrator enrollment credential; it is invalidated after enrollment. No public default password. Local password storage uses a reviewed password-hashing implementation; hardened profiles may require external federation instead.
 
-Prioritize genuine Golf username/password sign-in for the local developer installation; a native Gitea token input is advanced bootstrap tooling, not the primary product login. The [local authentication contract](docs/LOCAL_AUTHENTICATION.md) defines operator-enrolled Golf password verifiers, independently scoped immutable forge mappings and database-backed opaque sessions. Passwords use Argon2id with reviewed fixed parameters; do not forward Golf passwords to Gitea or store them as reversible ciphertext. HTTPS cookies are host-only `__Host-` cookies with Secure, HttpOnly, SameSite and persistent expiry; local HTTP is explicitly limited to loopback. Backend restarts do not invalidate unexpired sessions; password reset/disable, explicit logout/revocation and expiry do. Bound login attempts across replicas and password-hash concurrency, and deny account/role claims from native JSON. Recovery disables restored local accounts until deliberate re-enrollment with a fresh password and validated immutable forge credential. Self-service recovery, MFA, step-up, external OIDC and a complete instance-admin management surface remain separately qualified tasks. Use [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) and [session management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) as review inputs, not an automatic certification.
+Prioritize genuine Golf username/password sign-in for the local developer installation; a native forge token input is advanced bootstrap tooling, not the primary product login. The [local authentication contract](docs/LOCAL_AUTHENTICATION.md) defines operator-enrolled Golf password verifiers, independently scoped immutable forge mappings and database-backed opaque sessions. Passwords use Argon2id with reviewed fixed parameters; do not forward Golf passwords to Forgejo or store them as reversible ciphertext. HTTPS cookies are host-only `__Host-` cookies with Secure, HttpOnly, SameSite and persistent expiry; local HTTP is explicitly limited to loopback. Backend restarts do not invalidate unexpired sessions; password reset/disable, explicit logout/revocation and expiry do. Bound login attempts across replicas and password-hash concurrency, and deny account/role claims from native JSON. Recovery disables restored local accounts until deliberate re-enrollment with a fresh password and validated immutable forge credential. Self-service recovery, MFA, step-up, external OIDC and a complete instance-admin management surface remain separately qualified tasks. Use [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) and [session management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) as review inputs, not an automatic certification.
 
 Login with GitHub/GitLab is separate from authorizing a repository connection. Matching an email alone cannot merge identities or grant organization membership. Account linking requires proof of control of both accounts.
 
-Map Golf accounts and groups to Gitea identities; evaluate Gitea permissions for writes and sensitive reads. Do not mint an unrestricted administrator token for every product operation.
+Map Golf accounts and groups to Forgejo identities; evaluate Forgejo permissions for writes and sensitive reads. Do not mint an unrestricted administrator token for every product operation.
 
 ### 4.4 Ingress and search
 
-Golf owns the customer-facing UI in both tracks; Gitea is a supported internal forge service, not the product frontend. Use the standard pinned Gitea deployment behind private networking and explicit ingress rules rather than assuming a separate frontend-free distribution. Native REST stays internal to authorized Golf services; expose only deliberately qualified Git/LFS/SSH routes and separately controlled operator access. Current Gitea OAuth login/consent, token setup and unfinished native workflows remain explicit development exceptions until Golf owns their supported replacements. Prove registration/sign-in, consent/revocation, Git/LFS transports, administration and denial of unintended native pages/API writes before claiming an entirely Golf-facing installation. Hiding HTML alone does not fence Git/API/background write bypasses or close P0.8.
+Golf owns the customer-facing UI in both tracks; Forgejo is a supported internal forge service, not the product frontend. Use the standard pinned Forgejo deployment behind private networking and explicit ingress rules rather than assuming a separate frontend-free distribution. Native REST stays internal to authorized Golf services; expose only deliberately qualified Git/LFS/SSH routes and separately controlled operator access. Current Forgejo OAuth login/consent, token setup and unfinished native workflows remain explicit development exceptions until Golf owns their supported replacements. Prove registration/sign-in, consent/revocation, Git/LFS transports, administration and denial of unintended native pages/API writes before claiming an entirely Golf-facing installation. Hiding HTML alone does not fence Git/API/background write bypasses or close P0.8.
 
 Provide a direct Git/LFS ingress option for request sizes or protocols not suited to ordinary Cloudflare proxy limits. SSH is an explicit endpoint; ordinary Workers HTTP routing is not a generic SSH server.
 
@@ -527,7 +525,7 @@ Preserve effective rules across overlapping rulesets, bypass identities, protect
 
 ### 4.6 Repository lifecycle, forks and large files
 
-The common v1 contract explicitly includes public/private repositories, create-from-template, fork creation and upstream relationships, cross-repository PRs, draft/ready state, reviewer assignment, resolved/unresolved threads, merge/squash/rebase policies, archive/unarchive, rename/transfer and controlled deletion. Test same-repository and fork contributions through Gitea on both infrastructure tracks. Private forks retain an explicit access boundary; changing parent visibility or membership must not unexpectedly publish code. Rename/transfer updates Git URLs, origin mappings, hooks, automation, deployment and credential references; redirects never grant broader access or forward credentials to an unrelated host.
+The common v1 contract explicitly includes public/private repositories, create-from-template, fork creation and upstream relationships, cross-repository PRs, draft/ready state, reviewer assignment, resolved/unresolved threads, merge/squash/rebase policies, archive/unarchive, rename/transfer and controlled deletion. Test same-repository and fork contributions through Forgejo on both infrastructure tracks. Private forks retain an explicit access boundary; changing parent visibility or membership must not unexpectedly publish code. Rename/transfer updates Git URLs, origin mappings, hooks, automation, deployment and credential references; redirects never grant broader access or forward credentials to an unrelated host.
 
 LFS v1 publishes supported discovery, batch/basic transfer, upload verification, size/hash integrity, authentication and locking behavior. Default target includes lock/list/verify/unlock with owner/admin rules; unsupported backend/transport combinations are preflight blockers. Object existence or a guessed hash never grants repository access. Enforce upload quotas before accepting bytes, expire incomplete uploads, and retain LFS objects referenced by retained branches/tags/imports. Reachable missing LFS objects block verified import/backup completion. See [LFS batch](https://github.com/git-lfs/git-lfs/blob/main/docs/api/batch.md) and [locking](https://github.com/git-lfs/git-lfs/blob/main/docs/api/locking.md).
 
@@ -549,7 +547,7 @@ Local accounts need verified enrollment, reset/recovery, session listing/revocat
 | --- | --- | --- |
 | Connected origin | GitHub/GitLab | Golf receives events, runs eligible CI/agents, returns checks/comments/PRs or merge requests, and deploys projects without claiming forge ownership. |
 | Migration rehearsal | Origin until cutover | Golf imports into a staging destination, reports fidelity, and validates before switching writes. |
-| Imported repository | Gitea through Golf | Gitea owns new collaboration/Git writes under Golf's qualified policy boundary; historical origin identifiers remain preserved. |
+| Imported repository | Forgejo through Golf | Forgejo owns new collaboration/Git writes under Golf's qualified policy boundary; historical origin identifiers remain preserved. |
 | Read mirror | Explicit origin | One-way Git synchronization for authorized uses; no implicit two-way metadata synchronization. |
 
 These modes are explicit per repository. V1 does not attempt a conflict-prone universal bidirectional forge synchronization system.
@@ -575,7 +573,7 @@ Default external mutations are PR/MR proposals. Auto-merge or production deploym
 1. Connect account/instance and select repositories.
 2. Audit history, refs, blobs, LFS, submodules, metadata, workflows, policies, and integrations.
 3. Produce an unchanged/adaptable/blocked report before import.
-4. Select the destination Gitea installation/organization and map identities/groups deliberately.
+4. Select the destination Forgejo installation/organization and map identities/groups deliberately.
 5. Import Git and supported collaboration metadata into a staging destination.
 6. Verify refs/object integrity, attachments, counts, relationships, and fidelity losses.
 7. Freeze source writes for cutover and synchronize the final delta.
@@ -896,7 +894,7 @@ Current bounded foundation: [owner-issued read-only API credentials](docs/API_CR
 
 API/CLI/MCP expose authorized task, repository, workspace, test, evidence, PR, and deployment operations. Remote MCP uses authenticated transport and operation-scoped authorization; local adapters call the same domain API. ACP connects Golf to supported agents; it is not interchangeable with MCP tool access.
 
-Current bounded increment: [local stdio MCP](docs/MCP_CONTRACT.md) implements discovery and 19 existing CLI/API reads using official Go SDK v1.8.0, a fixed owner-configured Golf origin and scoped Gitea PAT bootstrap. Each call creates/deletes a temporary Golf session and records session activity; the adapter does not claim side-effect-free or idempotent behavior. Native-provider/SDK-client qualification covers all 19 tools under both `2026-07-28` and legacy `2025-11-25`; separate raw-wire cancellation/framing checks cover both versions. Exact evidence is recorded in the ledger. This advances only part of P0.9/P5.5; full conformance, remote authorization, ACP, tool mutations/approvals, managed credentials, actual coding-agent clients and task execution remain separate gates.
+Current bounded increment: [local stdio MCP](docs/MCP_CONTRACT.md) implements discovery and 19 existing CLI/API reads using official Go SDK v1.8.0, a fixed owner-configured Golf origin and scoped Forgejo PAT bootstrap. Each call creates/deletes a temporary Golf session and records session activity; the adapter does not claim side-effect-free or idempotent behavior. Native-provider/SDK-client qualification covers all 19 tools under both `2026-07-28` and legacy `2025-11-25`; separate raw-wire cancellation/framing checks cover both versions. Exact evidence is recorded in the ledger. This advances only part of P0.9/P5.5; full conformance, remote authorization, ACP, tool mutations/approvals, managed credentials, actual coding-agent clients and task execution remain separate gates.
 
 Protected preview access for agents uses configured Access service authentication, distinct from human sign-in. Limit it to the intended application/task, rotate/revoke it, and prevent forwarding credentials to unrelated redirects. See [authenticate coding agents](https://developers.cloudflare.com/cloudflare-one/access-controls/authenticate-agents/).
 
@@ -995,7 +993,7 @@ Generic media-product integration is outside this plan: normal application confi
 
 Choose Golf-managed CI/CD or native Workers Builds per deployment project. When native Builds owns execution, Golf records provider runs/events and policy state rather than firing a second deploy. A gated project cannot retain an independent on-push route that bypasses Golf approval.
 
-Native Builds supports documented origins, not arbitrary Golf/Gitea URLs. Use Golf execution or an approved immutable Artifacts handoff for other origins. Any handoff is read/build-only until release policy authorizes deployment. See [Workers CI/CD](https://developers.cloudflare.com/workers/ci-cd/) and [Artifacts builds](https://developers.cloudflare.com/artifacts/guides/build-and-deploy-on-push/).
+Native Builds supports documented origins, not arbitrary Golf/forge URLs. Use Golf execution or an approved immutable Artifacts handoff for other origins. Any handoff is read/build-only until release policy authorizes deployment. See [Workers CI/CD](https://developers.cloudflare.com/workers/ci-cd/) and [Artifacts builds](https://developers.cloudflare.com/artifacts/guides/build-and-deploy-on-push/).
 
 Queues/Workflows/DO state manages transport/provider steps, while Golf owns task policy, release approval, and canonical merge intent. Recovery reconstructs provider steps from Golf records rather than starting a parallel permission system.
 
@@ -1163,7 +1161,7 @@ Runner leases and resource operations have fencing. Large logs/artifacts live ou
 
 Irreversible external effects are not claimed exactly-once. Inspect existing effects by operation ID before retry, and require operator recovery for ambiguous non-idempotent actions.
 
-The implemented [repository-creation contract](docs/REPOSITORY_CREATION_CONTRACT.md) is a bounded first mutation journal: exact-input UUID binding per immutable account/forge, reservation plus initial event committed before one native POST, and typed unknown/success/rejection evidence. It has no dispatch worker or outbox. Repeated keys never resend, successful output rechecks current native repository ID/access, and the browser resumes status inspection only after reload. Actual Gitea acknowledgment loss remains unknown across replay/restart with one counted POST; it is not automatically adopted by name. Concurrent/rollback/privacy tests and fresh-restore operation/event preservation pass. Other operations still need their own semantics, tenant model and external-effect proofs; P1.3, P2.2 and P0.8 are not complete.
+The implemented [repository-creation contract](docs/REPOSITORY_CREATION_CONTRACT.md) is a bounded first mutation journal: exact-input UUID binding per immutable account/forge, reservation plus initial event committed before one native POST, and typed unknown/success/rejection evidence. It has no dispatch worker or outbox. Repeated keys never resend, successful output rechecks current native repository ID/access, and the browser resumes status inspection only after reload. Actual forge acknowledgment loss (observed on the earlier backend) remains unknown across replay/restart with one counted POST; it is not automatically adopted by name. Concurrent/rollback/privacy tests and fresh-restore operation/event preservation pass. Other operations still need their own semantics, tenant model and external-effect proofs; P1.3, P2.2 and P0.8 are not complete.
 
 ### 12.4 Notifications
 
@@ -1201,7 +1199,7 @@ Persist notification preference, email/thread/message/delivery, webhook subscrip
 
 | Profile | Required deployment | Optional expansion |
 | --- | --- | --- |
-| Minimal | Golf, PostgreSQL, Gitea, persistent Git/artifact volumes, basic health/audit/backup | Trusted Linux runner; selected Cloudflare services. |
+| Minimal | Golf, PostgreSQL, Forgejo, persistent Git/artifact volumes, basic health/audit/backup | Trusted Linux runner; selected Cloudflare services. |
 | Team | Separate background/runner processes, object storage, scheduled backups, quotas | Full observability, search, additional pools. |
 | Scale | Kubernetes, independently scaled workers/runners, HA database/storage, queue, indexed search | Regional cells and dedicated tenant placement. |
 | Enterprise | Supported HA/regional distribution, federation/lifecycle, governance | Government pack, HSM/KMS, managed hosting, dedicated pools. |
@@ -1210,15 +1208,15 @@ Single-node profiles do not claim HA. Their security/data-integrity requirements
 
 ### 13.2 Compose and Kubernetes
 
-Use the same versioned application images, configuration schema, migrations, capability gates, and health logic. Compose deploys single-host services with named persistent volumes; bundle Gitea by default or connect an explicitly qualified external Gitea installation. Runners, object storage and observability use optional profiles.
+Use the same versioned application images, configuration schema, migrations, capability gates, and health logic. Compose deploys single-host services with named persistent volumes; bundle Forgejo by default or connect an explicitly qualified external Forgejo installation. Runners, object storage and observability use optional profiles.
 
-Helm packages API/worker roles, Gitea or its external connection, execution configuration, ingress, persistent storage, resource requests/limits, probes, security contexts, secrets references, and network policy. Support external PostgreSQL/object storage instead of forcing bundled production databases.
+Helm packages API/worker roles, Forgejo or its external connection, execution configuration, ingress, persistent storage, resource requests/limits, probes, security contexts, secrets references, and network policy. Support external PostgreSQL/object storage instead of forcing bundled production databases.
 
-Pin a maintained Gitea release and image digest in the version inventory. Give Gitea its own PostgreSQL database and role; Golf application features cannot directly query or migrate that database. Privileged offline backup/recovery may use documented native database tools against a stopped, drained installation and a fresh quarantined target; this narrow P1.6 operator boundary does not permit direct application writes. Begin with one active canonical repository writer and supported persistent storage. Additional Golf API/workers/runners may scale independently; Gitea HA or shared repository storage needs a separate validated topology, write fencing and recovery proof before multiple writers are enabled.
+Pin a maintained Forgejo release and image digest in the version inventory. Give Forgejo its own PostgreSQL database and role; Golf application features cannot directly query or migrate that database. Privileged offline backup/recovery may use documented native database tools against a stopped, drained installation and a fresh quarantined target; this narrow P1.6 operator boundary does not permit direct application writes. Begin with one active canonical repository writer and supported persistent storage. Additional Golf API/workers/runners may scale independently; Forgejo HA or shared repository storage needs a separate validated topology, write fencing and recovery proof before multiple writers are enabled.
 
-Coordinated backups include Golf's database, Gitea's database, Git repositories, LFS objects, attachments/releases, relevant configuration, encryption material and SSH/signing keys. Encrypt backup secrets and preserve supported Gitea restore procedures. Fence writes for a consistent recovery point when required; restore the pinned compatible versions and verify identities, protected refs, LFS, signatures and Golf projections before reopening writes. R2/S3 may store qualified object categories and backups; neither is assumed to replace Gitea's repository filesystem.
+Coordinated backups include Golf's database, Forgejo's database, Git repositories, LFS objects, attachments/releases, relevant configuration, encryption material and SSH/signing keys. Encrypt backup secrets and preserve supported Forgejo restore procedures. Fence writes for a consistent recovery point when required; restore the pinned compatible versions and verify identities, protected refs, LFS, signatures and Golf projections before reopening writes. R2/S3 may store qualified object categories and backups; neither is assumed to replace Forgejo's repository filesystem.
 
-The current [offline recovery foundation](docs/RECOVERY.md) implements encrypted native capture/validation and fresh quarantined restoration for the canonical three-service Docker profile only: PostgreSQL 18.4, Gitea 1.27.3 and Golf schema 202610020004, with source runtime configuration, both complete Gitea volumes and locally available exact image IDs. Images are not bundled. The operator must drain all writers; repeated state checks and `--writers-drained` are not an administrator or distributed fence. Real PostgreSQL invalidation, offline archive checks and the bounded native fresh-restore/whole-stack restart drill pass in the [evidence ledger](docs/IMPLEMENTATION_STATUS.md). The small fixture skips its minimum-size-cap negative case; no 8 GiB, load or RPO/RTO result is claimed. Kubernetes, external stores/databases, cross-version restore, full inventory/scale and production recovery objectives remain P1.6 work.
+The current [offline recovery foundation](docs/RECOVERY.md) implements encrypted native capture/validation and fresh quarantined restoration for the canonical three-service Docker profile only: PostgreSQL 18.4, the pinned forge and Golf schema 202610020004, with source runtime configuration, both complete forge volumes and locally available exact image IDs. The drills recorded in the ledger ran on the earlier backend; the tooling was source-ported to Forgejo 15.0.9 on 2026-10-16 and no Forgejo drill has run yet. Images are not bundled. The operator must drain all writers; repeated state checks and `--writers-drained` are not an administrator or distributed fence. Real PostgreSQL invalidation, offline archive checks and the bounded native fresh-restore/whole-stack restart drill pass in the [evidence ledger](docs/IMPLEMENTATION_STATUS.md). The small fixture skips its minimum-size-cap negative case; no 8 GiB, load or RPO/RTO result is claimed. Kubernetes, external stores/databases, cross-version restore, full inventory/scale and production recovery objectives remain P1.6 work.
 
 Migrations run once with locking and explicit outcome; concurrent application instances do not race to alter schema. Default images run non-root where their function permits. No application cluster-admin permission. Per-job service accounts and network boundaries are explicit.
 
@@ -1242,7 +1240,7 @@ Default license for new OSS code: Apache-2.0. Complete license review of bundled
 
 | OSS foundation | Enterprise additions |
 | --- | --- |
-| Shared Gitea-backed forge on both infrastructure tracks | Supported HA/regional distributions and operational support. |
+| Shared Forgejo-backed forge on both infrastructure tracks | Supported HA/regional distributions and operational support. |
 | Compose and Helm/Kubernetes | Advanced identity lifecycle/SCIM and supported SAML/PIV federation. |
 | Core CI, agents, CLI/API/MCP/ACP adapters | Organization-wide governance, advanced policy administration. |
 | GitHub/GitLab connections and import/export | Compliance evidence workflows, retention governance/legal hold. |
@@ -1356,7 +1354,7 @@ Use bounded queues, resource-aware fairness, quotas, backpressure, paginated rea
 
 Optional affected-component CI uses a deterministic repository dependency graph, explained invalidation, stable aggregate checks, and opt-in shadow comparison before skipping jobs. Shared schema/lockfile/build config changes invalidate broadly. No LLM decides that required tests are unnecessary.
 
-Scale Git/web/background/search/compute separately. Regional cells own organizations/repositories; cross-cell moves are fenced migrations. Do not invent globally writable branch state or promise that Helm alone makes Gitea globally distributed.
+Scale Git/web/background/search/compute separately. Regional cells own organizations/repositories; cross-cell moves are fenced migrations. Do not invent globally writable branch state or promise that Helm alone makes Forgejo globally distributed.
 
 ### 15.3 Cost and abuse controls
 
@@ -1376,7 +1374,7 @@ Enforce organization/pool/project quotas, maximum fan-out, preview counts/TTL, a
 
 These are engineering targets, not promises that an arbitrary customer's configuration achieves them. The installation reports configured protection and last successful recovery drill.
 
-Recovery must preserve relationships among Golf's PostgreSQL state, Gitea's database, Git refs, objects, identity/SSH/signing configuration and external deployment state. Verify restored repository integrity through supported Gitea recovery procedures and reconcile Golf operation intents/outbox before permitting writes. Quarantine ambiguous mutations rather than replaying irreversible operations blindly.
+Recovery must preserve relationships among Golf's PostgreSQL state, Forgejo's database, Git refs, objects, identity/SSH/signing configuration and external deployment state. Verify restored repository integrity through supported Forgejo recovery procedures and reconcile Golf operation intents/outbox before permitting writes. Quarantine ambiguous mutations rather than replaying irreversible operations blindly.
 
 The implemented operator safeguard transactionally invalidates all restored Golf sessions and pending OAuth attempts, including expired records, and writes an independent append-only recovery record without fabricating user sign-outs or altering identity/account/crypto history. Its transaction is not old-writer fencing. Restore remains quarantined until authoritative post-backup native/provider revocations, memberships/protections, deletion tombstones and outbound queues/mirrors are reconciled. Restored bytes cannot undo an external issuer's refresh rotation. The current Docker tool does not automate that reconciliation or authorize traffic reopening; a controlled fixture start is narrower evidence. See [recovery operations and remaining gates](docs/RECOVERY.md).
 
@@ -1401,7 +1399,7 @@ Each task records status, owner when assigned, dependencies, changed contracts, 
 
 Current repository bootstrap policy: create the private `mjtechguy/golf-git` repository and use local build, formatting, validation and test commands only. Do not add or enable GitHub Actions workflows, GitLab CI configuration or other repository-hosted CI automation yet. This applies to Golf's own development repository; the product's planned pipeline ingestion and execution capabilities remain in scope. Enabling repository CI is a later explicit user decision.
 
-The initial implementation may deliver a bounded local slice that authenticates with a user's scoped Gitea token and exercises real repository operations through Golf. Label this temporary development authentication explicitly: it does not satisfy Golf local/OIDC login, sessions, organization isolation, account linking or managed credential storage. Keep tokens out of URLs/logs, avoid persistent browser storage, preserve Gitea authorization and restrict any unaudited bootstrap to local development. Minimal early HTTP handlers do not replace the planned versioned API/Connect contracts. Track the slice's actual checks separately from incomplete P1/P2 acceptance; do not present it as production-ready or completed v1.
+The initial implementation may deliver a bounded local slice that authenticates with a user's scoped Forgejo token and exercises real repository operations through Golf. Label this temporary development authentication explicitly: it does not satisfy Golf local/OIDC login, sessions, organization isolation, account linking or managed credential storage. Keep tokens out of URLs/logs, avoid persistent browser storage, preserve Forgejo authorization and restrict any unaudited bootstrap to local development. Minimal early HTTP handlers do not replace the planned versioned API/Connect contracts. Track the slice's actual checks separately from incomplete P1/P2 acceptance; do not present it as production-ready or completed v1.
 
 ### 16.1 Next execution sequence: portable automation first, Cloudflare adapters alongside qualified consumers
 
@@ -1441,7 +1439,7 @@ Depends on: none. Outcome: verified feasibility boundaries and a concrete implem
 | P0.5 | Prove Actions runtime and pinned GitLab coordinator/executor ADR | Real job, service, log/artifact, cancellation, and token smoke checks. |
 | P0.6 | Qualify Cloudflare Sandbox/Containers/CI SDK and limits | Controlled live Linux build with resources/network/cleanup evidence. |
 | P0.7 | Prove five harness interfaces and supported auth/provider paths | Real structured execution/cancel check per harness; untested combinations blocked. |
-| P0.8 | Record shared Gitea v1 decision; qualify API/policy boundary, licensing and ownership | Pinned Gitea operation/identity inventory, protected-write and conditional-merge proof, dependency notices and ADRs; required unsupported paths block completion. |
+| P0.8 | Record shared forge v1 decision (Forgejo, ADR 0009); qualify API/policy boundary, licensing and ownership | Pinned Forgejo operation/identity inventory, protected-write and conditional-merge proof, dependency notices and ADRs; required unsupported paths block completion. |
 | P0.9 | Qualify MCP/ACP versions, official Cloudflare tooling, and eligible ChatGPT-plan integration | Real discovery/auth/approval/cancel/refresh checks; unavailable eligibility remains explicit. |
 | P0.10 | Qualify Email Service, Event Subscriptions, Issues automations and latest Artifacts/Containers contracts | Controlled send/inbound/delivery-event/error-event/fork/build checks; live access and limits recorded. |
 
@@ -1459,18 +1457,18 @@ Depends on: P0 contracts and ADRs.
 | P1.2 | Bootstrap/local/OIDC identity, org/team roles, refresh/revocation | Account linking, tenant access, CSRF/origin, session tests. |
 | P1.3 | Credential references/encryption, audit, outbox, jobs | Key rotation and duplicate delivery/restart checks. |
 | P1.4 | TanStack shell/navigation/forms/tables, full settings pages and theme tokens; G1/G2 in6.4 | Black/charcoal and light screenshots, persisted theme, keyboard/mobile/deep links and honest enforceable-control inventory. |
-| P1.5 | Compose/Helm, pinned Gitea profile, configuration validation, capability/health | Fresh install/restart on both; separate Golf/Gitea DB roles, one canonical writer and external dependencies correctly gated. |
-| P1.6 | Object storage and coordinated Golf/Gitea backup/export/restore primitives | Fresh-instance restoration of both DBs, repositories, LFS/attachments/configuration and encrypted key material; integrity checks. |
+| P1.5 | Compose/Helm, pinned Forgejo profile, configuration validation, capability/health | Fresh install/restart on both; separate Golf/Forgejo DB roles, one canonical writer and external dependencies correctly gated. |
+| P1.6 | Object storage and coordinated Golf/Forgejo backup/export/restore primitives | Fresh-instance restoration of both DBs, repositories, LFS/attachments/configuration and encrypted key material; integrity checks. |
 | P1.7 | Structured logs/OTel/metrics and optional dev stack | Correlation across API/DB/job; dashboard smoke check. |
 | P1.8 | Human/service/Git credentials, role matrix, MFA/recovery and CLI login | Scoped tokens/SSH, rotation/revocation, owner recovery, local/OIDC paths and noninteractive login checks. |
 
 P1.6 progress is deliberately bounded: the [Docker recovery tool and operator safeguard](docs/RECOVERY.md) pass native encrypted backup/fresh restore, stopped-target quarantine, restored-credential invalidation, preserved repository-creation operations/events with own lookup and same-key replay, private signed Git/LFS/attachment/protection/identity checks, new writes and simultaneous whole-stack restart. The small fixture explicitly skips its minimum-payload-cap negative case; it is not an 8 GiB, load or RPO/RTO qualification. Wider object-storage, Kubernetes/external topology, all-repository inventory, provider revocation/tombstone and outbound-work reconciliation, and production recovery gates remain open. Backup age encryption is separate from the [application credential keyring](docs/CREDENTIAL_KEYRING.md).
 
-P1.7 progress is scoped to the existing shared core: [injected zerolog/OTLP/Prometheus runtime](docs/OBSERVABILITY.md), current API→native Gitea/PostgreSQL traces, separate authenticated metrics and an optional Jaeger/Prometheus/Grafana development overlay. [ADR-0006](docs/decisions/0006-private-observability-runtime.md) explicitly records the guide deviation from Tempo/Loki and leaves centralized log retention/search open. Telemetry omits credentials, source text, repository/user identity and SQL statements/parameters. Jobs/runners do not exist yet, so API→job propagation, production/load/alerting/retention and live Kubernetes scraping/export remain required future qualification; this does not close P1.7. Runnable evidence belongs in the implementation ledger.
+P1.7 progress is scoped to the existing shared core: [injected zerolog/OTLP/Prometheus runtime](docs/OBSERVABILITY.md), current API→native Forgejo/PostgreSQL traces, separate authenticated metrics and an optional Jaeger/Prometheus/Grafana development overlay. [ADR-0006](docs/decisions/0006-private-observability-runtime.md) explicitly records the guide deviation from Tempo/Loki and leaves centralized log retention/search open. Telemetry omits credentials, source text, repository/user identity and SQL statements/parameters. Jobs/runners do not exist yet, so API→job propagation, production/load/alerting/retention and live Kubernetes scraping/export remain required future qualification; this does not close P1.7. Runnable evidence belongs in the implementation ledger.
 
 Gate: persistent authenticated portable installation with safe tenant boundaries and verified restoration.
 
-### Phase 2 — Gitea-backed forge and origin connections
+### Phase 2 — Forgejo-backed forge and origin connections
 
 Depends on: Phase 1.
 
@@ -1492,21 +1490,21 @@ P2.4/P2.6 now have personal encrypted provider-token connections and exact selec
 
 Gate: useful Golf collaboration and origin connection without requiring migration; direct import has a verified report/cutover path. P2.8 delivers portable email/event behavior; its Cloudflare path closes with P6.9. Results APIs are tested here; real pipeline/agent callbacks close in Phases 4–5.
 
-### Phase 3 — Gitea integration, protection, and recovery hardening
+### Phase 3 — Forgejo integration, protection, and recovery hardening
 
 Depends on: Phase 1, P0.8 supported-operation proof and Phase 2 forge contracts. Existing P3 task IDs are retained for traceability; they now harden the selected shared foundation rather than building a second forge.
 
 | ID | Task | Acceptance evidence |
 | --- | --- | --- |
-| P3.1 | Harden Gitea Git ingress, supported maintenance and Golf operation recovery | Concurrent writes, object/ref integrity and interrupted API/merge recovery; no direct canonical ref/database mutations by Golf. |
-| P3.2 | Reconcile Gitea collaboration projections and effective authorization | Restart/event-gap/permission-revocation suite; Gitea remains sole collaboration authority. |
+| P3.1 | Harden Forgejo Git ingress, supported maintenance and Golf operation recovery | Concurrent writes, object/ref integrity and interrupted API/merge recovery; no direct canonical ref/database mutations by Golf. |
+| P3.2 | Reconcile Forgejo collaboration projections and effective authorization | Restart/event-gap/permission-revocation suite; Forgejo remains sole collaboration authority. |
 | P3.3 | Enforce protection, check/approval invalidation and qualified conditional merges | Stale base/evidence and all direct/API/editor/background write-path rejection scenarios. |
-| P3.4 | Harden Gitea LFS/attachments/boards and staged migration | Large objects/attachments, interrupted import/export and coordinated restoration checks. |
-| P3.5 | Fence Gitea instance relocation and connected-origin cutover | One canonical writer throughout relocation; restored identities/relationships, URLs and policy verified. |
-| P3.6 | Integrate serial merge queue and supported Git lifecycle controls | Exact candidate checks through qualified Gitea paths; moved-base invalidation; quarantine, object formats, maintenance/retention and safe task checkout checks. |
+| P3.4 | Harden Forgejo LFS/attachments/boards and staged migration | Large objects/attachments, interrupted import/export and coordinated restoration checks. |
+| P3.5 | Fence Forgejo instance relocation and connected-origin cutover | One canonical writer throughout relocation; restored identities/relationships, URLs and policy verified. |
+| P3.6 | Integrate serial merge queue and supported Git lifecycle controls | Exact candidate checks through qualified Forgejo paths; moved-base invalidation; quarantine, object formats, maintenance/retention and safe task checkout checks. |
 | P3.7 | Qualify complete repository/identity/LFS contract in both infrastructure profiles | P2.9 corpus on portable and hybrid CF origins; missing LFS, unauthorized object access and credential/signature negatives. |
 
-Gate: the shared Gitea integration passes the forge and recovery contract on portable and hybrid Cloudflare origin profiles, with a single canonical writer and no unenforced protected write path. Merge-queue tests use controlled checks initially; real CI integration closes after P4.9. Cloudflare provider-specific operations close in Phase 6 and the full release matrix in P8.1. A second forge implementation is outside this gate.
+Gate: the shared Forgejo integration passes the forge and recovery contract on portable and hybrid Cloudflare origin profiles, with a single canonical writer and no unenforced protected write path. Merge-queue tests use controlled checks initially; real CI integration closes after P4.9. Cloudflare provider-specific operations close in Phase 6 and the full release matrix in P8.1. A second forge implementation is outside this gate.
 
 ### Phase 4 — CI frontends and customer execution
 
@@ -1593,7 +1591,7 @@ Depends on: Phases 1–7 shared contract gates.
 
 | ID | Task | Acceptance evidence |
 | --- | --- | --- |
-| P8.1 | Full shared-forge/track/installation acceptance matrix | Gitea-backed Golf on portable and hybrid CF tracks, with Compose/Kubernetes origin installations where applicable. |
+| P8.1 | Full shared-forge/track/installation acceptance matrix | Forgejo-backed Golf on portable and hybrid CF tracks, with Compose/Kubernetes origin installations where applicable. |
 | P8.2 | Rehearse GitHub/GitLab migration and connected-origin use | No forced migration, fidelity reports, cutover/write fencing. |
 | P8.3 | Benchmarks, saturation/soak, provider fault injection | Published reproducible datasets/resources/results and blockers. |
 | P8.4 | Tenant/security/supply-chain and emergency disable checks | Cross-tenant/credential/provenance/revocation negative tests. |
@@ -1617,7 +1615,7 @@ Depends on: verified core and measured demand/operational requirements.
 | P9.2 | Retention/governance/legal hold/evidence and government distribution | Capability-specific evidence and supported crypto/environment inventory. |
 | P9.3 | Golf-managed hosting with Workers for Platforms/Cloudflare for SaaS | Tenant limits/outbound controls, domains/certs, metering/abuse controls. |
 | P9.4 | Advanced Actions/GitLab semantics and provider APIs | Versioned conformance corpus expansion. |
-| P9.5 | Discussions/wikis/packages/security surfaces/interactive workspaces | Supported Gitea/Golf feature contracts and migration fidelity; native-forge work requires a separate approved ADR and plan. |
+| P9.5 | Discussions/wikis/packages/security surfaces/interactive workspaces | Supported Forgejo/Golf feature contracts and migration fidelity; native-forge work requires a separate approved ADR and plan. |
 | P9.6 | Authorized semantic retrieval and large-scale analytics | Revocation/deletion isolation, derived-not-authoritative usage. |
 | P9.7 | macOS/Windows and additional provider execution | Platform/image/runtime corpora and scheduling qualification. |
 
@@ -1659,7 +1657,7 @@ Email/webhook release checks cover: protected summaries after membership removal
 ### 17.3 End-to-end demonstrations
 
 1. Connect GitHub and GitLab repositories without migration; discover projects, receive an event, run supported checks, and return a PR/MR proposal.
-2. Import repositories into Gitea-backed Golf on each infrastructure track with a preflight/fidelity report and verified history/LFS/collaboration data.
+2. Import repositories into Forgejo-backed Golf on each infrastructure track with a preflight/fidelity report and verified history/LFS/collaboration data.
 3. Run supported GitHub Actions and GitLab pipelines unchanged on customer Linux and qualified Cloudflare pools; show an unsupported pipeline blocked before execution.
 4. Run each required agent from an event or schedule, collect tests/evidence, and produce a PR/MR under default authority.
 5. Use Workers AI from a supported harness or direct Golf AI task; show unsupported combinations unavailable rather than failing mysteriously.
@@ -1681,7 +1679,7 @@ A release cannot claim both infrastructure tracks verified from one profile's re
 
 | Risk | Mitigation |
 | --- | --- |
-| Gitea API/policy limits may block requested behavior | Early supported-operation and all-write-path proofs; fail closed, preserve one authority, resolve blockers explicitly; native forge is conditional later scope. |
+| Forgejo API/policy limits may block requested behavior | Early supported-operation and all-write-path proofs; fail closed, preserve one authority, resolve blockers explicitly; native forge is conditional later scope. |
 | Two pipeline ecosystems have server-side semantics | Exact bounded contract, early engine/coordinator proof, upstream-derived corpus, fail closed. |
 | Cloudflare changes quickly | Date-stamped capability qualification, pinned adapters, live checks and explicit readiness. |
 | Managed resource/CD partial failures | Desired/observed records, ownership, fencing/idempotency, reconciliation and fault tests. |
@@ -1694,8 +1692,8 @@ A release cannot claim both infrastructure tracks verified from one profile's re
 ### 18.2 Explicit defaults
 
 - System UI theme initially; explicit dark mode uses black/dark charcoal.
-- Core forge plus CI/CD v1; one Gitea-backed forge shared by both infrastructure tracks.
-- Cloudflare track is hybrid; canonical core/Gitea require supported persistent origin infrastructure.
+- Core forge plus CI/CD v1; one Forgejo-backed forge shared by both infrastructure tracks.
+- Cloudflare track is hybrid; canonical core/Forgejo require supported persistent origin infrastructure.
 - Current private repository bootstrap uses local checks only; repository CI workflows remain disabled/uncreated until explicitly requested.
 - Linux only; unsupported OS jobs blocked.
 - Customer-owned Cloudflare accounts first.
@@ -1710,7 +1708,7 @@ A release cannot claim both infrastructure tracks verified from one profile's re
 
 ### 18.3 Deliberate deferrals
 
-Defer a second Golf-native forge, universal GitHub/GitLab API parity, arbitrary upstream runner binaries, canonical Artifacts Git, global multi-writer repositories, custom Kubernetes operator, universal bidirectional forge sync, TanStack DB, and media products without a specific application need. A native forge requires a demonstrated Gitea blocker or explicit all-Cloudflare hosting requirement and a separate ownership/migration/acceptance plan.
+Defer a second Golf-native forge, universal GitHub/GitLab API parity, arbitrary upstream runner binaries, canonical Artifacts Git, global multi-writer repositories, custom Kubernetes operator, universal bidirectional forge sync, TanStack DB, and media products without a specific application need. A native forge requires a demonstrated Forgejo blocker or explicit all-Cloudflare hosting requirement and a separate ownership/migration/acceptance plan.
 
 These deferrals reduce implementation burden without removing requested capabilities. Add them when a migration blocker or measured operational requirement makes them necessary, and give them a separate contract/test gate.
 
@@ -1727,8 +1725,8 @@ Links are implementation sources, not proof that an integration has already been
 - [Technology Selection Guide](https://technology-selection-guide.aws.ablabs.io/)
 - [Full guide for agents](https://technology-selection-guide.aws.ablabs.io/llms-full.txt)
 - [Guide source](https://github.com/alphabravocompany/technology-selection-guide)
-- [Gitea documentation](https://docs.gitea.com/)
-- [Gitea protected branches](https://docs.gitea.com/1.27/usage/access-control/protected-branches/)
+- [Forgejo documentation](https://forgejo.org/docs/latest/)
+- [Forgejo branch protection](https://forgejo.org/docs/latest/user/protection/)
 - [Actions runner source](https://github.com/actions/runner)
 - [GitHub workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
 - [GitLab CI syntax](https://docs.gitlab.com/ci/yaml/)
@@ -1801,7 +1799,7 @@ Reviewed against primary documentation on 2026-10-01. Findings below are design 
 | --- | --- | --- |
 | Worktrees share repository state; task snapshots can retain secrets. | Independent clones for hostile boundaries; authenticated snapshot ownership, fresh credentials on restore. | P3.6, P6.8; v1. |
 | Git writes and object lifecycle need more than storage capacity. | Quarantine, conditional ref transactions, bounded maintenance, active-ref retention, object-format preflight and safe submodules. | P3.6; v1. |
-| PR head checks do not prove a queued merge candidate passed. | Serial Golf queue through qualified Gitea operations; GitHub merge_group input and exact GitLab candidate qualification; speculative trains deferred. | P3.6, P4.9; v1. |
+| PR head checks do not prove a queued merge candidate passed. | Serial Golf queue through qualified Forgejo operations; GitHub merge_group input and exact GitLab candidate qualification; speculative trains deferred. | P3.6, P4.9; v1. |
 | GitHub/GitLab protection and CODEOWNERS semantics differ. | Format-specific effective-policy migration; blocked weakening and unmapped required approvers. | P2.7; v1. |
 | Webhook delivery alone cannot guarantee synchronization. | Durable intake, scoped hydration/redelivery and periodic permission/state reconciliation. | P2.7; v1. |
 | Agent-created events need both CI coverage and recursion limits. | Actor/token-aware causality, bounded automation generations, separate required PR/check execution. | P4.9; v1. |
@@ -1870,7 +1868,7 @@ Measure time from task intake to first agent action, checked proposal, protected
 
 | User requirement / necessary supporting contract | Specification | Tasks and release evidence |
 | --- | --- | --- |
-| GitHub replacement with shared Gitea forge in both tracks | 2, 4 | P0.8, P2.1–P2.3/P2.9 and P3.1–P3.7; shared fork/Git/review/LFS/protection corpus and supported Gitea ownership/recovery. |
+| GitHub replacement with shared Forgejo forge in both tracks | 2, 4 | P0.8, P2.1–P2.3/P2.9 and P3.1–P3.7; shared fork/Git/review/LFS/protection corpus and supported Forgejo ownership/recovery. |
 | Deep useful Cloudflare integration; no service-count goal | 10, 21 | P0.6/P0.10, P6; each activated service has a developer outcome and verified account capability. |
 | Cloudflare-independent Compose and Kubernetes | 11.10, 13 | P1.5, P4.5, P7.7/P7.10, P8.1; both installs and protected CD tested without CF. |
 | GitHub/GitLab connection and direct import | 5 | P2.4–P2.7, P8.2; connection and fenced import evidence for each origin. |
@@ -1891,15 +1889,15 @@ Measure time from task intake to first agent action, checked proposal, protected
 
 ### 23.2 Delivery milestones and task readiness
 
-Use these milestones rather than promising all v1 scope at a demo deadline: M0 proofs and architecture/guide decisions; M1 useful Gitea-backed portable forge/connection with qualified identity, protection and recovery; M2 deterministic Actions/GitLab execution on customer pools; M3 optional five-agent support and qualified hybrid CF execution; M4 protected previews and production delivery on both tracks; M5 hardening, migration, documentation and verified v1. A demonstration may be a clearly labeled vertical slice through these milestones and does not waive the remaining v1 work.
+Use these milestones rather than promising all v1 scope at a demo deadline: M0 proofs and architecture/guide decisions; M1 useful Forgejo-backed portable forge/connection with qualified identity, protection and recovery; M2 deterministic Actions/GitLab execution on customer pools; M3 optional five-agent support and qualified hybrid CF execution; M4 protected previews and production delivery on both tracks; M5 hardening, migration, documentation and verified v1. A demonstration may be a clearly labeled vertical slice through these milestones and does not waive the remaining v1 work.
 
 Before a task becomes ready, assign an accountable implementation owner and reviewer, exact predecessor task IDs, files/contracts to change, runnable positive/negative acceptance checks and expected evidence. Break large task rows into local checklists under the same stable ID. Unassigned owner or unknown estimate is explicit; do not invent staffing or delivery dates. Track planned/in-progress/blocked/implemented/verified independently of installed capability state. A changed requirement updates the corresponding task, test and coverage row together.
 
-Key integration dependencies: P0.8 closes Gitea policy/conditional-merge feasibility before dependent Phase 3 work; P3.6 + P4.9 close queue/CI integration; P2.8 + P6.9 close CF email; P5.6 + P7.8 close agent-requested production promotion; P6.6 + P7.4 close private browser tests; P7.10 + P1.8 close portable local-account preview access; P8.1/P8.11 require the shared Gitea forge on both infrastructure tracks. No later feature is treated as already available to an earlier phase.
+Key integration dependencies: P0.8 closes Forgejo policy/conditional-merge feasibility before dependent Phase 3 work; P3.6 + P4.9 close queue/CI integration; P2.8 + P6.9 close CF email; P5.6 + P7.8 close agent-requested production promotion; P6.6 + P7.4 close private browser tests; P7.10 + P1.8 close portable local-account preview access; P8.1/P8.11 require the shared Forgejo forge on both infrastructure tracks. No later feature is treated as already available to an earlier phase.
 
 ### 23.3 Remaining proof decisions and honest completion
 
-P0 must resolve the Actions engine subset, pinned GitLab coordinator interoperability, Gitea policy enforcement boundary, five harness/auth eligibility combinations, CF compute/Artifacts/Email account capabilities, supported storage/ingress profiles, and complete guide deviation register. The plan specifies their outcomes and blocking behavior; it does not establish feasibility merely by listing tasks. Where a required proof fails, revise the implementation approach or record a scope decision before calling the affected capability complete.
+P0 must resolve the Actions engine subset, pinned GitLab coordinator interoperability, Forgejo policy enforcement boundary, five harness/auth eligibility combinations, CF compute/Artifacts/Email account capabilities, supported storage/ingress profiles, and complete guide deviation register. The plan specifies their outcomes and blocking behavior; it does not establish feasibility merely by listing tasks. Where a required proof fails, revise the implementation approach or record a scope decision before calling the affected capability complete.
 
 The review closes identified specification gaps, not all possible future requirements. The plan is ready to drive Phase 0; the complete v1 claim requires the coverage matrix, compatibility catalogs, real integration evidence, operations drills and documented limitations to pass. Government/FIPS and conditional analytics/optimization products remain separate expansion gates. Review the plan at each milestone and after an upstream breaking change.
 
@@ -2018,7 +2016,7 @@ The [native inline characterization](docs/PULL_REVIEW_COMMENTS_NATIVE_QUALIFICAT
 
 Human inline/multiline batch authoring, durable private drafts, replies, suggestions, edit/delete, resolve/reopen, dismissal and correct original/current diff mapping remain required. Future reply writes must independently read and authorize the parent review: native reply POST accepts a known comment ID from another user's hidden pending review even though that review's comments GET returns 404. Native review creation also writes comments before submission without one encompassing transaction; a failed batch can leave partial pending state. Reserve exact ordered comment inputs and reviewed-diff identities durably, reject observed pre-existing pending drafts, independently verify every returned child and retain uncertain/partial outcomes without reposting or adopting an unrelated draft. Neither a successful native POST nor a shared line proves complete-thread visibility or write authority.
 
-The expanded [native boundary fixture](docs/GITEA_BOUNDARY_FIXTURE.md) advances metadata/current-user identity and PAT/Bearer-PAT wrong-target/replay checks. Its experimental qualification does not close P0.8 admission, complete mediation or effective-write fencing. This read increment adds no migration; latest-schema 034 coordinated recovery, protected merge/squash/rebase, full review collaboration and both-track scale remain open.
+An expanded native boundary fixture on the earlier backend (since retired) advanced metadata/current-user identity and PAT/Bearer-PAT wrong-target/replay checks. It is not Forgejo evidence, and its experimental qualification does not close P0.8 admission, complete mediation or effective-write fencing. This read increment adds no migration; latest-schema 034 coordinated recovery, protected merge/squash/rebase, full review collaboration and both-track scale remain open.
 
 
 ### 2026-10-03 exact PR comparison and inline authoring sequence
@@ -2027,7 +2025,7 @@ An implemented GX-3/P2.2 preparation packet strengthens the existing `GetPullReq
 
 Local evidence: TypeScript and whitespace checks pass; **443/443 browser tests pass in 2.6m** after the shared responsive correction; six focused toolbar cases pass in 8.4s at 1280/390/320px in both themes. The earlier 116-test affected suite passed 58.5s, including seven new cases for divergent old-side anchors/Viewed reset, wrong repository/PR/merge-base receipts and unavailable/malformed metadata before dispatch. **The new served exact-ID private-fork comparison qualification passed** on image `sha256:c8875d57eaa3d5f17760bdc1751aedf4830d16cd76bc33350f9879f1813ca769`; all four fixture actors and the private base/renamed fork were purged. Supported Git clone/fetch independently proves common M versus branch-tip B, blob identities and exact raw diff bytes. API/CLI/PAT-bearer MCP, base-only authority without general fork read, wrong ID/head/outsider/Origin denial, four actual theme/mobile browser captures, live private revocation and stale target after movement pass. The actual 390px capture exposed cramped toolbar labels; the global correction now wraps complete controls without shrinking/breaking labels, with final 443-test browser proof; replacement-image served recapture passes on `sha256:1f81b70aec461e5d2591ffb58ab17ede5f1b13fa07e18e97b60bb29a12d47017`. Exact final image, native Git/blob/diff evidence, test results and cleanup belong in the implementation ledger. No new writer or migration is introduced.
 
-The [actual inline-write characterization](docs/PULL_INLINE_WRITE_NATIVE_QUALIFICATION.md) passes serial supported Gitea 1.27.3 cases with five fixture actors and the repository purged. It proves a merge base distinct from the branch tip; a supplied historical review head can coexist with current-head stored hunk context and different line/blame objects. Appending/submitting an own pending review can rebind its header while retaining earlier children. Both later-child 500 and final-submit 422 failures left a pending child. Knowing a hidden foreign pending parent ID allowed a reply and author resolution despite 404 on reads. These native observations are requirements for conservative Golf admission/receipts, not a qualified Golf writer, private-fork authoring or a target-side write fence.
+The [actual inline-write characterization](docs/PULL_INLINE_WRITE_NATIVE_QUALIFICATION.md) passed serial supported cases on the earlier backend (since retired; not Forgejo evidence) with five fixture actors and the repository purged. It proves a merge base distinct from the branch tip; a supplied historical review head can coexist with current-head stored hunk context and different line/blame objects. Appending/submitting an own pending review can rebind its header while retaining earlier children. Both later-child 500 and final-submit 422 failures left a pending child. Knowing a hidden foreign pending parent ID allowed a reply and author resolution despite 404 on reads. These native observations are requirements for conservative Golf admission/receipts, not a qualified Golf writer, private-fork authoring or a target-side write fence.
 
 The [inline implementation design](docs/INLINE_REVIEW_IMPLEMENTATION_DESIGN.md) supplies the following ordered packets under GX-3/GX-4/P2.2/P2.9/P5.5. They apply to both infrastructure tracks with AI/Cloudflare optional; complete human and agent review parity remains required.
 
@@ -2049,7 +2047,7 @@ Priority correction for the existing managed bot writer: apply the same native f
 
 ### 2026-10-03 native feature and URL integration follow-up
 
-The [native feature and URL audit](docs/NATIVE_FEATURE_AND_URL_AUDIT.md) records the supported API/Git boundary and currently exposed versus missing product surfaces. Retain native repository/transport capabilities rather than rebuilding them; Golf owns its UI, typed contracts, automation and durable intent. This integration direction is implemented for bounded features, not complete Gitea/GitHub parity.
+The [native feature and URL audit](docs/NATIVE_FEATURE_AND_URL_AUDIT.md) records the supported API/Git boundary and currently exposed versus missing product surfaces. Retain native repository/transport capabilities rather than rebuilding them; Golf owns its UI, typed contracts, automation and durable intent. This integration direction is implemented for bounded features, not complete forge/GitHub parity.
 
 The latest bounded source increment implements redundant path-owned query removal, canonical repository settings with legacy aliases, authorized tree/blob and legacy normalization, and shared deep-link selector validation. Optional native unit configuration now distinguishes false/unknown; disabled Issues/PR controls and deep work panels are gated, metadata revalidates on mutable activity, and unsupported Wiki configuration is read only. These flags do not grant authority or establish that an enabled external tracker is an internal unit. Readable branch/tag entry links still require a qualified slash-ref/path resolver and exact immutable operation snapshots. Prioritize unified account-disable/Git ingress, protected merge/direct-native write enforcement, complete collaboration and native branch/fork/import/release coverage; maintain distinct GitHub/GitLab CI engine requirements. The audit does not close P0.8, latest-schema036 recovery or the full implementation goal.
 
@@ -2069,7 +2067,7 @@ The [readable source URL design](docs/READABLE_SOURCE_URL_DESIGN.md) preserves o
 
 RS-1 is now implemented through `eabe5b9`: typed default/branch/tag/commit resolution, expected native repository ID and exact source/image receipts across browser/README/navigator/CLI/MCP, and exact object-based sibling workflow reads. Bounded source/real-PG/native and replacement-image served qualification pass, with runtime identities, cleanup and limitations in [implementation status](docs/IMPLEMENTATION_STATUS.md). This supersedes only the earlier RS-1 design-only state. RS-2 still must retain readable branch/tag addresses, resolve slash/name ambiguity exhaustively, provide explicit Latest/Copy permalink and qualify same-ID rename/recreation. Current SHA normalization is not that completion.
 
-The deep GitHub/Gitea layout review adds a repository sidebar packet: align root refs/Code toolbar inside the left column with About at the top of the right rail; expose exact-ID/current-authority-bound About, safe website, topics, indexed language byte statistics, detected license IDs and honest native star/watch/fork counts. Reuse shared components/global CSS and keep the bounded Golf workspace, both themes/mobile/keyboard and private late-result clearing. Native indexed languages/licenses are repository observations, never selected-SHA facts. Contributors need a complete supported source or a separately designed bounded Golf index; recent commit authors cannot become a total. Releases/assets, watch/star/fork actions, repository-linked packages and Golf deployment/environment visibility remain separate feature adapters with their own authority, pagination and native/served tests. No fake disabled links, partial totals or invented successful integrations.
+The deep GitHub/native-forge layout review adds a repository sidebar packet: align root refs/Code toolbar inside the left column with About at the top of the right rail; expose exact-ID/current-authority-bound About, safe website, topics, indexed language byte statistics, detected license IDs and honest native star/watch/fork counts. Reuse shared components/global CSS and keep the bounded Golf workspace, both themes/mobile/keyboard and private late-result clearing. Native indexed languages/licenses are repository observations, never selected-SHA facts. Contributors need a complete supported source or a separately designed bounded Golf index; recent commit authors cannot become a total. Releases/assets, watch/star/fork actions, repository-linked packages and Golf deployment/environment visibility remain separate feature adapters with their own authority, pagination and native/served tests. No fake disabled links, partial totals or invented successful integrations.
 
 Follow-up archive qualification should independently compare normalized whole-workspace ordinary bytes/PAX commit for an old full SHA versus a SHA-looking moved branch/tag, including unchanged workflow but changed other source and Git archive attributes. Native source inspection currently resolves full object IDs before ref guessing, so do not label archives vulnerable to the `contents-ext` precedence bug without actual evidence. Preserve explicit snapshot/archive semantics and future LFS/submodule/.git requirements.
 

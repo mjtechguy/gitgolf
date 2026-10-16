@@ -31,7 +31,7 @@ func (s *Server) GetAccountSecurity(ctx context.Context, req *connect.Request[go
 		if err != nil {
 			return err
 		}
-		row, err := database.New(s.db).GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		row, err := database.New(s.db).GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if errors.Is(err, sql.ErrNoRows) {
 			return errUnauthenticated
 		}
@@ -83,7 +83,7 @@ func (s *Server) ownSecuritySnapshot(ctx context.Context, value string, token fo
 	if err != nil {
 		return empty, err
 	}
-	row, err := database.New(s.db).GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	row, err := database.New(s.db).GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return empty, errUnauthenticated
 	}
@@ -153,7 +153,7 @@ func (s *Server) changeOwnSecurity(ctx context.Context, value string, token forg
 	}
 	defer tx.Rollback()
 	q := database.New(s.db).WithTx(tx)
-	owner, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.GiteaURL})
+	owner, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return empty, errUnauthenticated
 	}
@@ -170,14 +170,14 @@ func (s *Server) changeOwnSecurity(ctx context.Context, value string, token forg
 	if account.DisabledAt.Valid || account.CredentialVersion != initial.CredentialVersion || account.PasswordHash != initial.PasswordHash {
 		return empty, errUnauthenticated
 	}
-	_, err = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	_, err = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return empty, errUnauthenticated
 	}
 	if err != nil {
 		return empty, errStorageUnavailable
 	}
-	current, err := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	current, err := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return empty, errUnauthenticated
 	}

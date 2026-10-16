@@ -51,7 +51,7 @@ func (s *Server) releaseAssetBytes(ctx context.Context, token forgeCredential, k
 	}
 	// Pinned native web AllowOAuth2 accepts PAT as Bearer. The API's PAT "token"
 	// scheme does not authenticate this route. Never follow ServeDirect redirects.
-	endpoint := s.config.GiteaURL + "/" + url.PathEscape(key.Owner) + "/" + url.PathEscape(key.Name) + "/releases/attachments/" + row.UUID
+	endpoint := s.config.ForgeURL + "/" + url.PathEscape(key.Owner) + "/" + url.PathEscape(key.Name) + "/releases/attachments/" + row.UUID
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, errInvalidForgeResponse

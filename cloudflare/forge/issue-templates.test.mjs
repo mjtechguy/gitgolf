@@ -136,7 +136,8 @@ test('YAML issue forms refuse aliases, anchors and everything outside the bounde
 test('templates are listed from the default-branch head with every portable source', async t => {
   const markdown = '---\nname: Bug report\nabout: Reproduce a bug\ntitle: "[Bug]"\n---\n## Steps\n';
   const f = await fixture(t, {
-    '.gitea/ISSUE_TEMPLATE/feature.md': 'Describe the feature.\n', '.gitea/ISSUE_TEMPLATE.md': 'Gitea single.\n',
+    '.forgejo/ISSUE_TEMPLATE/feature.md': 'Describe the feature.\n', '.forgejo/ISSUE_TEMPLATE.md': 'Forgejo single.\
+',
     '.github/ISSUE_TEMPLATE/bug.md': markdown, '.github/ISSUE_TEMPLATE/form.yml': form('  - type: input\n    attributes: { label: Version }\n'),
     '.github/ISSUE_TEMPLATE/config.yml': 'blank_issues_enabled: false\n', '.github/ISSUE_TEMPLATE/notes.txt': 'not a template', '.github/ISSUE_TEMPLATE/linked.md': { symlink: 'bug.md' },
     '.github/ISSUE_TEMPLATE/nested/deep.md': 'ignored', '.github/ISSUE_TEMPLATE/large.md': 'x'.repeat(6001), '.github/ISSUE_TEMPLATE/limit.md': 'x'.repeat(6000),
@@ -148,8 +149,8 @@ test('templates are listed from the default-branch head with every portable sour
   const response = await f.call(); assert.equal(response.status, 200, await response.clone().text());
   const data = await response.json();
   assert.equal(data.commitId, head); assert.equal(data.unsupportedTemplates, 4);
-  assert.deepEqual(data.templates.map(row => [row.path, row.name]), [['.gitea/ISSUE_TEMPLATE/feature.md', 'feature'], ['.github/ISSUE_TEMPLATE/bug.md', 'Bug report'], ['.github/ISSUE_TEMPLATE/form.yml', 'Bug'],
-    ['.github/ISSUE_TEMPLATE/limit.md', 'limit'], ['.gitea/ISSUE_TEMPLATE.md', 'ISSUE_TEMPLATE'], ['.github/ISSUE_TEMPLATE.md', 'ISSUE_TEMPLATE'], ['ISSUE_TEMPLATE.md', 'ISSUE_TEMPLATE']]);
+  assert.deepEqual(data.templates.map(row => [row.path, row.name]), [['.forgejo/ISSUE_TEMPLATE/feature.md', 'feature'], ['.github/ISSUE_TEMPLATE/bug.md', 'Bug report'], ['.github/ISSUE_TEMPLATE/form.yml', 'Bug'],
+    ['.github/ISSUE_TEMPLATE/limit.md', 'limit'], ['.forgejo/ISSUE_TEMPLATE.md', 'ISSUE_TEMPLATE'], ['.github/ISSUE_TEMPLATE.md', 'ISSUE_TEMPLATE'], ['ISSUE_TEMPLATE.md', 'ISSUE_TEMPLATE']]);
   const bug = data.templates[1];
   assert.deepEqual(bug, { path: '.github/ISSUE_TEMPLATE/bug.md', name: 'Bug report', about: 'Reproduce a bug', title: '[Bug]', body: '## Steps\n', blobId: f.blob('.github/ISSUE_TEMPLATE/bug.md'), fields: [] });
   assert.equal(data.templates[2].fields[0].label, 'Version'); assert.equal(data.templates[3].body.length, 6000);

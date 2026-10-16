@@ -217,7 +217,7 @@ def main():
     OUTPUT=args.output.resolve();OUTPUT.mkdir(mode=0o700,exist_ok=False);OUTPUT.chmod(0o700)
     stack=args.stack_root.resolve();record(status='running',expectedSource=args.expected_source,uiRequested=args.ui)
     if args.ui:require((stack/'web/node_modules/playwright/index.mjs').is_file(),'installed_browser_required')
-    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_','DOCKER_')) and k!='DATABASE_URL'}
+    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_','DOCKER_')) and k!='DATABASE_URL'}
     def run(*argv,payload=None,timeout=180):
         try:result=subprocess.run(argv,cwd=stack,env=environment,input=None if payload is None else json.dumps(payload).encode(),capture_output=True,timeout=timeout)
         except subprocess.TimeoutExpired as error:raise pool_helpers.PrivateSubprocessFailure(pool_helpers.process_observation(argv,None,error.stdout,error.stderr,True)) from None
@@ -247,7 +247,7 @@ def main():
         if original_error is not None:raise original_error
         return result
     stage('exact source, public binaries, cached dependencies and reserve')
-    image_rows={key:json.loads(run('docker','image','inspect',reference))[0] for key,reference in (('core',args.image),('runner',args.runner_image),('legacy',args.old_runner_image),('native','gitea/gitea:1.27.3-rootless'),('postgres','postgres:18.4-alpine3.24'),('daemon',DIND))}
+    image_rows={key:json.loads(run('docker','image','inspect',reference))[0] for key,reference in (('core',args.image),('runner',args.runner_image),('legacy',args.old_runner_image),('native','codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'),('postgres','postgres:18.4-alpine3.24'),('daemon',DIND))}
     for key in ('core','runner'):require((image_rows[key]['Config'].get('Labels') or {}).get('org.opencontainers.image.revision')==args.expected_source,'image_source_binding')
     require(all(row.get('Os')=='linux' and row.get('Architecture')==image_rows['core'].get('Architecture') for row in image_rows.values()),'same_linux_image_architecture')
     require(image_rows['core']['Id']==args.image and image_rows['runner']['Id']==args.runner_image and image_rows['legacy']['Id']==args.old_runner_image and args.runner_image!=args.old_runner_image,'exact_image_identity')
@@ -258,8 +258,8 @@ def main():
     space=ephemeral(args.image,'/bin/df','-Pk','/')
     require(int(space.splitlines()[-1].split()[3])>=2*1024*1024,'disk_reserve_below_2gib')
     record(images={key:{'image':value['Id'],'source':(value['Config'].get('Labels') or {}).get('org.opencontainers.image.revision') if re.fullmatch(r'[a-f0-9]{40}',(value['Config'].get('Labels') or {}).get('org.opencontainers.image.revision','')) else None} for key,value in image_rows.items()},publicBinarySha256=public_hashes,workingTreeHead=run('git','rev-parse','HEAD'))
-    project='golf-limits-'+secrets.token_hex(5);ports=helpers.free_ports(3);previous=smoke.GOLF,smoke.GITEA
-    smoke.GOLF,smoke.GITEA=f'http://127.0.0.1:{ports[0]}',f'http://127.0.0.1:{ports[1]}'
+    project='golf-limits-'+secrets.token_hex(5);ports=helpers.free_ports(3);previous=smoke.GOLF,smoke.FORGE
+    smoke.GOLF,smoke.FORGE=f'http://127.0.0.1:{ports[0]}',f'http://127.0.0.1:{ports[1]}'
     keys={name:base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=') for name in WORKERS}
     actors={};forbidden=list(keys.values());started=False;original=None;cleanup=[];passed=False;daemon=None
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
@@ -271,7 +271,7 @@ def main():
         run('openssl','x509','-req','-in',str(tls/'server.csr'),'-CA',str(tls/'ca.crt'),'-CAkey',str(tls/'ca.key'),'-CAcreateserial','-days','1','-extfile',str(tls/'extensions'),'-out',str(tls/'server.crt'),timeout=20)
         for file in ('ca.crt','server.crt','server.key'):(tls/file).chmod(0o444)
         context=ssl.create_default_context(cafile=str(tls/'ca.crt'));context.minimum_version=ssl.TLSVersion.TLSv1_3
-        values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')}
+        values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_RUNNER_KEY=keys['worker-a'],GOLF_RUNNER_KEYS=json.dumps(keys),GOLF_RUNNER_IMAGES=json.dumps({'linux':IMAGE}),GOLF_RUNNER_JOB_IMAGE=IMAGE,GOLF_RUNNER_APPROVED_IMAGES=json.dumps([IMAGE]),GOLF_PUSH_CI_ENABLED='false')
         forbidden.extend(value for key,value in values.items() if key.endswith(('PASSWORD','ENCRYPTION_KEY')))
         env_file=directory/'core.env';override=directory/'proof.yaml'
@@ -315,12 +315,12 @@ def main():
       GOLF_INTERNAL_TLS_CERT_FILE: /run/golf/internal-tls/server.crt
       GOLF_INTERNAL_TLS_KEY_FILE: /run/golf/internal-tls/server.key
     volumes: ["{tls/'server.crt'}:/run/golf/internal-tls/server.crt:ro", "{tls/'server.key'}:/run/golf/internal-tls/server.key:ro"]
-  gitea:
+  forgejo:
     image: {image_rows['native']['Id']}
     pull_policy: never
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
-      GITEA__actions__ENABLED: 'false'
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
+      FORGEJO__actions__ENABLED: 'false'
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
   runner-daemon:
     image: {image_rows['daemon']['Id']}
@@ -342,7 +342,7 @@ def main():
 ''')
         compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(stack/'compose.yaml'),'-f',str(stack/'deploy/compose/compose.ci.yaml'),'-f',str(override)]
         def command(*argv,**kw):return run(*compose,*argv,**kw)
-        def admin(*argv):return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*argv)
+        def admin(*argv):return command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*argv)  # Forgejo's upstream path
         pool_helpers.record=record
         def rpc(actor,method,payload=None,**kw):return pool_helpers.checked_rpc(actor['session'],method,payload,**kw)
         def observation(item):return rpc(actors['owner'],'WorkflowRunService/GetWorkflowRun',{'runId':item['id']})['run']
@@ -369,12 +369,12 @@ def main():
             return not daemon_command('ps','-aq',*filters) and not daemon_command('volume','ls','-q',*filters)
         def runtime():
             row=json.loads(run('docker','inspect',command('ps','-q','golf')))[0];require(row['Image']==args.image,'unchanged_core_image')
-            return {'image':row['Image'],'composeConfigHash':row['Config']['Labels']['com.docker.compose.config-hash'],'nativeVersion':smoke.request(smoke.client(),'GET',smoke.GITEA+'/api/v1/version')['version']}
+            return {'image':row['Image'],'composeConfigHash':row['Config']['Labels']['com.docker.compose.config-hash'],'nativeVersion':smoke.request(smoke.client(),'GET',smoke.FORGE+'/api/v1/version')['version']}
         try:
             stage('fresh TLS core/native/database and root-seeded owned daemon')
             started=True;record(project=project,cleanup='pending')
-            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf','runner-daemon');smoke.ready();command('up','-d','--no-build','--pull','never','runner-image-init')
-            before=runtime();require(before['nativeVersion']=='1.27.3','pinned_native');record(runtimeBefore=before)
+            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','forgejo','golf','runner-daemon');smoke.ready();command('up','-d','--no-build','--pull','never','runner-image-init')
+            before=runtime();require(before['nativeVersion']=='15.0.9+gitea-1.22.0','pinned_native');record(runtimeBefore=before)  # Forgejo's upstream version string
             with socket.create_connection(('127.0.0.1',ports[2]),timeout=10) as connection:
                 with context.wrap_socket(connection,server_hostname='127.0.0.1') as verified:require(verified.version()=='TLSv1.3','tls13_verified')
             for bad_context,hostname in ((ssl.create_default_context(),'127.0.0.1'),(context,'wrong.golf.invalid')):
@@ -528,7 +528,7 @@ def main():
                     command('down','--volumes','--remove-orphans',timeout=180)
                     for argv in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):require(not run('docker',*argv,'--filter','label=com.docker.compose.project='+project),'owned_compose_cleanup')
                 except Exception:cleanup.append('fresh-compose-resources')
-            smoke.GOLF,smoke.GITEA=previous;record(status='passed' if passed and not cleanup else 'failed',complete=passed and not cleanup,cleanup='failed' if cleanup else 'passed',cleanupFailures=cleanup)
+            smoke.GOLF,smoke.FORGE=previous;record(status='passed' if passed and not cleanup else 'failed',complete=passed and not cleanup,cleanup='failed' if cleanup else 'passed',cleanupFailures=cleanup)
             raw=pool_helpers.safe_manifest(PROOF,forbidden);(OUTPUT/'manifest.json').write_text(raw);(OUTPUT/'manifest.json').chmod(0o600)
         if original is not None:raise original
         require(passed and not cleanup,'qualification_and_cleanup')

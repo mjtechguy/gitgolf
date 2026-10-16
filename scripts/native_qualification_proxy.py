@@ -21,7 +21,7 @@ import urllib.parse
 
 PROJECT = re.compile(r'golf-(?:rules49|access48)-[a-f0-9]{10}')
 NONCE_HEADER = 'X-Native-Qualification-Nonce'
-NATIVE_DESTINATION = 'http://gitea:3000'
+NATIVE_DESTINATION = 'http://forgejo:3000'
 SERVICE_NAME = 'native-qualification-proxy'
 METHODS = {'POST', 'PATCH', 'PUT', 'DELETE'}
 CATEGORIES = {'authority', 'repository', 'branch_protections', 'tag_protections', 'collaborator'}
@@ -132,7 +132,7 @@ class NativeProxy:
             assert file.read(4) == b'\x7fELF', 'Linux binary required'
         return {'image': image, 'pull_policy': 'never', 'read_only': True, 'cap_drop': ['ALL'], 'security_opt': ['no-new-privileges:true'],
                 'entrypoint': ['/usr/local/bin/native-qualification-proxy'], 'volumes': [f'{binary}:/usr/local/bin/native-qualification-proxy:ro'],
-                'ports': [f'127.0.0.1:{self.port}:8082'], 'expose': ['8081'], 'depends_on': {'gitea': {'condition': 'service_started'}},
+                'ports': [f'127.0.0.1:{self.port}:8082'], 'expose': ['8081'], 'depends_on': {'forgejo': {'condition': 'service_started'}},
                 'environment': {'NATIVE_QUALIFICATION_PROJECT': self.project, 'NATIVE_QUALIFICATION_NONCE': '${NATIVE_QUALIFICATION_NONCE:?}'}}
 
     def start(self):

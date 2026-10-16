@@ -104,7 +104,7 @@ func (s *Server) withForgeCaller(ctx context.Context, value string, credential f
 		if s.db == nil {
 			return errStorageUnavailable
 		}
-		row, err := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		row, err := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if errors.Is(err, sql.ErrNoRows) {
 			return errUnauthenticated
 		}
@@ -136,7 +136,7 @@ func (s *Server) withForgeCaller(ctx context.Context, value string, credential f
 // This membership proof specifically requires 204; a public organization GET,
 // unexpected 200, redirect or site-admin visibility is not proof of membership.
 func (s *Server) requireOrganizationMember(ctx context.Context, credential forgeCredential, org, login string) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.GiteaURL+"/api/v1/orgs/"+org+"/members/"+login, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.config.ForgeURL+"/api/v1/orgs/"+org+"/members/"+login, nil)
 	if err != nil {
 		return errInvalidForgeResponse
 	}
@@ -352,7 +352,7 @@ func (s *Server) listOrganizationTeamRepositories(ctx context.Context, value str
 			}
 			seen[row.ID] = true
 		}
-		// Gitea trims inaccessible repositories after pagination. An empty page
+		// Forgejo trims inaccessible repositories after pagination. An empty page
 		// may still have a next page; never expose its unfiltered total count.
 		next, err = organizationNextPage(headers, page)
 		return err

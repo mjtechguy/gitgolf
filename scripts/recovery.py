@@ -60,18 +60,38 @@ KEY_FAMILIES = ('sessions', 'oauth_attempts', 'local_accounts', 'infrastructure_
                 'automation_credentials', 'review_contents', 'conversation_contents', 'webhook_credentials',
                 'repository_execution_values', 'organization_execution_values',
                 'workflow_quarantined_outputs', 'notification_contents', 'workflow_dispatch_inputs')
-# Gitea1.27.3 maps cron.<name>, not a global cron.ENABLED switch.
+# Forgejo 15.0.9 has no global cron switch; each task reads its own
+# [cron.<name>] section. This is every task registered by v15.0.9
+# services/cron/tasks_basic.go and tasks_extended.go, including conditionally
+# registered ones. tasks_actions.go registers nothing while
+# [actions] ENABLED=false, which this profile separately requires.
 NATIVE_CRON_TASKS = ('update_mirrors', 'repo_health_check', 'check_repo_stats', 'archive_cleanup',
     'sync_external_users', 'deleted_branches_cleanup', 'update_migration_poster_id',
-    'cleanup_hook_task_table', 'cleanup_packages', 'sync_repo_licenses',
+    'cleanup_hook_task_table', 'cleanup_packages',
     'delete_inactive_accounts', 'delete_repo_archives', 'git_gc_repos', 'resync_all_sshkeys',
     'resync_all_sshprincipals', 'resync_all_hooks', 'reinit_missing_repos', 'delete_missing_repos',
     'delete_generated_repository_avatars', 'delete_old_actions', 'update_checker',
-    'delete_old_system_notices', 'gc_lfs', 'rebuild_issue_indexer')
+    'delete_old_system_notices', 'gc_lfs', 'rebuild_issue_indexer', 'remove_resolved_reports')
 ACCESS_NATIVE_EMPTY = ('mirror', 'push_mirror', 'webhook', 'hook_task', 'action_run')
 
-FILES = {'compose.json', 'postgres-init.sh', 'golf.dump', 'gitea.dump',
-         'gitea-data.tar', 'gitea-config.tar'}
+# The rootless Forgejo 15.0.9 image (Dockerfile.rootless) keeps its single data
+# volume, app.ini and temporary scratch under these upstream paths.
+FORGEJO_DATA = PurePosixPath('/var/lib/gitea')  # Forgejo's upstream name
+FORGEJO_TEMP = PurePosixPath('/tmp/gitea')  # Forgejo's upstream name
+FORGEJO_APP_INI = FORGEJO_DATA/'custom/conf/app.ini'
+# `forgejo --version` prints the build version, which carries the compatibility suffix.
+FORGEJO_VERSION = 'forgejo version 15.0.9+gitea-1.22.0 '  # Forgejo's upstream name
+# `docker cp` names the archive root after the copied directory.
+DATA_ROOT = FORGEJO_DATA.name
+DATA_APP_INI = str(PurePosixPath(DATA_ROOT)/FORGEJO_APP_INI.relative_to(FORGEJO_DATA))
+FORGE_ENV_PREFIX = 'FORGEJO__'
+# Forgejo's environment-to-ini also reads this prefix. Refuse it rather than
+# guess which of two spellings for one setting wins.
+UPSTREAM_ENV_PREFIX = 'GITEA__'  # Forgejo's upstream name
+ENV_ESCAPE = re.compile(r'_0[xX]((?:[0-9a-fA-F]{2})+)_')
+POSTGRES_INIT = 'deploy/postgres/forgejo-init.sh'  # Relative to ROOT, which a caller may rebind.
+
+FILES = {'compose.json', 'postgres-init.sh', 'golf.dump', 'forgejo.dump', 'forgejo-data.tar'}
 PROJECT = re.compile(r'^[a-z0-9][a-z0-9_-]{0,62}$')
 LIMIT = 8 << 30
 RUSTFS_IMAGE = 'rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff'
@@ -160,8 +180,74 @@ def ports(container, expected):
 def captured_path(value):
     path = PurePosixPath(value)
     require(path.is_absolute() and '..' not in path.parts and value.rstrip('/') == path.as_posix() and
-            (path == PurePosixPath('/var/lib/gitea') or PurePosixPath('/var/lib/gitea') in path.parents or
-             path == PurePosixPath('/etc/gitea') or PurePosixPath('/etc/gitea') in path.parents))
+            (path == FORGEJO_DATA or FORGEJO_DATA in path.parents))
+
+
+def native_settings(env):
+    """Decode Forgejo 15.0.9 FORGEJO__SECTION__KEY settings (modules/setting/config_env.go).
+
+    Refuse __FILE indirection (its value is outside the captured runtime) and
+    any two variables naming one setting, instead of depending on order.
+    """
+    settings = {}
+    for name, value in env.items():
+        require(not name.startswith(UPSTREAM_ENV_PREFIX))
+        if not name.startswith(FORGE_ENV_PREFIX):
+            continue
+        require(not name.endswith('__FILE'))
+        encoded, section, key, in_key, last = name[len(FORGE_ENV_PREFIX):], '', '', False, 0
+
+        def plain(text):
+            nonlocal section, key, in_key
+            if in_key:
+                key += text
+            elif '__' in text:
+                before, after = text.split('__', 1)
+                section, key, in_key = section+before, key+after, True
+            else:
+                section += text
+
+        for match in ENV_ESCAPE.finditer(encoded):
+            plain(encoded[last:match.start()])
+            decoded = bytes.fromhex(match.group(1)).decode()
+            if in_key:
+                key += decoded
+            else:
+                section += decoded
+            last = match.end()
+        plain(encoded[last:])
+        if not key:
+            continue
+        setting = (section.lower(), key.upper())
+        require(setting not in settings)
+        settings[setting] = value
+    return settings
+
+
+def validate_forgejo_environment(env, password):
+    # The rootless image's own path variables. Every persistent path,
+    # including app.ini, must stay inside the captured volume.
+    image_paths = {'GITEA_WORK_DIR': str(FORGEJO_DATA),  # Forgejo's upstream name
+                   'GITEA_CUSTOM': str(FORGEJO_DATA/'custom'),  # Forgejo's upstream name
+                   'GITEA_APP_INI': str(FORGEJO_APP_INI),  # Forgejo's upstream name
+                   'HOME': str(FORGEJO_DATA/'git')}
+    require(all(env.get(key) == value for key, value in image_paths.items()))
+    # Forgejo copies these over the image path variables at startup.
+    require(not env.get('FORGEJO_CUSTOM') and not env.get('FORGEJO_WORK_DIR'))
+    settings = native_settings(env)
+    require(settings.get(('database', 'DB_TYPE')) == 'postgres' and
+            settings.get(('database', 'HOST')) == 'postgres:5432' and
+            settings.get(('database', 'NAME')) == 'forgejo' and
+            settings.get(('database', 'USER')) == 'forgejo' and
+            settings.get(('database', 'PASSWD')) == password)
+
+
+def volume_names(rustfs):
+    return ['postgres-data', 'forgejo-data', *(['rustfs-data'] if rustfs else [])]
+
+
+def forgejo_volumes():
+    return ['forgejo-data:' + str(FORGEJO_DATA)]
 
 
 def compose_bytes(config):
@@ -224,23 +310,23 @@ def validate_profile(schema, profile):
 
 
 def validate_access_config(config):
-    require(set(config['services']) == {'golf', 'gitea', 'postgres'})
+    require(set(config['services']) == {'golf', 'forgejo', 'postgres'})
     golf = config['services']['golf']['environment']
-    native = config['services']['gitea']['environment']
-    require(golf.get('GITEA_URL') == 'http://gitea:3000')
+    native = config['services']['forgejo']['environment']
+    require(golf.get('GOLF_FORGE_URL') == 'http://forgejo:3000' and golf.get('GOLF_FORGE_KIND') == 'forgejo')
     # Do not capture proxy transport, external intake or managed Git activation.
     for key in ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy',
                 'GOLF_REPOSITORY_EVENT_CONNECTIONS', 'GOLF_GIT_TRANSPORT_PROFILE',
                 'GOLF_INTERNAL_TLS_CERT_FILE', 'GOLF_INTERNAL_TLS_KEY_FILE'):
         require(not golf.get(key))
     require(golf.get('GOLF_PUSH_CI_ENABLED', 'false').lower() == 'false')
-    require(native.get('GITEA__actions__ENABLED', '').lower() == 'false' and
-            native.get('GITEA__mailer__ENABLED', '').lower() == 'false' and
-            all(native.get('GITEA__cron.' + name + '__ENABLED', '').lower() == 'false' for name in NATIVE_CRON_TASKS))
+    settings = native_settings(native)
+    require(settings.get(('actions', 'ENABLED'), '').lower() == 'false' and
+            settings.get(('mailer', 'ENABLED'), '').lower() == 'false' and
+            all(settings.get(('cron.' + name, 'ENABLED'), '').lower() == 'false' for name in NATIVE_CRON_TASKS))
     # No injected native global hook command or environment proxy.
-    require(not any(value for key, value in native.items()
-                    if key.upper() in {'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY'} or
-                    key.lower().startswith('gitea__git.config')))
+    require(not any(value for key, value in native.items() if key.upper() in {'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY'}))
+    require(not any(value for (section, _), value in settings.items() if section.startswith('git.config')))
 
 
 def validate_access_counts(counts):
@@ -261,7 +347,7 @@ def access_profile_observation(pg, config):
                "SELECT count(*) FROM golf_workflow_runs WHERE state='queued';"]).strip()
     require(raw.isdigit()); counts['typed_queued'] = int(raw)
     for table in ACCESS_NATIVE_EMPTY:
-        raw = run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'gitea', '-Atc',
+        raw = run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'forgejo', '-Atc',
                    'SELECT count(*) FROM ' + table + ';']).strip()
         require(raw.isdigit()); counts['native_' + table] = int(raw)
     validate_access_counts(counts)
@@ -271,25 +357,26 @@ def access_profile_observation(pg, config):
 
 
 def validate_access_archive(stage):
-    with tarfile.open(stage/'gitea-config.tar', 'r:') as archive:
+    with tarfile.open(stage/'forgejo-data.tar', 'r:') as archive:
         ini = configparser.ConfigParser(interpolation=None, strict=False)
-        ini.read_string('[DEFAULT]\n' + archive.extractfile('gitea/app.ini').read().decode())
+        ini.read_string('[DEFAULT]\n' + archive.extractfile(DATA_APP_INI).read().decode())
         require(ini.get('actions', 'ENABLED', fallback='').lower() == 'false' and
                 ini.get('mailer', 'ENABLED', fallback='').lower() == 'false' and
                 all(ini.get('cron.' + name, 'ENABLED', fallback='').lower() == 'false' for name in NATIVE_CRON_TASKS))
         require(not ini.has_section('git.config') or
                 not any(key.lower() == 'core.hookspath' and value for key, value in ini['git.config'].items()))
-    with tarfile.open(stage/'gitea-data.tar', 'r:') as archive:
         for member in archive:
             parts = PurePosixPath(member.name).parts
             require('custom_hooks' not in parts and not (parts[-1] == 'reference-transaction' and 'hooks' in parts))
             for index, part in enumerate(parts):
                 if part in {'pre-receive.d', 'post-receive.d', 'update.d', 'proc-receive.d'}:
+                    # Only Forgejo's generated delegate hook file is permitted.
                     require((index + 1 == len(parts) and member.isdir()) or
-                            (index + 2 == len(parts) and parts[-1] == 'gitea' and member.isfile()))
-            # Native Git configuration persists independently of app.ini. Do not
-            # restore an out-of-profile hook path or a deferred include override.
-            if member.name == 'gitea/git/.gitconfig' or ('/git/repositories/' in member.name and member.name.endswith('.git/config')):
+                            (index + 2 == len(parts) and parts[-1] == 'gitea' and member.isfile()))  # Forgejo's upstream name
+            # Native Git configuration persists independently of app.ini: the
+            # image HOME and Forgejo's [git] HOME_PATH each hold a .gitconfig.
+            # Do not restore an out-of-profile hook path or a deferred include.
+            if parts[-1] == '.gitconfig' or member.name.endswith('.git/config'):
                 require(member.isfile() and member.size <= 1 << 20)
                 git = configparser.ConfigParser(interpolation=None, strict=False)
                 git.read_string(archive.extractfile(member).read().decode())
@@ -338,7 +425,7 @@ def snapshot(project, compose_files, profile=None):
     services = {row['Config']['Labels'].get('com.docker.compose.service'): row for row in rows}
     rustfs = 'rustfs' in services
     require(len(services) == len(rows))
-    require(set(services) == {'golf', 'gitea', 'postgres'} | ({'rustfs'} if rustfs else set()))
+    require(set(services) == {'golf', 'forgejo', 'postgres'} | ({'rustfs'} if rustfs else set()))
     for row in rows:
         labels = row['Config']['Labels']
         require(labels.get('com.docker.compose.oneoff') == 'False' and
@@ -362,10 +449,11 @@ def snapshot(project, compose_files, profile=None):
             require(not host.get('CapDrop') and not host.get('SecurityOpt') and not host.get('Tmpfs'))
         require(len(row['NetworkSettings']['Networks']) == 1)
     require(services['postgres']['State']['Running'])
-    require(all(services[name]['State']['Status'] in {'exited', 'created'} for name in ['golf', 'gitea', *(['rustfs'] if rustfs else [])]))
-    require(services['gitea']['Config']['User'] == '1000:1000')
+    require(all(services[name]['State']['Status'] in {'exited', 'created'} for name in ['golf', 'forgejo', *(['rustfs'] if rustfs else [])]))
+    require(services['forgejo']['Config']['User'] == '1000:1000')
+    # The rootless Forgejo image declares exactly one volume; app.ini is inside it.
     expected = {'postgres': {'/var/lib/postgresql': 'postgres-data'},
-                'gitea': {'/var/lib/gitea': 'gitea-data', '/etc/gitea': 'gitea-config'}, 'golf': {}, **({'rustfs': {'/data': 'rustfs-data'}} if rustfs else {})}
+                'forgejo': {str(FORGEJO_DATA): 'forgejo-data'}, 'golf': {}, **({'rustfs': {'/data': 'rustfs-data'}} if rustfs else {})}
     volumes = set()
     initializer = None
     for name, row in services.items():
@@ -377,7 +465,7 @@ def snapshot(project, compose_files, profile=None):
             if name == 'postgres' and target == '/docker-entrypoint-initdb.d/01-golf.sh':
                 require(mount['Type'] == 'bind' and not mount['RW'])
                 initializer = Path(mount['Source']).read_bytes()
-                require(initializer == (ROOT/'deploy/postgres/init.sh').read_bytes())
+                require(initializer == (ROOT/POSTGRES_INIT).read_bytes())
                 continue
             require(target in mounts and mount['Type'] == 'volume' and mount['RW'])
             volume = docker_json('volume', 'inspect', mount['Name'])[0]
@@ -396,29 +484,25 @@ def snapshot(project, compose_files, profile=None):
     pg = services['postgres']['Id']
     # This detects existing direct clients, not a fence against a Docker/DB
     # administrator opening another connection after the check.
-    query = "SELECT count(*) FROM pg_stat_activity WHERE datname IN ('golf','gitea') AND backend_type='client backend';"
+    query = "SELECT count(*) FROM pg_stat_activity WHERE datname IN ('golf','forgejo') AND backend_type='client backend';"
     require(run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'postgres', '-Atc', query]).strip() == b'0')
-    config = {'services': {}, 'volumes': {name: {} for name in ['postgres-data', 'gitea-data', 'gitea-config', *(['rustfs-data'] if rustfs else [])]}}
+    config = {'services': {}, 'volumes': {name: {} for name in volume_names(rustfs)}}
     for name, row in services.items():
         image = row['Image']
         require(re.fullmatch(r'sha256:[a-f0-9]{64}', image))
         env = environment(row)
         config['services'][name] = {'image': image, 'pull_policy': 'never', 'environment': env,
                                     'restart': 'no'}
-    golf, gitea, postgres = [config['services'][name] for name in ['golf', 'gitea', 'postgres']]
+    golf, forgejo, postgres = [config['services'][name] for name in ['golf', 'forgejo', 'postgres']]
     if profile == ACCESS_PROFILE and services['postgres']['Config'].get('Cmd') == ACCESS_PG_COMMAND:
         postgres['command'] = list(ACCESS_PG_COMMAND)
     require(postgres['environment'].get('POSTGRES_PASSWORD') and
-            postgres['environment'].get('GOLF_DB_PASSWORD') and postgres['environment'].get('GITEA_DB_PASSWORD'))
-    require(gitea['environment'].get('GITEA__database__HOST') == 'postgres:5432' and
-            gitea['environment'].get('GITEA__database__NAME') == 'gitea' and
-            gitea['environment'].get('GITEA__database__USER') == 'gitea' and
-            gitea['environment'].get('GITEA__database__PASSWD') == postgres['environment']['GITEA_DB_PASSWORD'])
-    require(gitea['environment'].get('HOME') == '/var/lib/gitea/git')
-    for key in ['GITEA_WORK_DIR', 'GITEA_CUSTOM', 'GITEA_APP_INI']:
-        if gitea['environment'].get(key):
-            captured_path(gitea['environment'][key])
-    require(golf['environment'].get('GITEA_URL') == 'http://gitea:3000')
+            postgres['environment'].get('GOLF_DB_PASSWORD') and postgres['environment'].get('FORGEJO_DB_PASSWORD'))
+    validate_forgejo_environment(forgejo['environment'], postgres['environment']['FORGEJO_DB_PASSWORD'])
+    require(golf['environment'].get('GOLF_FORGE_URL') == 'http://forgejo:3000' and
+            golf['environment'].get('GOLF_FORGE_KIND') == 'forgejo')
+    instance = golf['environment'].get('GOLF_FORGE_INSTANCE_ID', '')
+    require(re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', instance))
     database = urlsplit(golf['environment'].get('DATABASE_URL', ''))
     require(database.scheme == 'postgres' and database.hostname == 'postgres' and database.port == 5432 and
             database.username == 'golf' and unquote(database.password or '') == postgres['environment']['GOLF_DB_PASSWORD'] and
@@ -427,11 +511,11 @@ def snapshot(project, compose_files, profile=None):
                              './postgres-init.sh:/docker-entrypoint-initdb.d/01-golf.sh:ro'],
                     healthcheck={'test': ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres'], 'interval': '2s', 'timeout': '3s', 'retries': 60})
     require(not (services['postgres']['HostConfig']['PortBindings'] or {}))
-    gitea.update(volumes=['gitea-data:/var/lib/gitea', 'gitea-config:/etc/gitea'],
-                  ports=ports(services['gitea'], ['3000/tcp', '2222/tcp']),
-                  depends_on={'postgres': {'condition': 'service_healthy'}})
+    forgejo.update(volumes=forgejo_volumes(),
+                   ports=ports(services['forgejo'], ['3000/tcp', '2222/tcp']),
+                   depends_on={'postgres': {'condition': 'service_healthy'}})
     golf.update(ports=ports(services['golf'], ['8080/tcp']),
-                depends_on={'postgres': {'condition': 'service_healthy'}, 'gitea': {'condition': 'service_started'}})
+                depends_on={'postgres': {'condition': 'service_healthy'}, 'forgejo': {'condition': 'service_started'}})
     if rustfs:
         config['services']['rustfs'].update(volumes=['rustfs-data:/data'], tmpfs=['/logs:'+RUSTFS_TMPFS['/logs']],
             cap_drop=['ALL'], security_opt=['no-new-privileges:true'],
@@ -445,7 +529,7 @@ def validate_volume(path, config=False, rustfs=False):
     # Validate nested tar streams without extracting onto the host. Docker cp
     # receives only this checked archive; archive links cannot escape its root.
     references = set()
-    root = 'data' if rustfs else 'gitea'
+    root = 'data' if rustfs else DATA_ROOT
     owners = {0, 10001} if rustfs else {0, 1000}
     with tarfile.open(path, 'r:') as archive:
         members = {}
@@ -486,12 +570,12 @@ def validate_volume(path, config=False, rustfs=False):
                     if str(parent) != '.':
                         require(str(parent) in members and members[str(parent)].isdir())
         if config:
-            require('gitea/app.ini' in members and members['gitea/app.ini'].isfile())
-            require(members['gitea/app.ini'].size <= 1 << 20 and members['gitea/app.ini'].mode & 0o077 == 0)
+            require(DATA_APP_INI in members and members[DATA_APP_INI].isfile())
+            require(members[DATA_APP_INI].size <= 1 << 20 and members[DATA_APP_INI].mode & 0o077 == 0)
             ini = configparser.ConfigParser(interpolation=None, strict=False)
-            ini.read_string('[DEFAULT]\n'+archive.extractfile(members['gitea/app.ini']).read().decode())
+            ini.read_string('[DEFAULT]\n'+archive.extractfile(members[DATA_APP_INI]).read().decode())
             require(ini.get('database', 'DB_TYPE') == 'postgres' and ini.get('database', 'HOST') == 'postgres:5432' and
-                    ini.get('database', 'NAME') == 'gitea' and ini.get('database', 'USER') == 'gitea')
+                    ini.get('database', 'NAME') == 'forgejo' and ini.get('database', 'USER') == 'forgejo')
             for section in ini.sections():
                 require(ini.get(section, 'STORAGE_TYPE', fallback='local') == 'local')
                 if section.startswith('storage') or section in {'lfs', 'attachment', 'repository'}:
@@ -506,14 +590,14 @@ def validate_volume(path, config=False, rustfs=False):
                     value = ini.get(section, key, fallback='')
                     if value:
                         captured_path(value)
-            # Native local-clone/upload scratch is outside persistent volumes
-            # in this image. Draining writers does not preserve in-flight work.
+            # Native local-clone/upload scratch is the image's temporary directory,
+            # outside the persistent volume. Draining writers does not preserve in-flight work.
             for section, key in [('repository.local', 'LOCAL_COPY_PATH'), ('repository.upload', 'TEMP_PATH')]:
                 value = ini.get(section, key, fallback='')
                 if value:
                     scratch = PurePosixPath(value)
                     require(scratch.is_absolute() and '..' not in scratch.parts and value.rstrip('/') == scratch.as_posix())
-                    if scratch != PurePosixPath('/tmp/gitea') and PurePosixPath('/tmp/gitea') not in scratch.parents:
+                    if scratch != FORGEJO_TEMP and FORGEJO_TEMP not in scratch.parents:
                         captured_path(value)
             for section in [ini.default_section, *ini.sections()]:
                 for key, value in ini[section].items():
@@ -526,16 +610,16 @@ def validate_volume(path, config=False, rustfs=False):
                 if value.strip():
                     captured_path(value.strip())
                     references.add(value.strip().rstrip('/'))
-        base = PurePosixPath('/etc' if config else '/var/lib')
+        base = FORGEJO_DATA.parent
         files = {str(base/name) for name, member in members.items()
                  if member.isfile() or name in links_to_files}
         return files, references
 
 
-def validate_pair(stage):
-    data_files, data_references = validate_volume(stage/'gitea-data.tar')
-    config_files, config_references = validate_volume(stage/'gitea-config.tar', config=True)
-    require((data_references | config_references) <= (data_files | config_files))
+def validate_forgejo_data(stage):
+    # app.ini lives inside the single data volume; every file it references must too.
+    files, references = validate_volume(stage/'forgejo-data.tar', config=True)
+    require(references <= files)
 
 
 def backup(args, stage):
@@ -546,11 +630,11 @@ def backup(args, stage):
     files = profile_files(rustfs)
     pg = services['postgres']['Id']
     pg_version = run(['docker', 'exec', pg, 'postgres', '--version']).decode().strip()
-    forge_version = run(['docker', 'run', '--rm', '--network', 'none', '--entrypoint', 'gitea',
-                         services['gitea']['Image'], '--version']).decode().strip()
+    forge_version = run(['docker', 'run', '--rm', '--network', 'none', '--entrypoint', 'forgejo',
+                         services['forgejo']['Image'], '--version']).decode().strip()
     schema = run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
                   'SELECT max(version_id) FROM goose_db_version WHERE is_applied;']).decode().strip()
-    require(pg_version == 'postgres (PostgreSQL) 18.4' and forge_version.startswith('gitea version 1.27.3 ') and
+    require(pg_version == 'postgres (PostgreSQL) 18.4' and forge_version.startswith(FORGEJO_VERSION) and
             (schema in SUPPORTED_SCHEMAS or schema == ACCESS_SCHEMA))
     validate_profile(schema, args.profile)
     observation = access_profile_observation(pg, config) if args.profile else None
@@ -563,15 +647,15 @@ def backup(args, stage):
     validate_source_bindings(pg, config, schema)
     write(stage/'compose.json', json.dumps(config).encode())
     write(stage/'postgres-init.sh', initializer)
-    for name in ['golf', 'gitea']:
+    for name in ['golf', 'forgejo']:
         run(['docker', 'exec', services['postgres']['Id'], 'pg_dump', '-Fc', '--no-owner', '--no-acl',
              '-U', 'postgres', '-d', name], output=stage/(name+'.dump'), limit=args.max_bytes)
-    for name, directory in [('gitea-data.tar', '/var/lib/gitea'), ('gitea-config.tar', '/etc/gitea')]:
-        run(['docker', 'cp', '-a', services['gitea']['Id']+':'+directory, '-'], output=stage/name, limit=args.max_bytes)
+    run(['docker', 'cp', '-a', services['forgejo']['Id']+':'+str(FORGEJO_DATA), '-'],
+        output=stage/'forgejo-data.tar', limit=args.max_bytes)
     if rustfs:
         run(['docker', 'cp', '-a', services['rustfs']['Id']+':/data', '-'], output=stage/'rustfs-data.tar', limit=args.max_bytes)
         validate_volume(stage/'rustfs-data.tar', rustfs=True)
-    validate_pair(stage)
+    validate_forgejo_data(stage)
     if args.profile:
         validate_access_archive(stage)
     # Revalidate ordinary writer/container state and runtime configuration after
@@ -586,7 +670,7 @@ def backup(args, stage):
     require(total <= args.max_bytes)
     manifest = {'schema_version': FORMAT, 'backup_id': uuid.uuid4().hex,
                 'created_at': datetime.now(timezone.utc).isoformat(), 'source_project': args.project,
-                'versions': {'postgres': pg_version, 'gitea': forge_version, 'golf_schema': schema},
+                'versions': {'postgres': pg_version, 'forgejo': forge_version, 'golf_schema': schema},
                 'images': {name: row['Image'] for name, row in services.items()}, 'files': sizes}
     if args.profile:
         manifest['recovery_profile'] = args.profile
@@ -630,12 +714,13 @@ def verified(args, stage):
     rustfs = manifest.get('storage_profile') == 'local_rustfs'
     require('storage_profile' not in manifest or rustfs)
     files = profile_files(rustfs)
-    services = {'postgres', 'gitea', 'golf'} | ({'rustfs'} if rustfs else set())
+    services = {'postgres', 'forgejo', 'golf'} | ({'rustfs'} if rustfs else set())
     require(found == files | {'manifest.json'})
     require(manifest['schema_version'] == FORMAT and re.fullmatch('[a-f0-9]{32}', manifest['backup_id']) and
             set(manifest['files']) == files and set(manifest['images']) == services)
     require(manifest['versions']['postgres'] == 'postgres (PostgreSQL) 18.4' and
-            manifest['versions']['gitea'].startswith('gitea version 1.27.3 ') and
+            set(manifest['versions']) == {'postgres', 'forgejo', 'golf_schema'} and
+            manifest['versions']['forgejo'].startswith(FORGEJO_VERSION) and
             (manifest['versions']['golf_schema'] in SUPPORTED_SCHEMAS or manifest['versions']['golf_schema'] == ACCESS_SCHEMA))
     validate_profile(manifest['versions']['golf_schema'], manifest.get('recovery_profile'))
     if manifest.get('recovery_profile'):
@@ -646,15 +731,15 @@ def verified(args, stage):
     for name in files:
         require(manifest['files'][name] == {'bytes': (stage/name).stat().st_size, 'sha256': digest(stage/name)})
     require(sum(row['bytes'] for row in manifest['files'].values()) <= args.max_bytes)
-    require((stage/'postgres-init.sh').read_bytes() == (ROOT/'deploy/postgres/init.sh').read_bytes())
-    validate_pair(stage)
+    require((stage/'postgres-init.sh').read_bytes() == (ROOT/POSTGRES_INIT).read_bytes())
+    validate_forgejo_data(stage)
     if rustfs:
         validate_volume(stage/'rustfs-data.tar', rustfs=True)
     config = json.loads((stage/'compose.json').read_text())
     # This is an operator-trusted archive, not arbitrary uploaded Compose/SQL.
     # Still reject extra services, host mounts, privilege and substituted images.
     require(set(config) == {'services', 'volumes'} and set(config['services']) == services and
-            config['volumes'] == {name: {} for name in ['postgres-data', 'gitea-data', 'gitea-config', *(['rustfs-data'] if rustfs else [])]})
+            config['volumes'] == {name: {} for name in volume_names(rustfs)})
     for name, service in config['services'].items():
         require(service['image'] == manifest['images'][name] and re.fullmatch(r'sha256:[a-f0-9]{64}', service['image']))
         require(set(service) <= {'image', 'pull_policy', 'environment', 'restart', 'volumes', 'ports', 'depends_on', 'healthcheck'} | ({'command'} if name == 'postgres' and manifest.get('recovery_profile') == ACCESS_PROFILE else set()) | ({'tmpfs', 'cap_drop', 'security_opt'} if name == 'rustfs' else set()))
@@ -662,8 +747,13 @@ def verified(args, stage):
         require(all(isinstance(key, str) and isinstance(value, str) for key, value in service['environment'].items()))
     require('command' not in config['services']['postgres'] or config['services']['postgres']['command'] == ACCESS_PG_COMMAND)
     require(config['services']['postgres']['volumes'] == ['postgres-data:/var/lib/postgresql', './postgres-init.sh:/docker-entrypoint-initdb.d/01-golf.sh:ro'])
-    require(config['services']['gitea']['volumes'] == ['gitea-data:/var/lib/gitea', 'gitea-config:/etc/gitea'])
+    require(config['services']['forgejo']['volumes'] == forgejo_volumes())
     require('volumes' not in config['services']['golf'])
+    password = config['services']['postgres']['environment'].get('FORGEJO_DB_PASSWORD')
+    require(password)
+    validate_forgejo_environment(config['services']['forgejo']['environment'], password)
+    require(config['services']['golf']['environment'].get('GOLF_FORGE_URL') == 'http://forgejo:3000' and
+            config['services']['golf']['environment'].get('GOLF_FORGE_KIND') == 'forgejo')
     if rustfs:
         service = config['services']['rustfs']
         require(service['volumes'] == ['rustfs-data:/data'] and not service.get('ports') and
@@ -682,7 +772,7 @@ def fresh(project):
     require(not containers(project))
     require(not run(['docker', 'volume', 'ls', '-q', '--filter', 'label=com.docker.compose.project='+project]).strip())
     require(not run(['docker', 'network', 'ls', '-q', '--filter', 'label=com.docker.compose.project='+project]).strip())
-    for name in ['postgres-data', 'gitea-data', 'gitea-config', 'rustfs-data']:
+    for name in volume_names(True):
         require(not run(['docker', 'volume', 'ls', '-q', '--filter', 'name=^'+project+'_'+name+'$']).strip())
     require(not run(['docker', 'network', 'ls', '-q', '--filter', 'name=^'+project+'_default$']).strip())
 
@@ -710,7 +800,7 @@ def restore(args, stage, manifest):
         time.sleep(1)
     else:
         raise TimeoutError('Database startup failed')
-    for name in ['golf', 'gitea']:
+    for name in ['golf', 'forgejo']:
         with (stage/(name+'.dump')).open('rb') as file:
             run(['docker', 'exec', '-i', rows['postgres']['Id'], 'pg_restore', '--no-owner', '--no-acl', '--role='+name,
                  '--single-transaction', '--exit-on-error', '-U', 'postgres', '-d', name], input=file)
@@ -719,9 +809,8 @@ def restore(args, stage, manifest):
     require(schema == manifest['versions']['golf_schema'])
     if manifest.get('recovery_profile'):
         require(access_profile_observation(rows['postgres']['Id'], json.loads((stage/'compose.json').read_text())) == manifest['profile_observation'])
-    for name, destination in [('gitea-data.tar', '/var/lib'), ('gitea-config.tar', '/etc')]:
-        with (stage/name).open('rb') as file:
-            run(['docker', 'cp', '-a', '-', rows['gitea']['Id']+':'+destination], input=file)
+    with (stage/'forgejo-data.tar').open('rb') as file:
+        run(['docker', 'cp', '-a', '-', rows['forgejo']['Id']+':'+str(FORGEJO_DATA.parent)], input=file)
     validate_source_bindings(rows['postgres']['Id'], json.loads((stage/'compose.json').read_text()), schema)
     if 'rustfs' in rows:
         with (stage/'rustfs-data.tar').open('rb') as file:
@@ -732,7 +821,7 @@ def restore(args, stage, manifest):
                               '--backup-id', manifest['backup_id']]))
     require(recovery['schema_version'] == 'golf.recovery.v1' and recovery['state'] == 'complete')
     require(not any(row['State']['Running'] for row in containers(args.project)
-                    if row['Config']['Labels'].get('com.docker.compose.service') in {'golf', 'gitea', 'rustfs'}))
+                    if row['Config']['Labels'].get('com.docker.compose.service') in {'golf', 'forgejo', 'rustfs'}))
     return {'backup_id': manifest['backup_id'], 'compose_file': str(args.directory/'compose.json'),
             'sessions_count': recovery['result']['sessions_count'],
             'oauth_attempts_count': recovery['result']['oauth_attempts_count'],

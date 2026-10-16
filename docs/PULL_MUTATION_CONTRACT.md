@@ -1,6 +1,6 @@
 # Pull request creation and lifecycle observations
 
-This extends the shared portable/Cloudflare core through supported Gitea1.27.3 APIs. Actual tests and running image identities belong in the [implementation ledger](IMPLEMENTATION_STATUS.md). Protected merging remains a separate unresolved P0.8 gate. These operations do not implement approval, trusted checks or merge readiness.
+This extends the shared portable/Cloudflare core through Forgejo's supported APIs. Actual tests and running image identities belong in the [implementation ledger](IMPLEMENTATION_STATUS.md). Protected merging remains a separate unresolved P0.8 gate. These operations do not implement approval, trusted checks or merge readiness.
 
 ## API and identity
 
@@ -38,4 +38,4 @@ Creation is now exposed through the full-page branch/fork comparison and explici
 
 Schema033 adds a separate native PR identity, PR operation kinds, native-target/receipt constraints and immutable guards, including the issue-versus-PR discriminator. Existing issue/comment fingerprints and outcomes are preserved. Down refuses silent history loss. Latest schema033 recovery is unqualified; the recovery operator must continue refusing schemas beyond its proved checkpoint. A current-schema restore/replay corpus remains necessary before claiming recoverability.
 
-Primary sources: [pinned create/edit handlers](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/pull.go), [PR wire definitions](https://github.com/go-gitea/gitea/blob/v1.27.3/modules/structs/pull.go), [explicit source addressing](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/common/compare.go), [draft defaults](https://github.com/go-gitea/gitea/blob/v1.27.3/modules/setting/repository.go). Local qualification: `make qualify-pull-mutations` creates/purges its own users and private repositories through supported native APIs and records no provider credentials.
+Primary sources: [pinned create/edit handlers](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/pull.go), [PR wire definitions](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/structs/pull.go), [explicit source addressing](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/common/compare.go), [draft defaults](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/setting/repository.go). Local qualification: `make qualify-pull-mutations` creates/purges its own users and private repositories through supported native APIs and records no provider credentials.

@@ -85,7 +85,7 @@ type refMutationFixture struct {
 func newRefMutationFixture(t *testing.T, k golfv1.RepositoryRefMutationKind) *refMutationFixture {
 	f := &refMutationFixture{releasePublicationFixture: newReleasePublicationFixture(t), present: !refMutationCreate(refMutationKind(k))}
 	f.modeRef.Store("")
-	target, _ := url.Parse(f.s.config.GiteaURL)
+	target, _ := url.Parse(f.s.config.ForgeURL)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		base := "/api/v1/repos/alice/private"
@@ -200,8 +200,8 @@ func newRefMutationFixture(t *testing.T, k golfv1.RepositoryRefMutationKind) *re
 	}))
 	t.Cleanup(provider.Close)
 	config := f.s.config
-	config.GiteaURL = provider.URL
-	config.GiteaPublicURL = provider.URL
+	config.ForgeURL = provider.URL
+	config.ForgePublicURL = provider.URL
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {

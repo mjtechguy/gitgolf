@@ -48,7 +48,7 @@ func readAudit(t *testing.T, client golfv1connect.AuditServiceClient) *golfv1.Li
 }
 
 func TestAuditBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestAuditStableCursorAndScopingPostgres(t *testing.T) {
 	_, bobUser, _ := f.id(t, bob)
 	queries := database.New(f.db)
 	for _, params := range []database.ListAuditEventsParams{
-		{UserID: bobUser, ForgeURL: f.s.config.GiteaURL, CallerTokenHash: hash, SnapshotID: 9223372036854775807, RowLimit: 100},
+		{UserID: bobUser, ForgeURL: f.s.config.ForgeURL, CallerTokenHash: hash, SnapshotID: 9223372036854775807, RowLimit: 100},
 		{UserID: aliceUser, ForgeURL: "https://other.invalid", CallerTokenHash: hash, SnapshotID: 9223372036854775807, RowLimit: 100},
 	} {
 		rows, err := queries.ListAuditEvents(context.Background(), params)
@@ -272,7 +272,7 @@ func legacyManagementSession(t *testing.T, f *managementFixture, name, kind stri
 	}
 	expires := time.Now().Add(time.Hour)
 	q := database.New(f.db)
-	id, err := q.UpsertUser(context.Background(), database.UpsertUserParams{ForgeURL: f.s.config.GiteaURL, ForgeUserID: user.ID, Login: user.Login})
+	id, err := q.UpsertUser(context.Background(), database.UpsertUserParams{ForgeURL: f.s.config.ForgeURL, ForgeUserID: user.ID, Login: user.Login})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,13 +413,13 @@ func TestAuditSnapshotSerializesWritersPostgres(t *testing.T) {
 	}
 	defer tx.Rollback()
 	q := database.New(f.db).WithTx(tx)
-	if _, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: f.s.config.GiteaURL}); err != nil {
+	if _, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: f.s.config.ForgeURL}); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
 	go func() { _, err := f.s.loginSession(ctx, "alice-management-token", ""); done <- err }()
 	waitManagementLock(t, f.db, "LockLoginUsers", 1)
-	snapshot, err := q.GetAuditSnapshot(ctx, database.GetAuditSnapshotParams{UserID: userID, ForgeURL: f.s.config.GiteaURL, CallerTokenHash: hash})
+	snapshot, err := q.GetAuditSnapshot(ctx, database.GetAuditSnapshotParams{UserID: userID, ForgeURL: f.s.config.ForgeURL, CallerTokenHash: hash})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -269,7 +269,7 @@ func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connec
 			return invalid("Source approval must expire before the approving session.")
 		}
 		var current int64
-		e := tx.QueryRowContext(ctx, `SELECT version FROM golf_execution_bindings WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 FOR UPDATE`, m.Id, s.config.GiteaURL, t.repo, t.owner).Scan(&current)
+		e := tx.QueryRowContext(ctx, `SELECT version FROM golf_execution_bindings WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 FOR UPDATE`, m.Id, s.config.ForgeURL, t.repo, t.owner).Scan(&current)
 		if e == nil && current != version || errors.Is(e, sql.ErrNoRows) && version != 0 {
 			return errExecutionValueConflict
 		}
@@ -277,7 +277,7 @@ func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connec
 			return errStorageUnavailable
 		}
 		var names, history int
-		if e = tx.QueryRowContext(ctx, `SELECT count(*),(SELECT count(*) FROM golf_execution_binding_versions vv JOIN golf_execution_bindings b ON b.id=vv.id WHERE b.forge_url=$1 AND b.repository_id=$2 AND b.owner_id=$3) FROM golf_execution_bindings WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3`, s.config.GiteaURL, t.repo, t.owner).Scan(&names, &history); e != nil {
+		if e = tx.QueryRowContext(ctx, `SELECT count(*),(SELECT count(*) FROM golf_execution_binding_versions vv JOIN golf_execution_bindings b ON b.id=vv.id WHERE b.forge_url=$1 AND b.repository_id=$2 AND b.owner_id=$3) FROM golf_execution_bindings WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3`, s.config.ForgeURL, t.repo, t.owner).Scan(&names, &history); e != nil {
 			return errStorageUnavailable
 		}
 		if version == 0 && names >= 20 || history >= 256 {
@@ -300,7 +300,7 @@ func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connec
 			return invalid("Approved value aggregate exceeds its bound.")
 		}
 		if version == 0 {
-			_, e = tx.ExecContext(ctx, `INSERT INTO golf_execution_bindings(id,forge_url,repository_id,owner_id,version) VALUES($1,$2,$3,$4,1)`, m.Id, s.config.GiteaURL, t.repo, t.owner)
+			_, e = tx.ExecContext(ctx, `INSERT INTO golf_execution_bindings(id,forge_url,repository_id,owner_id,version) VALUES($1,$2,$3,$4,1)`, m.Id, s.config.ForgeURL, t.repo, t.owner)
 		} else {
 			_, e = tx.ExecContext(ctx, `UPDATE golf_execution_bindings SET version=version+1,deleted=false,updated_at=clock_timestamp() WHERE id=$1`, m.Id)
 		}
@@ -316,7 +316,7 @@ func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connec
 		if e != nil {
 			return errStorageUnavailable
 		}
-		return fenceExecutionBindingRuns(ctx, tx, s.config.GiteaURL, m.Id)
+		return fenceExecutionBindingRuns(ctx, tx, s.config.ForgeURL, m.Id)
 	})
 	if e != nil {
 		return nil, executionMutationRPCError(e, result)
@@ -329,7 +329,7 @@ func (s *Server) DeleteRepositoryExecutionBinding(ctx context.Context, req *conn
 	m := req.Msg
 	metadata := struct{ ID, Version, Broker string }{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision}
 	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "delete_binding", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, "", nil}, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte, t executionTarget, version int64) error {
-		r, e := tx.ExecContext(ctx, `UPDATE golf_execution_bindings SET version=version+1,deleted=true,updated_at=clock_timestamp() WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 AND version=$5 AND NOT deleted`, m.Id, s.config.GiteaURL, t.repo, t.owner, version)
+		r, e := tx.ExecContext(ctx, `UPDATE golf_execution_bindings SET version=version+1,deleted=true,updated_at=clock_timestamp() WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 AND version=$5 AND NOT deleted`, m.Id, s.config.ForgeURL, t.repo, t.owner, version)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -337,7 +337,7 @@ func (s *Server) DeleteRepositoryExecutionBinding(ctx context.Context, req *conn
 		if n != 1 {
 			return errExecutionValueConflict
 		}
-		return fenceExecutionBindingRuns(ctx, tx, s.config.GiteaURL, m.Id)
+		return fenceExecutionBindingRuns(ctx, tx, s.config.ForgeURL, m.Id)
 	})
 	if e != nil {
 		return nil, executionMutationRPCError(e, result)

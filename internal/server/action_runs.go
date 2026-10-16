@@ -196,7 +196,7 @@ func (s *Server) ListActionRuns(ctx context.Context, req *connect.Request[golfv1
 			return false, invalid("Actions cursor does not match this selection.")
 		}
 		where := ` WHERE ($6=0 OR kind=$6) AND ($7='' OR workflow_path=$7)`
-		args := []any{s.config.GiteaURL, id, owner, a.UserID, workflowWritable(access), int32(filter), req.Msg.WorkflowPath}
+		args := []any{s.config.ForgeURL, id, owner, a.UserID, workflowWritable(access), int32(filter), req.Msg.WorkflowPath}
 		if req.Msg.Cursor != "" {
 			where += ` AND (created_at,kind,id)<($8::timestamptz,$9::integer,$10::uuid)`
 			args = append(args, time.UnixMicro(cursor.At).UTC(), cursor.Kind, cursor.ID)
@@ -262,7 +262,7 @@ func (s *Server) GetActionRun(ctx context.Context, req *connect.Request[golfv1.G
 		if ref.Kind == 2 {
 			query = `SELECT 2,id::text,created_at,'Coding task',state,commit_id,started_at,finished_at,'','','',0::bigint,COALESCE(config->>'model_id',''),worker_id,attempt_id,'','','','','' FROM golf_agent_tasks WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 AND user_id=$4 AND $5 AND 2=$6 AND id=$7::uuid`
 		}
-		summary, _, e := scanActionSummary(s.db.QueryRowContext(ctx, query, s.config.GiteaURL, id, owner, a.UserID, workflowWritable(access), int32(ref.Kind), ref.Id), id, owner)
+		summary, _, e := scanActionSummary(s.db.QueryRowContext(ctx, query, s.config.ForgeURL, id, owner, a.UserID, workflowWritable(access), int32(ref.Kind), ref.Id), id, owner)
 		if errors.Is(e, sql.ErrNoRows) {
 			return false, errResourceNotFound
 		}
@@ -276,7 +276,7 @@ func (s *Server) GetActionRun(ctx context.Context, req *connect.Request[golfv1.G
 			if e != nil {
 				return false, e
 			}
-			if r.RepositoryID != id || r.OwnerID != owner || r.ForgeURL != s.config.GiteaURL {
+			if r.RepositoryID != id || r.OwnerID != owner || r.ForgeURL != s.config.ForgeURL {
 				return false, errResourceNotFound
 			}
 			v := wireWorkflowRun(r, workflowWritable(access))
@@ -314,7 +314,7 @@ func (s *Server) GetActionRun(ctx context.Context, req *connect.Request[golfv1.G
 			summary.AttemptId = actionAttempt(r.Attempt)
 			result.Detail = &golfv1.GetActionRunResponse_Task{Task: v}
 		case 3:
-			r, e := scanReviewRun(s.db.QueryRowContext(ctx, `SELECT `+reviewRunColumns+` FROM golf_reviewer_runs WHERE id=$1 AND reviewer_id IN(SELECT id FROM golf_reviewers WHERE forge_url=$2 AND repository_id=$3 AND owner_id=$4)`, ref.Id, s.config.GiteaURL, id, owner))
+			r, e := scanReviewRun(s.db.QueryRowContext(ctx, `SELECT `+reviewRunColumns+` FROM golf_reviewer_runs WHERE id=$1 AND reviewer_id IN(SELECT id FROM golf_reviewers WHERE forge_url=$2 AND repository_id=$3 AND owner_id=$4)`, ref.Id, s.config.ForgeURL, id, owner))
 			if errors.Is(e, sql.ErrNoRows) {
 				return false, errResourceNotFound
 			}

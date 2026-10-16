@@ -1,6 +1,6 @@
 # Private CI source storage
 
-Golf's first S3 consumer is a bounded, immutable CI source snapshot. The maintained AWS SDK for Go v2 signs requests; Golf does not implement its own S3 authentication. The portable target is RustFS and the Cloudflare target is R2. This adapter does not move Git repositories, Gitea LFS/attachments, job logs or general artifacts into object storage.
+Golf's first S3 consumer is a bounded, immutable CI source snapshot. The maintained AWS SDK for Go v2 signs requests; Golf does not implement its own S3 authentication. The portable target is RustFS and the Cloudflare target is R2. This adapter does not move Git repositories, Forgejo LFS/attachments, job logs or general artifacts into object storage.
 
 ## Adapter contract
 

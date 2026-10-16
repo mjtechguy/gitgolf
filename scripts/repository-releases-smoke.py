@@ -200,7 +200,7 @@ def main():
   result=subprocess.run(argv,cwd=stack,input=None if payload is None else json.dumps(payload),text=True,capture_output=True,timeout=timeout)
   assert result.returncode==0 and len(result.stdout)+len(result.stderr)<2<<20
   return result.stdout.strip()
- def admin(*parts):return command(compose+['exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*parts])
+ def admin(*parts):return command(compose+['exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*parts])  # Forgejo's upstream path
  def operator(action,payload):
   result=json.loads(command(compose+['exec','-T','golf','/usr/local/bin/golf','local-account',action],payload));assert result['state']=='complete';return result['result']
  def rpc(actor,procedure,payload=None,status=200,code=None):
@@ -245,7 +245,7 @@ def main():
   assert row['id']==cid and row['image']==args.image and row['project']==args.project and row['service']=='golf' and row['running'] and label==args.source_revision
   return {**row,'sourceRevision':label}
  try:
-  persist();runtime=runtime_now();manifest['runtimeBefore']=runtime;persist();assert common.request(common.client(),'GET',golf+'/readyz',None,{},200);assert api(None,'GET','version')['version']=='1.27.3'
+  persist();runtime=runtime_now();manifest['runtimeBefore']=runtime;persist();assert common.request(common.client(),'GET',golf+'/readyz',None,{},200);assert api(None,'GET','version')['version']=='15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
   stage='ordinary native actors and managed enrollment'
   for role in ('owner','reader'):
    name=prefix+'-'+role;actor={'name':name,'created':False,'enrolled':False,'loggedIn':False,'session':common.client()};actors[role]=actor

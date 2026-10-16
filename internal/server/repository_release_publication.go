@@ -107,7 +107,7 @@ func (s *Server) releasePublicationAuthority(ctx context.Context, session string
 func (s *Server) ownReleasePublication(ctx context.Context, session string, token forgeCredential, id string) (r releasePublicationRecord, e error) {
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanReleasePublication(s.db.QueryRowContext(ctx, `SELECT `+releasePublicationColumns+` FROM golf_repository_release_publications WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, id))
+		r, e = scanReleasePublication(s.db.QueryRowContext(ctx, `SELECT `+releasePublicationColumns+` FROM golf_repository_release_publications WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, id))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -233,10 +233,10 @@ func (s *Server) releasePublicationReceipt(ctx context.Context, session string, 
 }
 
 func (s *Server) lockReleasePublication(ctx context.Context, tx *sql.Tx, repoID int64) (context.Context, error) {
-	if _, e := tx.ExecContext(ctx, `SELECT golf_release_publication_lock($1,$2)`, s.config.GiteaURL, repoID); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_release_publication_lock($1,$2)`, s.config.ForgeURL, repoID); e != nil {
 		return nil, errStorageUnavailable
 	}
-	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, repoID, tx}), nil
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, repoID, tx}), nil
 }
 func (s *Server) advanceReleasePublication(ctx context.Context, session string, token forgeCredential, r releasePublicationRecord, phase string, id int64) (updated releasePublicationRecord, e error) {
 	actor, e := s.currentUser(ctx, token)
@@ -287,7 +287,7 @@ func (s *Server) validateReleasePublicationPermit(ctx context.Context, tx *sql.T
 	if tx == nil || repo.ID != r.RepositoryID || method != http.MethodPost || path != base+"/releases" || key.Owner != r.Owner || key.Name != r.Name {
 		return errLifecycleBlocked
 	}
-	row, e := scanReleasePublication(tx.QueryRowContext(ctx, `SELECT `+releasePublicationColumns+` FROM golf_repository_release_publications WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND phase='DISPATCH_UNKNOWN'`, r.ID, r.UserID, s.config.GiteaURL))
+	row, e := scanReleasePublication(tx.QueryRowContext(ctx, `SELECT `+releasePublicationColumns+` FROM golf_repository_release_publications WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND phase='DISPATCH_UNKNOWN'`, r.ID, r.UserID, s.config.ForgeURL))
 	if e != nil {
 		return errLifecycleBlocked
 	}
@@ -380,7 +380,7 @@ func (s *Server) SubmitRepositoryReleasePublication(ctx context.Context, req *co
 		if e != nil {
 			return e
 		}
-		r, e = scanReleasePublication(tx.QueryRowContext(held, `SELECT `+releasePublicationColumns+` FROM golf_repository_release_publications WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanReleasePublication(tx.QueryRowContext(held, `SELECT `+releasePublicationColumns+` FROM golf_repository_release_publications WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(r.Fingerprint, fingerprint) {
 				return errRepositoryAccessConflict
@@ -390,7 +390,7 @@ func (s *Server) SubmitRepositoryReleasePublication(ctx context.Context, req *co
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanReleasePublication(tx.QueryRowContext(held, `INSERT INTO golf_repository_release_publications(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,tag_name,tag_object_id,commit_id,title_sha256,body_sha256,prerelease,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING `+releasePublicationColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, repoID, ownerID, key.Owner, key.Name, m.AccessRevision, m.TagName, m.TagObjectId, m.CommitId, releasePublicationTextHash(m.Title), releasePublicationTextHash(m.BodyMarkdown), m.Prerelease, fingerprint))
+		r, e = scanReleasePublication(tx.QueryRowContext(held, `INSERT INTO golf_repository_release_publications(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,tag_name,tag_object_id,commit_id,title_sha256,body_sha256,prerelease,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING `+releasePublicationColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, repoID, ownerID, key.Owner, key.Name, m.AccessRevision, m.TagName, m.TagObjectId, m.CommitId, releasePublicationTextHash(m.Title), releasePublicationTextHash(m.BodyMarkdown), m.Prerelease, fingerprint))
 		if e != nil {
 			var state interface{ SQLState() string }
 			if errors.As(e, &state) && state.SQLState() == "55000" {

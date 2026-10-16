@@ -156,7 +156,7 @@ func (s *Server) GetMirrorSyncObservation(ctx context.Context, req *connect.Requ
 	var r mirrorRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanMirror(s.db.QueryRowContext(ctx, `SELECT `+mirrorColumns+` FROM golf_repository_mirror_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanMirror(s.db.QueryRowContext(ctx, `SELECT `+mirrorColumns+` FROM golf_repository_mirror_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}

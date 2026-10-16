@@ -1,6 +1,6 @@
 # Native forge consumers078
 
-Golf exposes these supported native1.27.3 API consumers on both infrastructure tracks. Cloudflare, AI and additional Docker execution capacity are not prerequisites. Native repository files/databases are never written directly.
+Golf exposes these supported native forge API consumers on both infrastructure tracks. Cloudflare, AI and additional Docker execution capacity are not prerequisites. Native repository files/databases are never written directly.
 
 ## Wiki
 
@@ -36,7 +36,7 @@ The pinned native Swagger inventory exposes no supported projects/board REST end
 
 ## Evidence
 
-The owned native qualifier is `scripts/native-forge078-source-proof.py`; it uses actual production HTTP handlers, isolated host PostgreSQL schemas and supported existing Gitea APIs, with no new Docker jobs. It checks wiki CRUD/history, original replay/inspection, linked private generic package inventory/files, organization label CRUD, mirror interval edits and synchronization queue acceptance. Every owned organization, user, repository, package and session is removed. Failed original requests are retained in receipts and fresh fixture UUIDs are used for subsequent qualification.
+The owned native qualifier is `scripts/native-forge078-source-proof.py`; it uses actual production HTTP handlers, isolated host PostgreSQL schemas and supported existing native forge APIs, with no new Docker jobs. It checks wiki CRUD/history, original replay/inspection, linked private generic package inventory/files, organization label CRUD, mirror interval edits and synchronization queue acceptance. Every owned organization, user, repository, package and session is removed. Failed original requests are retained in receipts and fresh fixture UUIDs are used for subsequent qualification.
 
 `TestWikiOperationJournalPostgres` covers exact success, lost/invalid receipts, stale expected versions, lost authority, unchanged replay, changed-intent refusal and immutable journal/events. Browser tests cover requested forms, previews, explicit confirmation, unknown-operation reload, denial clearing, temporary parent revalidation, shared package/label tables, honest sync acceptance and both themes/mobile widths. These source/native checks do not establish served localhost deployment or close an entire plan phase.
 

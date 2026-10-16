@@ -8,7 +8,7 @@ The executable proof passed:
 
 - Native Cluster, Database, ObjectStore, ScheduledBackup and Backup resources accepted by installed CRDs/operators.
 - Three source PostgreSQL instances ready, with a synchronous standby reported by PostgreSQL.
-- Separate `golf` and `gitea` databases with matching owners; both application roles non-superuser and unable to create databases or roles.
+- Separate `golf` and native-forge databases with matching owners (this run used the since-retired backend's database/role name; the chart now creates `forgejo`, which this proof did not exercise); both application roles non-superuser and unable to create databases or roles.
 - Password-authenticated `verify-full` TLS client connections using the CNPG CA; each application role denied access to the other application database.
 - RustFS HTTPS bucket creation with certificate verification.
 - Barman physical base backup completed into RustFS.
@@ -18,4 +18,4 @@ The executable proof passed:
 
 `python3 deploy/kubernetes/cnpg/check.py`, valid-values `helm lint`, and Python syntax checks also passed. Offline checks include narrow role/replication/resource contracts, missing or conflicting secrets, unconfigured storage, unsafe endpoint/prefix, invalid retention, misspelled/type-invalid settings and same-name recovery refusal.
 
-This is a **PostgreSQL/Barman/RustFS compatibility and recovery proof**, not complete Golf runtime or production HA qualification. It does not prove native Gitea client CA integration, cross-host/zone failover, distributed RustFS erasure-code behavior, retention expiry, production RPO/RTO, R2 Barman compatibility, application load or whole-Golf recovery. Those gates remain explicit in the [README](README.md) and [recovery contract](../../../docs/RECOVERY.md).
+This is a **PostgreSQL/Barman/RustFS compatibility and recovery proof**, not complete Golf runtime or production HA qualification. It does not prove native Forgejo client CA integration, cross-host/zone failover, distributed RustFS erasure-code behavior, retention expiry, production RPO/RTO, R2 Barman compatibility, application load or whole-Golf recovery. Those gates remain explicit in the [README](README.md) and [recovery contract](../../../docs/RECOVERY.md).

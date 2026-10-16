@@ -5,6 +5,7 @@ import { digest, Fault, invalid } from './common.mjs';
 import { repositoryFeatures } from './feature-policy.mjs';
 import { openRepositoryValues } from './execution-values.mjs';
 import { pipelinePolicy } from './pipeline-policy.mjs';
+import { RUNNER_LEGACY_ENV_PREFIX } from './forgejo-upstream.mjs';
 import { claimPlan, poolFull, claimFilter, claimSkipped, claimGuard, claimMissed, dailyRunGuard } from './capacity-shares.mjs';
 
 export { pipelinePolicy };
@@ -629,8 +630,9 @@ async function environmentValues(db, env, run, job) {
   }
   return { secrets, variables };
 }
+const RESERVED_VALUE_PREFIX = new RegExp(`^(GITHUB_|ACTIONS_|RUNNER_|FORGEJO_|${RUNNER_LEGACY_ENV_PREFIX}|CI_|GITLAB_)`);
 export async function saveEnvironmentValue(db, env, person, environment, { name, kind, value }) {
-  if (!/^[A-Z][A-Z0-9_]{0,63}$/.test(name || '') || /^(GITHUB_|ACTIONS_|RUNNER_|FORGEJO_|GITEA_|CI_|GITLAB_)/.test(name) || !['secret', 'variable'].includes(kind) || typeof value !== 'string' || !value || new TextEncoder().encode(value).length > 65536) invalid('Use an uppercase name and a value up to 64 KiB.');
+  if (!/^[A-Z][A-Z0-9_]{0,63}$/.test(name || '') || RESERVED_VALUE_PREFIX.test(name) || !['secret', 'variable'].includes(kind) || typeof value !== 'string' || !value || new TextEncoder().encode(value).length > 65536) invalid('Use an uppercase name and a value up to 64 KiB.');
   if (!env.EXECUTION_VALUE_KEY?.get) refuse('Configure the repository value encryption key to store environment values.');
   const { seal } = await import('./sealed.mjs'), { key, id } = await environmentKey(env);
   const current = await db.prepare('SELECT version FROM pipeline_environment_values WHERE environment_id=? AND name=?').bind(environment.id, name).first();

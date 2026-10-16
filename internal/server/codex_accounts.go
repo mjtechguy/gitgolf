@@ -145,14 +145,14 @@ func (s *Server) codexGuard(ctx context.Context, a codexActor, fn func(*sql.Tx, 
 	}
 	defer tx.Rollback()
 	q := database.New(s.db).WithTx(tx)
-	u, e := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: a.Hash, ForgeURL: s.config.GiteaURL})
+	u, e := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: a.Hash, ForgeURL: s.config.ForgeURL})
 	if e != nil || u.ForgeUserID != a.NativeID || (a.UserID != 0 && a.UserID != u.ID) {
 		return errUnauthenticated
 	}
 	if e := s.requireGolfUserAccess(ctx, tx, u.ID); e != nil {
 		return e
 	}
-	c, e := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: a.Hash, UserID: u.ID, ForgeURL: s.config.GiteaURL})
+	c, e := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: a.Hash, UserID: u.ID, ForgeURL: s.config.ForgeURL})
 	if e != nil || (c.CredentialKind != "local" && c.CredentialKind != "oauth") {
 		return errUnauthenticated
 	}
@@ -323,7 +323,7 @@ func (s *Server) codexSave(ctx context.Context, rt *codexRuntime, r codexRecord)
 	}
 	e = s.codexGuard(ctx, rt.actor, func(tx *sql.Tx, id int64) error {
 		if r.Version == 0 {
-			_, e := tx.ExecContext(ctx, `INSERT INTO golf_codex_connections(id,user_id,state,forge_url,harness,provider,name) VALUES($1,$2,'UNCONFIGURED',$3,$4,$5,$6) ON CONFLICT(user_id,harness,provider) DO NOTHING`, r.ID, id, s.config.GiteaURL, r.Harness, r.Provider, "Personal "+agentLabel(r.Harness))
+			_, e := tx.ExecContext(ctx, `INSERT INTO golf_codex_connections(id,user_id,state,forge_url,harness,provider,name) VALUES($1,$2,'UNCONFIGURED',$3,$4,$5,$6) ON CONFLICT(user_id,harness,provider) DO NOTHING`, r.ID, id, s.config.ForgeURL, r.Harness, r.Provider, "Personal "+agentLabel(r.Harness))
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -332,7 +332,7 @@ func (s *Server) codexSave(ctx context.Context, rt *codexRuntime, r codexRecord)
 			return err
 		}
 		var version int64
-		e := tx.QueryRowContext(ctx, `SELECT version FROM golf_codex_connections WHERE id=$1 AND forge_url=$2 FOR UPDATE`, r.ID, s.config.GiteaURL).Scan(&version)
+		e := tx.QueryRowContext(ctx, `SELECT version FROM golf_codex_connections WHERE id=$1 AND forge_url=$2 FOR UPDATE`, r.ID, s.config.ForgeURL).Scan(&version)
 		// A newly inserted connection is version 1; this first save is its first CAS.
 		expected := r.Version
 		if expected == 0 {
@@ -571,7 +571,7 @@ func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action
 		return s.codexForget(ctx, a, r)
 	}
 	if r.ID == "" {
-		identity := "golf:personal-codex:" + s.config.GiteaURL + ":" + strconv.FormatInt(a.UserID, 10)
+		identity := "golf:personal-codex:" + s.config.ForgeURL + ":" + strconv.FormatInt(a.UserID, 10)
 		if r.Harness != "codex" {
 			identity += "\x00" + r.Harness + "\x00" + r.Provider
 		}
@@ -871,7 +871,7 @@ func (s *Server) codexForget(ctx context.Context, a codexActor, r codexRecord) (
 		if err := s.codexManageTx(ctx, tx, id, r); err != nil {
 			return err
 		}
-		result, e := tx.ExecContext(ctx, `UPDATE golf_codex_connections SET version=version+1,state='UNCONFIGURED',auth_method='',email='',plan_type='',checked_at=NULL,login_id='',verification_url='',user_code='',login_expires_at=NULL,reason_code='',updated_at=clock_timestamp() WHERE id=$1 AND forge_url=$2 AND version=$3`, r.ID, s.config.GiteaURL, r.Version)
+		result, e := tx.ExecContext(ctx, `UPDATE golf_codex_connections SET version=version+1,state='UNCONFIGURED',auth_method='',email='',plan_type='',checked_at=NULL,login_id='',verification_url='',user_code='',login_expires_at=NULL,reason_code='',updated_at=clock_timestamp() WHERE id=$1 AND forge_url=$2 AND version=$3`, r.ID, s.config.ForgeURL, r.Version)
 		if e != nil {
 			return errStorageUnavailable
 		}

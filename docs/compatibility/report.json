@@ -1,16 +1,16 @@
 {
   "format": "golf.compatibility.report.v1",
-  "gitea_profile": "gitea-1.27.3",
-  "denominator": 482,
-  "assessed": 5,
+  "forge_profile": "forgejo-15.0.9",
+  "denominator": 491,
+  "assessed": 4,
   "states": {
     "blocked-upstream": 0,
     "deployed": 0,
-    "missing": 2,
+    "missing": 1,
     "native-tested": 2,
     "runtime-tested": 0,
     "source-tested": 1,
-    "unassessed": 477
+    "unassessed": 487
   },
   "implemented_complete": 0,
   "qualified_complete": 0,
@@ -42,5 +42,5 @@
     }
   },
   "full_compatibility": false,
-  "installed_spec_comparison": "Fresh owned Gitea 1.27.3 paths/definitions/security match; retained installation comparison still required."
+  "installed_spec_comparison": "Served by a fresh owned Forgejo 15.0.9 from the pinned image digest; canonical hash matches the 2026-10-11 and 2026-10-16 qualification receipts. Each retained installation still needs its own comparison."
 }

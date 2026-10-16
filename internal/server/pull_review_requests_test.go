@@ -29,7 +29,7 @@ type reviewRequestFixture struct {
 func newReviewRequestFixture(t *testing.T) *reviewRequestFixture {
 	f := &reviewRequestFixture{releasePublicationFixture: newReleasePublicationFixture(t)}
 	f.requestMode.Store("")
-	target, _ := url.Parse(f.s.config.GiteaURL)
+	target, _ := url.Parse(f.s.config.ForgeURL)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		base := "/api/v1/repos/alice/private"
@@ -111,7 +111,7 @@ func newReviewRequestFixture(t *testing.T) *reviewRequestFixture {
 	}))
 	t.Cleanup(provider.Close)
 	config := f.s.config
-	config.GiteaURL, config.GiteaPublicURL = provider.URL, provider.URL
+	config.ForgeURL, config.ForgePublicURL = provider.URL, provider.URL
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {

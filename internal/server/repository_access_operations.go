@@ -48,7 +48,7 @@ func (s *Server) accessGeneration(ctx context.Context, repo, recipient string) (
 		return 0, errStorageUnavailable
 	}
 	var generation int64
-	e := s.db.QueryRowContext(ctx, `SELECT generation FROM golf_repository_access_generations WHERE forge_url=$1 AND repository_id=$2 AND recipient_id=$3`, s.config.GiteaURL, repo, recipient).Scan(&generation)
+	e := s.db.QueryRowContext(ctx, `SELECT generation FROM golf_repository_access_generations WHERE forge_url=$1 AND repository_id=$2 AND recipient_id=$3`, s.config.ForgeURL, repo, recipient).Scan(&generation)
 	if errors.Is(e, sql.ErrNoRows) {
 		return 0, nil
 	}
@@ -87,7 +87,7 @@ func (s *Server) lockAccessTarget(ctx context.Context, tx *sql.Tx, repo, recipie
 		return nil, e
 	}
 	if _, e = tx.ExecContext(ctx, `-- name: ConcurrentAccessTarget
-SELECT golf_repository_access_lock($1,$2,$3)`, s.config.GiteaURL, repo, recipient); e != nil {
+SELECT golf_repository_access_lock($1,$2,$3)`, s.config.ForgeURL, repo, recipient); e != nil {
 		return nil, errStorageUnavailable
 	}
 	return held, nil
@@ -95,9 +95,9 @@ SELECT golf_repository_access_lock($1,$2,$3)`, s.config.GiteaURL, repo, recipien
 func (s *Server) accessSlot(ctx context.Context, tx *sql.Tx, repo, recipient int64) (int64, sql.NullInt64, sql.NullInt64, error) {
 	var generation int64
 	var direct, invitation sql.NullInt64
-	_, e := tx.ExecContext(ctx, `INSERT INTO golf_repository_access_generations(forge_url,repository_id,recipient_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, s.config.GiteaURL, repo, recipient)
+	_, e := tx.ExecContext(ctx, `INSERT INTO golf_repository_access_generations(forge_url,repository_id,recipient_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, s.config.ForgeURL, repo, recipient)
 	if e == nil {
-		e = tx.QueryRowContext(ctx, `SELECT generation,direct_operation_id,invitation_operation_id FROM golf_repository_access_generations WHERE forge_url=$1 AND repository_id=$2 AND recipient_id=$3 FOR UPDATE`, s.config.GiteaURL, repo, recipient).Scan(&generation, &direct, &invitation)
+		e = tx.QueryRowContext(ctx, `SELECT generation,direct_operation_id,invitation_operation_id FROM golf_repository_access_generations WHERE forge_url=$1 AND repository_id=$2 AND recipient_id=$3 FOR UPDATE`, s.config.ForgeURL, repo, recipient).Scan(&generation, &direct, &invitation)
 	}
 	if e != nil {
 		return 0, direct, invitation, errStorageUnavailable
@@ -240,11 +240,11 @@ func (s *Server) mutateRepositoryAccessIntent(ctx context.Context, value string,
 			if generation == 9223372036854775807 {
 				return invalid("Access generation exhausted.")
 			}
-			op, e = scanAccessOperation(tx.QueryRowContext(ctx, `INSERT INTO golf_repository_access_operations(user_id,forge_url,idempotency_key,repository_id,owner_id,repository_owner,repository_name,actor_id,recipient_id,recipient_login,access_revision,recipient_revision,requested_permission,remove,generation,input_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING `+accessOperationColumns, actor.UserID, s.config.GiteaURL, operationKey, repo, owner, key.Owner, key.Name, caller.ID, recipient, login, revision, targetRevision, permission, remove, generation+1, fingerprint))
+			op, e = scanAccessOperation(tx.QueryRowContext(ctx, `INSERT INTO golf_repository_access_operations(user_id,forge_url,idempotency_key,repository_id,owner_id,repository_owner,repository_name,actor_id,recipient_id,recipient_login,access_revision,recipient_revision,requested_permission,remove,generation,input_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING `+accessOperationColumns, actor.UserID, s.config.ForgeURL, operationKey, repo, owner, key.Owner, key.Name, caller.ID, recipient, login, revision, targetRevision, permission, remove, generation+1, fingerprint))
 			if e != nil {
 				return e
 			}
-			_, e = tx.ExecContext(ctx, `UPDATE golf_repository_access_generations SET generation=$4,direct_operation_id=$5,invitation_operation_id=NULL WHERE forge_url=$1 AND repository_id=$2 AND recipient_id=$3`, s.config.GiteaURL, repo, recipient, op.Generation, op.ID)
+			_, e = tx.ExecContext(ctx, `UPDATE golf_repository_access_generations SET generation=$4,direct_operation_id=$5,invitation_operation_id=NULL WHERE forge_url=$1 AND repository_id=$2 AND recipient_id=$3`, s.config.ForgeURL, repo, recipient, op.Generation, op.ID)
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -360,7 +360,7 @@ func (s *Server) mutateRepositoryAccessIntent(ctx context.Context, value string,
 			if e != nil {
 				return e
 			}
-			_, e = tx.ExecContext(ctx, `UPDATE golf_repository_access_generations SET direct_operation_id=NULL WHERE forge_url=$1 AND repository_id=$2 AND recipient_id=$3`, s.config.GiteaURL, repo, recipient)
+			_, e = tx.ExecContext(ctx, `UPDATE golf_repository_access_generations SET direct_operation_id=NULL WHERE forge_url=$1 AND repository_id=$2 AND recipient_id=$3`, s.config.ForgeURL, repo, recipient)
 			if e != nil {
 				return errStorageUnavailable
 			}

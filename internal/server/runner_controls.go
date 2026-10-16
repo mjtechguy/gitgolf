@@ -57,7 +57,7 @@ func runnerControlVersion(value string) (int64, bool) {
 	return n, e == nil && n >= 0 && strconv.FormatInt(n, 10) == value
 }
 func (s *Server) lockRunnerControl(ctx context.Context, tx *sql.Tx, id string) error {
-	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.GiteaURL+"/runner/"+id)
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.ForgeURL+"/runner/"+id)
 	return err
 }
 
@@ -66,7 +66,7 @@ func (s *Server) lockRunnerControl(ctx context.Context, tx *sql.Tx, id string) e
 func (s *Server) runnerControl(ctx context.Context, tx *sql.Tx, id string) (string, int64, error) {
 	var state string
 	var version int64
-	err := tx.QueryRowContext(ctx, `SELECT state,version FROM golf_runner_controls WHERE forge_url=$1 AND runner_id=$2`, s.config.GiteaURL, id).Scan(&state, &version)
+	err := tx.QueryRowContext(ctx, `SELECT state,version FROM golf_runner_controls WHERE forge_url=$1 AND runner_id=$2`, s.config.ForgeURL, id).Scan(&state, &version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "active", 0, nil
 	}
@@ -89,7 +89,7 @@ func (s *Server) enrolledRunnerInventory(ctx context.Context, tx *sql.Tx) ([]*go
 		}
 		var stamp sql.NullTime
 		var recent, busy bool
-		err = tx.QueryRowContext(ctx, `SELECT (SELECT last_seen FROM golf_runner_presence WHERE forge_url=$1 AND runner_id=$2),COALESCE((SELECT last_seen>clock_timestamp()-interval '15 seconds' AND last_seen<=clock_timestamp() FROM golf_runner_presence WHERE forge_url=$1 AND runner_id=$2),false),EXISTS(SELECT 1 FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND state='running' AND lease_expires_at>clock_timestamp())`, s.config.GiteaURL, id).Scan(&stamp, &recent, &busy)
+		err = tx.QueryRowContext(ctx, `SELECT (SELECT last_seen FROM golf_runner_presence WHERE forge_url=$1 AND runner_id=$2),COALESCE((SELECT last_seen>clock_timestamp()-interval '15 seconds' AND last_seen<=clock_timestamp() FROM golf_runner_presence WHERE forge_url=$1 AND runner_id=$2),false),EXISTS(SELECT 1 FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND state='running' AND lease_expires_at>clock_timestamp())`, s.config.ForgeURL, id).Scan(&stamp, &recent, &busy)
 		if err != nil {
 			return nil, errStorageUnavailable
 		}
@@ -169,19 +169,19 @@ func (s *Server) UpdateRunnerControl(ctx context.Context, req *connect.Request[g
 		if version == int64(^uint64(0)>>1) {
 			return errStorageUnavailable
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO golf_runner_controls(forge_url,runner_id,state,version) VALUES($1,$2,$3,$4) ON CONFLICT(forge_url,runner_id) DO UPDATE SET state=excluded.state,version=excluded.version,updated_at=clock_timestamp()`, s.config.GiteaURL, m.WorkerId, next, version+1)
+		_, err = tx.ExecContext(ctx, `INSERT INTO golf_runner_controls(forge_url,runner_id,state,version) VALUES($1,$2,$3,$4) ON CONFLICT(forge_url,runner_id) DO UPDATE SET state=excluded.state,version=excluded.version,updated_at=clock_timestamp()`, s.config.ForgeURL, m.WorkerId, next, version+1)
 		if err != nil {
 			return errStorageUnavailable
 		}
 		if next == "revoked" {
 			// Fences all result/release capabilities; runner observes refusal and cleans
 			// its owned execution. Cancellation is not a successful daemon-cleanup proof.
-			_, err = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',cancel_requested=true,version=version+1,finished_at=clock_timestamp(),reason='Enrolled worker was revoked.',lease_token_hash=NULL,lease_expires_at=NULL WHERE forge_url=$1 AND runner_id=$2 AND state='running'`, s.config.GiteaURL, m.WorkerId)
+			_, err = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',cancel_requested=true,version=version+1,finished_at=clock_timestamp(),reason='Enrolled worker was revoked.',lease_token_hash=NULL,lease_expires_at=NULL WHERE forge_url=$1 AND runner_id=$2 AND state='running'`, s.config.ForgeURL, m.WorkerId)
 			if err != nil {
 				return errStorageUnavailable
 			}
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO golf_runner_control_audit(forge_url,runner_id,version,actor_user_id,previous_state,state) VALUES($1,$2,$3,$4,$5,$6)`, s.config.GiteaURL, m.WorkerId, version+1, initial.UserID, old, next)
+		_, err = tx.ExecContext(ctx, `INSERT INTO golf_runner_control_audit(forge_url,runner_id,version,actor_user_id,previous_state,state) VALUES($1,$2,$3,$4,$5,$6)`, s.config.ForgeURL, m.WorkerId, version+1, initial.UserID, old, next)
 		if err != nil {
 			return errStorageUnavailable
 		}

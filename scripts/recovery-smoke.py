@@ -3,7 +3,7 @@
 
 Requires Docker, age/age-keygen, Git/git-lfs, GnuPG and ssh-keyscan. Supply the
 locally built Golf image with --image. Neither the normal Compose project nor
-its credentials/ports are used. Native Gitea APIs/Git/admin create the fixture;
+its credentials/ports are used. Native Forgejo APIs/Git/admin create the fixture;
 only Golf's database is queried/seeded directly for recovery evidence. Two actual
 native pushes admit automatic runs; HTTP leases exercise control-plane authority,
 without executing Docker jobs. Explicit pending/preparing metadata fixtures cover
@@ -37,10 +37,12 @@ import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
+import recovery as recovery_tool
 import smoke
 
 ROOT = Path(__file__).resolve().parents[1]
 STAGE = 'prerequisites'
+FORGEJO_IMAGE = 'codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'
 JOB_IMAGE = 'alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0'
 # Fixed Golf metadata only. Mutable grant/run/account state is compared separately.
 HISTORY_TABLES = [
@@ -114,22 +116,22 @@ def main():
         assert shutil.which(tool), 'Required native tool is unavailable'
     image = json.loads(run('docker', 'image', 'inspect', args.image))[0]['Id']
     print('Golf image: '+image, flush=True)
-    for tag in ['postgres:18.4-alpine3.24', 'gitea/gitea:1.27.3-rootless']:
+    for tag in ['postgres:18.4-alpine3.24', FORGEJO_IMAGE]:
         run('docker', 'image', 'inspect', tag)
     prefix = 'golf-recovery-'+secrets.token_hex(5)
     source, target, rejected, schema_rejected = [prefix+'-'+name for name in ['source', 'restore', 'reject', 'schema']]
     projects = [source, target, rejected, schema_rejected]
     for project in projects:
         assert not any(resources(project).values()), 'Fixture project already exists'
-    original_urls = smoke.GOLF, smoke.GITEA
+    original_urls = smoke.GOLF, smoke.FORGE
     ports = set()
     while len(ports) < 3:
         ports.add(port())
-    golf_port, gitea_port, ssh_port = sorted(ports)
-    smoke.GOLF, smoke.GITEA = 'http://127.0.0.1:'+str(golf_port), 'http://127.0.0.1:'+str(gitea_port)
+    golf_port, forge_port, ssh_port = sorted(ports)
+    smoke.GOLF, smoke.FORGE = 'http://127.0.0.1:'+str(golf_port), 'http://127.0.0.1:'+str(forge_port)
     # Compose receives only explicit fixture values, never the operator's keys.
     env = {key: value for key, value in os.environ.items()
-           if not key.startswith(('GOLF_', 'GITEA_', 'COMPOSE_', 'POSTGRES_', 'RUSTFS_', 'AWS_')) and key != 'DATABASE_URL'}
+           if not key.startswith(('GOLF_', 'FORGEJO_', 'COMPOSE_', 'POSTGRES_', 'RUSTFS_', 'AWS_')) and key != 'DATABASE_URL'}
     forbidden = []
     try:
         with tempfile.TemporaryDirectory(prefix=prefix+'-') as temporary, ExitStack() as cleanup:
@@ -155,7 +157,7 @@ def main():
                     # Report only lifecycle metadata, never container env/logs
                     # or a readiness response body that could contain secrets.
                     states = {}
-                    for service in ['postgres', 'gitea', 'golf']:
+                    for service in ['postgres', 'forgejo', 'golf']:
                         state = json.loads(run('docker', 'inspect', container(service)))[0]['State']
                         states[service] = {'status': state['Status'], 'running': state['Running'],
                                            'exit_code': state['ExitCode'],
@@ -172,7 +174,7 @@ def main():
                     raise
 
             def admin(*arguments):
-                return compose('exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini',
+                return compose('exec', '-T', 'forgejo', 'forgejo', '--config', str(recovery_tool.FORGEJO_APP_INI),
                                'admin', 'user', *arguments).strip()
 
             def sql(statement):
@@ -245,21 +247,21 @@ def main():
             config = {'services': {
                 'postgres': {'image': 'postgres:18.4-alpine3.24', 'pull_policy': 'never',
                     'environment': {'POSTGRES_PASSWORD': passwords[0], 'GOLF_DB_PASSWORD': passwords[1],
-                                    'GITEA_DB_PASSWORD': passwords[2]},
+                                    'FORGEJO_DB_PASSWORD': passwords[2]},
                     'volumes': ['postgres-data:/var/lib/postgresql',
-                                str(ROOT/'deploy/postgres/init.sh')+':/docker-entrypoint-initdb.d/01-golf.sh:ro'],
+                                str(ROOT/recovery_tool.POSTGRES_INIT)+':/docker-entrypoint-initdb.d/01-golf.sh:ro'],
                     'healthcheck': {'test': ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres'], 'interval': '2s',
                                     'timeout': '3s', 'retries': 60}},
-                'gitea': {'image': 'gitea/gitea:1.27.3-rootless', 'pull_policy': 'never',
-                    'environment': {'GITEA__database__DB_TYPE': 'postgres', 'GITEA__database__HOST': 'postgres:5432',
-                        'GITEA__database__NAME': 'gitea', 'GITEA__database__USER': 'gitea',
-                        'GITEA__database__PASSWD': passwords[2], 'GITEA__server__ROOT_URL': smoke.GITEA+'/',
-                        'GITEA__server__SSH_DOMAIN': '127.0.0.1', 'GITEA__server__SSH_PORT': str(ssh_port),
-                        'GITEA__server__SSH_LISTEN_PORT': '2222', 'GITEA__server__LFS_START_SERVER': 'true',
-                        'GITEA__security__INSTALL_LOCK': 'true', 'GITEA__service__DISABLE_REGISTRATION': 'true',
-                        'GITEA__actions__ENABLED': 'false', 'GITEA__security__ALLOWED_HOST_LIST': 'golf'},
-                    'ports': [f'127.0.0.1:{gitea_port}:3000', f'127.0.0.1:{ssh_port}:2222'],
-                    'volumes': ['gitea-data:/var/lib/gitea', 'gitea-config:/etc/gitea'],
+                'forgejo': {'image': FORGEJO_IMAGE, 'pull_policy': 'never',
+                    'environment': {'FORGEJO__database__DB_TYPE': 'postgres', 'FORGEJO__database__HOST': 'postgres:5432',
+                        'FORGEJO__database__NAME': 'forgejo', 'FORGEJO__database__USER': 'forgejo',
+                        'FORGEJO__database__PASSWD': passwords[2], 'FORGEJO__server__ROOT_URL': smoke.FORGE+'/',
+                        'FORGEJO__server__SSH_DOMAIN': '127.0.0.1', 'FORGEJO__server__SSH_PORT': str(ssh_port),
+                        'FORGEJO__server__SSH_LISTEN_PORT': '2222', 'FORGEJO__server__LFS_START_SERVER': 'true',
+                        'FORGEJO__security__INSTALL_LOCK': 'true', 'FORGEJO__service__DISABLE_REGISTRATION': 'true',
+                        'FORGEJO__actions__ENABLED': 'false', 'FORGEJO__webhook__ALLOWED_HOST_LIST': 'golf'},
+                    'ports': [f'127.0.0.1:{forge_port}:3000', f'127.0.0.1:{ssh_port}:2222'],
+                    'volumes': recovery_tool.forgejo_volumes(),
                     'depends_on': {'postgres': {'condition': 'service_healthy'}}},
                 'golf': {'image': image, 'pull_policy': 'never', 'environment': {
                         'GOLF_LISTEN_ADDR': ':8080', 'GOLF_PUBLIC_URL': smoke.GOLF,
@@ -275,11 +277,12 @@ def main():
                         # backup/restore must preserve that effective value.
                         'GOLF_RECOVERY_FIXTURE_MARKER': 'literal-$$recovery-marker',
                         'DATABASE_URL': f'postgres://golf:{passwords[1]}@postgres:5432/golf?sslmode=disable',
-                        'GITEA_URL': 'http://gitea:3000', 'GITEA_PUBLIC_URL': smoke.GITEA,
-                        'GITEA_OAUTH_CLIENT_ID': prefix, 'GITEA_OAUTH_CLIENT_SECRET': oauth_secret},
+                        'GOLF_FORGE_URL': 'http://forgejo:3000', 'GOLF_FORGE_KIND': 'forgejo',
+                        'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4()), 'GOLF_FORGE_PUBLIC_URL': smoke.FORGE,
+                        'GOLF_FORGE_OAUTH_CLIENT_ID': prefix, 'GOLF_FORGE_OAUTH_CLIENT_SECRET': oauth_secret},
                     'ports': [f'127.0.0.1:{golf_port}:8080'],
-                    'depends_on': {'postgres': {'condition': 'service_healthy'}, 'gitea': {'condition': 'service_started'}}}},
-                'volumes': {name: {} for name in ['postgres-data', 'gitea-data', 'gitea-config']}}
+                    'depends_on': {'postgres': {'condition': 'service_healthy'}, 'forgejo': {'condition': 'service_started'}}}},
+                'volumes': {name: {} for name in recovery_tool.volume_names(False)}}
             config['services']['rustfs'] = {
                 'image': 'rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff',
                 'environment': {'RUSTFS_VOLUMES': '/data', 'RUSTFS_ADDRESS': '0.0.0.0:9000',
@@ -309,7 +312,7 @@ def main():
                               '--scopes', 'write:user,write:repository,write:issue', '--raw')
                 forbidden.append(token); tokens.append(token)
                 session = smoke.client(); sessions.append(session)
-                smoke.rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})
+                smoke.rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})
             owner, outsider = sessions
             def bearer_rpc(token, procedure, payload=None, expected=200):
                 return smoke.rpc(smoke.client(), procedure, payload, expected=expected,
@@ -346,9 +349,9 @@ def main():
                 'passwordConfirmation': local_passwords[0]})
             assert admin_disabled['account']['disabled'] and admin_disabled['operationId']
             extra = smoke.client(); sessions.append(extra)
-            smoke.rpc(extra, 'SessionService/LoginWithGiteaToken', {'token': owner_token})
+            smoke.rpc(extra, 'SessionService/LoginWithForgeToken', {'token': owner_token})
             owner_identity = smoke.rpc(owner, 'SessionService/GetSession')['user']
-            smoke.rpc(smoke.client(), 'SessionService/BeginGiteaOAuth')
+            smoke.rpc(smoke.client(), 'SessionService/BeginForgeOAuth')
             assert sql('SELECT count(*) FROM golf_oauth_attempts;') == '1'
             creation_request = {'name': 'recovery-private', 'private': True, 'idempotency_key': str(uuid.uuid4())}
             created = smoke.rpc(owner, 'RepositoryService/CreateRepository', creation_request)
@@ -357,7 +360,7 @@ def main():
             full_name = repository['fullName']; key = {'owner': users[0], 'name': repository['name']}
             route = 'repos/'+full_name
             native_owner_id = str(smoke.provider(owner_token, 'GET', 'user')['id'])
-            remote = smoke.GITEA+'/'+full_name+'.git'
+            remote = smoke.FORGE+'/'+full_name+'.git'
             issue_request = {'repository': key, 'repository_id': repository['id'],
                              'title': 'Recovered issue discussion', 'body': 'Original plain-text issue body.',
                              'idempotency_key': str(uuid.uuid4())}
@@ -392,18 +395,18 @@ def main():
             signer = directory/'gpg-sign'
 
             def signing_wrapper():
-                private(signer, '#!/bin/sh\nexec docker exec -i '+shlex.quote(container('gitea'))+
+                private(signer, '#!/bin/sh\nexec docker exec -i '+shlex.quote(container('forgejo'))+
                         ' gpg --batch --pinentry-mode loopback --passphrase "" "$@"\n', 0o700)
 
             signing_wrapper()
             git_env = dict(env, GIT_ASKPASS=str(askpass), GIT_TERMINAL_PROMPT='0',
                            GOLF_CHECK_USER=users[0], GOLF_CHECK_TOKEN=owner_token,
                            GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull, GNUPGHOME=str(public_home))
-            compose('exec', '-T', 'gitea', 'gpg', '--batch', '--pinentry-mode', 'loopback', '--passphrase', '',
+            compose('exec', '-T', 'forgejo', 'gpg', '--batch', '--pinentry-mode', 'loopback', '--passphrase', '',
                     '--quick-generate-key', 'Golf Recovery <recovery@example.invalid>', 'ed25519', 'sign', '0')
-            secret_listing = compose('exec', '-T', 'gitea', 'gpg', '--with-colons', '--list-secret-keys')
+            secret_listing = compose('exec', '-T', 'forgejo', 'gpg', '--with-colons', '--list-secret-keys')
             fingerprint = next(line.split(':')[9] for line in secret_listing.splitlines() if line.startswith('fpr:'))
-            public_key = compose('exec', '-T', 'gitea', 'gpg', '--armor', '--export', fingerprint)
+            public_key = compose('exec', '-T', 'forgejo', 'gpg', '--armor', '--export', fingerprint)
             run('gpg', '--batch', '--import', input=public_key, env=git_env)
             git('init', '-b', 'main')
             for name, value in [('user.name', 'Golf Recovery'), ('user.email', 'recovery@example.invalid'),
@@ -424,8 +427,8 @@ def main():
                 'repository': full_name, 'secret': event_secret}])
             private(config_file, json.dumps(config))
             compose('up', '-d', 'golf'); ready()
-            hook = smoke.provider(owner_token, 'POST', route+'/hooks', {'type': 'gitea', 'active': True,
-                'events': ['push'], 'branch_filter': '*', 'config': {'url': 'http://golf:8080/hooks/gitea/'+event_connection,
+            hook = smoke.provider(owner_token, 'POST', route+'/hooks', {'type': 'forgejo', 'active': True,
+                'events': ['push'], 'branch_filter': '*', 'config': {'url': 'http://golf:8080/hooks/forgejo/'+event_connection,
                 'content_type': 'json', 'http_method': 'POST', 'secret': event_secret}}, expected=201)
             git('add', '.')
             git('commit', '-m', 'Preserve signed Git and LFS')
@@ -438,7 +441,7 @@ def main():
             release = smoke.provider(owner_token, 'POST', route+'/releases',
                                      {'tag_name': 'fixture-v1', 'name': 'Recovery fixture'}, expected=201)
             attachment_bytes = b'Golf attachment recovery\n'+secrets.token_bytes(4096)
-            upload = urllib.request.Request(smoke.GITEA+'/api/v1/'+route+'/releases/'+str(release['id'])+
+            upload = urllib.request.Request(smoke.FORGE+'/api/v1/'+route+'/releases/'+str(release['id'])+
                 '/assets?name=recovery.bin', data=attachment_bytes, method='POST',
                 headers={'Authorization': 'token '+owner_token, 'Content-Type': 'application/octet-stream'})
             with urllib.request.urlopen(upload, timeout=20) as response:
@@ -475,7 +478,7 @@ def main():
             forbidden.append(pat_token)
             smoke.provider(owner_token, 'PUT', route+'/collaborators/'+pat_name, {'permission': 'admin'}, expected=204)
             pat_session = smoke.client()
-            smoke.rpc(pat_session, 'SessionService/LoginWithGiteaToken', {'token': pat_token})
+            smoke.rpc(pat_session, 'SessionService/LoginWithForgeToken', {'token': pat_token})
             grants.append(smoke.rpc(pat_session, 'AutomationGrantService/CreateAutomationGrant',
                 {**grant_input, 'nativeToken': pat_token, 'idempotencyKey': str(uuid.uuid4())})['grant'])
             smoke.rpc(pat_session, 'SessionService/Logout')
@@ -559,7 +562,7 @@ def main():
             assert partial['rotated_sessions'] == 1
             compose('up', '-d', 'golf'); ready()
             new = smoke.client(); sessions.append(new)
-            smoke.rpc(new, 'SessionService/LoginWithGiteaToken', {'token': owner_token})
+            smoke.rpc(new, 'SessionService/LoginWithForgeToken', {'token': owner_token})
             assert sql("SELECT count(DISTINCT credential_key_id) FROM golf_sessions;") == '2'
             assert sql("SELECT credential_key_id FROM golf_oauth_attempts;") == 'legacy'
             local_usage = operator('status')['keys']
@@ -584,17 +587,17 @@ def main():
             counts = int(sql('SELECT count(*) FROM golf_sessions;')), int(sql('SELECT count(*) FROM golf_oauth_attempts;'))
             assert counts == (5, 1)
             check('live writers cannot be bypassed by the operator drain assertion')
-            for service in ['golf', 'gitea']:
+            for service in ['golf', 'forgejo']:
                 assert json.loads(run('docker', 'inspect', container(service)))[0]['State']['Running']
             running_output = directory/'reject-running.age'
             recovery('backup', '--project', source, '--compose-file', str(config_file), '--recipient', recipient,
                      '--output', str(running_output), '--writers-drained', success=False)
             assert not running_output.exists()
-            for service in ['golf', 'gitea']:
+            for service in ['golf', 'forgejo']:
                 assert json.loads(run('docker', 'inspect', container(service)))[0]['State']['Running']
             # GnuPG agent sockets are runtime state, not backup payloads.
-            compose('exec', '-T', 'gitea', 'gpgconf', '--kill', 'all')
-            compose('stop', 'golf', 'gitea', 'rustfs')
+            compose('exec', '-T', 'forgejo', 'gpgconf', '--kill', 'all')
+            compose('stop', 'golf', 'forgejo', 'rustfs')
             # Explicit Golf metadata fixtures exercise interrupted preparation quarantine;
             # actual admitted automatic rows above retain separate native evidence.
             for index, fixture_state in enumerate(['pending', 'preparing']):
@@ -665,7 +668,7 @@ def main():
                 '--directory', str(directory/'wrong-schema'), '--writers-drained', success=False)
             rejected_rows = json.loads(run('docker', 'inspect', *resources(schema_rejected)['containers']))
             assert all(not row['State']['Running'] for row in rejected_rows
-                if row['Config']['Labels'].get('com.docker.compose.service') in {'golf', 'gitea'})
+                if row['Config']['Labels'].get('com.docker.compose.service') in {'golf', 'forgejo'})
             rejected_pg = next(row['Id'] for row in rejected_rows
                 if row['Config']['Labels'].get('com.docker.compose.service')=='postgres')
             assert run('docker', 'exec', rejected_pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
@@ -701,7 +704,7 @@ def main():
             active_config, active_project = Path(restored['compose_file']), target
             assert active_config == restore_dir/'compose.json'
             assert marker_value() == 'literal-$recovery-marker'
-            for service in ['golf', 'gitea', 'rustfs']:
+            for service in ['golf', 'forgejo', 'rustfs']:
                 assert not json.loads(run('docker', 'inspect', container(service)))[0]['State']['Running']
             assert object_files() == source_object_files, 'Restored RustFS file hashes differ'
             assert sql('SELECT count(*) FROM golf_sessions;') == '0'
@@ -759,7 +762,7 @@ def main():
             print('PASS: quarantine, exact invalidation ledger, preserved identity/audit/crypto history and key registry', flush=True)
             check('reopen only the disposable target and verify private restored data')
             compose('start', 'rustfs')
-            compose('up', '-d', 'gitea', 'golf'); ready()
+            compose('up', '-d', 'forgejo', 'golf'); ready()
             for session in sessions:
                 smoke.rpc(session, 'SessionService/GetSession', expected=401)
             for (worker_id, worker_key), assignment in zip(workers,assignments):
@@ -776,8 +779,8 @@ def main():
                 smoke.rpc(smoke.client(), 'SessionService/LoginWithPassword',
                     {'username': local_names[index], 'password': local_passwords[index]}, expected=401)
             owner, outsider = smoke.client(), smoke.client()
-            assert smoke.rpc(owner, 'SessionService/LoginWithGiteaToken', {'token': owner_token})['user'] == owner_identity
-            smoke.rpc(outsider, 'SessionService/LoginWithGiteaToken', {'token': outsider_token})
+            assert smoke.rpc(owner, 'SessionService/LoginWithForgeToken', {'token': owner_token})['user'] == owner_identity
+            smoke.rpc(outsider, 'SessionService/LoginWithForgeToken', {'token': outsider_token})
             assert sql("SELECT count(*) FROM golf_sessions WHERE credential_key_id='next';") == '2'
             for issued in api_issued:
                 bearer_rpc(issued['token'], 'SessionService/GetSession', expected=401)
@@ -877,7 +880,7 @@ def main():
                 assert response.read() == attachment_bytes
             assert smoke.provider(owner_token, 'GET', route+'/branch_protections/main') == protection
             assert ssh_keys() == host_keys
-            assert compose('exec', '-T', 'gitea', 'gpg', '--armor', '--export', fingerprint) == public_key
+            assert compose('exec', '-T', 'forgejo', 'gpg', '--armor', '--export', fingerprint) == public_key
             signing_wrapper()
             (work/'after-restore.txt').write_text('A new signed write after recovery.\n')
             git('add', '.'); git('commit', '-m', 'Write after restore')
@@ -899,11 +902,11 @@ def main():
             assert sql('SELECT count(*) FROM golf_recovery_events;') == '1'
             assert ssh_keys() == host_keys
             for row in json.loads(run('docker', 'inspect', *resources(source)['containers'])):
-                if row['Config']['Labels']['com.docker.compose.service'] in {'golf', 'gitea'}:
+                if row['Config']['Labels']['com.docker.compose.service'] in {'golf', 'forgejo'}:
                     assert not row['State']['Running'], 'Source writer was reopened'
             print('PASS: fresh-session key use, post-restore signed push, force-push denial and restart persistence', flush=True)
     finally:
-        smoke.GOLF, smoke.GITEA = original_urls
+        smoke.GOLF, smoke.FORGE = original_urls
         failures = []
         for project in reversed(projects):
             try:

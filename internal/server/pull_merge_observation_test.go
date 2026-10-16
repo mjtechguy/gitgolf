@@ -59,7 +59,7 @@ func TestPullMergeBranchExactObservation(t *testing.T) {
 				json.NewEncoder(w).Encode(rows)
 			}))
 			defer provider.Close()
-			s := &Server{config: Config{GiteaURL: provider.URL}, client: provider.Client()}
+			s := &Server{config: Config{ForgeURL: provider.URL}, client: provider.Client()}
 			row, e := s.readMergeBranch(context.Background(), forgeCredential{Kind: "pat", Token: "owned-source-test"}, "/repos/alice/private", "feature/slash")
 			if mode == "valid" {
 				if e != nil || row.Protected == nil || *row.Protected || row.UserCanMerge == nil || *row.UserCanMerge || requests.Load() != 2 {
@@ -198,9 +198,9 @@ func newPullMergeFixture(t *testing.T) *pullMergeFixture {
 	t.Cleanup(provider.Close)
 	t.Cleanup(func() { close(f.resume) })
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL = provider.URL
-	config.GiteaOAuthClientID = "fixture-client"
-	config.GiteaOAuthClientSecret = "fixture-secret"
+	config.ForgePublicURL = provider.URL
+	config.ForgeOAuthClientID = "fixture-client"
+	config.ForgeOAuthClientSecret = "fixture-secret"
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {

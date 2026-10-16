@@ -189,14 +189,14 @@ func wireEnvironmentOperation(op database.GolfRepositoryEnvironmentOperation, v 
 	return &golfv1.RepositoryEnvironmentOperation{OperationId: op.OperationID.String(), EnvironmentId: env.Id, Target: env.Target, ActorId: env.UpdaterId, Action: action, ExpectedVersion: strconv.FormatInt(op.ExpectedVersion, 10), Version: env.Version, State: "SUCCEEDED", CreatedAt: op.CreatedAt.UTC().Format(time.RFC3339Nano)}, env, nil
 }
 func (s *Server) environmentOriginal(ctx context.Context, q *database.Queries, actor int64, id uuid.UUID, repo, owner int64) (database.GolfRepositoryEnvironmentOperation, database.GolfRepositoryEnvironmentVersion, error) {
-	op, e := q.GetOwnRepositoryEnvironmentOperation(ctx, database.GetOwnRepositoryEnvironmentOperationParams{UserID: actor, OperationID: id, ForgeURL: s.config.GiteaURL})
+	op, e := q.GetOwnRepositoryEnvironmentOperation(ctx, database.GetOwnRepositoryEnvironmentOperationParams{UserID: actor, OperationID: id, ForgeURL: s.config.ForgeURL})
 	if e != nil {
 		return op, database.GolfRepositoryEnvironmentVersion{}, e
 	}
 	if op.RepositoryID != repo || op.OwnerID != owner {
 		return op, database.GolfRepositoryEnvironmentVersion{}, errEnvironmentIntent
 	}
-	v, e := q.GetRepositoryEnvironmentVersion(ctx, database.GetRepositoryEnvironmentVersionParams{ForgeURL: s.config.GiteaURL, EnvironmentID: op.EnvironmentID, Version: op.Version, RepositoryID: repo, OwnerID: owner})
+	v, e := q.GetRepositoryEnvironmentVersion(ctx, database.GetRepositoryEnvironmentVersionParams{ForgeURL: s.config.ForgeURL, EnvironmentID: op.EnvironmentID, Version: op.Version, RepositoryID: repo, OwnerID: owner})
 	return op, v, e
 }
 func (s *Server) environmentPassword(ctx context.Context, value string, token forgeCredential, password string) (database.GetOwnPasswordConfirmationRow, error) {
@@ -252,15 +252,15 @@ func (s *Server) ListRepositoryEnvironments(ctx context.Context, req *connect.Re
 			if e := s.environmentAuthority(ctx, token, key, caller, req.Msg.Target, false, true); e != nil {
 				return e
 			}
-			if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock_shared(hashtextextended($1||'/repository-environments/'||$2::bigint::text,0))`, s.config.GiteaURL, repo); e != nil {
+			if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock_shared(hashtextextended($1||'/repository-environments/'||$2::bigint::text,0))`, s.config.ForgeURL, repo); e != nil {
 				return errStorageUnavailable
 			}
 			q := database.New(s.db).WithTx(tx)
-			total, e := q.CountRepositoryEnvironments(ctx, database.CountRepositoryEnvironmentsParams{ForgeURL: s.config.GiteaURL, RepositoryID: repo, OwnerID: owner})
+			total, e := q.CountRepositoryEnvironments(ctx, database.CountRepositoryEnvironmentsParams{ForgeURL: s.config.ForgeURL, RepositoryID: repo, OwnerID: owner})
 			if e != nil {
 				return errStorageUnavailable
 			}
-			rows, e := q.ListRepositoryEnvironments(ctx, database.ListRepositoryEnvironmentsParams{ForgeURL: s.config.GiteaURL, RepositoryID: repo, OwnerID: owner, Limit: int32(limit), Offset: int32((page - 1) * limit)})
+			rows, e := q.ListRepositoryEnvironments(ctx, database.ListRepositoryEnvironmentsParams{ForgeURL: s.config.ForgeURL, RepositoryID: repo, OwnerID: owner, Limit: int32(limit), Offset: int32((page - 1) * limit)})
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -366,7 +366,7 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 			if e := s.environmentAuthority(ctx, token, key, caller, in.target, false, false); e != nil {
 				return e
 			}
-			observed, e := database.New(s.db).GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.GiteaURL, ID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner})
+			observed, e := database.New(s.db).GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.ForgeURL, ID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner})
 			if errors.Is(e, sql.ErrNoRows) {
 				return errResourceNotFound
 			}
@@ -378,7 +378,7 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 		}
 		txErr := s.workflowTransaction(ctx, session, caller.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte) error {
 			q := database.New(s.db).WithTx(tx)
-			if e := environmentPasswordCurrent(ctx, q, hash, s.config.GiteaURL, initial); e != nil {
+			if e := environmentPasswordCurrent(ctx, q, hash, s.config.ForgeURL, initial); e != nil {
 				return e
 			}
 			// Replay never re-sends a mutation, and does not require an old revision to
@@ -398,7 +398,7 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 				if e != nil {
 					return e
 				}
-				if e = environmentPasswordCurrent(ctx, q, hash, s.config.GiteaURL, initial); e != nil {
+				if e = environmentPasswordCurrent(ctx, q, hash, s.config.ForgeURL, initial); e != nil {
 					return e
 				}
 				return s.environmentAuthority(ctx, token, key, caller, in.target, false, false)
@@ -412,17 +412,17 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 			if _, e = s.lockRepositoryLifecycleTransaction(ctx, tx, repo); e != nil {
 				return e
 			}
-			if e = q.LockRepositoryEnvironments(ctx, database.LockRepositoryEnvironmentsParams{ForgeURL: s.config.GiteaURL, RepositoryID: repo}); e != nil {
+			if e = q.LockRepositoryEnvironments(ctx, database.LockRepositoryEnvironmentsParams{ForgeURL: s.config.ForgeURL, RepositoryID: repo}); e != nil {
 				return errStorageUnavailable
 			}
 			// Refresh authority, credential version and configured identities after wait.
-			if e = environmentPasswordCurrent(ctx, q, hash, s.config.GiteaURL, initial); e != nil {
+			if e = environmentPasswordCurrent(ctx, q, hash, s.config.ForgeURL, initial); e != nil {
 				return e
 			}
 			if e = s.environmentAuthority(ctx, token, key, caller, in.target, true, true); e != nil {
 				return e
 			}
-			prior, e := q.GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.GiteaURL, ID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner})
+			prior, e := q.GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.ForgeURL, ID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner})
 			if in.version == 0 {
 				if e == nil {
 					return errEnvironmentCAS
@@ -454,7 +454,7 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 					return e
 				}
 			}
-			count, e := q.CountRepositoryEnvironmentOperations(ctx, database.CountRepositoryEnvironmentOperationsParams{ForgeURL: s.config.GiteaURL, RepositoryID: repo})
+			count, e := q.CountRepositoryEnvironmentOperations(ctx, database.CountRepositoryEnvironmentOperationsParams{ForgeURL: s.config.ForgeURL, RepositoryID: repo})
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -466,19 +466,19 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 				return connect.NewError(connect.CodeResourceExhausted, errors.New("Environment operation retention limit reached; inspect retained configuration and qualified recovery policy."))
 			}
 			if in.version == 0 {
-				n, e := q.CountRepositoryEnvironments(ctx, database.CountRepositoryEnvironmentsParams{ForgeURL: s.config.GiteaURL, RepositoryID: repo, OwnerID: owner})
+				n, e := q.CountRepositoryEnvironments(ctx, database.CountRepositoryEnvironmentsParams{ForgeURL: s.config.ForgeURL, RepositoryID: repo, OwnerID: owner})
 				if e != nil {
 					return errStorageUnavailable
 				}
 				if n >= 100 {
 					return connect.NewError(connect.CodeResourceExhausted, errors.New("Repository environment inventory limit reached."))
 				}
-				e = q.InsertRepositoryEnvironment(ctx, database.InsertRepositoryEnvironmentParams{ForgeURL: s.config.GiteaURL, ID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner, Column5: in.name})
+				e = q.InsertRepositoryEnvironment(ctx, database.InsertRepositoryEnvironmentParams{ForgeURL: s.config.ForgeURL, ID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner, Column5: in.name})
 				if e != nil {
 					return e
 				}
 			} else {
-				n, e := q.AdvanceRepositoryEnvironment(ctx, database.AdvanceRepositoryEnvironmentParams{ForgeURL: s.config.GiteaURL, ID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner, Column5: in.name, Deleted: in.deleted, CurrentVersion: in.version})
+				n, e := q.AdvanceRepositoryEnvironment(ctx, database.AdvanceRepositoryEnvironmentParams{ForgeURL: s.config.ForgeURL, ID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner, Column5: in.name, Deleted: in.deleted, CurrentVersion: in.version})
 				if e != nil {
 					return e
 				}
@@ -495,7 +495,7 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 			if in.version > 0 {
 				creator, creatorNative, created = prior.CreatorUserID, prior.CreatorNativeID, prior.EnvironmentCreatedAt
 			}
-			v, e = q.InsertRepositoryEnvironmentVersion(ctx, database.InsertRepositoryEnvironmentVersionParams{ForgeURL: s.config.GiteaURL, EnvironmentID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner, Version: in.version + 1, Name: in.name, Deleted: in.deleted, Policy: raw, CreatorUserID: creator, CreatorNativeID: creatorNative, ActorUserID: actor.UserID, ActorNativeID: caller.ID, RepositoryOwner: key.Owner, RepositoryName: key.Name, AccessRevision: in.target.AccessRevision, EnvironmentCreatedAt: created, CreatedAt: now})
+			v, e = q.InsertRepositoryEnvironmentVersion(ctx, database.InsertRepositoryEnvironmentVersionParams{ForgeURL: s.config.ForgeURL, EnvironmentID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner, Version: in.version + 1, Name: in.name, Deleted: in.deleted, Policy: raw, CreatorUserID: creator, CreatorNativeID: creatorNative, ActorUserID: actor.UserID, ActorNativeID: caller.ID, RepositoryOwner: key.Owner, RepositoryName: key.Name, AccessRevision: in.target.AccessRevision, EnvironmentCreatedAt: created, CreatedAt: now})
 			if e != nil {
 				return e
 			}
@@ -503,7 +503,7 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 			if in.deleted {
 				action = "delete"
 			}
-			op, e = q.InsertRepositoryEnvironmentOperation(ctx, database.InsertRepositoryEnvironmentOperationParams{UserID: actor.UserID, OperationID: uuid.MustParse(in.operation), ForgeURL: s.config.GiteaURL, EnvironmentID: v.EnvironmentID, RepositoryID: repo, OwnerID: owner, Action: action, ExpectedVersion: in.version, Version: v.Version, InputFingerprint: in.fingerprint, CreatedAt: now})
+			op, e = q.InsertRepositoryEnvironmentOperation(ctx, database.InsertRepositoryEnvironmentOperationParams{UserID: actor.UserID, OperationID: uuid.MustParse(in.operation), ForgeURL: s.config.ForgeURL, EnvironmentID: v.EnvironmentID, RepositoryID: repo, OwnerID: owner, Action: action, ExpectedVersion: in.version, Version: v.Version, InputFingerprint: in.fingerprint, CreatedAt: now})
 			if e != nil {
 				return e
 			}
@@ -515,7 +515,7 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 			if e = s.environmentAuthority(ctx, token, key, caller, in.target, true, true); e != nil {
 				return e
 			}
-			if e = environmentPasswordCurrent(ctx, q, hash, s.config.GiteaURL, initial); e != nil {
+			if e = environmentPasswordCurrent(ctx, q, hash, s.config.ForgeURL, initial); e != nil {
 				return e
 			}
 			receipt, env, e = wireEnvironmentOperation(op, v)

@@ -50,8 +50,8 @@ type Runtime struct {
 	routes    map[string]struct{}
 	requests  *prometheus.CounterVec
 	duration  *prometheus.HistogramVec
-	gitea     *prometheus.CounterVec
-	giteaTime *prometheus.HistogramVec
+	forge     *prometheus.CounterVec
+	forgeTime *prometheus.HistogramVec
 	queries   *prometheus.CounterVec
 	queryTime *prometheus.HistogramVec
 	exports   *prometheus.CounterVec
@@ -79,12 +79,12 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	}
 	r.requests = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "golf_http_requests_total", Help: "Completed Golf HTTP requests by bounded route and transport status."}, []string{"method", "route", "status"})
 	r.duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "golf_http_request_duration_seconds", Help: "Golf HTTP handler duration in seconds."}, []string{"method", "route", "status"})
-	r.gitea = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "golf_gitea_requests_total", Help: "Gitea HTTP round trips by method and transport status."}, []string{"method", "status"})
-	r.giteaTime = prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "golf_gitea_request_duration_seconds", Help: "Gitea HTTP round-trip duration through response headers, excluding body consumption."}, []string{"method", "status"})
+	r.forge = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "golf_forge_requests_total", Help: "Forgejo HTTP round trips by method and transport status."}, []string{"method", "status"})
+	r.forgeTime = prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "golf_forge_request_duration_seconds", Help: "Forgejo HTTP round-trip duration through response headers, excluding body consumption."}, []string{"method", "status"})
 	r.queries = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "golf_database_queries_total", Help: "PostgreSQL operations by bounded SQL verb and outcome."}, []string{"operation", "outcome"})
 	r.queryTime = prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "golf_database_query_duration_seconds", Help: "PostgreSQL operation duration in seconds."}, []string{"operation", "outcome"})
 	r.exports = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "golf_telemetry_trace_exports_total", Help: "Trace export batches acknowledged successfully or lost to an export failure."}, []string{"outcome"})
-	r.registry.MustRegister(r.requests, r.duration, r.gitea, r.giteaTime, r.queries, r.queryTime, r.exports)
+	r.registry.MustRegister(r.requests, r.duration, r.forge, r.forgeTime, r.queries, r.queryTime, r.exports)
 	r.tracer = noop.NewTracerProvider().Tracer("golf")
 	if config.OTLPEndpoint == "" {
 		if config.OTLPInsecure {

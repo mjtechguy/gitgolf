@@ -16,7 +16,7 @@ import tempfile
 import time
 
 sys.dont_write_bytecode = True
-from smoke import ROOT, GOLF, GITEA, admin, client, provider, ready, request, rpc, wait_for_push
+from smoke import ROOT, GOLF, FORGE, admin, client, provider, ready, request, rpc, wait_for_push
 
 BROWSER = r'''
 import {pathToFileURL} from 'node:url';import {join} from 'node:path';import {writeFile} from 'node:fs/promises';
@@ -24,7 +24,7 @@ let browser,context,config,stage='initialization';function check(value){if(!valu
 try {
  const {chromium}=await import(pathToFileURL(join(process.cwd(),'web/node_modules/playwright/index.mjs')));let input='';for await(const p of process.stdin)input+=p;config=JSON.parse(input);input='';
  browser=await chromium.launch();context=await browser.newContext({viewport:{width:1280,height:900}});const headers={Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'};
- check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithGiteaToken',{headers,data:{token:config.token}})).status()===200);
+ check((await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithForgeToken',{headers,data:{token:config.token}})).status()===200);
  const page=await context.newPage();const errors=[];page.on('pageerror',()=>errors.push(true));
  for(const theme of ['dark','light'])for(const width of [1280,390]) {
   stage='exact diff '+theme+' '+width;await page.setViewportSize({width,height:900});await page.goto(config.golf+'/'+config.repository+'/pull/'+config.number+'/files');await page.locator('.diff-file').first().waitFor();
@@ -36,7 +36,7 @@ try {
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.screenshot({path:join(config.screenshots,'native-bound-diff-'+theme+'-'+width+'.png')});await writeFile(join(config.screenshots,'native-bound-diff-'+theme+'-'+width+'.txt'),await page.locator('body').innerText());
  }
- stage='live private diff revocation';check((await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);
+ stage='live private diff revocation';check((await context.request.delete(config.forge+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);
  await page.locator('.diff-file').first().waitFor({state:'detached',timeout:15000});check(!(await page.locator('body').innerText()).includes('source proposed'));check(errors.length===0);
  console.log('PASS: actual exact-bound Files changed, merge-base old side distinct from base tip, dark/light/mobile and live private diff removal');
 } catch {console.error('Bound diff browser failed at '+stage+'; private diagnostics withheld');process.exitCode=1;}
@@ -45,8 +45,8 @@ finally {if(context&&config)try{check((await context.request.post(config.golf+'/
 
 
 def mcp_diff(binary, credential, api, arguments, expected):
-    env = {k:v for k,v in os.environ.items() if k not in {'GOLF_API_TOKEN','GOLF_GITEA_TOKEN','GOLF_URL','MCPGODEBUG'}}
-    env['GOLF_API_TOKEN' if api else 'GOLF_GITEA_TOKEN'] = credential
+    env = {k:v for k,v in os.environ.items() if k not in {'GOLF_API_TOKEN','GOLF_FORGE_TOKEN','GOLF_URL','MCPGODEBUG'}}
+    env['GOLF_API_TOKEN' if api else 'GOLF_FORGE_TOKEN'] = credential
     process = subprocess.Popen([str(binary),'--url',GOLF,'mcp'], stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     def send(value):
@@ -74,7 +74,7 @@ def mcp_diff(binary, credential, api, arguments, expected):
 
 
 def main():
-    ready();assert request(client(),'GET',GITEA+'/api/v1/version')['version'] == '1.27.3'
+    ready();assert request(client(),'GET',FORGE+'/api/v1/version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
     prefix = 'golf-diff-bind-'+secrets.token_hex(4)
     users, actors = [], {}
     stage = 'accounts'
@@ -85,7 +85,7 @@ def main():
             users.append(name)
             token = admin('generate-access-token','--username',name,'--token-name',prefix,'--scopes','write:user,write:repository','--raw').strip()
             read = admin('generate-access-token','--username',name,'--token-name',prefix+'-read','--scopes','read:user,read:repository','--raw').strip()
-            session = client();rpc(session,'SessionService/LoginWithGiteaToken',{'token':read})
+            session = client();rpc(session,'SessionService/LoginWithForgeToken',{'token':read})
             actors[role] = {'name':name,'token':token,'read':read,'session':session}
         owner, author, reader, outsider = [actors[r] for r in actors]
         stage = 'divergent private fork setup'
@@ -121,7 +121,7 @@ def main():
                 result = subprocess.run(['git','-c','credential.helper=',*args],cwd=cwd,env=env,capture_output=True,text=True,timeout=30)
                 assert result.returncode == 0,'Git observation failed; private output withheld'
                 return result.stdout
-            clone = work/'clone';git('clone',GITEA+'/'+full+'.git',str(clone));git('fetch','origin','refs/pull/'+str(number)+'/head',cwd=clone)
+            clone = work/'clone';git('clone',FORGE+'/'+full+'.git',str(clone));git('fetch','origin','refs/pull/'+str(number)+'/head',cwd=clone)
             assert git('rev-parse','FETCH_HEAD',cwd=clone).strip() == head
             assert git('merge-base',base_tip,head,cwd=clone).strip() == merge_base != base_tip
             assert git('show',merge_base+':'+path,cwd=clone) == 'merge-base original\nstable line\n'
@@ -152,7 +152,7 @@ def main():
         print('PASS: actual Git merge-base/blob/diff identity; exact Golf receipt, private-fork base-only authority, wrong IDs/head/Origin denied, CLI and PAT/bearer MCP',flush=True)
         stage = 'served browser'
         screenshots = ROOT/'.tmp/pull-diff-binding-smoke';screenshots.mkdir(exist_ok=True)
-        proof = subprocess.run(['node','--input-type=module','-e',BROWSER],cwd=ROOT,input=json.dumps({'golf':GOLF,'gitea':GITEA,'repository':full,'number':number,'mergeBase':merge_base,'head':head,'baseTip':base_tip,'token':reader['read'],'user':reader['name'],'ownerToken':owner['token'],'screenshots':str(screenshots)}),capture_output=True,text=True,timeout=120)
+        proof = subprocess.run(['node','--input-type=module','-e',BROWSER],cwd=ROOT,input=json.dumps({'golf':GOLF,'forge':FORGE,'repository':full,'number':number,'mergeBase':merge_base,'head':head,'baseTip':base_tip,'token':reader['read'],'user':reader['name'],'ownerToken':owner['token'],'screenshots':str(screenshots)}),capture_output=True,text=True,timeout=120)
         print(proof.stdout.strip(),flush=True)
         if proof.returncode:
             for line in proof.stderr.splitlines():

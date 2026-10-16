@@ -220,7 +220,7 @@ func (s *Server) startConversation(ctx context.Context, t agentTaskRecord, r cod
 		return errStorageUnavailable
 	}
 	return s.conversationGuard(ctx, t, r, worker, attempt, func(tx *sql.Tx) error {
-		if _, e := tx.ExecContext(ctx, `INSERT INTO golf_agent_conversations(task_id,attempt_id,forge_url,repository_id,owner_id,user_id,native_user_id,worker_id,connection_id,connection_version,commit_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, t.ID, attempt, s.config.GiteaURL, t.RepositoryID, t.OwnerID, t.UserID, t.NativeID, worker, t.Connection, t.ConnectionVersion, t.Commit); e != nil {
+		if _, e := tx.ExecContext(ctx, `INSERT INTO golf_agent_conversations(task_id,attempt_id,forge_url,repository_id,owner_id,user_id,native_user_id,worker_id,connection_id,connection_version,commit_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, t.ID, attempt, s.config.ForgeURL, t.RepositoryID, t.OwnerID, t.UserID, t.NativeID, worker, t.Connection, t.ConnectionVersion, t.Commit); e != nil {
 			return errStorageUnavailable
 		}
 		return s.appendConversationEvent(ctx, tx, t, attempt, 1, conversationPayload{Prompt: prompt})
@@ -248,7 +248,7 @@ func (s *Server) appendConversationEvent(ctx context.Context, tx *sql.Tx, t agen
 	if p.Prompt != "" && sequence != 1 || p.Prompt == "" && p.Observation.Sequence+1 != sequence {
 		return errExecutionPolicyConflict
 	}
-	binding := conversationBinding(t, s.config.GiteaURL, attempt, sequence, raw)
+	binding := conversationBinding(t, s.config.ForgeURL, attempt, sequence, raw)
 	var existing []byte
 	e = tx.QueryRowContext(ctx, `SELECT c.content_binding FROM golf_agent_task_events e JOIN golf_agent_conversation_contents c ON c.id=e.content_id WHERE e.task_id=$1 AND e.attempt_id=$2 AND e.sequence=$3`, t.ID, attempt, sequence).Scan(&existing)
 	if e == nil {
@@ -265,7 +265,7 @@ func (s *Server) appendConversationEvent(ctx context.Context, tx *sql.Tx, t agen
 	if e != nil {
 		return e
 	}
-	if _, e = tx.ExecContext(ctx, `INSERT INTO golf_agent_conversation_contents(id,task_id,attempt_id,forge_url,repository_id,user_id,sequence,encrypted_content,content_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, t.ID, attempt, s.config.GiteaURL, t.RepositoryID, t.UserID, sequence, cipher, binding, key); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO golf_agent_conversation_contents(id,task_id,attempt_id,forge_url,repository_id,user_id,sequence,encrypted_content,content_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, t.ID, attempt, s.config.ForgeURL, t.RepositoryID, t.UserID, sequence, cipher, binding, key); e != nil {
 		return errStorageUnavailable
 	}
 	var tok any
@@ -290,7 +290,7 @@ func (s *Server) openConversationEvent(t agentTaskRecord, attempt string, v conv
 	if e != nil {
 		return p, errStorageUnavailable
 	}
-	if len(raw) != v.Bytes || !bytes.Equal(v.Binding, conversationBinding(t, s.config.GiteaURL, attempt, v.Sequence, []byte(raw))) || json.Unmarshal([]byte(raw), &p) != nil {
+	if len(raw) != v.Bytes || !bytes.Equal(v.Binding, conversationBinding(t, s.config.ForgeURL, attempt, v.Sequence, []byte(raw))) || json.Unmarshal([]byte(raw), &p) != nil {
 		return p, errStorageUnavailable
 	}
 	kind, status, tool, tokens, e := conversationMetadata(p)
@@ -418,7 +418,7 @@ func (s *Server) ListAgentTaskEvents(ctx context.Context, req *connect.Request[g
 		}
 		defer tx.Rollback()
 		var state string
-		e = tx.QueryRowContext(ctx, `SELECT body_state FROM golf_agent_conversations WHERE task_id=$1 AND attempt_id=$2 AND forge_url=$3 AND repository_id=$4 AND owner_id=$5 AND user_id=$6 AND native_user_id=$7 AND commit_id=$8`, t.ID, t.Attempt, s.config.GiteaURL, t.RepositoryID, t.OwnerID, t.UserID, t.NativeID, t.Commit).Scan(&state)
+		e = tx.QueryRowContext(ctx, `SELECT body_state FROM golf_agent_conversations WHERE task_id=$1 AND attempt_id=$2 AND forge_url=$3 AND repository_id=$4 AND owner_id=$5 AND user_id=$6 AND native_user_id=$7 AND commit_id=$8`, t.ID, t.Attempt, s.config.ForgeURL, t.RepositoryID, t.OwnerID, t.UserID, t.NativeID, t.Commit).Scan(&state)
 		if errors.Is(e, sql.ErrNoRows) {
 			return true, nil
 		}

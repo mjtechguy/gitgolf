@@ -114,7 +114,7 @@ func newWebhookFixture(t *testing.T, instanceAdmin ...bool) *webhookFixture {
 	if e != nil {
 		t.Fatal(e)
 	}
-	local, e := ManageLocalAccount(t.Context(), f.db, f.s.keyring, cfg.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "owned-webhook-native-token", IsInstanceAdmin: len(instanceAdmin) > 0 && instanceAdmin[0]})
+	local, e := ManageLocalAccount(t.Context(), f.db, f.s.keyring, cfg.ForgeURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "owned-webhook-native-token", IsInstanceAdmin: len(instanceAdmin) > 0 && instanceAdmin[0]})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -177,7 +177,7 @@ func TestWebhookOutboxAndBackgroundPostgres(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	_, e = tx.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) VALUES($1,$2,'source',0)`, f.s.config.GiteaURL, int64(9007199254740993))
+	_, e = tx.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) VALUES($1,$2,'source',0)`, f.s.config.ForgeURL, int64(9007199254740993))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -187,7 +187,7 @@ func TestWebhookOutboxAndBackgroundPostgres(t *testing.T) {
 	if count != 0 {
 		t.Fatal("rollback leaked event")
 	}
-	_, e = f.db.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) VALUES($1,$2,'agents',42),($1,$2,'pulls',0)`, f.s.config.GiteaURL, int64(9007199254740993))
+	_, e = f.db.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) VALUES($1,$2,'agents',42),($1,$2,'pulls',0)`, f.s.config.ForgeURL, int64(9007199254740993))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -349,7 +349,7 @@ func TestWebhookRetryLeaseAndCapacityPostgres(t *testing.T) {
 		t.Fatal("expired attempt not finalized")
 	}
 	// Capacity is a recorded terminal refusal, not a silent missing outbox event.
-	_, e := f.db.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) SELECT $1,$2,'source',0 FROM generate_series(1,201)`, f.s.config.GiteaURL, int64(9007199254740993))
+	_, e := f.db.Exec(`INSERT INTO golf_repository_activity(forge_url,repository_id,topic,recipient_user_id) SELECT $1,$2,'source',0 FROM generate_series(1,201)`, f.s.config.ForgeURL, int64(9007199254740993))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -576,7 +576,7 @@ func TestWebhookLegacyBootstrapLaterPagePostgres(t *testing.T) {
 	cfg := testConfig("https://forge.invalid")
 	keys := parseTestKeys(t, cfg.EncryptionKey, nil, "")
 	q := database.New(db)
-	user, e := q.UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: cfg.GiteaURL, ForgeUserID: 42, Login: "alice"})
+	user, e := q.UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: cfg.ForgeURL, ForgeUserID: 42, Login: "alice"})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -591,7 +591,7 @@ func TestWebhookLegacyBootstrapLaterPagePostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	sub := uuid.New()
-	if e = q.CreateWebhookSubscription(t.Context(), database.CreateWebhookSubscriptionParams{ID: sub, ForgeURL: cfg.GiteaURL, RepositoryID: 17, OwnerID: 42, RepositoryOwner: "alice", RepositoryName: "example", Name: "Retained versions", WorkflowNotifications: 1, EventTopics: []byte(`["source"]`), SponsorUserID: user, SponsorNativeID: 42, LocalAccountID: local.ID, CredentialVersion: 1}); e != nil {
+	if e = q.CreateWebhookSubscription(t.Context(), database.CreateWebhookSubscriptionParams{ID: sub, ForgeURL: cfg.ForgeURL, RepositoryID: 17, OwnerID: 42, RepositoryOwner: "alice", RepositoryName: "example", Name: "Retained versions", WorkflowNotifications: 1, EventTopics: []byte(`["source"]`), SponsorUserID: user, SponsorNativeID: 42, LocalAccountID: local.ID, CredentialVersion: 1}); e != nil {
 		t.Fatal(e)
 	}
 	var original []byte

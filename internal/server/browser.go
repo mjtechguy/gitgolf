@@ -111,7 +111,7 @@ func (s *Server) listBranches(ctx context.Context, token forgeCredential, key re
 	if err != nil {
 		return nil, 0, err
 	}
-	// Gitea 1.27.3 can fail branch reads while first-push metadata is still empty.
+	// The native forge can fail branch reads while first-push metadata is still empty.
 	repo, err := s.readRepository(ctx, base, token)
 	if err != nil {
 		return nil, 0, err

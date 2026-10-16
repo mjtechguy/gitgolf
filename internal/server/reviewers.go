@@ -37,7 +37,7 @@ func scanReviewer(row workflowRunScanner) (r reviewerRecord, e error) {
 	return
 }
 func (s *Server) reviewer(ctx context.Context, repoID int64) (reviewerRecord, error) {
-	return scanReviewer(s.db.QueryRowContext(ctx, `SELECT `+reviewerColumns+` FROM golf_reviewers WHERE forge_url=$1 AND repository_id=$2`, s.config.GiteaURL, repoID))
+	return scanReviewer(s.db.QueryRowContext(ctx, `SELECT `+reviewerColumns+` FROM golf_reviewers WHERE forge_url=$1 AND repository_id=$2`, s.config.ForgeURL, repoID))
 }
 func (s *Server) reviewPublisher(ctx context.Context) (User, error) {
 	if s.config.ReviewPublisherToken == "" {
@@ -167,12 +167,12 @@ func (s *Server) SaveReviewer(ctx context.Context, req *connect.Request[golfv1.S
 	raw, _ := json.Marshal(v)
 	id := uuid.NewString()
 	e = s.codexGuard(ctx, a, func(tx *sql.Tx, _ int64) error {
-		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.GiteaURL+"/reviewer/"+auth.ID); e != nil {
+		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.ForgeURL+"/reviewer/"+auth.ID); e != nil {
 			return errStorageUnavailable
 		}
 		var oldID string
 		var revision int64
-		err := tx.QueryRowContext(ctx, `SELECT id::text,revision FROM golf_reviewers WHERE forge_url=$1 AND repository_id=$2 FOR UPDATE`, s.config.GiteaURL, mustID(auth.ID)).Scan(&oldID, &revision)
+		err := tx.QueryRowContext(ctx, `SELECT id::text,revision FROM golf_reviewers WHERE forge_url=$1 AND repository_id=$2 FOR UPDATE`, s.config.ForgeURL, mustID(auth.ID)).Scan(&oldID, &revision)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
@@ -186,7 +186,7 @@ func (s *Server) SaveReviewer(ctx context.Context, req *connect.Request[golfv1.S
 		if e := tx.QueryRowContext(ctx, `SELECT id,credential_version FROM golf_local_accounts WHERE user_id=$1 AND disabled_at IS NULL FOR SHARE`, a.UserID).Scan(&localID, &version); e != nil {
 			return errUnauthenticated
 		}
-		_, e := tx.ExecContext(ctx, `INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT(forge_url,repository_id) DO UPDATE SET sponsor_user_id=EXCLUDED.sponsor_user_id,sponsor_native_id=EXCLUDED.sponsor_native_id,local_account_id=EXCLUDED.local_account_id,local_version=EXCLUDED.local_version,publisher_id=EXCLUDED.publisher_id,owner_id=EXCLUDED.owner_id,repository_owner=EXCLUDED.repository_owner,repository_name=EXCLUDED.repository_name,config=EXCLUDED.config,enabled=EXCLUDED.enabled,expires_at=EXCLUDED.expires_at,revision=golf_reviewers.revision+1`, id, s.config.GiteaURL, mustID(auth.ID), auth.OwnerID, v.Repository.Owner, v.Repository.Name, a.UserID, a.NativeID, localID, version, publisher.ID, raw, v.Enabled, expiry)
+		_, e := tx.ExecContext(ctx, `INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT(forge_url,repository_id) DO UPDATE SET sponsor_user_id=EXCLUDED.sponsor_user_id,sponsor_native_id=EXCLUDED.sponsor_native_id,local_account_id=EXCLUDED.local_account_id,local_version=EXCLUDED.local_version,publisher_id=EXCLUDED.publisher_id,owner_id=EXCLUDED.owner_id,repository_owner=EXCLUDED.repository_owner,repository_name=EXCLUDED.repository_name,config=EXCLUDED.config,enabled=EXCLUDED.enabled,expires_at=EXCLUDED.expires_at,revision=golf_reviewers.revision+1`, id, s.config.ForgeURL, mustID(auth.ID), auth.OwnerID, v.Repository.Owner, v.Repository.Name, a.UserID, a.NativeID, localID, version, publisher.ID, raw, v.Enabled, expiry)
 		return e
 	})
 	if e != nil {
@@ -245,7 +245,7 @@ func (s *Server) ListReviewerRuns(ctx context.Context, req *connect.Request[golf
 	if req.Msg.AfterId != "" && !creationKey.MatchString(req.Msg.AfterId) {
 		return nil, rpcError(invalid("Invalid cursor."))
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT `+reviewRunColumns+` FROM golf_reviewer_runs rr WHERE reviewer_id IN(SELECT id FROM golf_reviewers WHERE forge_url=$1 AND repository_id=$2) AND ($3=0 OR pull_number=$3) AND ($4='' OR (created_at,id)<(SELECT created_at,id FROM golf_reviewer_runs WHERE id=NULLIF($4,'')::uuid AND reviewer_id=rr.reviewer_id)) ORDER BY created_at DESC,id DESC LIMIT 26`, s.config.GiteaURL, repo.ID, req.Msg.PullNumber, req.Msg.AfterId)
+	rows, e := s.db.QueryContext(ctx, `SELECT `+reviewRunColumns+` FROM golf_reviewer_runs rr WHERE reviewer_id IN(SELECT id FROM golf_reviewers WHERE forge_url=$1 AND repository_id=$2) AND ($3=0 OR pull_number=$3) AND ($4='' OR (created_at,id)<(SELECT created_at,id FROM golf_reviewer_runs WHERE id=NULLIF($4,'')::uuid AND reviewer_id=rr.reviewer_id)) ORDER BY created_at DESC,id DESC LIMIT 26`, s.config.ForgeURL, repo.ID, req.Msg.PullNumber, req.Msg.AfterId)
 	if e != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}

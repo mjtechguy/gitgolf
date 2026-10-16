@@ -5,7 +5,7 @@
     "state": "native-tested",
     "disposition": "product",
     "complete": false,
-    "reason": "Bounded immutable native source consumer proved in the owned manual/push fixture; full fields, pagination/roles and retained deployment remain unqualified.",
+    "reason": "Bounded immutable native source consumer proved on a fresh pinned Forgejo 15.0.9 in the owned manual/push fixture; full fields, pagination/roles and retained deployment remain unqualified.",
     "consumers": [
       "internal/server/source_objects.go"
     ],
@@ -29,7 +29,7 @@
     ],
     "deployed_evidence": [],
     "native_evidence": [
-      "docs/compatibility/evidence/native-gitea-paths.json"
+      "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
     ]
   },
   "GetBlob": {
@@ -38,7 +38,7 @@
     "state": "native-tested",
     "disposition": "product",
     "complete": false,
-    "reason": "Bounded immutable native source consumer proved in the owned manual/push fixture; full fields, pagination/roles and retained deployment remain unqualified.",
+    "reason": "Bounded immutable native source consumer proved on a fresh pinned Forgejo 15.0.9 in the owned manual/push fixture; full fields, pagination/roles and retained deployment remain unqualified.",
     "consumers": [
       "internal/server/source_objects.go"
     ],
@@ -62,7 +62,7 @@
     ],
     "deployed_evidence": [],
     "native_evidence": [
-      "docs/compatibility/evidence/native-gitea-paths.json"
+      "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
     ]
   },
   "repoMergePullRequest": {
@@ -88,28 +88,6 @@
     "tests": [
       "internal/server/standard_pull_merge_test.go"
     ],
-    "request_fields_complete": false,
-    "response_fields_complete": false,
-    "qualified_roles": [],
-    "deployed_evidence": []
-  },
-  "ActionsListRepositoryWorkflows": {
-    "method": "GET",
-    "path": "/repos/{owner}/{repo}/actions/workflows",
-    "state": "missing",
-    "disposition": "product",
-    "complete": false,
-    "reason": "Native Actions consumer is missing; Golf-owned runs must not be mapped to native IDs.",
-    "consumers": [],
-    "ui": [],
-    "cli_mcp": [],
-    "native_token_scope": "read:repository",
-    "unit_permission": "actions read",
-    "pagination": "See immutable Swagger parameters and consumer limits; native completeness remains unqualified.",
-    "limits": [
-      "Native Actions consumer is missing; Golf-owned runs must not be mapped to native IDs."
-    ],
-    "tests": [],
     "request_fields_complete": false,
     "response_fields_complete": false,
     "qualified_roles": [],

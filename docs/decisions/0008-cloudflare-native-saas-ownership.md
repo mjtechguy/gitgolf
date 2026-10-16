@@ -4,7 +4,7 @@ Status: product destination and first-release defaults selected by the user on 2
 
 ## Destination
 
-The managed SaaS targets fully Cloudflare-native hosting. The existing Gitea/Go/PostgreSQL core is the migration bridge, and remains the independent portable implementation. This refines ADR0001/ADR0007 for the future managed destination; their current database and forge ownership continues until an explicit qualified cutover.
+The managed SaaS targets fully Cloudflare-native hosting. The existing Forgejo/Go/PostgreSQL core is the migration bridge, and remains the independent portable implementation. This refines ADR0001/ADR0007 for the future managed destination; their current database and forge ownership continues until an explicit qualified cutover.
 
 Selected defaults: organization/workspace tenancy with personal workspaces; Golf-managed application resources first, customer accounts next; private previews restricted to current repository readers; Artifacts canonical Git first for eligible repositories; repositories, permissions, issues, PRs, reviews, checks, agents and previews as the first native collaboration milestone; automatic eligible PR previews within an operator-approved resource policy and budget. Production approvals remain separate.
 
@@ -49,4 +49,4 @@ Artifacts is a Git service, not an implementation of issues, PRs or permissions.
 
 Encrypted/versioned product Cloudflare profiles and the operator D1/R2 allocation consumer are implemented. Bounded native Worker/R2/Artifacts agent-fork proofs and one protected static preview pass within their documented scopes; they do not establish canonical Git migration or native forge authority. The [foundation contract](../CLOUDFLARE_FOUNDATION_CONTRACT.md) and [status ledger](../IMPLEMENTATION_STATUS.md) distinguish product consumers from fixture/provider proofs.
 
-The separate [Cloudflare bridge setup](../CLOUDFLARE_SETUP.md) serves the existing UI from Workers and retains Go/Gitea/PostgreSQL authority behind protected origin connectivity. It is source/local-runtime qualified, not live deployed. The selected public name is now `gitgolf.mjtechguy.com`; preview naming is unchanged. Canonical Artifacts Git, D1 collaboration and native authorization remain required before this destination can replace the bridge. The user's explicit Git-in-Artifacts clarification reinforces this boundary.
+The separate [Cloudflare bridge setup](../CLOUDFLARE_SETUP.md) serves the existing UI from Workers and retains Go/Forgejo/PostgreSQL authority behind protected origin connectivity. It is source/local-runtime qualified, not live deployed. The selected public name is now `gitgolf.mjtechguy.com`; preview naming is unchanged. Canonical Artifacts Git, D1 collaboration and native authorization remain required before this destination can replace the bridge. The user's explicit Git-in-Artifacts clarification reinforces this boundary.

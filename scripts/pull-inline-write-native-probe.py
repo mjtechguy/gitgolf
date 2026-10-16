@@ -20,7 +20,7 @@ from runpy import run_path
 from urllib.parse import quote
 
 sys.dont_write_bytecode = True
-from smoke import ROOT, GITEA, admin as default_admin, client, command, provider, ready, request, wait_for_push
+from smoke import ROOT, FORGE, admin as default_admin, client, command, provider, ready, request, wait_for_push
 
 probe = run_path(str(ROOT/'scripts/pull-review-native-probe.py'))['probe']
 
@@ -37,12 +37,12 @@ def main():
     def admin(*values):
         if stack_root:
             return command('docker', 'compose', '--project-directory', str(stack_root), '--file', str(stack_root/'compose.yaml'),
-                           '--env-file', str(stack_root/'.env'), 'exec', '-T', 'gitea', 'gitea',
-                           '--config', '/etc/gitea/app.ini', 'admin', 'user', *values)
+                           '--env-file', str(stack_root/'.env'), 'exec', '-T', 'forgejo', 'forgejo',
+                           '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *values)  # Forgejo's upstream path
         return default_admin(*values)
 
     def raw_diff(token, route):
-        req = urllib.request.Request(GITEA+'/api/v1/'+route+'.diff', headers={'Authorization': 'token '+token})
+        req = urllib.request.Request(FORGE+'/api/v1/'+route+'.diff', headers={'Authorization': 'token '+token})
         with client().open(req, timeout=20) as response:
             assert response.status == 200
             raw = response.read(512*1024+1)
@@ -70,7 +70,7 @@ def main():
         print('PASS: strict Go parser admits actual selected M→H same-path context and rejects historical selected-head/current-hunk mixture; current-context positive control passes', flush=True)
 
     ready()
-    assert request(client(), 'GET', GITEA+'/api/v1/version')['version'] == '1.27.3'
+    assert request(client(), 'GET', FORGE+'/api/v1/version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
     prefix = 'golf-inline-write-'+secrets.token_hex(4)
     users, repositories, actors = [], [], {}
     stage = 'accounts'

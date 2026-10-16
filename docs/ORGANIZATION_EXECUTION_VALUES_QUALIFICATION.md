@@ -44,7 +44,7 @@ The workflow never prints secret values, hashes, commands containing secrets or 
 
 Published output is read through its exact run/attempt/repository/source receipt. Before authority changes, the helper requires real running job state plus positive encrypted quarantine record counts and zero readable logs. After fencing, it requires a non-success terminal state with withheld output; current resource denial is separately checked after transfer. Read-only queries address the **owned Golf fixture database**, never native forge storage. They expose only states/counts, not ciphertext, raw logs or secret bodies.
 
-Supported native transfer is an independent API operation, not a Golf transfer implementation or atomic permission fence. [Gitea 1.27.3 transfer handler](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/repo/transfer.go) declares the transfer API and completed transfer response; the [native organization/permission wire contract](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/modules/structs/org.go) distinguishes actual ownership from repository/admin observations. Golf retains its separate current-authority source contract.
+Supported native transfer is an independent API operation, not a Golf transfer implementation or atomic permission fence. The upstream Forgejo [transfer handler](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/transfer.go) declares the transfer API and completed transfer response; the [native organization/permission wire contract](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/structs/org.go) distinguishes actual ownership from repository/admin observations. Golf retains its separate current-authority source contract.
 
 ## Evidence and failure handling
 

@@ -345,7 +345,7 @@ func (s *Server) ownRuleMutation(ctx context.Context, session string, token forg
 	var r database.GolfRepositoryRuleMutation
 	e := s.withManagedSession(ctx, session, token, func(q *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = q.GetOwnRepositoryRuleMutation(ctx, database.GetOwnRepositoryRuleMutationParams{UserID: c.UserID, ForgeURL: s.config.GiteaURL, OperationID: id})
+		r, e = q.GetOwnRepositoryRuleMutation(ctx, database.GetOwnRepositoryRuleMutationParams{UserID: c.UserID, ForgeURL: s.config.ForgeURL, OperationID: id})
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -399,7 +399,7 @@ func (s *Server) advanceRuleMutation(ctx context.Context, session string, token 
 		if c.UserID != r.UserID {
 			return errUnauthenticated
 		}
-		if err := q.LockRepositoryRuleMutations(ctx, database.LockRepositoryRuleMutationsParams{ForgeURL: s.config.GiteaURL, RepositoryID: r.RepositoryID}); err != nil {
+		if err := q.LockRepositoryRuleMutations(ctx, database.LockRepositoryRuleMutationsParams{ForgeURL: s.config.ForgeURL, RepositoryID: r.RepositoryID}); err != nil {
 			return errStorageUnavailable
 		}
 		if phase != "REJECTED" {
@@ -428,7 +428,7 @@ func (s *Server) advanceRuleMutation(ctx context.Context, session string, token 
 			failure = "preflight_refused"
 		}
 		var e error
-		r, e = q.AdvanceRepositoryRuleMutation(ctx, database.AdvanceRepositoryRuleMutationParams{ID: r.ID, UserID: r.UserID, ForgeURL: s.config.GiteaURL, Phase: phase, FailureCode: failure, ObservedRulesRevision: revision})
+		r, e = q.AdvanceRepositoryRuleMutation(ctx, database.AdvanceRepositoryRuleMutationParams{ID: r.ID, UserID: r.UserID, ForgeURL: s.config.ForgeURL, Phase: phase, FailureCode: failure, ObservedRulesRevision: revision})
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -586,9 +586,9 @@ func (s *Server) MutateRepositoryRules(ctx context.Context, req *connect.Request
 	dispatch := false
 	e = s.withManagedSession(ctx, session, token, func(q *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var err error
-		r, err = q.ReserveRepositoryRuleMutation(ctx, database.ReserveRepositoryRuleMutationParams{UserID: c.UserID, ForgeURL: s.config.GiteaURL, ActorID: actor.ID, OperationID: m.OperationId, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, Action: int32(m.Action), ExpectedAccessRevision: m.ExpectedAccessRevision, ExpectedRulesRevision: m.ExpectedRulesRevision, InputFingerprint: fingerprint[:]})
+		r, err = q.ReserveRepositoryRuleMutation(ctx, database.ReserveRepositoryRuleMutationParams{UserID: c.UserID, ForgeURL: s.config.ForgeURL, ActorID: actor.ID, OperationID: m.OperationId, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, Action: int32(m.Action), ExpectedAccessRevision: m.ExpectedAccessRevision, ExpectedRulesRevision: m.ExpectedRulesRevision, InputFingerprint: fingerprint[:]})
 		if errors.Is(err, sql.ErrNoRows) {
-			r, err = q.GetOwnRepositoryRuleMutation(ctx, database.GetOwnRepositoryRuleMutationParams{UserID: c.UserID, ForgeURL: s.config.GiteaURL, OperationID: m.OperationId})
+			r, err = q.GetOwnRepositoryRuleMutation(ctx, database.GetOwnRepositoryRuleMutationParams{UserID: c.UserID, ForgeURL: s.config.ForgeURL, OperationID: m.OperationId})
 			if err != nil {
 				return errStorageUnavailable
 			}
@@ -684,7 +684,7 @@ func (s *Server) MutateRepositoryRules(ctx context.Context, req *connect.Request
 			if err != nil {
 				return errStorageUnavailable
 			}
-			originalCtx := context.WithValue(ctx, protectionDispatchPermitKey{}, protectionDispatchPermit{r.ID, r.UserID, r.ActorID, repoID, s.config.GiteaURL, write.method, base + write.suffix, digest})
+			originalCtx := context.WithValue(ctx, protectionDispatchPermitKey{}, protectionDispatchPermit{r.ID, r.UserID, r.ActorID, repoID, s.config.ForgeURL, write.method, base + write.suffix, digest})
 			writeCtx, err := s.lockRepositoryLifecycleTransaction(originalCtx, tx, repoID)
 			if err != nil {
 				return err

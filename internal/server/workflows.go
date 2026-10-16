@@ -457,7 +457,7 @@ func workflowMissing(err error) bool {
 // containing only unsupported files. A failed permission/provider read is never
 // interpreted as absence. Parent symlinks and submodules are never followed.
 func (s *Server) actionsWorkflowDirectory(ctx context.Context, token forgeCredential, base, commit string) (string, []forgeContents, []*golfv1.WorkflowDiagnostic, error) {
-	directories, err := workflowpath.Directories(s.config.GiteaWorkflowDirs)
+	directories, err := workflowpath.Directories(s.config.ForgeWorkflowDirs)
 	if err != nil {
 		return "", nil, nil, errWorkflowExecutionUnsupported
 	}

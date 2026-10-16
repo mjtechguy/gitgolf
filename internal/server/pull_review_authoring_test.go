@@ -30,7 +30,7 @@ type authoringFixture struct {
 
 func newAuthoringFixture(t *testing.T) *authoringFixture {
 	f := &authoringFixture{reviewRequestFixture: newReviewRequestFixture(t), comments: []forgePullReviewComment{}}
-	target, _ := url.Parse(f.s.config.GiteaURL)
+	target, _ := url.Parse(f.s.config.ForgeURL)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -144,7 +144,7 @@ func newAuthoringFixture(t *testing.T) *authoringFixture {
 	}))
 	t.Cleanup(provider.Close)
 	config := f.s.config
-	config.GiteaURL, config.GiteaPublicURL = provider.URL, provider.URL
+	config.ForgeURL, config.ForgePublicURL = provider.URL, provider.URL
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {

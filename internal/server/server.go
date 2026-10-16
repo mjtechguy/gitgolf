@@ -32,16 +32,14 @@ type Config struct {
 	ForgeKind, ForgeInstanceID, ForgeURL, ForgeWorkflowDirs    string
 	ForgePublicURL, ForgeOAuthClientID, ForgeOAuthClientSecret string
 	RuntimeProfile                                             string
-	GiteaWorkflowDirs                                          string
 	WebhookEgressPolicyJSON                                    string
 	AgentImage, ReviewImage, ReviewPublisherToken              string
 	ClaudeBinary, OpenCodeBinary, CodexBinary                  string
 	PushCIEnabled                                              bool
 	ObjectStoreConfig                                          objectstore.Config
 	DatabaseEndpoint, DatabaseTLSMode, NativeDatabaseEndpoint  string
-	PublicURL, GiteaURL, EncryptionKey                         string
+	PublicURL, EncryptionKey                                   string
 	EncryptionKeysJSON, EncryptionActiveKeyID                  string
-	GiteaPublicURL, GiteaOAuthClientID, GiteaOAuthClientSecret string
 	AllowInsecureCookies                                       bool
 	WebDir                                                     string
 	// DefaultAppearance is "appearance" or "appearance/layout"; empty keeps the built-in default.
@@ -138,14 +136,14 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	} else if public.Scheme != "https" {
 		return nil, errors.New("HTTP loopback development requires GOLF_ALLOW_INSECURE_COOKIES=true")
 	}
-	forge, err := url.Parse(config.GiteaURL)
+	forge, err := url.Parse(config.ForgeURL)
 	if err != nil || forge.Host == "" || forge.User != nil || forge.RawQuery != "" || forge.Fragment != "" || (forge.Scheme != "http" && forge.Scheme != "https") {
 		return nil, errors.New("GOLF_FORGE_URL must be an HTTP(S) URL without credentials or query")
 	}
 	if err := validateOAuthConfig(config); err != nil {
 		return nil, err
 	}
-	config.GiteaPublicURL = strings.TrimRight(config.GiteaPublicURL, "/")
+	config.ForgePublicURL = strings.TrimRight(config.ForgePublicURL, "/")
 	keyring, err := ParseKeyring(config.EncryptionKey, config.EncryptionKeysJSON, config.EncryptionActiveKeyID)
 	if err != nil {
 		return nil, err
@@ -158,7 +156,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 		}
 	}
 	config.PublicURL = public.Scheme + "://" + public.Host
-	config.GiteaURL = strings.TrimRight(config.GiteaURL, "/")
+	config.ForgeURL = strings.TrimRight(config.ForgeURL, "/")
 	if err := BindForgeInstallation(context.Background(), db, config); err != nil {
 		return nil, err
 	}

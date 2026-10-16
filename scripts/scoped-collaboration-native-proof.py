@@ -26,7 +26,7 @@ try:
     created = True
     token = smoke.admin('generate-access-token', '--username', name, '--token-name', name, '--scopes', 'write:user,write:repository,write:issue', '--raw')
     repo = smoke.provider(token, 'POST', 'user/repos', {'name': 'scoped-writes', 'private': True}, expected=201)
-    payload = {'NativeURL': smoke.GITEA, 'Token': token, 'Owner': name, 'Name': repo['name'], 'RepositoryID': str(repo['id'])}
+    payload = {'NativeURL': smoke.FORGE, 'Token': token, 'Owner': name, 'Name': repo['name'], 'RepositoryID': str(repo['id'])}
     report['sourceRevision'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
     report['sourceFilesSha256'] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in map(Path, ['internal/server/api_credentials.go', 'internal/server/api_write_scopes.go', 'internal/server/api_write_native_test.go', 'internal/server/issue_mutations.go', 'internal/server/rpc.go', 'api/golf/v1/golf.proto', 'scripts/scoped-collaboration-native-proof.py'])}
     report['nativeVersion'] = smoke.provider(token, 'GET', 'version')['version']

@@ -12,7 +12,7 @@ python3 scripts/public-repositories-smoke.py \
   --cli bin/golf
 ```
 
-**2026-10-02: native drill passed** against that immutable local image and pinned Gitea 1.27.3. The script emits public commit/file checksums and stage results, not credentials or source bodies. Each run creates a separate Compose project, fresh databases, random loopback ports and ordinary users; `finally` removes its containers, volumes, network and private temporary files and verifies resource absence. The normal local administrator and installation are untouched. No external repository, issue, hook, runner or pipeline is written.
+**2026-10-02: native drill passed** against that immutable local image in an earlier native qualification on a since-retired backend; it has not been repeated on Forgejo 15.0.9. The script emits public commit/file checksums and stage results, not credentials or source bodies. Each run creates a separate Compose project, fresh databases, random loopback ports and ordinary users; `finally` removes its containers, volumes, network and private temporary files and verifies resource absence. The normal local administrator and installation are untouched. No external repository, issue, hook, runner or pipeline is written.
 
 | Public fixture | Immutable source commit | Qualified scope |
 | --- | --- | --- |
@@ -22,11 +22,11 @@ python3 scripts/public-repositories-smoke.py \
 The local drill verifies:
 
 1. Fetch each fixed commit into a bare repository with no checkout, client hooks, dependency installation, submodule recursion or LFS smudge. Reject redirects; ignore system/global Git configuration and credential helpers. Validate Git objects with `fsck` and bound the fixed fixture footprint.
-2. Create private destination repositories through Golf's durable `CreateRepository` RPC using ordinary scoped credentials. Push through native Git HTTPS with credentials limited to the isolated destination origin. No Gitea database/repository-file mutation occurs.
+2. Create private destination repositories through Golf's durable `CreateRepository` RPC using ordinary scoped credentials. Push through native Git HTTPS with credentials limited to the isolated destination origin. No native forge database/repository-file mutation occurs.
 3. Confirm exactly two qualification refs: destination `main` and the locally created lightweight `qualification-source` tag both point to the source commit. GitLab's selected `master` is deliberately mapped to destination `main`. These are **selected-ref copies**, not all-branch/all-tag mirrors or imported upstream tag/signature verification.
 4. Read the complete selected history through Golf's paginated commit API and compare every SHA with local Git. Read all detected workflow files, README and license at the exact commit; compare plain-text bytes and blob IDs. Workflow inventory reports byte counts and SHA256, not semantic validation.
 5. Read the selected workflow through the real Golf CLI with a token supplied on stdin. Verify typed JSON and that its temporary sign-in leaves no additional active session. An unrelated account receives 404 for both destination repository and workflow reads.
-6. Confirm the deployed topology contains only Golf/Gitea/PostgreSQL, Gitea Actions is configured off and Golf reports pipeline execution disabled. No runner is registered or launched.
+6. Confirm the deployed topology contains only Golf/native forge/PostgreSQL, native Actions is configured off and Golf reports pipeline execution disabled. No runner is registered or launched.
 
 The two repositories are examples, not a complete migration corpus. This proof omits private-source authentication, every upstream ref, LFS payloads, submodule repositories, issues/PRs/MRs, attachments, teams, policies, secrets, webhooks, cutover, resumability, source renames/deletions, large repositories and provider throttling. Upstream removal of a pinned object causes a visible failure; the script never silently advances its pin.
 
@@ -34,7 +34,7 @@ The two repositories are examples, not a complete migration corpus. This proof o
 
 Public Git transport provides the selected history and object identity used above. Provider metadata discovery is separate: GitHub's repository API exposes repository identity, default branch and clone URLs, including public reads without credentials; GitLab's Projects API supplies equivalent project discovery. Those endpoints do not copy repositories into Golf. See [GitHub repositories API](https://docs.github.com/en/rest/repos/repos#get-a-repository) and [GitLab Projects API](https://docs.gitlab.com/api/projects/).
 
-Pinned Gitea has a supported `POST /repos/migrate` endpoint. Its implementation accepts clone/source-service options and selected metadata, checks destination ownership and migration-URL policy, and uses a background context that continues after the caller disconnects. Mirror mode suppresses collaboration-data options. This makes a lost response a potentially completed migration, not permission to retry or adopt a similarly named repository. The drill above does not call or qualify that endpoint. See [Gitea 1.27.3 migration implementation](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/migrate.go) and [API reference](https://docs.gitea.com/api/1.27/).
+Forgejo has a supported `POST /repos/migrate` endpoint. Its implementation accepts clone/source-service options and selected metadata, checks destination ownership and migration-URL policy, and uses a background context that continues after the caller disconnects. Mirror mode suppresses collaboration-data options. This makes a lost response a potentially completed migration, not permission to retry or adopt a similarly named repository. These implementation notes were characterized on the since-retired backend; Forgejo inherits this handler but it has not been re-qualified. The drill above does not call or qualify that endpoint. See the [Forgejo 15.0.9 migration handler source](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/migrate.go) and the pinned [API reference](compatibility/forgejo-15.0.9.swagger.json).
 
 Before exposing public import in Golf, implement and prove:
 

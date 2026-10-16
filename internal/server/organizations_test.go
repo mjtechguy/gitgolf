@@ -28,7 +28,7 @@ var organizationProcedures = []string{
 }
 
 func TestOrganizationBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func newOrganizationFixture(t *testing.T) *organizationFixture {
 	t.Cleanup(provider.Close)
 	t.Cleanup(func() { close(f.resume) })
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL, config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
+	config.ForgePublicURL, config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
 	var err error
 	f.s, err = New(config, f.db)
 	if err != nil {

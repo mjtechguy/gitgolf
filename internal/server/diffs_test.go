@@ -137,7 +137,7 @@ func newDiffFixture(t *testing.T) *pullFixture {
 	t.Cleanup(provider.Close)
 	t.Cleanup(func() { close(f.resume) })
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL, config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
+	config.ForgePublicURL, config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
 	var err error
 	f.s, err = New(config, f.db)
 	if err != nil {
@@ -151,7 +151,7 @@ func diffRequest(sha string) *connect.Request[golfv1.GetCommitDiffRequest] {
 }
 
 func TestCommitDiffBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

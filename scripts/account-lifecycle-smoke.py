@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Qualify local-account administration and own credential changes on a fresh core.
 
-Native users are disposable fixtures created through Gitea's operator CLI.
+Native users are disposable fixtures created through Forgejo's operator CLI.
 Golf enrollment binds those existing identities; it never provisions native
 users. Login emails here are unverified aliases, not proof of mailbox ownership.
 """
@@ -19,6 +19,7 @@ import tempfile
 
 sys.dont_write_bytecode = True
 import smoke
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('lifecycle_helpers', ROOT/'scripts/observability-smoke.py')
@@ -38,7 +39,7 @@ def main():
     parser.add_argument('--image', required=True)
     args = parser.parse_args()
     environment = {key: value for key, value in os.environ.items() if not key.startswith(
-        ('GOLF_', 'GITEA_', 'POSTGRES_', 'OTEL_', 'COMPOSE_', 'RUSTFS_', 'AWS_')) and key != 'DATABASE_URL'}
+        ('GOLF_', 'FORGEJO_', 'POSTGRES_', 'OTEL_', 'COMPOSE_', 'RUSTFS_', 'AWS_')) and key != 'DATABASE_URL'}
     private = []
 
     def run(*arguments, payload=None, timeout=120):
@@ -54,26 +55,26 @@ def main():
     print('Golf image: '+image, flush=True)
     project = 'golf-lifecycle-proof-'+secrets.token_hex(5)
     golf_port, forge_port = helpers.free_ports(2)
-    original = smoke.GOLF, smoke.GITEA
-    smoke.GOLF, smoke.GITEA = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{forge_port}'
+    original = smoke.GOLF, smoke.FORGE
+    smoke.GOLF, smoke.FORGE = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{forge_port}'
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory = Path(temporary)
         directory.chmod(0o700)
         env_file, override = directory/'core.env', directory/'proof.yaml'
-        values = {name: secrets.token_hex(24) for name in ['POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD']}
+        values = {name: secrets.token_hex(24) for name in ['POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'FORGEJO_DB_PASSWORD']} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),
             GOLF_PUBLIC_URL=smoke.GOLF, GOLF_ENCRYPTION_KEYS='', GOLF_ACTIVE_ENCRYPTION_KEY='',
-            GITEA_PUBLIC_URL='', GITEA_OAUTH_CLIENT_ID='', GITEA_OAUTH_CLIENT_SECRET='')
-        private.extend(value for key, value in values.items() if value and key != 'GOLF_PUBLIC_URL')
+            GOLF_FORGE_PUBLIC_URL='', GOLF_FORGE_OAUTH_CLIENT_ID='', GOLF_FORGE_OAUTH_CLIENT_SECRET='')
+        private.extend(value for key, value in values.items() if value and key not in ('GOLF_PUBLIC_URL', 'GOLF_FORGE_INSTANCE_ID'))
         helpers.private_write(env_file, ''.join(key+'='+value+'\n' for key, value in values.items()))
         helpers.private_write(override, f'''services:
   golf:
     image: {image}
     pull_policy: never
     ports: !override ["127.0.0.1:{golf_port}:8080"]
-  gitea:
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
     ports: !override ["127.0.0.1:{forge_port}:3000"]
 ''')
         compose = ['docker', 'compose', '-p', project, '--env-file', str(env_file),
@@ -83,7 +84,7 @@ def main():
             return run(*compose, *arguments, **kwargs)
 
         def native_admin(*arguments):
-            return command('exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini',
+            return command('exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini',  # Forgejo's upstream path
                 'admin', 'user', *arguments).strip()
 
         def operator(action, payload):
@@ -131,7 +132,7 @@ def main():
             started = True
             command('up', '-d', '--no-build', '--wait', '--wait-timeout', '120', timeout=180)
             smoke.ready()
-            assert smoke.provider('', 'GET', 'version')['version'] == '1.27.3'
+            assert smoke.provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
             assert run('docker', 'inspect', '--format', '{{.Image}}', project+'-golf-1').strip() == image
             identities = {}
             for role in ['admin', 'second', 'managed', 'self']:
@@ -154,7 +155,7 @@ def main():
             actor, second, managed, own = [identities[key] for key in ['admin', 'second', 'managed', 'self']]
             admin, other_admin = actor['session'], second['session']
             pat = smoke.client()
-            rpc(pat, 'SessionService/LoginWithGiteaToken', {'token': actor['token']})
+            rpc(pat, 'SessionService/LoginWithForgeToken', {'token': actor['token']})
             delegated = bearer(admin, 'admin read boundary')
 
             def enrollment(item, confirmation=None):
@@ -317,7 +318,7 @@ def main():
                 rpc(session, 'SessionService/Logout')
             print('PASS: native admin enrollment/reset/enable, immutable target/source binding, authority and CAS denials, own password/email changes, session/delegation revocation, encrypted credentials, atomic duplicate-alias rollback, actor audit and restart', flush=True)
         finally:
-            smoke.GOLF, smoke.GITEA = original
+            smoke.GOLF, smoke.FORGE = original
             if started:
                 command('down', '--volumes', '--remove-orphans', timeout=120)
             for resource, action in [('container', 'ls'), ('volume', 'ls'), ('network', 'ls')]:

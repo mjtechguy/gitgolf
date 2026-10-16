@@ -81,7 +81,7 @@ def main():
         assert repo['fullName'] == owner+'/'+name and repo.get('private')
         tokens = []
         for purpose, scopes in [('push', 'read:user,write:repository'), ('grant', 'read:user,read:repository')]:
-            token = command(*COMPOSE, 'exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini',
+            token = command(*COMPOSE, 'exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini',  # Forgejo's upstream path
                 'admin', 'user', 'generate-access-token', '--username', owner, '--token-name', name+'-'+purpose,
                 '--scopes', scopes, '--raw')
             assert len(token) >= 8 and '\n' not in token
@@ -106,7 +106,7 @@ def main():
             (work/workflow).write_text('on: push\njobs:\n  check:\n    runs-on: linux\n    steps:\n      - run: |\n          test "$(id -u)" = 1000\n          test -f README.md\n          printf "Golf local automatic CI passed\\n"\n')
             (work/'README.md').write_text('# Golf local CI\n\nA private native Git repository with automatic isolated shell CI.\n')
             git('add', 'README.md', workflow); git('commit', '-m', 'Add local automatic CI demo')
-            remote = smoke.GITEA+'/'+owner+'/'+name+'.git'
+            remote = smoke.FORGE+'/'+owner+'/'+name+'.git'
             git('push', remote, 'HEAD:refs/heads/main'); smoke.wait_for_push(push, owner+'/'+name)
             connection, secret = str(uuid.uuid4()), secrets.token_hex(32)
             # Preserve other operator connections; refuse to silently replace one.
@@ -141,7 +141,7 @@ def main():
                 'expiresAt': (datetime.now(timezone.utc)+timedelta(hours=24)).isoformat(),
                 'idempotencyKey': str(uuid.uuid4())})['grant']
             assert grant['executionState'] == 'requires_push_admission'
-            smoke.provider(push, 'POST', 'repos/'+owner+'/'+name+'/hooks', {'type': 'gitea', 'active': True,
+            smoke.provider(push, 'POST', 'repos/'+owner+'/'+name+'/hooks', {'type': 'forgejo', 'active': True,
                 'events': ['push'], 'branch_filter': 'main', 'config': {'url': 'http://golf:8080/hooks/forgejo/'+connection,
                     'content_type': 'json', 'http_method': 'POST', 'secret': secret}}, expected=201)
             time.sleep(7)

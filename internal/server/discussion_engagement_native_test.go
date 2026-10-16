@@ -27,7 +27,7 @@ func TestDiscussionEngagementNative(t *testing.T) {
 		t.Fatal("native source setup", e)
 	}
 	sessions, writes, _, httpClient, origin := testRPCClients(t, s)
-	login, e := sessions.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: f.Token}))
+	login, e := sessions.LoginWithForgeToken(t.Context(), connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: f.Token}))
 	if e != nil || login.Msg.User == nil {
 		t.Fatal("native source login", connect.CodeOf(e))
 	}
@@ -127,7 +127,7 @@ func TestDiscussionEngagementNative(t *testing.T) {
 	}
 
 	readerSessions, readerWrites, _, readerHTTP, readerOrigin := testRPCClients(t, s)
-	readerLogin, e := readerSessions.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: f.ReaderToken}))
+	readerLogin, e := readerSessions.LoginWithForgeToken(t.Context(), connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: f.ReaderToken}))
 	if e != nil || readerLogin.Msg.User == nil {
 		t.Fatal("native ordinary reader login", connect.CodeOf(e))
 	}

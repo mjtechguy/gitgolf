@@ -1,6 +1,6 @@
 # Account session management
 
-The current account control lists and revokes the signed-in user's active **Golf sessions**. It works with scoped Gitea PAT bootstrap and configured Gitea browser OAuth. It does not replace Golf local/OIDC identity, invitation, MFA/recovery, credential rotation or organization authorization work.
+The current account control lists and revokes the signed-in user's active **Golf sessions**. It works with scoped Forgejo PAT bootstrap and configured Forgejo browser OAuth. It does not replace Golf local/OIDC identity, invitation, MFA/recovery, credential rotation or organization authorization work.
 
 Open **Sessions** in the workspace sidebar. The page identifies the current session, creation and absolute expiration times, and whether its stored upstream credential uses PAT or OAuth. It shows no inferred device/location/IP data. Revocation requires an explicit confirmation; cancelling leaves access unchanged.
 
@@ -20,7 +20,7 @@ Pagination defaults to page1/limit20, with limit100 and page10000 ceilings. Orde
 
 ## Authorization and concurrency
 
-The API checks the current upstream credential and compares the actual immutable Gitea user ID with the stored identity. A revoked credential, wrong identity, missing Golf session or expired caller cannot list or revoke sessions. Forge URL and user scoping remain in the SQL queries; possession of another user's management ID does not grant access.
+The API checks the current upstream credential and compares the actual immutable Forgejo user ID with the stored identity. A revoked credential, wrong identity, missing Golf session or expired caller cannot list or revoke sessions. Forge URL and user scoping remain in the SQL queries; possession of another user's management ID does not grant access.
 
 Management transactions lock the Golf user before the caller session, recheck current authorization after lock waits, and serialize competing account revocations. This avoids two callers holding the very session rows the other wants to delete. A concurrent revoke-other race can leave one caller authorized; the deleted caller receives unauthenticated rather than revoking through a stale session. Login and management share the identity-first lock order; OAuth refresh only locks its own session.
 
@@ -30,7 +30,7 @@ The additive migration assigns management IDs to existing PAT/OAuth sessions wit
 
 ## Provider and browser boundaries
 
-Revoking Golf sessions does **not** revoke the Gitea PAT, OAuth consent, Gitea browser session, Git SSH/deploy keys or provider account. A still-valid credential can establish a new Golf session. Revoke those credentials through their owning provider when necessary. The development CLI's ephemeral bootstrap sessions can briefly appear while a command is running.
+Revoking Golf sessions does **not** revoke the Forgejo PAT, OAuth consent, Forgejo browser session, Git SSH/deploy keys or provider account. A still-valid credential can establish a new Golf session. Revoke those credentials through their owning provider when necessary. The development CLI's ephemeral bootstrap sessions can briefly appear while a command is running.
 
 Session queries are private, per-user, abortable and uncached after the dialog closes. Failed refresh/revocation hides prior rows. Current-session revocation and unauthenticated errors reuse the existing sign-out path to cancel/remove private queries. Theme selection is the only persisted browser preference involved; no credentials/session metadata are stored in localStorage.
 

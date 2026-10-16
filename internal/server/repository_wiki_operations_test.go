@@ -63,15 +63,15 @@ func TestNative078Actual(t *testing.T) {
 		t.Fatal("fixture invalid")
 	}
 	config := testConfig(f.Native)
-	config.GiteaPublicURL = f.Native
-	config.GiteaOAuthClientID = "owned-native078"
-	config.GiteaOAuthClientSecret = "owned-native078-secret"
+	config.ForgePublicURL = f.Native
+	config.ForgeOAuthClientID = "owned-native078"
+	config.ForgeOAuthClientSecret = "owned-native078-secret"
 	s, e := New(config, testDatabase(t))
 	if e != nil {
 		t.Fatal(e)
 	}
 	sessions, _, _, transport, origin := testRPCClients(t, s)
-	if _, e = sessions.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: f.Token})); e != nil {
+	if _, e = sessions.LoginWithForgeToken(t.Context(), connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: f.Token})); e != nil {
 		t.Fatal("login failed")
 	}
 	t.Cleanup(func() {
@@ -207,7 +207,7 @@ func TestWikiOperationJournalPostgres(t *testing.T) {
 	for _, mode := range []string{"success", "unknown", "wrong-content", "stale", "reader", "lost-authority"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newReleasePublicationFixture(t)
-			target, _ := url.Parse(f.s.config.GiteaURL)
+			target, _ := url.Parse(f.s.config.ForgeURL)
 			proxy := httputil.NewSingleHostReverseProxy(target)
 			var writes atomic.Int32
 			var row nativeWikiPage
@@ -251,8 +251,8 @@ func TestWikiOperationJournalPostgres(t *testing.T) {
 			}))
 			t.Cleanup(provider.Close)
 			config := f.s.config
-			config.GiteaURL = provider.URL
-			config.GiteaPublicURL = provider.URL
+			config.ForgeURL = provider.URL
+			config.ForgePublicURL = provider.URL
 			var e error
 			f.s, e = New(config, f.db)
 			if e != nil {

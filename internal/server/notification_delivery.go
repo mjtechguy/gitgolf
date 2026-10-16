@@ -65,7 +65,7 @@ func (s *Server) emailAuthority(ctx context.Context, d emailDelivery) (emailAcco
  FROM golf_email_contacts c JOIN golf_local_accounts a ON a.id=c.local_account_id AND a.user_id=c.user_id JOIN golf_users u ON u.id=c.user_id
  WHERE c.user_id=$1 AND c.version=$2 AND u.forge_url=$3 AND u.forge_user_id=c.native_user_id AND a.disabled_at IS NULL AND a.credential_version=c.credential_version AND NOT EXISTS(SELECT 1 FROM golf_user_access ga WHERE ga.user_id=u.id AND ga.suspended)
  AND (( $4='verification' AND EXISTS(SELECT 1 FROM golf_email_challenges ch WHERE ch.id=$5::uuid AND ch.user_id=c.user_id AND ch.contact_version=c.version AND (ch.purpose='verification' OR (ch.purpose='password_recovery' AND c.verified_at IS NOT NULL AND c.suppression='' AND EXISTS(SELECT 1 FROM golf_password_recovery_enrollments er WHERE er.user_id=u.id AND er.local_account_id=a.id AND er.native_user_id=u.forge_user_id AND er.credential_version=a.credential_version AND er.contact_version=c.version AND er.version=ch.password_recovery_enrollment_version AND er.enabled))) AND ch.confirmed_at IS NULL AND ch.expires_at>clock_timestamp() AND ch.attempts<5))
- OR ($4='activity' AND c.enabled AND c.verified_at IS NOT NULL AND c.suppression='' AND EXISTS(SELECT 1 FROM golf_email_subscriptions ss WHERE ss.id=$6::uuid AND ss.user_id=c.user_id AND ss.version=$7 AND ss.epoch=$8 AND ss.contact_version=c.version AND ss.local_account_id=c.local_account_id AND ss.native_user_id=c.native_user_id AND ss.credential_version=c.credential_version AND ss.enabled AND ss.authorization_state='authorized')))`, d.UserID, d.ContactVersion, s.config.GiteaURL, d.Kind, d.ChallengeID, d.SubscriptionID, d.SubscriptionVersion, d.Epoch).Scan(&a.UserID, &a.NativeID, &a.LocalID, &a.CredentialVersion, &a.Email, &cipher, &binding, &key)
+ OR ($4='activity' AND c.enabled AND c.verified_at IS NOT NULL AND c.suppression='' AND EXISTS(SELECT 1 FROM golf_email_subscriptions ss WHERE ss.id=$6::uuid AND ss.user_id=c.user_id AND ss.version=$7 AND ss.epoch=$8 AND ss.contact_version=c.version AND ss.local_account_id=c.local_account_id AND ss.native_user_id=c.native_user_id AND ss.credential_version=c.credential_version AND ss.enabled AND ss.authorization_state='authorized')))`, d.UserID, d.ContactVersion, s.config.ForgeURL, d.Kind, d.ChallengeID, d.SubscriptionID, d.SubscriptionVersion, d.Epoch).Scan(&a.UserID, &a.NativeID, &a.LocalID, &a.CredentialVersion, &a.Email, &cipher, &binding, &key)
 	if errors.Is(e, sql.ErrNoRows) {
 		return a, errEmailRevoked
 	}
@@ -102,7 +102,7 @@ func (s *Server) emailAuthority(ctx context.Context, d emailDelivery) (emailAcco
 		var ownerName, name, forge string
 		var repo, owner int64
 		e = s.db.QueryRowContext(ctx, `SELECT forge_url,repository_owner,repository_name,repository_id,owner_id FROM golf_email_subscriptions WHERE id=$1 AND user_id=$2`, d.SubscriptionID, a.UserID).Scan(&forge, &ownerName, &name, &repo, &owner)
-		if e != nil || forge != s.config.GiteaURL {
+		if e != nil || forge != s.config.ForgeURL {
 			return a, errEmailRevoked
 		}
 		access, e := s.readRepositoryAccess(ctx, token, repositoryKey{ownerName, name}, actor)
@@ -148,7 +148,7 @@ func (s *Server) claimEmail(ctx context.Context) (emailDelivery, error) {
 	defer tx.Rollback()
 	_, e = tx.ExecContext(ctx, `WITH expired AS (SELECT d.id,d.lease_id FROM golf_email_deliveries d JOIN golf_users u ON u.id=d.user_id WHERE u.forge_url=$1 AND d.state='sending' AND lease_until<=clock_timestamp() ORDER BY d.lease_until,d.id LIMIT 100 FOR UPDATE OF d SKIP LOCKED),finished AS (
  UPDATE golf_email_attempts a SET completed_at=clock_timestamp(),outcome='lease_expired_uncertain' FROM expired x WHERE a.delivery_id=x.id AND a.lease_id=x.lease_id AND a.completed_at IS NULL RETURNING a.delivery_id)
- UPDATE golf_email_deliveries d SET state=CASE WHEN attempts>=6 THEN 'failed' ELSE 'retrying' END,possible_duplicate=true,failure_code='lease_expired_uncertain',next_attempt_at=clock_timestamp(),completed_at=CASE WHEN attempts>=6 THEN clock_timestamp() ELSE NULL END FROM expired x WHERE d.id=x.id`, s.config.GiteaURL)
+ UPDATE golf_email_deliveries d SET state=CASE WHEN attempts>=6 THEN 'failed' ELSE 'retrying' END,possible_duplicate=true,failure_code='lease_expired_uncertain',next_attempt_at=clock_timestamp(),completed_at=CASE WHEN attempts>=6 THEN clock_timestamp() ELSE NULL END FROM expired x WHERE d.id=x.id`, s.config.ForgeURL)
 	if e != nil {
 		return d, e
 	}
@@ -159,12 +159,12 @@ func (s *Server) claimEmail(ctx context.Context) (emailDelivery, error) {
  OR (d.kind='verification' AND (ch.confirmed_at IS NOT NULL OR ch.expires_at<=clock_timestamp() OR ch.attempts>=5))
  OR (d.kind='activity' AND (NOT c.enabled OR c.verified_at IS NULL OR c.suppression<>'' OR NOT ss.enabled OR ss.authorization_state<>'authorized' OR ss.version<>d.subscription_version OR ss.epoch<>d.epoch OR ss.contact_version<>c.version OR ss.credential_version<>c.credential_version)))
  ORDER BY d.id LIMIT 100 FOR UPDATE OF d SKIP LOCKED)
- UPDATE golf_email_deliveries d SET state='cancelled',failure_code='authorization_or_configuration_changed',completed_at=clock_timestamp() FROM obsolete x WHERE d.id=x.id`, s.config.GiteaURL)
+ UPDATE golf_email_deliveries d SET state='cancelled',failure_code='authorization_or_configuration_changed',completed_at=clock_timestamp() FROM obsolete x WHERE d.id=x.id`, s.config.ForgeURL)
 	if e != nil {
 		return d, e
 	}
 	var id string
-	e = tx.QueryRowContext(ctx, `SELECT d.id::text FROM golf_email_deliveries d JOIN golf_users u ON u.id=d.user_id WHERE u.forge_url=$1 AND d.state IN ('queued','retrying') AND d.attempts<6 AND d.next_attempt_at<=clock_timestamp() ORDER BY d.next_attempt_at,d.id LIMIT 1 FOR UPDATE OF d SKIP LOCKED`, s.config.GiteaURL).Scan(&id)
+	e = tx.QueryRowContext(ctx, `SELECT d.id::text FROM golf_email_deliveries d JOIN golf_users u ON u.id=d.user_id WHERE u.forge_url=$1 AND d.state IN ('queued','retrying') AND d.attempts<6 AND d.next_attempt_at<=clock_timestamp() ORDER BY d.next_attempt_at,d.id LIMIT 1 FOR UPDATE OF d SKIP LOCKED`, s.config.ForgeURL).Scan(&id)
 	if e != nil {
 		if errors.Is(e, sql.ErrNoRows) {
 			_ = tx.Commit()
@@ -425,7 +425,7 @@ func (s *Server) ListOwnEmailDeliveries(ctx context.Context, req *connect.Reques
 					return e
 				}
 			}
-			rows, e := tx.QueryContext(ctx, `SELECT `+prefixedEmailColumns("d")+` FROM golf_email_deliveries d LEFT JOIN golf_email_subscriptions ss ON ss.id=d.subscription_id WHERE d.user_id=$1 AND (($2::bigint=0 AND d.kind='verification') OR ($2>0 AND ss.repository_id=$2 AND ss.owner_id=$3 AND ss.forge_url=$4)) ORDER BY d.created_at DESC,d.id DESC LIMIT $5 OFFSET $6`, a.UserID, repo, owner, s.config.GiteaURL, int(limit)+1, int((page-1)*limit))
+			rows, e := tx.QueryContext(ctx, `SELECT `+prefixedEmailColumns("d")+` FROM golf_email_deliveries d LEFT JOIN golf_email_subscriptions ss ON ss.id=d.subscription_id WHERE d.user_id=$1 AND (($2::bigint=0 AND d.kind='verification') OR ($2>0 AND ss.repository_id=$2 AND ss.owner_id=$3 AND ss.forge_url=$4)) ORDER BY d.created_at DESC,d.id DESC LIMIT $5 OFFSET $6`, a.UserID, repo, owner, s.config.ForgeURL, int(limit)+1, int((page-1)*limit))
 			if e != nil {
 				return e
 			}

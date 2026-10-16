@@ -45,7 +45,7 @@ def main():
             users.append(name)
             token = smoke.admin('generate-access-token', '--username', name, '--token-name', prefix, '--scopes', 'write:user,write:repository,write:issue,write:organization', '--raw')
             session = smoke.client()
-            identity = smoke.rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})['user']
+            identity = smoke.rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})['user']
             actors[role] = dict(name=name, token=token, session=session, id=identity['id'])
         owner = actors['owner']; token = owner['token']; session = owner['session']
         if args.source_unit_only or args.metadata_unit_only:
@@ -209,7 +209,7 @@ def main():
             except BaseException: errors.append('organization_cleanup')
         else: report['ownedOrganizationPurged'] = True
         for name in reversed(users):
-            try: smoke.admin('delete', '--username', name, '--purge'); smoke.request(smoke.client(), 'GET', smoke.GITEA+'/api/v1/users/'+name, expected=404)
+            try: smoke.admin('delete', '--username', name, '--purge'); smoke.request(smoke.client(), 'GET', smoke.FORGE+'/api/v1/users/'+name, expected=404)
             except BaseException: errors.append('user_cleanup')
         report['ownedUsersPurged'] = 'user_cleanup' not in errors
         report['cleanupErrors'] = errors

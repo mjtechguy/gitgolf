@@ -43,7 +43,7 @@ func (s *Server) getPullRequestDiff(ctx context.Context, session string, token f
 	return result, nil
 }
 
-// getCommitDiff fixes both sides to commit objects. Gitea 1.27.3's supported
+// getCommitDiff fixes both sides to commit objects. Forgejo's supported
 // .diff endpoint uses the first parent even for merges, and git show for roots.
 // Keep its native text (including root metadata, filenames and binary notices),
 // rather than interpreting it as a parsed patch or a merge-readiness assertion.
@@ -111,7 +111,7 @@ func validCommitURL(value, repositoryURL, commitID string) bool {
 			return false
 		}
 	}
-	// Gitea 1.27.3 ToRepo calls HTMLURL(ctx), whereas ToCommit calls HTMLURL()
+	// The forge's ToRepo calls HTMLURL(ctx), whereas ToCommit calls HTMLURL()
 	// without request context. Internal and public origins can therefore differ.
 	// Bind the repository path and exact object ID; never follow this metadata URL.
 	return commit.EscapedPath() == strings.TrimRight(repo.EscapedPath(), "/")+"/commit/"+commitID

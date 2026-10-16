@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 import sys
 sys.dont_write_bytecode = True
-from smoke import GITEA, GOLF, ROOT, admin, client, provider, ready, rpc
+from smoke import FORGE, GOLF, ROOT, admin, client, provider, ready, rpc
 
 
 def main():
@@ -28,7 +28,7 @@ def main():
             users.append(name)
             token = admin('generate-access-token','--username',name,'--token-name',prefix,'--scopes','write:user,write:organization,write:repository','--raw')
             session = client();sessions.append(session)
-            rpc(session,'SessionService/LoginWithGiteaToken',{'token':token})
+            rpc(session,'SessionService/LoginWithForgeToken',{'token':token})
             actors.append((name,token,session))
         owner_name,owner_token,owner = actors[0]
         reader_name,_,reader = actors[1]
@@ -96,7 +96,7 @@ def main():
             except Exception:pass
         cleanup_failed = False
         def remove_native(route):
-            request = urllib.request.Request(GITEA+'/api/v1/'+route, method='DELETE',
+            request = urllib.request.Request(FORGE+'/api/v1/'+route, method='DELETE',
                                              headers={'Authorization':'token '+owner_token})
             try:
                 response = client().open(request, timeout=15)

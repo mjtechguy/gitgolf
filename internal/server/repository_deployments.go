@@ -138,7 +138,7 @@ func (s *Server) deploymentRecord(ctx context.Context, id string) (*deploymentRe
 	if !deploymentUUID(id) {
 		return nil, invalid("Provide the original deployment identity.")
 	}
-	d, e := scanDeployment(s.db.QueryRowContext(ctx, "SELECT "+deploymentColumns+" FROM golf_repository_deployments WHERE id=$1 AND forge_url=$2", id, s.config.GiteaURL))
+	d, e := scanDeployment(s.db.QueryRowContext(ctx, "SELECT "+deploymentColumns+" FROM golf_repository_deployments WHERE id=$1 AND forge_url=$2", id, s.config.ForgeURL))
 	if e != nil {
 		return nil, e
 	}
@@ -254,20 +254,20 @@ func (s *Server) createRepositoryDeployment(ctx context.Context, r *connect.Requ
 	var record *deploymentRecord
 	e = s.workflowTransaction(ctx, session, user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, sessionHash []byte) error {
 		q := database.New(s.db).WithTx(tx)
-		if e := environmentPasswordCurrent(ctx, q, sessionHash, s.config.GiteaURL, password); e != nil {
+		if e := environmentPasswordCurrent(ctx, q, sessionHash, s.config.ForgeURL, password); e != nil {
 			return e
 		}
-		if _, e := tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.GiteaURL, repo); e != nil {
+		if _, e := tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.ForgeURL, repo); e != nil {
 			return errStorageUnavailable
 		}
 		var blocked bool
-		if tx.QueryRowContext(ctx, "SELECT golf_repository_lifecycle_blocked($1,$2)", s.config.GiteaURL, repo).Scan(&blocked) != nil {
+		if tx.QueryRowContext(ctx, "SELECT golf_repository_lifecycle_blocked($1,$2)", s.config.ForgeURL, repo).Scan(&blocked) != nil {
 			return errStorageUnavailable
 		}
 		if blocked {
 			return errLifecycleBlocked
 		}
-		v, e := q.GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.GiteaURL, ID: uuid.MustParse(m.EnvironmentId), RepositoryID: repo, OwnerID: owner})
+		v, e := q.GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.ForgeURL, ID: uuid.MustParse(m.EnvironmentId), RepositoryID: repo, OwnerID: owner})
 		if e != nil || v.Deleted || v.Version != version {
 			return errDeployment
 		}
@@ -298,14 +298,14 @@ func (s *Server) createRepositoryDeployment(ctx context.Context, r *connect.Requ
 			return e
 		}
 		var count int
-		if tx.QueryRowContext(ctx, "SELECT count(*) FROM golf_repository_deployments WHERE forge_url=$1 AND repository_id=$2", s.config.GiteaURL, repo).Scan(&count) != nil {
+		if tx.QueryRowContext(ctx, "SELECT count(*) FROM golf_repository_deployments WHERE forge_url=$1 AND repository_id=$2", s.config.ForgeURL, repo).Scan(&count) != nil {
 			return errStorageUnavailable
 		}
 		if count >= 100 {
 			return errDeployment
 		}
 		data, _ := proto.Marshal(d)
-		_, e = tx.ExecContext(ctx, "INSERT INTO golf_repository_deployments(id,forge_url,repository_id,owner_id,user_id,native_actor_id,session_hash,run_id,attempt_id,archive_sha256,environment_id,environment_version,input_hash,receipt,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'REQUESTED')", m.DeploymentId, s.config.GiteaURL, repo, owner, actor.UserID, user.ID, sessionHash, m.RunId, m.AttemptId, m.ArchiveSha256, m.EnvironmentId, version, hash, data)
+		_, e = tx.ExecContext(ctx, "INSERT INTO golf_repository_deployments(id,forge_url,repository_id,owner_id,user_id,native_actor_id,session_hash,run_id,attempt_id,archive_sha256,environment_id,environment_version,input_hash,receipt,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'REQUESTED')", m.DeploymentId, s.config.ForgeURL, repo, owner, actor.UserID, user.ID, sessionHash, m.RunId, m.AttemptId, m.ArchiveSha256, m.EnvironmentId, version, hash, data)
 		if e != nil {
 			return errStorageUnavailable
 		}

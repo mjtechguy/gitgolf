@@ -143,12 +143,12 @@ func (s *Server) getInlineReview(ctx context.Context, session string, token forg
 	var result *golfv1.PullInlineReviewMutation
 	err = s.withReviewDraftAuthority(ctx, session, token, m.Target, scope, func(_ string, _ Repository, _ forgePull) error {
 		return s.withManagedSession(ctx, session, token, func(q *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
-			actor, e := q.GetReviewDraftActor(ctx, database.GetReviewDraftActorParams{ID: caller.UserID, ForgeURL: s.config.GiteaURL})
+			actor, e := q.GetReviewDraftActor(ctx, database.GetReviewDraftActorParams{ID: caller.UserID, ForgeURL: s.config.ForgeURL})
 			if e != nil {
 				return errStorageUnavailable
 			}
 			r, e := q.GetInlineReviewMutation(ctx, database.GetInlineReviewMutationParams{UserID: caller.UserID, OperationID: uuid.MustParse(m.OperationId)})
-			if errors.Is(e, sql.ErrNoRows) || e == nil && (!inlineScopeMatches(r, scope, m.DraftId, s.config.GiteaURL) || r.ActorID != actor) {
+			if errors.Is(e, sql.ErrNoRows) || e == nil && (!inlineScopeMatches(r, scope, m.DraftId, s.config.ForgeURL) || r.ActorID != actor) {
 				return errResourceNotFound
 			}
 			if e != nil {
@@ -181,13 +181,13 @@ func (s *Server) reserveInlineReview(ctx context.Context, session string, token 
 	var parsed reviewComparison
 	owned := false
 	err := s.withManagedSession(ctx, session, token, func(q *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
-		actor, e := q.GetReviewDraftActor(ctx, database.GetReviewDraftActorParams{ID: caller.UserID, ForgeURL: s.config.GiteaURL})
+		actor, e := q.GetReviewDraftActor(ctx, database.GetReviewDraftActorParams{ID: caller.UserID, ForgeURL: s.config.ForgeURL})
 		if e != nil {
 			return errStorageUnavailable
 		}
 		existing, e := q.GetInlineReviewMutation(ctx, database.GetInlineReviewMutationParams{UserID: caller.UserID, OperationID: uuid.MustParse(m.OperationId)})
 		if e == nil {
-			if !inlineScopeMatches(existing, scope, m.DraftId, s.config.GiteaURL) || existing.ActorID != actor || !bytes.Equal(existing.RequestFingerprint, inlineRequestFingerprint(m)) {
+			if !inlineScopeMatches(existing, scope, m.DraftId, s.config.ForgeURL) || existing.ActorID != actor || !bytes.Equal(existing.RequestFingerprint, inlineRequestFingerprint(m)) {
 				return errReviewDraftIntent
 			}
 			r = existing
@@ -196,14 +196,14 @@ func (s *Server) reserveInlineReview(ctx context.Context, session string, token 
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		d, e := q.GetReviewDraft(ctx, database.GetReviewDraftParams{ID: uuid.MustParse(m.DraftId), UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+		d, e := q.GetReviewDraft(ctx, database.GetReviewDraftParams{ID: uuid.MustParse(m.DraftId), UserID: caller.UserID, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
 		if e != nil {
 			return errStorageUnavailable
 		}
-		slot, e := q.GetReviewDraftTarget(ctx, database.GetReviewDraftTargetParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
+		slot, e := q.GetReviewDraftTarget(ctx, database.GetReviewDraftTargetParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID})
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -229,7 +229,7 @@ func (s *Server) reserveInlineReview(ctx context.Context, session string, token 
 			return errReviewDraftQuota
 		}
 		c := draft.Comparison.Capture
-		r, e = q.ReserveInlineReviewMutation(ctx, database.ReserveInlineReviewMutationParams{OperationID: uuid.MustParse(m.OperationId), UserID: caller.UserID, ForgeURL: s.config.GiteaURL, ActorID: actor, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID, PullNumber: scope.number, RepositoryOwner: m.Target.Repository.Owner, RepositoryName: m.Target.Repository.Name, DraftID: d.ID, DraftVersion: version, TargetGeneration: generation, ComparisonID: d.ComparisonID, RequestFingerprint: inlineRequestFingerprint(m), PayloadFingerprint: inlinePayloadFingerprint(input), ExpectedRevision: c.ExpectedPullRevision, BaseTip: c.Selection.BaseCommitId, MergeBase: c.MergeBaseCommitId, HeadCommit: c.Selection.HeadCommitId, DiffSha256: c.DiffSha256, Decision: input.Event, EntryCount: int32(len(input.Comments))})
+		r, e = q.ReserveInlineReviewMutation(ctx, database.ReserveInlineReviewMutationParams{OperationID: uuid.MustParse(m.OperationId), UserID: caller.UserID, ForgeURL: s.config.ForgeURL, ActorID: actor, RepositoryID: scope.repositoryID, PullRequestID: scope.pullID, PullNumber: scope.number, RepositoryOwner: m.Target.Repository.Owner, RepositoryName: m.Target.Repository.Name, DraftID: d.ID, DraftVersion: version, TargetGeneration: generation, ComparisonID: d.ComparisonID, RequestFingerprint: inlineRequestFingerprint(m), PayloadFingerprint: inlinePayloadFingerprint(input), ExpectedRevision: c.ExpectedPullRevision, BaseTip: c.Selection.BaseCommitId, MergeBase: c.MergeBaseCommitId, HeadCommit: c.Selection.HeadCommitId, DiffSha256: c.DiffSha256, Decision: input.Event, EntryCount: int32(len(input.Comments))})
 		if e != nil {
 			if errors.Is(reviewAdmissionError(e), errInlineReviewBlocked) {
 				return errInlineReviewBlocked

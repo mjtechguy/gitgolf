@@ -17,7 +17,7 @@ func (s *Server) expireDeployment(ctx context.Context, d *deploymentRecord) (*de
 		return nil, errStorageUnavailable
 	}
 	defer tx.Rollback()
-	if _, e = tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.GiteaURL, repo); e != nil {
+	if _, e = tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.ForgeURL, repo); e != nil {
 		return nil, errStorageUnavailable
 	}
 	result, e := tx.ExecContext(ctx, "UPDATE golf_repository_deployments SET state='EXPIRED',version=version+1,updated_at=clock_timestamp() WHERE id=$1 AND state='READY' AND expires_at<=clock_timestamp()", d.wire.Id)

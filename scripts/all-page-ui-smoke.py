@@ -58,7 +58,7 @@ def main():
         return result.stdout.strip()
 
     def admin(*values):
-        return command(*compose, 'exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini', 'admin', 'user', *values)
+        return command(*compose, 'exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *values)  # Forgejo's upstream path
 
     def operator(action, payload):
         result = json.loads(command(*compose, 'exec', '-T', 'golf', '/usr/local/bin/golf', 'local-account', action, payload=payload))
@@ -86,7 +86,7 @@ def main():
 
     try:
         smoke.ready()
-        assert smoke.provider('', 'GET', 'version')['version'] == '1.27.3'
+        assert smoke.provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
         baseline = runtime()
         prefix = 'golf-all-pages-' + secrets.token_hex(4)
         stage = 'owned actors'

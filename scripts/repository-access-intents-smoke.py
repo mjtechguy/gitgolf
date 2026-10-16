@@ -34,7 +34,7 @@ ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('access48_invitation_helpers',ROOT/'scripts/repository-invitations-smoke.py')
 inv=importlib.util.module_from_spec(spec);spec.loader.exec_module(inv)
 common=inv.common
-PROOF={'status':'not_started','cleanup':'not_started','captures':[], 'nativeSources':['https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/repo/collaborators.go','https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/services/repository/collaboration.go'], 'scope':'Requested direct read/write/admin acknowledgements and retained original access/invitation generations; no native atomic CAS, exclusive stored-role proof, recovery or full Access readiness'}
+PROOF={'status':'not_started','cleanup':'not_started','captures':[], 'nativeSources':['https://codeberg.org/forgejo/forgejo/raw/tag/v15.0.9/routers/api/v1/repo/collaborators.go','https://codeberg.org/forgejo/forgejo/raw/tag/v15.0.9/models/repo/collaboration.go'], 'scope':'Requested direct read/write/admin acknowledgements and retained original access/invitation generations; no native atomic CAS, exclusive stored-role proof, recovery or full Access readiness'}
 common.PROOF=PROOF
 record,stage,checked_rpc=common.record,common.stage,common.checked_rpc
 SERVICE='RepositoryInvitationService/'
@@ -388,7 +388,7 @@ def main():
     args.output.mkdir(parents=True,exist_ok=False,mode=0o700);args.output.chmod(0o700);common.OUTPUT=args.output.resolve();record(status='running',browser='pending' if args.ui else 'not_requested')
     if args.ui:assert (ROOT/'web/node_modules/playwright/index.mjs').is_file(),'Require existing local browser dependency; no installation'
     spec=importlib.util.spec_from_file_location('invitation_stack_helpers',ROOT/'scripts/observability-smoke.py');helpers=importlib.util.module_from_spec(spec);spec.loader.exec_module(helpers)
-    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
+    environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','FORGEJO_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
     def run(*arguments,payload=None,timeout=180):
         result=subprocess.run(arguments,cwd=ROOT,env=environment,input=None if payload is None else json.dumps(payload).encode(),capture_output=True,timeout=timeout)
         assert result.returncode==0 and len(result.stdout)<=8<<20 and len(result.stderr)<=8<<20,'Private subprocess failure; output withheld'
@@ -396,23 +396,23 @@ def main():
     stage('exact prebuilt product image and cached pinned base dependencies')
     selected=json.loads(run('docker','image','inspect',args.image))[0];image=selected['Id'];source=selected['Config'].get('Labels',{}).get('org.opencontainers.image.revision')
     assert re.fullmatch(r'sha256:[0-9a-f]{64}',image) and re.fullmatch(r'[0-9a-f]{40}',source or '')
-    for name in ('postgres:18.4-alpine3.24','gitea/gitea:1.27.3-rootless'):run('docker','image','inspect',name)
+    for name in ('postgres:18.4-alpine3.24','codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'):run('docker','image','inspect',name)
     space=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',image,'-Pk','/')
     assert int(space.splitlines()[-1].split()[3])>=2*1024*1024,'Require 2 GiB free VM disk before fresh fixture'
-    project='golf-access48-'+secrets.token_hex(5);ports=helpers.free_ports(3);previous=smoke.GOLF,smoke.GITEA;smoke.GOLF,smoke.GITEA='http://127.0.0.1:'+str(ports[0]),'http://127.0.0.1:'+str(ports[1]);actors={};repositories={};organizations={};bearers=[];started=False;passed=False
+    project='golf-access48-'+secrets.token_hex(5);ports=helpers.free_ports(3);previous=smoke.GOLF,smoke.FORGE;smoke.GOLF,smoke.FORGE='http://127.0.0.1:'+str(ports[0]),'http://127.0.0.1:'+str(ports[1]);actors={};repositories={};organizations={};bearers=[];started=False;passed=False
     record(project=project,selectedImage=image,sourceRevision=source,cleanup='not_created',proxy='owned_inside_compose_fixed_native_destination')
     with native_proxy.NativeProxy(ports[2],project) as proxy, tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
-        directory=Path(temporary);directory.chmod(0o700);values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')};values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_PUSH_CI_ENABLED='false')
+        directory=Path(temporary);directory.chmod(0o700);values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD')} | {'GOLF_FORGE_INSTANCE_ID': str(uuid.uuid4())};values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_PUSH_CI_ENABLED='false')
         env_file,override=directory/'core.env',directory/'proof.yaml';helpers.private_write(env_file,''.join(k+'='+v+'\n' for k,v in values.items()));helpers.private_write(override,f'''services:
   golf:
     image: {image}
     pull_policy: never
     ports: !override ["127.0.0.1:{ports[0]}:8080"]
     environment:
-      GITEA_URL: http://native-qualification-proxy:8081
-  gitea:
+      GOLF_FORGE_URL: http://native-qualification-proxy:8081
+  forgejo:
     environment:
-      GITEA__server__ROOT_URL: {smoke.GITEA}/
+      FORGEJO__server__ROOT_URL: {smoke.FORGE}/
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
 ''')
         environment.update(proxy.environment())
@@ -420,13 +420,13 @@ def main():
         helpers.private_write(proxy_override,json.dumps({'services':{native_proxy.SERVICE_NAME:proxy.compose_service(image,binary),'golf':{'depends_on':{native_proxy.SERVICE_NAME:{'condition':'service_started'}}}}}))
         compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/'compose.yaml'),'-f',str(override),'-f',str(proxy_override)]
         def command(*arguments,**kwargs):return run(*compose,*arguments,**kwargs)
-        def admin(*arguments):return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*arguments)
+        def admin(*arguments):return command('exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*arguments)  # Forgejo's upstream path
         def operator(action,payload):
             result=json.loads(command('exec','-T','golf','/usr/local/bin/golf','local-account',action,payload=payload));assert result['state']=='complete';return result['result']
         def login(actor):
             actor['session']=smoke.client();u=checked_rpc(actor['session'],'SessionService/LoginWithPassword',{'username':actor['email'],'password':actor['password']})['user'];assert u['id']==actor['id'];actor['loggedIn']=True
         def runtime():
-            container=command('ps','-q','golf');assert re.fullmatch(r'[0-9a-f]{12,64}',container);r=json.loads(run('docker','inspect','--format','{"image":{{json .Image}},"reference":{{json .Config.Image}},"revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}},"composeConfigHash":{{json (index .Config.Labels "com.docker.compose.config-hash")}}}',container));assert r['image']==image and r['reference']==image and r['revision']==source;r['nativeVersion']=smoke.request(smoke.client(),'GET',smoke.GITEA+'/api/v1/version')['version'];assert r['nativeVersion']=='1.27.3';return r
+            container=command('ps','-q','golf');assert re.fullmatch(r'[0-9a-f]{12,64}',container);r=json.loads(run('docker','inspect','--format','{"image":{{json .Image}},"reference":{{json .Config.Image}},"revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}},"composeConfigHash":{{json (index .Config.Labels "com.docker.compose.config-hash")}}}',container));assert r['image']==image and r['reference']==image and r['revision']==source;r['nativeVersion']=smoke.request(smoke.client(),'GET',smoke.FORGE+'/api/v1/version')['version'];assert r['nativeVersion']=='15.0.9+gitea-1.22.0';return r  # Forgejo's upstream version string
         def call(actor,method,payload=None,**kwargs):return checked_rpc(actor['session'],SERVICE+method,payload,**kwargs)
         def create_repo(owner,name,organization=None):
             native=smoke.provider(owner['token'],'POST','orgs/'+organization+'/repos' if organization else 'user/repos',{'name':name,'private':True,'auto_init':True},201);r={'key':{'owner':native['owner']['login'],'name':native['name']},'name':native['full_name'],'id':str(native['id']),'ownerId':str(native['owner']['id']),'owner':owner};repositories[r['name']]=r;smoke.wait_for_push(owner['token'],r['name']);return r
@@ -474,7 +474,7 @@ def main():
             except RuntimeError:
                 # Public closed dependency states only; no logs/env/token/body dump.
                 diagnostic={}
-                for label,url in (('golf',smoke.GOLF+'/readyz'),('native',smoke.GITEA+'/api/v1/version')):
+                for label,url in (('golf',smoke.GOLF+'/readyz'),('native',smoke.FORGE+'/api/v1/version')):
                     try:
                         try:response=urllib.request.urlopen(url,timeout=5)
                         except urllib.error.HTTPError as e:response=e
@@ -482,8 +482,8 @@ def main():
                             raw=response.read(4097);diagnostic[label+'Status']=response.status
                             if len(raw)<=4096:
                                 value=json.loads(raw)
-                                if label=='golf' and set(value.get('checks',{}))=={'database','gitea'} and all(v in {'ready','unavailable','unsupported_version'} for v in value['checks'].values()):diagnostic['checks']=value['checks']
-                                if label=='native':diagnostic['nativeVersionMatches']=value.get('version')=='1.27.3'
+                                if label=='golf' and set(value.get('checks',{}))=={'database','forgejo'} and all(v in {'ready','unavailable','unsupported_version'} for v in value['checks'].values()):diagnostic['checks']=value['checks']
+                                if label=='native':diagnostic['nativeVersionMatches']=value.get('version')=='15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
                     except Exception:diagnostic[label+'TransportUnavailable']=True
                 container=command('ps','-aq','golf')
                 if re.fullmatch(r'[a-f0-9]{12,64}',container):
@@ -516,7 +516,7 @@ def main():
                                 diagnostic['closedSourceErrorTemplate']=sorted(matching)[0] if matching else 'unmatched_private_error_withheld'
                     observation=subprocess.run(['docker','exec',container,'/bin/wget','-q','-T','3','-O','-','http://native-qualification-proxy:8081/api/v1/version'],cwd=ROOT,env=environment,capture_output=True,timeout=10)
                     diagnostic['containerProxyReadExit']=observation.returncode
-                    try:diagnostic['containerProxyVersionMatches']=len(observation.stdout)<=4096 and json.loads(observation.stdout).get('version')=='1.27.3'
+                    try:diagnostic['containerProxyVersionMatches']=len(observation.stdout)<=4096 and json.loads(observation.stdout).get('version')=='15.0.9+gitea-1.22.0'  # Forgejo's upstream version string
                     except Exception:diagnostic['containerProxyVersionMatches']=False
                 record(startupObservation=diagnostic);proxy_state(proxy,'startupProxyState')
                 raise
@@ -670,7 +670,7 @@ def main():
                 'freshDirectBlocked':True,'freshAcceptBlocked':True,'archiveBlocked':True,'noResend':True,'restartStatusOnly':True}))
             if args.ui:
                 stage('actual requested-role forms and original successful receipt inspection;12 captures')
-                ui_repo=create_repo(owner,'browser');config={'stackRoot':str(ROOT),'golf':smoke.GOLF,'gitea':smoke.GITEA,'repository':ui_repo['name'],'repositoryId':ui_repo['id'],'ownerId':ui_repo['ownerId'],'issuerEmail':owner['email'],'issuerPassword':owner['password'],'recipientId':recipient['id'],'recipientUsername':recipient['name'],'ownerToken':owner['token'],'screenshots':str(common.OUTPUT),'runtime':before};result=subprocess.run(['node',str(Path(__file__).with_name('repository-access-intents-browser.mjs'))],cwd=ROOT,env=environment,input=json.dumps(config).encode(),capture_output=True,timeout=360);assert len(result.stdout)<=65536 and len(result.stderr)<=65536;path=common.OUTPUT/'browser-manifest.json';assert path.is_file(),'Browser safe staged manifest missing';b=json.loads(path.read_text());record(browser=b['status'],captures=b.get('captures',[]),browserFailedStage=b.get('failedStage'));assert result.returncode==0 and b['status']=='browser_checks_passed_parent_native_cleanup_pending' and len(b['captures'])==12 and b['runtime']==before,'Browser predicate failed; safe manifest retained';print(result.stdout.decode().strip(),flush=True)
+                ui_repo=create_repo(owner,'browser');config={'stackRoot':str(ROOT),'golf':smoke.GOLF,'forge':smoke.FORGE,'repository':ui_repo['name'],'repositoryId':ui_repo['id'],'ownerId':ui_repo['ownerId'],'issuerEmail':owner['email'],'issuerPassword':owner['password'],'recipientId':recipient['id'],'recipientUsername':recipient['name'],'ownerToken':owner['token'],'screenshots':str(common.OUTPUT),'runtime':before};result=subprocess.run(['node',str(Path(__file__).with_name('repository-access-intents-browser.mjs'))],cwd=ROOT,env=environment,input=json.dumps(config).encode(),capture_output=True,timeout=360);assert len(result.stdout)<=65536 and len(result.stderr)<=65536;path=common.OUTPUT/'browser-manifest.json';assert path.is_file(),'Browser safe staged manifest missing';b=json.loads(path.read_text());record(browser=b['status'],captures=b.get('captures',[]),browserFailedStage=b.get('failedStage'));assert result.returncode==0 and b['status']=='browser_checks_passed_parent_native_cleanup_pending' and len(b['captures'])==12 and b['runtime']==before,'Browser predicate failed; safe manifest retained';print(result.stdout.decode().strip(),flush=True)
             assert runtime()==before and verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,source)==proxy_before and checked_proxy_progress(proxy.snapshot(),proxy_baseline,project) and proxy.armed is None;record(nativeChecks='passed',runtimeUnchanged=True,proxyMutationCount=sum(proxy.counts.values()));passed=True
         finally:
             if not passed:
@@ -691,7 +691,7 @@ def main():
             cleanup=urllib.request.build_opener(NoRedirect)
             def remove(route,actor,identifier,owner_id=None,role='repository'):
                 def request(method):
-                    req=urllib.request.Request(smoke.GITEA+'/api/v1/'+route,method=method,headers={'Authorization':'token '+actor['token']})
+                    req=urllib.request.Request(smoke.FORGE+'/api/v1/'+route,method=method,headers={'Authorization':'token '+actor['token']})
                     try:response=cleanup.open(req,timeout=15)
                     except urllib.error.HTTPError as e:response=e
                     with response:
@@ -721,7 +721,7 @@ def main():
                     command('down','--volumes','--remove-orphans',timeout=180)
                     for arguments in [('ps','-aq'),('volume','ls','-q'),('network','ls','-q')]:assert not run('docker',*arguments,'--filter','label=com.docker.compose.project='+project)
             except Exception:failures.append('fresh project resources')
-            finally:smoke.GOLF,smoke.GITEA=previous;record(cleanup='failed' if failures else 'passed',cleanupFailureCategories=failures)
+            finally:smoke.GOLF,smoke.FORGE=previous;record(cleanup='failed' if failures else 'passed',cleanupFailureCategories=failures)
             if failures and passed:record(failedStage='owned fixture cleanup')
             assert not failures,'Owned fixture cleanup failed; initial failing predicate remains preserved'
     assert passed;record(status='qualified',browser='qualified' if args.ui else 'not_requested');print('PASS: actual supported-native requested access roles, retained generations, original-operation replay and real native204 response loss; full Access remains Partial')

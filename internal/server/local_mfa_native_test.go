@@ -98,7 +98,7 @@ func TestLocalMFANativeProof(t *testing.T) {
 	if _, e = sessions.GetSession(t.Context(), connect.NewRequest(&golfv1.GetSessionRequest{})); connect.CodeOf(e) != connect.CodeUnauthenticated {
 		t.Fatal("native setup session retained")
 	}
-	if _, e = sessions.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: in.Token})); connect.CodeOf(e) != connect.CodeUnauthenticated {
+	if _, e = sessions.LoginWithForgeToken(t.Context(), connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: in.Token})); connect.CodeOf(e) != connect.CodeUnauthenticated {
 		t.Fatal("native PAT interactive MFA bypass")
 	}
 	password, e := sessions.LoginWithPassword(t.Context(), connect.NewRequest(&golfv1.LoginWithPasswordRequest{Username: in.Username, Password: localTestPassword}))

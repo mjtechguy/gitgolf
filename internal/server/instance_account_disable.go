@@ -42,7 +42,7 @@ func (s *Server) DisableLocalAccount(ctx context.Context, req *connect.Request[g
 		return nil, rpcError(err)
 	}
 	q := database.New(s.db)
-	initial, err := q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	initial, err := q.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, rpcError(errUnauthenticated)
 	}
@@ -60,7 +60,7 @@ func (s *Server) DisableLocalAccount(ctx context.Context, req *connect.Request[g
 	if err := s.requireInstanceAdmin(ctx, value, credential); err != nil {
 		return nil, err
 	}
-	target, err := q.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: accountID, ForgeURL: s.config.GiteaURL})
+	target, err := q.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: accountID, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, rpcError(errResourceNotFound)
 	}
@@ -91,14 +91,14 @@ func (s *Server) DisableLocalAccount(ctx context.Context, req *connect.Request[g
 	if !actor.IsInstanceAdmin || actor.DisabledAt.Valid || actor.CredentialVersion != initial.CredentialVersion || actor.PasswordHash != initial.PasswordHash {
 		return nil, rpcError(errUnauthenticated)
 	}
-	_, err = locked.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	_, err = locked.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, rpcError(errUnauthenticated)
 	}
 	if err != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
-	current, err := locked.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	current, err := locked.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, rpcError(errUnauthenticated)
 	}
@@ -119,7 +119,7 @@ func (s *Server) DisableLocalAccount(ctx context.Context, req *connect.Request[g
 	if err != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
-	updated, err := locked.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: target.ID, ForgeURL: s.config.GiteaURL})
+	updated, err := locked.GetAdminAccountTarget(ctx, database.GetAdminAccountTargetParams{ID: target.ID, ForgeURL: s.config.ForgeURL})
 	if err != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
@@ -132,7 +132,7 @@ func (s *Server) DisableLocalAccount(ctx context.Context, req *connect.Request[g
 		return nil, rpcError(errStorageUnavailable)
 	}
 	// Expiry can advance while locks were acquired; recheck immediately before commit.
-	if _, err := locked.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL}); err != nil {
+	if _, err := locked.GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL}); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, rpcError(errUnauthenticated)
 		}

@@ -217,7 +217,7 @@ func (s *Server) GetOrganizationLabelOperation(ctx context.Context, req *connect
 	var r orgLabelRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanOrgLabel(s.db.QueryRowContext(ctx, `SELECT `+orgLabelColumns+` FROM golf_organization_label_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanOrgLabel(s.db.QueryRowContext(ctx, `SELECT `+orgLabelColumns+` FROM golf_organization_label_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -265,11 +265,11 @@ func (s *Server) SubmitOrganizationLabelOperation(ctx context.Context, req *conn
 	var r orgLabelRecord
 	fresh := false
 	e = s.workflowTransaction(ctx, session, actor.ID, func(tx *sql.Tx, c database.LockManagedSessionRow, _ []byte) error {
-		if e := lockOrgLabel(ctx, tx, s.config.GiteaURL, orgID); e != nil {
+		if e := lockOrgLabel(ctx, tx, s.config.ForgeURL, orgID); e != nil {
 			return e
 		}
 		var e error
-		r, e = scanOrgLabel(tx.QueryRowContext(ctx, `SELECT `+orgLabelColumns+` FROM golf_organization_label_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanOrgLabel(tx.QueryRowContext(ctx, `SELECT `+orgLabelColumns+` FROM golf_organization_label_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(r.Fingerprint, fingerprint) {
 				return errOrganizationAdminConflict
@@ -279,7 +279,7 @@ func (s *Server) SubmitOrganizationLabelOperation(ctx context.Context, req *conn
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanOrgLabel(tx.QueryRowContext(ctx, `INSERT INTO golf_organization_label_operations(user_id,forge_url,actor_id,operation_id,organization,organization_id,kind,label_id,expected_revision,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING `+orgLabelColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, m.Organization, orgID, int32(m.Kind), labelID, m.ExpectedRevision, fingerprint))
+		r, e = scanOrgLabel(tx.QueryRowContext(ctx, `INSERT INTO golf_organization_label_operations(user_id,forge_url,actor_id,operation_id,organization,organization_id,kind,label_id,expected_revision,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING `+orgLabelColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, m.Organization, orgID, int32(m.Kind), labelID, m.ExpectedRevision, fingerprint))
 		if e != nil {
 			return errStorageUnavailable
 		}

@@ -58,7 +58,7 @@ func (s *Server) loadAgentConfig(ctx context.Context, q interface {
 }, scope, id string) (*golfv1.AgentUsageConfig, int64, int64, error) {
 	var raw []byte
 	var rev, owner int64
-	e := q.QueryRowContext(ctx, `SELECT config,revision,owner_id FROM golf_agent_usage_settings WHERE forge_url=$1 AND scope=$2 AND scope_id=$3`, s.config.GiteaURL, scope, id).Scan(&raw, &rev, &owner)
+	e := q.QueryRowContext(ctx, `SELECT config,revision,owner_id FROM golf_agent_usage_settings WHERE forge_url=$1 AND scope=$2 AND scope_id=$3`, s.config.ForgeURL, scope, id).Scan(&raw, &rev, &owner)
 	if errors.Is(e, sql.ErrNoRows) {
 		return agentDefaults(), 0, 0, nil
 	}
@@ -331,12 +331,12 @@ func (s *Server) SaveAgentUsage(ctx context.Context, req *connect.Request[golfv1
 	a.RequireAdmin = auth.Scope == "instance"
 	raw, _ := json.Marshal(m.Config)
 	e = s.codexGuard(ctx, a, func(tx *sql.Tx, user int64) error {
-		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.GiteaURL+"/agent-policy/"+auth.Scope+"/"+auth.ID); e != nil {
+		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.ForgeURL+"/agent-policy/"+auth.Scope+"/"+auth.ID); e != nil {
 			return errStorageUnavailable
 		}
 		if m.Config.ConnectionId != "" {
 			var permitted bool
-			e := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_codex_connections c WHERE c.id=$1 AND c.forge_url=$2 AND c.state='CONNECTED' AND EXISTS(SELECT 1 FROM golf_agent_model_catalogs mc WHERE mc.connection_id=c.id AND mc.connection_version=c.version AND EXISTS(SELECT 1 FROM jsonb_array_elements(mc.models) m WHERE m->>'id'=$5::text AND ($6::text='' OR COALESCE(m->'reasoning','[]'::jsonb) @> to_jsonb(ARRAY[$6::text])))) AND ((c.scope='PERSONAL' AND c.user_id=$3 AND $4='personal') OR (c.scope='INSTANCE' AND EXISTS(SELECT 1 FROM golf_codex_connection_access x JOIN golf_local_accounts l ON l.user_id=x.user_id WHERE x.connection_id=c.id AND x.user_id=$3 AND l.disabled_at IS NULL))))`, m.Config.ConnectionId, s.config.GiteaURL, user, auth.Scope, m.Config.ModelId, m.Config.Reasoning).Scan(&permitted)
+			e := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_codex_connections c WHERE c.id=$1 AND c.forge_url=$2 AND c.state='CONNECTED' AND EXISTS(SELECT 1 FROM golf_agent_model_catalogs mc WHERE mc.connection_id=c.id AND mc.connection_version=c.version AND EXISTS(SELECT 1 FROM jsonb_array_elements(mc.models) m WHERE m->>'id'=$5::text AND ($6::text='' OR COALESCE(m->'reasoning','[]'::jsonb) @> to_jsonb(ARRAY[$6::text])))) AND ((c.scope='PERSONAL' AND c.user_id=$3 AND $4='personal') OR (c.scope='INSTANCE' AND EXISTS(SELECT 1 FROM golf_codex_connection_access x JOIN golf_local_accounts l ON l.user_id=x.user_id WHERE x.connection_id=c.id AND x.user_id=$3 AND l.disabled_at IS NULL))))`, m.Config.ConnectionId, s.config.ForgeURL, user, auth.Scope, m.Config.ModelId, m.Config.Reasoning).Scan(&permitted)
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -344,10 +344,10 @@ func (s *Server) SaveAgentUsage(ctx context.Context, req *connect.Request[golfv1
 				return errCodexPermission
 			}
 		}
-		if _, e := tx.ExecContext(ctx, `INSERT INTO golf_agent_usage_settings(forge_url,scope,scope_id,owner_id,config) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`, s.config.GiteaURL, auth.Scope, auth.ID, auth.OwnerID, raw); e != nil {
+		if _, e := tx.ExecContext(ctx, `INSERT INTO golf_agent_usage_settings(forge_url,scope,scope_id,owner_id,config) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`, s.config.ForgeURL, auth.Scope, auth.ID, auth.OwnerID, raw); e != nil {
 			return errStorageUnavailable
 		}
-		result, e := tx.ExecContext(ctx, `UPDATE golf_agent_usage_settings SET config=$1,revision=revision+1,updated_at=now() WHERE forge_url=$2 AND scope=$3 AND scope_id=$4 AND revision=$5 AND owner_id=$6`, raw, s.config.GiteaURL, auth.Scope, auth.ID, rev, auth.OwnerID)
+		result, e := tx.ExecContext(ctx, `UPDATE golf_agent_usage_settings SET config=$1,revision=revision+1,updated_at=now() WHERE forge_url=$2 AND scope=$3 AND scope_id=$4 AND revision=$5 AND owner_id=$6`, raw, s.config.ForgeURL, auth.Scope, auth.ID, rev, auth.OwnerID)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -355,7 +355,7 @@ func (s *Server) SaveAgentUsage(ctx context.Context, req *connect.Request[golfv1
 		if n != 1 {
 			return errExecutionPolicyConflict
 		}
-		_, e = tx.ExecContext(ctx, `INSERT INTO golf_agent_usage_events(forge_url,scope,scope_id,revision,actor_user_id) VALUES($1,$2,$3,$4,$5)`, s.config.GiteaURL, auth.Scope, auth.ID, rev+1, user)
+		_, e = tx.ExecContext(ctx, `INSERT INTO golf_agent_usage_events(forge_url,scope,scope_id,revision,actor_user_id) VALUES($1,$2,$3,$4,$5)`, s.config.ForgeURL, auth.Scope, auth.ID, rev+1, user)
 		if e != nil {
 			return errStorageUnavailable
 		}

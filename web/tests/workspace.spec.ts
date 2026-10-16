@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetProfileResponseSchema, BeginGiteaOAuthResponseSchema, GetAuthenticationOptionsResponseSchema, CapabilityState, RepositoryCreationState, CreateRepositoryRequestSchema, CreateRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, LoginWithGiteaTokenRequestSchema, LoginWithGiteaTokenResponseSchema, LoginWithPasswordRequestSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetProfileResponseSchema, BeginForgeOAuthResponseSchema, GetAuthenticationOptionsResponseSchema, CapabilityState, RepositoryCreationState, CreateRepositoryRequestSchema, CreateRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, LoginWithForgeTokenRequestSchema, LoginWithForgeTokenResponseSchema, LoginWithPasswordRequestSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
 import type { CreateRepositoryRequest } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
@@ -12,14 +12,14 @@ const originalRepositories = [
 const user = create(UserSchema, { id: '9007199254740993', login: 'alex', fullName: 'Alex' });
 
 async function backend(page: Page, signedIn = true) {
-  const state = { signedIn, oauthOptions: create(GetAuthenticationOptionsResponseSchema, { providerLabel: 'Gitea', localPasswordEnabled: true }), oauthUrl: 'https://forge.example/login/oauth/authorize?client_id=golf&state=server-state&code_challenge=server-challenge&code_challenge_method=S256', beginError: false, optionsError: false, beginCalls: 0, passwordCalls: 0, passwordWait: undefined as Promise<void> | undefined, passwordDenied: false, receivedUsername: '', receivedPassword: '', passwordAdmin: false, repositories: [...originalRepositories], rejectCreation: false, receivedToken: '', created: undefined as CreateRepositoryRequest | undefined };
+  const state = { signedIn, oauthOptions: create(GetAuthenticationOptionsResponseSchema, { providerLabel: 'Forgejo', localPasswordEnabled: true }), oauthUrl: 'https://forge.example/login/oauth/authorize?client_id=golf&state=server-state&code_challenge=server-challenge&code_challenge_method=S256', beginError: false, optionsError: false, beginCalls: 0, passwordCalls: 0, passwordWait: undefined as Promise<void> | undefined, passwordDenied: false, receivedUsername: '', receivedPassword: '', passwordAdmin: false, repositories: [...originalRepositories], rejectCreation: false, receivedToken: '', created: undefined as CreateRepositoryRequest | undefined };
   await page.route('**/rpc/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/rpc/golf.v1.SessionService/GetAuthenticationOptions') return state.optionsError ? reject(route, 'unavailable', 'Options unavailable.') : respond(route, GetAuthenticationOptionsResponseSchema, state.oauthOptions);
-    if (path === '/rpc/golf.v1.SessionService/BeginGiteaOAuth') {
+    if (path === '/rpc/golf.v1.SessionService/BeginForgeOAuth') {
       state.beginCalls++;
-      if (state.beginError || !state.oauthOptions.giteaOauthEnabled) return reject(route, 'unavailable', 'Gitea sign-in could not be started. Please try again.');
-      return respond(route, BeginGiteaOAuthResponseSchema, { authorizationUrl: state.oauthUrl });
+      if (state.beginError || !state.oauthOptions.forgeOauthEnabled) return reject(route, 'unavailable', 'Forgejo sign-in could not be started. Please try again.');
+      return respond(route, BeginForgeOAuthResponseSchema, { authorizationUrl: state.oauthUrl });
     }
     if (path === '/rpc/golf.v1.SessionService/LoginWithPassword') {
       const input = request(route, LoginWithPasswordRequestSchema);
@@ -30,11 +30,11 @@ async function backend(page: Page, signedIn = true) {
       state.signedIn = true;
       return respond(route, LoginWithPasswordResponseSchema, { user: { ...user, isInstanceAdmin: state.passwordAdmin } });
     }
-    if (path === '/rpc/golf.v1.SessionService/LoginWithGiteaToken') {
-      state.receivedToken = request(route, LoginWithGiteaTokenRequestSchema).token;
-      if (state.receivedToken !== 'test-scoped-token') return reject(route, 'unauthenticated', 'Gitea did not accept this token.');
+    if (path === '/rpc/golf.v1.SessionService/LoginWithForgeToken') {
+      state.receivedToken = request(route, LoginWithForgeTokenRequestSchema).token;
+      if (state.receivedToken !== 'test-scoped-token') return reject(route, 'unauthenticated', 'Forgejo did not accept this token.');
       state.signedIn = true;
-      return respond(route, LoginWithGiteaTokenResponseSchema, { user });
+      return respond(route, LoginWithForgeTokenResponseSchema, { user });
     }
     if (path === '/rpc/golf.v1.SessionService/Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (path === '/rpc/golf.v1.ProfileService/GetProfile') return state.signedIn ? respond(route, GetProfileResponseSchema, { profile: { userId: user.id, login: user.login, fullName: user.fullName, revision: 'a'.repeat(64), canEdit: true } }) : reject(route, 'unauthenticated', 'Sign in required.');
@@ -42,7 +42,7 @@ async function backend(page: Page, signedIn = true) {
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session expired.');
     if (path === '/rpc/golf.v1.CapabilityService/ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { runtimeProfile: 'local', capabilities: [
       { id: 'settings.local-auth', label: 'Local sign-in settings', state: CapabilityState.READY, reason: 'Available in this fixture.' },
-      { id: 'repositories', label: 'Repositories', state: CapabilityState.READY, reason: 'Browse and create repositories on your connected Gitea instance. Check readiness for live dependency health.' },
+      { id: 'repositories', label: 'Repositories', state: CapabilityState.READY, reason: 'Browse and create repositories on your connected Forgejo instance. Check readiness for live dependency health.' },
       { id: 'agents', label: 'Agent workflows', state: CapabilityState.DISABLED, reason: 'Agent execution is planned and is not available in this build.' },
     ] });
     if (path === '/rpc/golf.v1.RepositoryService/CreateRepository') {
@@ -180,7 +180,7 @@ test('repository filtering, safe links, theme persistence and mobile layout', as
   await page.goto('/');
   await expect(page.locator('.repository-row')).toHaveCount(3);
   await expect(page.getByRole('link', { name: 'Open alex/design-system in the repository interface' })).toHaveAttribute('href', 'https://forge.example/alex/design-system');
-  await expect(page.getByRole('link', { name: 'Open alex/untrusted-link in Gitea' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Open alex/untrusted-link in Forgejo' })).toHaveCount(0);
   await page.getByLabel('Repository visibility').selectOption('public');
   await expect(page.getByRole('heading', { name: 'alex/tiny-tools' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'alex/design-system' })).toHaveCount(0);
@@ -251,10 +251,10 @@ test('explicit public visibility preserves the optional false value over Connect
 
 test('configured OAuth shows requested permissions and navigates through the generated begin procedure', async ({ page }) => {
   const state = await backend(page, false);
-  state.oauthOptions.giteaOauthEnabled = true;
-  state.oauthOptions.providerLabel = 'Team Gitea';
+  state.oauthOptions.forgeOauthEnabled = true;
+  state.oauthOptions.providerLabel = 'Team Forgejo';
   state.oauthOptions.scopes = ['write:user', 'write:repository', 'write:issue', 'read:organization'];
-  await page.route('https://forge.example/login/oauth/authorize?**', (route) => route.fulfill({ contentType: 'text/html', body: '<h1>Gitea authorization fixture</h1>' }));
+  await page.route('https://forge.example/login/oauth/authorize?**', (route) => route.fulfill({ contentType: 'text/html', body: '<h1>Forgejo authorization fixture</h1>' }));
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
@@ -269,7 +269,7 @@ test('configured OAuth shows requested permissions and navigates through the gen
   expect(storage).not.toMatch(/server-state|server-challenge/);
   await page.getByRole('button', { name: 'Continue with provider', exact: true }).click();
   await expect(page).toHaveURL(state.oauthUrl);
-  await expect(page.getByRole('heading', { name: 'Gitea authorization fixture' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Forgejo authorization fixture' })).toBeVisible();
   expect(state.beginCalls).toBe(1);
   expect(state.receivedToken).toBe('');
   expect(errors).toEqual([]);
@@ -277,12 +277,12 @@ test('configured OAuth shows requested permissions and navigates through the gen
 
 test('OAuth initiation failures and unsafe destinations stay inline without navigation', async ({ page }) => {
   const state = await backend(page, false);
-  state.oauthOptions.giteaOauthEnabled = true;
+  state.oauthOptions.forgeOauthEnabled = true;
   state.oauthOptions.scopes = ['read:user', 'read:repository'];
   state.beginError = true;
   await page.goto('/');
   await page.getByRole('button', { name: 'Continue with provider', exact: true }).click();
-  await expect(page.getByRole('alert')).toHaveText('Gitea sign-in could not be started. Please try again.');
+  await expect(page.getByRole('alert')).toHaveText('Forgejo sign-in could not be started. Please try again.');
   await expect(page).toHaveURL(new URL('/', test.info().project.use.baseURL).href);
   state.beginError = false;
   for (const url of ['javascript:window.executed=true', 'data:text/html,<h1>Bad</h1>', 'https://user:private-password@forge.example/login/oauth/authorize']) {
@@ -314,7 +314,7 @@ test('unconfigured and unavailable sign-in options show honest disabled state an
   await expect(page.getByLabel('Password', { exact: true })).toBeDisabled();
   await expect(page.getByLabel('Provider access token')).toHaveCount(0);
   state.optionsError = false;
-  state.oauthOptions.giteaOauthEnabled = true;
+  state.oauthOptions.forgeOauthEnabled = true;
   state.oauthOptions.scopes = ['read:user', 'read:repository'];
   await page.getByRole('button', { name: 'Retry sign-in options' }).click();
   await expect(page.getByRole('button', { name: 'Continue with provider', exact: true })).toBeVisible();
@@ -405,7 +405,7 @@ test('workspace puts account and one persistent dark/light toggle in the upper-r
   await header.getByLabel('Your account', { exact: true }).click();
   await expect(header.locator('.topbar-controls .account-dropdown')).toContainText('alex');
   await header.getByLabel('Your account', { exact: true }).click();
-  await expect(page.getByText('Connected to Gitea', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Connected to Forgejo', { exact: true })).toHaveCount(0);
   await expect(page.locator('.sidebar .theme-toggle')).toHaveCount(0);
   await expect(header.locator('.theme-toggle')).toHaveCount(1);
   const initial = await page.locator('html').getAttribute('data-theme');

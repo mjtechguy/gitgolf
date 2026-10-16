@@ -97,7 +97,7 @@ func TestForgeResponseBounds(t *testing.T) {
 }
 
 func TestBrowserRequiresSession(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestRepositoryBrowserWithPostgres(t *testing.T) {
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/repos/developer/empty/") {
 			if strings.HasSuffix(r.URL.Path, "/branches") {
-				t.Error("empty metadata must prevent Gitea's first-push branch race")
+				t.Error("empty metadata must prevent the native first-push branch race")
 			}
 			w.WriteHeader(409)
 			return
@@ -235,7 +235,7 @@ func TestRepositoryBrowserWithPostgres(t *testing.T) {
 	}
 	sessions, repositories, _, _, _ := testRPCClients(t, s)
 	ctx := context.Background()
-	if _, err := sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: "browser-user-token"})); err != nil {
+	if _, err := sessions.LoginWithForgeToken(ctx, connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: "browser-user-token"})); err != nil {
 		t.Fatal(err)
 	}
 	key := func(name string) *golfv1.RepositoryKey { return &golfv1.RepositoryKey{Owner: "developer", Name: name} }

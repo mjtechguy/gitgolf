@@ -2,13 +2,13 @@
 
 Date: 2026-10-09. Owner: Golf engineering. Status: implementation in progress.
 
-This is the execution plan for the user's request for a robust, fast Cloudflare-native Golf and an administrator operations dashboard across local, Docker, Kubernetes and Cloudflare deployments. It extends, rather than supersedes, CLOUDFLARE_BUILD_PLAN.md, CLOUDFLARE_NATIVE_SETUP.md, GITEA_CI_COMPATIBILITY_PLAN.md and the generated CLOUDFLARE_CAPABILITY_INVENTORY.md. IMPLEMENTATION_STATUS.md remains the evidence ledger. A checklist is not deployment evidence.
+This is the execution plan for the user's request for a robust, fast Cloudflare-native Golf and an administrator operations dashboard across local, Docker, Kubernetes and Cloudflare deployments. It extends, rather than supersedes, CLOUDFLARE_BUILD_PLAN.md, CLOUDFLARE_NATIVE_SETUP.md, the compatibility goals in ACTIONS_COMPATIBILITY_IMPLEMENTATION.md and the generated CLOUDFLARE_CAPABILITY_INVENTORY.md. IMPLEMENTATION_STATUS.md remains the evidence ledger. A checklist is not deployment evidence.
 
 The [2026-10-10 speed qualification](CLOUDFLARE_SPEED_QUALIFICATION.md) records the cache architecture, request/paint profiling method, deployed indexing and UI fixes, five-repository measurements, explicit large-diff failures and remaining performance/feature gates. Ordinary file/folder reads passed at median/p95 183/274 ms; six oversized diff failures remain part of the 108-request result. This evidence does not close global scale or complete native parity.
 
 ## 1. Product decisions and scope
 
-- Managed SaaS targets Cloudflare-native hosting. The existing Gitea/PostgreSQL installation is the migration bridge and remains an independent supported self-hosted path.
+- Managed SaaS targets Cloudflare-native hosting. The portable Forgejo/PostgreSQL installation is the migration bridge and remains an independent supported self-hosted path.
 - Organizations/workspaces own projects, members, allocations and budgets. A personal user receives a personal workspace.
 - Golf-managed app resources come first; customer-owned Cloudflare accounts follow the same explicit provisioning and retirement contracts.
 - Artifacts is canonical Git for eligible native repositories. Oversized repositories stay on the bridge until an independently qualified large-repository path exists. Do not silently truncate imports.
@@ -31,7 +31,7 @@ The last bounded exact-root/overview benchmark across eight repositories measure
 
 Each deliverable advances through DESIGN, IMPLEMENTED, SOURCE-VERIFIED, LOCAL-RUNTIME-VERIFIED, HOSTED-VERIFIED and OPERATIONS-QUALIFIED. Record the exact command, source/release identity, schema, tenant scope, resource ownership and cleanup result. Missing metrics remain unknown; a successful empty response must not become a zero-failure claim.
 
-A deployment is robust only after failure injection and restoration, not merely a passing build. Performance acceptance requires both cold and warm measurements and permission-revocation tests. Optional services must fail independently without blocking ordinary repository browsing. Never use cached/replicated identity data to broaden current authorization. No direct Gitea database/repository writes are authorized.
+A deployment is robust only after failure injection and restoration, not merely a passing build. Performance acceptance requires both cold and warm measurements and permission-revocation tests. Optional services must fail independently without blocking ordinary repository browsing. Never use cached/replicated identity data to broaden current authorization. No direct Forgejo database/repository writes are authorized.
 
 ## 4. Ordered work packages
 
@@ -83,9 +83,9 @@ Metrics have fixed IDs, label, optional numeric value, unit, source, observed ti
 ### Portable backend
 
 - [x] Reuse requireInstanceAdmin and recheck it after waiting for observations.
-- [x] Reuse bounded dependencyChecks for PostgreSQL/Gitea readiness.
+- [x] Reuse bounded dependencyChecks for PostgreSQL/Forgejo readiness.
 - [x] Gather from the injected Prometheus registry, never scrape a public metrics URL.
-- [x] Aggregate bounded HTTP/Gitea/database counters and histogram buckets.
+- [x] Aggregate bounded HTTP/forge/database counters and histogram buckets.
 - [x] Calculate approximate p50/p95/p99 only for populated distributions.
 - [x] Display trace exporter failures and telemetry configuration independently.
 - [x] Do not export route labels, usernames, repository names, paths, SQL or credentials.
@@ -219,7 +219,7 @@ Priority order:
 6. Environments/deployments, artifacts/attachments, releases/packages/wiki/imports/mirrors.
 7. Account/profile/security adaptations, all remaining settings and runtime-aware capability states.
 
-Acceptance for each supported behavior requires current authority, input validation, stale-write fencing, no duplicate provider effects, sanitized errors, pagination, shared UI and tests. Native protected merge must independently verify exact refs, required reviews, checks, grants and approval before Git publication; AI reports do not authorize merge. General Actions compatibility remains governed by GITEA_CI_COMPATIBILITY_PLAN.md, including the runner release implications and unchanged upstream workflow tests.
+Acceptance for each supported behavior requires current authority, input validation, stale-write fencing, no duplicate provider effects, sanitized errors, pagination, shared UI and tests. Native protected merge must independently verify exact refs, required reviews, checks, grants and approval before Git publication; AI reports do not authorize merge. General Actions compatibility remains governed by ACTIONS_COMPATIBILITY_IMPLEMENTATION.md, including the runner release implications and unchanged upstream workflow tests.
 
 ## 11. New Cloudflare services with real consumers
 
@@ -322,10 +322,10 @@ This appendix is the method-level work queue at plan creation. The generated cap
 | F-009 | `DiscussionAttachmentUploadService/SubmitDiscussionAttachmentUpload` | forge089.proto | Missing native adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
 | F-010 | `DiscussionAttachmentUploadService/GetDiscussionAttachmentUploadOperation` | forge089.proto | Missing native adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
 | F-011 | `SessionService/GetAuthenticationOptions` | golf.proto | Bounded adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
-| F-012 | `SessionService/BeginGiteaOAuth` | golf.proto | Missing native adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
+| F-012 | `SessionService/BeginForgeOAuth` | golf.proto | Missing native adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
 | F-013 | `SessionService/LoginWithPassword` | golf.proto | Missing native adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
 | F-014 | `SessionService/CompletePasswordMFA` | golf.proto | Missing native adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
-| F-015 | `SessionService/LoginWithGiteaToken` | golf.proto | Missing native adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
+| F-015 | `SessionService/LoginWithForgeToken` | golf.proto | Missing native adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
 | F-016 | `SessionService/GetSession` | golf.proto | Bounded adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
 | F-017 | `SessionService/ListSessions` | golf.proto | Missing native adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |
 | F-018 | `SessionService/RevokeSession` | golf.proto | Missing native adapter | [ ] behavior; [ ] role/revocation; [ ] failure/idempotency; [ ] UI; [ ] hosted |

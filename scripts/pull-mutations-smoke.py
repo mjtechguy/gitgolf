@@ -12,7 +12,7 @@ import secrets
 import sys
 import uuid
 sys.dont_write_bytecode = True
-from smoke import ROOT, GOLF, GITEA, admin, client, provider, ready, rpc, wait_for_push
+from smoke import ROOT, GOLF, FORGE, admin, client, provider, ready, rpc, wait_for_push
 
 
 BROWSER = r'''
@@ -25,7 +25,7 @@ try {
  let input='';for await(const part of process.stdin)input+=part;config=JSON.parse(input);input='';
  browser=await chromium.launch();context=await browser.newContext({viewport:{width:1280,height:900}});
  const headers={Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'};
- stage='sign-in';const auth=await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithGiteaToken',{headers,data:{token:config.token}});check(auth.status()===200);
+ stage='sign-in';const auth=await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithForgeToken',{headers,data:{token:config.token}});check(auth.status()===200);
  const page=await context.newPage(),errors=[];page.on('pageerror',()=>errors.push(true));
  stage='compare renamed fork';const search=new URLSearchParams({base:config.baseBranch,head:'feature/browser',sourceOwner:config.sourceOwner,sourceName:config.sourceName});await page.goto(config.golf+'/'+config.repository+'/compare?'+search);await page.getByRole('button',{name:'Compare',exact:true}).click();await page.locator('.diff-file').waitFor();
  for(const theme of ['dark','light'])for(const width of [1280,390]) {
@@ -34,7 +34,7 @@ try {
  stage='create browser PR';await page.getByRole('button',{name:'Open pull request',exact:true}).click();await page.getByLabel('Pull request title',{exact:true}).fill('Browser-created proposal');await page.getByLabel('Description, Markdown',{exact:true}).fill('## Browser-created description');await page.getByLabel('Pull request readiness',{exact:true}).selectOption('draft');await page.getByRole('button',{name:'Preview Markdown',exact:true}).click();await page.getByRole('heading',{name:'Browser-created description',exact:true}).waitFor();await page.getByRole('button',{name:'Create draft pull request',exact:true}).click();await page.waitForURL(/\/pull\/[1-9][0-9]*$/);await page.getByRole('heading',{name:/Browser-created proposal/}).waitFor();
  const createdNumber=Number(new URL(page.url()).pathname.split('/').at(-1));const created=await context.request.post(config.golf+'/rpc/golf.v1.RepositoryService/GetPullRequest',{headers,data:{repository:{owner:config.repository.split('/')[0],name:config.repository.split('/')[1]},number:createdNumber}});check(created.status()===200);const createdPull=(await created.json()).pullRequest;check(createdPull.draft===true&&createdPull.head.repositoryId===config.sourceId&&createdPull.head.ref==='feature/browser'&&createdPull.body==='## Browser-created description');
  stage='source private draft';await page.goto(config.golf+'/'+config.repository+'/compare?'+search);await page.getByRole('button',{name:'Compare',exact:true}).click();await page.locator('.diff-file').waitFor();await page.getByRole('button',{name:'Open pull request',exact:true}).click();await page.getByLabel('Description, Markdown',{exact:true}).fill('PRIVATE_UNSENT_SOURCE_DRAFT');
- const sourcePath=config.gitea+'/api/v1/repos/'+config.sourceOwner+'/'+config.sourceName+'/collaborators/'+config.actor;const deniedSource=await context.request.delete(sourcePath,{headers:{Authorization:'token '+config.sourceToken}});check(deniedSource.status()===204);await page.getByLabel('Description, Markdown',{exact:true}).waitFor({state:'detached',timeout:20000});check(!await page.locator('body').innerText().then(t=>t.includes('PRIVATE_UNSENT_SOURCE_DRAFT')));check(await page.locator('.diff-file').count()===0);const restoredSource=await context.request.put(sourcePath,{headers:{Authorization:'token '+config.sourceToken},data:{permission:'read'}});check(restoredSource.status()===204);
+ const sourcePath=config.forge+'/api/v1/repos/'+config.sourceOwner+'/'+config.sourceName+'/collaborators/'+config.actor;const deniedSource=await context.request.delete(sourcePath,{headers:{Authorization:'token '+config.sourceToken}});check(deniedSource.status()===204);await page.getByLabel('Description, Markdown',{exact:true}).waitFor({state:'detached',timeout:20000});check(!await page.locator('body').innerText().then(t=>t.includes('PRIVATE_UNSENT_SOURCE_DRAFT')));check(await page.locator('.diff-file').count()===0);const restoredSource=await context.request.put(sourcePath,{headers:{Authorization:'token '+config.sourceToken},data:{permission:'read'}});check(restoredSource.status()===204);
  console.log('PASS: live independently revoked source-fork access removes comparison and unsent PR draft');
  console.log('PASS: actual renamed-fork compare/commits/files and explicit Markdown/draft PR creation; both themes and widths');
  stage='open PR';await page.goto(config.golf+'/'+config.repository+'/pull/'+config.number);await page.getByRole('button',{name:'Edit pull request title',exact:true}).waitFor();
@@ -53,7 +53,7 @@ try {
  }
  stage='description edit';await page.getByRole('button',{name:'Edit pull request description',exact:true}).click();await page.getByLabel('Description, Markdown',{exact:true}).fill('Browser-confirmed description');await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.getByLabel('Pull request body, rendered Markdown').filter({hasText:'Browser-confirmed description'}).waitFor();
  stage='private draft revocation';await page.getByRole('button',{name:'Edit pull request title',exact:true}).click();await page.getByLabel('Pull request title',{exact:true}).fill('PRIVATE_REVOKED_DRAFT');
- const revoked=await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.actor,{headers:{Authorization:'token '+config.ownerToken}});check(revoked.status()===204);
+ const revoked=await context.request.delete(config.forge+'/api/v1/repos/'+config.repository+'/collaborators/'+config.actor,{headers:{Authorization:'token '+config.ownerToken}});check(revoked.status()===204);
  stage='live revocation cleanup';await page.getByLabel('Pull request title',{exact:true}).waitFor({state:'detached',timeout:20000});await page.locator('.repository-browser').getByRole('alert').waitFor();check(await page.getByLabel('Pull request title',{exact:true}).count()===0);check(!await page.locator('body').innerText().then(t=>t.includes('PRIVATE_REVOKED_DRAFT')));
  check(errors.length===0);console.log('PASS: actual served PR title/description/draft/ready/close/reopen; explicit shared editors; dark/light desktop/mobile; private draft/access revocation cleanup');
 } catch {console.error('Native PR mutation browser failed at '+stage+'; private diagnostics withheld');process.exitCode=1;}
@@ -77,7 +77,7 @@ def main():
             token = admin('generate-access-token', '--username', name, '--token-name', prefix,
                           '--scopes', 'write:user,write:repository', '--raw')
             session = client(); sessions.append(session)
-            rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})
+            rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})
             actors[role] = {'name':name, 'token':token, 'session':session}
         owner, author, writer, reader, outsider = [actors[r] for r in ['owner','author','writer','reader','outsider']]
         repo = provider(owner['token'], 'POST', 'user/repos', {'name':'private','private':True,'auto_init':True}, expected=201)
@@ -163,7 +163,7 @@ def main():
         provider(author['token'],'PUT',fork_path+'/collaborators/'+writer['name'],{'permission':'read'},expected=204)
         browser_token=admin('generate-access-token','--username',writer['name'],'--token-name',prefix+'-browser','--scopes','write:user,write:repository,read:issue','--raw')
         screenshots=ROOT/'.tmp/github-visual-audit/pull-mutations';screenshots.mkdir(parents=True,exist_ok=True)
-        result=subprocess.run(['node','--input-type=module','-e',BROWSER],input=json.dumps({'golf':GOLF,'gitea':GITEA,'token':browser_token,'ownerToken':owner['token'],'actor':writer['name'],'repository':full,'number':pull['number'],'baseBranch':repo['default_branch'],'sourceOwner':author['name'],'sourceName':fork['name'],'sourceId':str(fork['id']),'sourceToken':author['token'],'screenshots':str(screenshots)}),text=True,cwd=ROOT,capture_output=True,timeout=120)
+        result=subprocess.run(['node','--input-type=module','-e',BROWSER],input=json.dumps({'golf':GOLF,'forge':FORGE,'token':browser_token,'ownerToken':owner['token'],'actor':writer['name'],'repository':full,'number':pull['number'],'baseBranch':repo['default_branch'],'sourceOwner':author['name'],'sourceName':fork['name'],'sourceId':str(fork['id']),'sourceToken':author['token'],'screenshots':str(screenshots)}),text=True,cwd=ROOT,capture_output=True,timeout=120)
         print(result.stdout, end='',flush=True)
         if result.returncode:
             print(result.stderr, end='',file=sys.stderr);raise RuntimeError('Native PR browser failed (private diagnostics withheld)')

@@ -49,7 +49,7 @@ func TestMCPDiscoveryReadErrorsAndCleanup(t *testing.T) {
 				}
 				w.Header().Set("Content-Type", "application/json")
 				switch {
-				case strings.HasSuffix(r.URL.Path, "/LoginWithGiteaToken"):
+				case strings.HasSuffix(r.URL.Path, "/LoginWithForgeToken"):
 					logins.Add(1)
 					http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "opaque", Path: "/", HttpOnly: true})
 					fmt.Fprint(w, `{"user":{"id":"1"}}`)
@@ -194,7 +194,7 @@ func TestMCPCancellationAndSaturation(t *testing.T) {
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch {
-				case strings.HasSuffix(r.URL.Path, "/LoginWithGiteaToken"):
+				case strings.HasSuffix(r.URL.Path, "/LoginWithForgeToken"):
 					http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "opaque", Path: "/"})
 					fmt.Fprint(w, `{"user":{"id":"1"}}`)
 				case strings.HasSuffix(r.URL.Path, "/Logout"):
@@ -298,7 +298,7 @@ func TestMCPExplicitPullReadsAndCredentialModes(t *testing.T) {
 							t.Error("origin changed")
 						}
 						switch {
-						case strings.HasSuffix(r.URL.Path, "/LoginWithGiteaToken"):
+						case strings.HasSuffix(r.URL.Path, "/LoginWithForgeToken"):
 							if api {
 								t.Error("bearer attempted bootstrap")
 							}
@@ -477,7 +477,7 @@ func TestMCPSourceTypedSelectorsExactReceiptsAndCredentialBoundary(t *testing.T)
 				}
 				want := "GetRepository,ResolveRepositorySource,GetContents"
 				if !api {
-					want = "LoginWithGiteaToken," + want + ",Logout"
+					want = "LoginWithForgeToken," + want + ",Logout"
 				}
 				if strings.Join(calls(), ",") != want {
 					t.Fatalf("MCP traversal/lifecycle boundary changed: %v", calls())
@@ -493,7 +493,7 @@ func TestMCPSourceTypedSelectorsExactReceiptsAndCredentialBoundary(t *testing.T)
 			if err != nil || !result.IsError || result.StructuredContent != nil || strings.Contains(result.Content[0].(*mcp.TextContent).Text, "private-source") {
 				t.Fatal("MCP invalid/denied source released private output")
 			}
-			if strings.Contains(strings.Join(calls(), ","), "LoginWithGiteaToken") || strings.Contains(strings.Join(calls(), ","), "Logout") {
+			if strings.Contains(strings.Join(calls(), ","), "LoginWithForgeToken") || strings.Contains(strings.Join(calls(), ","), "Logout") {
 				t.Fatal("MCP bearer traversal created a session")
 			}
 		})

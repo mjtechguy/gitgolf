@@ -183,14 +183,14 @@ func lockOrganizationExecutionBroker(ctx context.Context, tx *sql.Tx, forge stri
 func (s *Server) openOrganizationExecutionValue(ctx context.Context, tx workflowQueryer, t organizationExecutionTarget, id string, version int64) (organizationExecutionRecord, string, error) {
 	// Latest metadata and requested immutable history are deliberately distinct:
 	// status replay may inspect a historic accepted version after replacement/delete.
-	r, e := scanOrganizationExecutionValue(tx.QueryRowContext(ctx, `SELECT `+organizationExecutionColumns+` FROM golf_organization_execution_values v JOIN golf_organization_execution_versions h ON h.id=v.id AND h.version=$4 WHERE v.id=$1 AND v.forge_url=$2 AND v.organization_id=$3`, id, s.config.GiteaURL, t.id, version))
+	r, e := scanOrganizationExecutionValue(tx.QueryRowContext(ctx, `SELECT `+organizationExecutionColumns+` FROM golf_organization_execution_values v JOIN golf_organization_execution_versions h ON h.id=v.id AND h.version=$4 WHERE v.id=$1 AND v.forge_url=$2 AND v.organization_id=$3`, id, s.config.ForgeURL, t.id, version))
 	if errors.Is(e, sql.ErrNoRows) {
 		return r, "", errResourceNotFound
 	}
 	if e != nil {
 		return r, "", errStorageUnavailable
 	}
-	plain, e := openOrganizationExecutionContent(s.keyring, s.config.GiteaURL, t.id, version, r)
+	plain, e := openOrganizationExecutionContent(s.keyring, s.config.ForgeURL, t.id, version, r)
 	return r, plain, e
 }
 func (s *Server) ListOrganizationExecutionValues(ctx context.Context, req *connect.Request[golfv1.ListOrganizationExecutionValuesRequest]) (*connect.Response[golfv1.ListOrganizationExecutionValuesResponse], error) {
@@ -206,12 +206,12 @@ func (s *Server) ListOrganizationExecutionValues(ctx context.Context, req *conne
 			if e := s.checkOrganizationExecutionOwner(ctx, token, t, user); e != nil {
 				return e
 			}
-			revision, e := lockOrganizationExecutionBroker(ctx, tx, s.config.GiteaURL, t.id, false)
+			revision, e := lockOrganizationExecutionBroker(ctx, tx, s.config.ForgeURL, t.id, false)
 			if e != nil {
 				return e
 			}
 			out.BrokerRevision = strconv.FormatInt(revision, 10)
-			rows, e := tx.QueryContext(ctx, `SELECT `+organizationExecutionColumns+` FROM golf_organization_execution_values v JOIN golf_organization_execution_versions h ON h.id=v.id AND h.version=(SELECT max(version) FROM golf_organization_execution_versions WHERE id=v.id) WHERE v.forge_url=$1 AND v.organization_id=$2 ORDER BY v.name,v.id LIMIT 65`, s.config.GiteaURL, t.id)
+			rows, e := tx.QueryContext(ctx, `SELECT `+organizationExecutionColumns+` FROM golf_organization_execution_values v JOIN golf_organization_execution_versions h ON h.id=v.id AND h.version=(SELECT max(version) FROM golf_organization_execution_versions WHERE id=v.id) WHERE v.forge_url=$1 AND v.organization_id=$2 ORDER BY v.name,v.id LIMIT 65`, s.config.ForgeURL, t.id)
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -272,7 +272,7 @@ func (s *Server) mutateOrganizationExecutionValue(ctx context.Context, h http.He
 			// held; both mutations and release use user -> sorted repository gates ->
 			// org broker -> repository broker -> run. Refresh metadata after the wait.
 			var oldSelected []byte
-			er := tx.QueryRowContext(ctx, `SELECT h.selected_repositories FROM golf_organization_execution_values v JOIN golf_organization_execution_versions h ON h.id=v.id AND h.version=(SELECT max(version) FROM golf_organization_execution_versions WHERE id=v.id) WHERE v.id=$1 AND v.forge_url=$2 AND v.organization_id=$3`, m.id, s.config.GiteaURL, t.id).Scan(&oldSelected)
+			er := tx.QueryRowContext(ctx, `SELECT h.selected_repositories FROM golf_organization_execution_values v JOIN golf_organization_execution_versions h ON h.id=v.id AND h.version=(SELECT max(version) FROM golf_organization_execution_versions WHERE id=v.id) WHERE v.id=$1 AND v.forge_url=$2 AND v.organization_id=$3`, m.id, s.config.ForgeURL, t.id).Scan(&oldSelected)
 			if er != nil && !errors.Is(er, sql.ErrNoRows) {
 				return errStorageUnavailable
 			}
@@ -291,11 +291,11 @@ func (s *Server) mutateOrganizationExecutionValue(ctx context.Context, h http.He
 			slices.Sort(ids)
 			ids = slices.Compact(ids)
 			for _, id := range ids {
-				if e := executionLifecycleGate(ctx, tx, s.config.GiteaURL, id); e != nil {
+				if e := executionLifecycleGate(ctx, tx, s.config.ForgeURL, id); e != nil {
 					return e
 				}
 			}
-			observed, e := lockOrganizationExecutionBroker(ctx, tx, s.config.GiteaURL, t.id, true)
+			observed, e := lockOrganizationExecutionBroker(ctx, tx, s.config.ForgeURL, t.id, true)
 			if e != nil {
 				return e
 			}
@@ -306,7 +306,7 @@ func (s *Server) mutateOrganizationExecutionValue(ctx context.Context, h http.He
 			var accepted, broker int64
 			var stored []byte
 			var at time.Time
-			e = tx.QueryRowContext(ctx, `SELECT action,item_id::text,accepted_version,accepted_broker_revision,request_metadata,created_at FROM golf_organization_execution_operations WHERE forge_url=$1 AND organization_id=$2 AND user_id=$3 AND operation_id=$4`, s.config.GiteaURL, t.id, actor.UserID, m.operation).Scan(&action, &id, &accepted, &broker, &stored, &at)
+			e = tx.QueryRowContext(ctx, `SELECT action,item_id::text,accepted_version,accepted_broker_revision,request_metadata,created_at FROM golf_organization_execution_operations WHERE forge_url=$1 AND organization_id=$2 AND user_id=$3 AND operation_id=$4`, s.config.ForgeURL, t.id, actor.UserID, m.operation).Scan(&action, &id, &accepted, &broker, &stored, &at)
 			if e == nil {
 				var a, b any
 				if json.Unmarshal(stored, &a) != nil || json.Unmarshal(metadata, &b) != nil || accessRevision(a) != accessRevision(b) || action != m.action || id != m.id {
@@ -334,7 +334,7 @@ func (s *Server) mutateOrganizationExecutionValue(ctx context.Context, h http.He
 				return errExecutionValueConflict
 			}
 			var latestPolicy []byte
-			err := tx.QueryRowContext(ctx, `SELECT h.selected_repositories FROM golf_organization_execution_values v JOIN golf_organization_execution_versions h ON h.id=v.id AND h.version=(SELECT max(version) FROM golf_organization_execution_versions WHERE id=v.id) WHERE v.id=$1 AND v.forge_url=$2 AND v.organization_id=$3`, m.id, s.config.GiteaURL, t.id).Scan(&latestPolicy)
+			err := tx.QueryRowContext(ctx, `SELECT h.selected_repositories FROM golf_organization_execution_values v JOIN golf_organization_execution_versions h ON h.id=v.id AND h.version=(SELECT max(version) FROM golf_organization_execution_versions WHERE id=v.id) WHERE v.id=$1 AND v.forge_url=$2 AND v.organization_id=$3`, m.id, s.config.ForgeURL, t.id).Scan(&latestPolicy)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return errStorageUnavailable
 			}
@@ -357,10 +357,10 @@ func (s *Server) mutateOrganizationExecutionValue(ctx context.Context, h http.He
 			if e = apply(tx, actor, hash, t, version, user); e != nil {
 				return e
 			}
-			if _, e = tx.ExecContext(ctx, `UPDATE golf_organization_execution_brokers SET revision=revision+1 WHERE forge_url=$1 AND organization_id=$2`, s.config.GiteaURL, t.id); e != nil {
+			if _, e = tx.ExecContext(ctx, `UPDATE golf_organization_execution_brokers SET revision=revision+1 WHERE forge_url=$1 AND organization_id=$2`, s.config.ForgeURL, t.id); e != nil {
 				return errStorageUnavailable
 			}
-			e = tx.QueryRowContext(ctx, `INSERT INTO golf_organization_execution_operations(forge_url,organization_id,user_id,operation_id,action,item_id,accepted_version,accepted_broker_revision,request_metadata) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING created_at`, s.config.GiteaURL, t.id, actor.UserID, m.operation, m.action, m.id, version+1, revision+1, metadata).Scan(&at)
+			e = tx.QueryRowContext(ctx, `INSERT INTO golf_organization_execution_operations(forge_url,organization_id,user_id,operation_id,action,item_id,accepted_version,accepted_broker_revision,request_metadata) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING created_at`, s.config.ForgeURL, t.id, actor.UserID, m.operation, m.action, m.id, version+1, revision+1, metadata).Scan(&at)
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -414,7 +414,7 @@ func (s *Server) SaveOrganizationExecutionValue(ctx context.Context, req *connec
 		var current int64
 		var name, storedKind string
 		var deleted bool
-		e := tx.QueryRowContext(ctx, `SELECT version,name,kind,deleted FROM golf_organization_execution_values WHERE id=$1 AND forge_url=$2 AND organization_id=$3 FOR UPDATE`, m.Id, s.config.GiteaURL, t.id).Scan(&current, &name, &storedKind, &deleted)
+		e := tx.QueryRowContext(ctx, `SELECT version,name,kind,deleted FROM golf_organization_execution_values WHERE id=$1 AND forge_url=$2 AND organization_id=$3 FOR UPDATE`, m.Id, s.config.ForgeURL, t.id).Scan(&current, &name, &storedKind, &deleted)
 		if e == nil && (current != version || name != m.Name || storedKind != kind) || errors.Is(e, sql.ErrNoRows) && version != 0 {
 			return errExecutionValueConflict
 		}
@@ -423,7 +423,7 @@ func (s *Server) SaveOrganizationExecutionValue(ctx context.Context, req *connec
 		}
 		for _, selectedRepo := range selected {
 			var conflict bool
-			if e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_execution_values WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 AND name=$4 AND kind<>$5 AND NOT deleted)`, s.config.GiteaURL, selectedRepo.ID, t.id, m.Name, kind).Scan(&conflict); e != nil {
+			if e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_execution_values WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 AND name=$4 AND kind<>$5 AND NOT deleted)`, s.config.ForgeURL, selectedRepo.ID, t.id, m.Name, kind).Scan(&conflict); e != nil {
 				return errStorageUnavailable
 			}
 			if conflict {
@@ -444,21 +444,21 @@ func (s *Server) SaveOrganizationExecutionValue(ctx context.Context, req *connec
 			value = plain
 		}
 		var names, history, used int
-		if e = tx.QueryRowContext(ctx, `SELECT count(*),coalesce(sum(value_bytes) FILTER(WHERE NOT deleted AND id<>$3),0),(SELECT count(*) FROM golf_organization_execution_versions h JOIN golf_organization_execution_values v ON v.id=h.id WHERE v.forge_url=$1 AND v.organization_id=$2) FROM golf_organization_execution_values WHERE forge_url=$1 AND organization_id=$2`, s.config.GiteaURL, t.id, m.Id).Scan(&names, &used, &history); e != nil {
+		if e = tx.QueryRowContext(ctx, `SELECT count(*),coalesce(sum(value_bytes) FILTER(WHERE NOT deleted AND id<>$3),0),(SELECT count(*) FROM golf_organization_execution_versions h JOIN golf_organization_execution_values v ON v.id=h.id WHERE v.forge_url=$1 AND v.organization_id=$2) FROM golf_organization_execution_values WHERE forge_url=$1 AND organization_id=$2`, s.config.ForgeURL, t.id, m.Id).Scan(&names, &used, &history); e != nil {
 			return errStorageUnavailable
 		}
 		if version == 0 && names >= 64 || history >= executionRetainedVersionsLimit || used+len(value) > runner.MaxExecutionEnvironmentBytes {
 			return invalid("Organization execution value retention or active quota reached.")
 		}
 		if version == 0 {
-			_, e = tx.ExecContext(ctx, `INSERT INTO golf_organization_execution_values(id,forge_url,organization_id,name,kind,version,value_bytes) VALUES($1,$2,$3,$4,$5,1,$6)`, m.Id, s.config.GiteaURL, t.id, m.Name, kind, len(value))
+			_, e = tx.ExecContext(ctx, `INSERT INTO golf_organization_execution_values(id,forge_url,organization_id,name,kind,version,value_bytes) VALUES($1,$2,$3,$4,$5,1,$6)`, m.Id, s.config.ForgeURL, t.id, m.Name, kind, len(value))
 		} else {
 			_, e = tx.ExecContext(ctx, `UPDATE golf_organization_execution_values SET version=version+1,deleted=false,value_bytes=$2,updated_at=clock_timestamp() WHERE id=$1`, m.Id, len(value))
 		}
 		if e != nil {
 			return errExecutionValueConflict
 		}
-		binding := organizationExecutionBinding(m.Id, version+1, s.config.GiteaURL, t.id, m.Name, kind, len(value), selected, actor.UserID, approver.ID, hash, expiry)
+		binding := organizationExecutionBinding(m.Id, version+1, s.config.ForgeURL, t.id, m.Name, kind, len(value), selected, actor.UserID, approver.ID, hash, expiry)
 		cipher, key, e := s.keyring.seal(organizationExecutionValueDomain, value, binding)
 		if e != nil {
 			return e
@@ -467,7 +467,7 @@ func (s *Server) SaveOrganizationExecutionValue(ctx context.Context, req *connec
 		if _, e = tx.ExecContext(ctx, `INSERT INTO golf_organization_execution_versions(id,version,value_bytes,selected_repositories,approver_user_id,approver_native_id,approval_session_hash,expires_at,encrypted_content,content_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, m.Id, version+1, len(value), policy, actor.UserID, approver.ID, hash, expiry, cipher, binding, key); e != nil {
 			return errStorageUnavailable
 		}
-		return fenceOrganizationExecutionValueRuns(ctx, tx, s.config.GiteaURL, t.id, m.Id)
+		return fenceOrganizationExecutionValueRuns(ctx, tx, s.config.ForgeURL, t.id, m.Id)
 	})
 	if e != nil {
 		return nil, executionMutationRPCError(e, nil)
@@ -480,7 +480,7 @@ func (s *Server) DeleteOrganizationExecutionValue(ctx context.Context, req *conn
 	m := req.Msg
 	metadata := struct{ ID, Version, Broker string }{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision}
 	result, e := s.mutateOrganizationExecutionValue(ctx, req.Header(), organizationExecutionMutation{m.Target, m.Id, m.OperationId, "delete_value", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, nil, nil}, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte, t organizationExecutionTarget, version int64, approver User) error {
-		r, e := tx.ExecContext(ctx, `UPDATE golf_organization_execution_values SET version=version+1,deleted=true,updated_at=clock_timestamp() WHERE id=$1 AND forge_url=$2 AND organization_id=$3 AND version=$4 AND NOT deleted`, m.Id, s.config.GiteaURL, t.id, version)
+		r, e := tx.ExecContext(ctx, `UPDATE golf_organization_execution_values SET version=version+1,deleted=true,updated_at=clock_timestamp() WHERE id=$1 AND forge_url=$2 AND organization_id=$3 AND version=$4 AND NOT deleted`, m.Id, s.config.ForgeURL, t.id, version)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -488,7 +488,7 @@ func (s *Server) DeleteOrganizationExecutionValue(ctx context.Context, req *conn
 		if n != 1 {
 			return errExecutionValueConflict
 		}
-		return fenceOrganizationExecutionValueRuns(ctx, tx, s.config.GiteaURL, t.id, m.Id)
+		return fenceOrganizationExecutionValueRuns(ctx, tx, s.config.ForgeURL, t.id, m.Id)
 	})
 	if e != nil {
 		return nil, executionMutationRPCError(e, nil)
@@ -549,7 +549,7 @@ func (s *Server) GetOrganizationExecutionValueOperation(ctx context.Context, req
 			}
 			var version, revision int64
 			var at time.Time
-			e := tx.QueryRowContext(ctx, `SELECT action,item_id::text,accepted_version,accepted_broker_revision,created_at FROM golf_organization_execution_operations WHERE forge_url=$1 AND organization_id=$2 AND user_id=$3 AND operation_id=$4`, s.config.GiteaURL, t.id, actor.UserID, m.OperationId).Scan(&out.Action, &out.ItemId, &version, &revision, &at)
+			e := tx.QueryRowContext(ctx, `SELECT action,item_id::text,accepted_version,accepted_broker_revision,created_at FROM golf_organization_execution_operations WHERE forge_url=$1 AND organization_id=$2 AND user_id=$3 AND operation_id=$4`, s.config.ForgeURL, t.id, actor.UserID, m.OperationId).Scan(&out.Action, &out.ItemId, &version, &revision, &at)
 			if errors.Is(e, sql.ErrNoRows) {
 				return errResourceNotFound
 			}

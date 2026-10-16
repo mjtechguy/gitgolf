@@ -137,7 +137,7 @@ func newOAuthFixture(t *testing.T) *oauthFixture {
 	}))
 	t.Cleanup(provider.Close)
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL, config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = provider.URL, "client-id", "client-secret"
+	config.ForgePublicURL, config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = provider.URL, "client-id", "client-secret"
 	var err error
 	f.s, err = New(config, f.db)
 	if err != nil {
@@ -148,7 +148,7 @@ func newOAuthFixture(t *testing.T) *oauthFixture {
 func (f *oauthFixture) begin(t *testing.T) (url.Values, *http.Cookie) {
 	t.Helper()
 	sessions, _, _, _, _ := testRPCClients(t, f.s)
-	response, err := sessions.BeginGiteaOAuth(context.Background(), connect.NewRequest(&golfv1.BeginGiteaOAuthRequest{}))
+	response, err := sessions.BeginForgeOAuth(context.Background(), connect.NewRequest(&golfv1.BeginForgeOAuthRequest{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,25 +207,25 @@ func TestOAuthConfigurationAndPublicBoundary(t *testing.T) {
 		valid  bool
 	}{
 		{"disabled", func(c *Config) {}, true},
-		{"partial", func(c *Config) { c.GiteaOAuthClientID = "client" }, false},
+		{"partial", func(c *Config) { c.ForgeOAuthClientID = "client" }, false},
 		{"complete loopback", func(c *Config) {
-			c.GiteaPublicURL = "http://localhost:3001"
-			c.GiteaOAuthClientID = "client"
-			c.GiteaOAuthClientSecret = "secret"
+			c.ForgePublicURL = "http://localhost:3001"
+			c.ForgeOAuthClientID = "client"
+			c.ForgeOAuthClientSecret = "secret"
 		}, true},
 		{"remote insecure", func(c *Config) {
-			c.GiteaPublicURL = "http://forge.example"
-			c.GiteaOAuthClientID = "client"
-			c.GiteaOAuthClientSecret = "secret"
+			c.ForgePublicURL = "http://forge.example"
+			c.ForgeOAuthClientID = "client"
+			c.ForgeOAuthClientSecret = "secret"
 		}, false},
 		{"query", func(c *Config) {
-			c.GiteaPublicURL = "https://forge.example?secret=1"
-			c.GiteaOAuthClientID = "client"
-			c.GiteaOAuthClientSecret = "secret"
+			c.ForgePublicURL = "https://forge.example?secret=1"
+			c.ForgeOAuthClientID = "client"
+			c.ForgeOAuthClientSecret = "secret"
 		}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			c := testConfig("http://gitea:3000")
+			c := testConfig("http://forgejo:3000")
 			test.change(&c)
 			_, err := New(c, nil)
 			if (err == nil) != test.valid {
@@ -233,11 +233,11 @@ func TestOAuthConfigurationAndPublicBoundary(t *testing.T) {
 			}
 		})
 	}
-	s, err := New(testConfig("http://gitea:3000"), nil)
+	s, err := New(testConfig("http://forgejo:3000"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, procedure := range []string{golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure} {
+	for _, procedure := range []string{golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginForgeOAuthProcedure} {
 		req := httptest.NewRequest("POST", "/rpc"+procedure, strings.NewReader("malformed"))
 		req.Header.Set("Origin", "https://attacker.example")
 		req.Header.Set("Content-Type", "application/json")
@@ -249,10 +249,10 @@ func TestOAuthConfigurationAndPublicBoundary(t *testing.T) {
 		}
 	}
 	options, err := s.GetAuthenticationOptions(context.Background(), connect.NewRequest(&golfv1.GetAuthenticationOptionsRequest{}))
-	if err != nil || options.Msg.GiteaOauthEnabled {
+	if err != nil || options.Msg.ForgeOauthEnabled {
 		t.Fatal("unconfigured OAuth advertised")
 	}
-	if _, err := s.BeginGiteaOAuth(context.Background(), connect.NewRequest(&golfv1.BeginGiteaOAuthRequest{})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+	if _, err := s.BeginForgeOAuth(context.Background(), connect.NewRequest(&golfv1.BeginForgeOAuthRequest{})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatal("unconfigured OAuth began")
 	}
 }
@@ -312,8 +312,8 @@ func TestOAuthLoginBindingAndReplayPostgres(t *testing.T) {
 	}
 	f.mode.Store(6)
 	options, err := f.s.GetAuthenticationOptions(context.Background(), connect.NewRequest(&golfv1.GetAuthenticationOptionsRequest{}))
-	if err != nil || options.Msg.GiteaOauthEnabled {
-		t.Fatal("unsupported Gitea advertised")
+	if err != nil || options.Msg.ForgeOauthEnabled {
+		t.Fatal("unsupported forge advertised")
 	}
 }
 func TestOAuthCallbackDenialsPostgres(t *testing.T) {
@@ -433,7 +433,7 @@ func TestOAuthRefreshFailureRecoveryPostgres(t *testing.T) {
 				t.Fatal("revoked identity not denied")
 			}
 			hash, _ := sessionHash(session.Value)
-			row, lookupErr := database.New(f.db).GetSessionCredential(context.Background(), database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: f.s.config.GiteaURL})
+			row, lookupErr := database.New(f.db).GetSessionCredential(context.Background(), database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: f.s.config.ForgeURL})
 			if scenario.deleted {
 				if !errors.Is(lookupErr, sql.ErrNoRows) {
 					t.Fatal("denied session retained")
@@ -479,9 +479,9 @@ func TestOAuthTokenRedirectDenied(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, target.URL, 307) }))
 	defer provider.Close()
 	c := testConfig(provider.URL)
-	c.GiteaPublicURL = provider.URL
-	c.GiteaOAuthClientID = "client"
-	c.GiteaOAuthClientSecret = "secret"
+	c.ForgePublicURL = provider.URL
+	c.ForgeOAuthClientID = "client"
+	c.ForgeOAuthClientSecret = "secret"
 	s, err := New(c, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -504,7 +504,7 @@ func TestOAuthRefreshWriteRollbackPostgres(t *testing.T) {
 		t.Fatal("failed DB write returned a credential")
 	}
 	hash, _ := sessionHash(session.Value)
-	row, err := database.New(f.db).GetSessionCredential(context.Background(), database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: f.s.config.GiteaURL})
+	row, err := database.New(f.db).GetSessionCredential(context.Background(), database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: f.s.config.ForgeURL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -529,7 +529,7 @@ func TestOAuthAbsoluteExpiryAfterLockWaitPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if _, err := database.New(f.db).WithTx(tx).LockSessionCredential(context.Background(), database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: f.s.config.GiteaURL}); err != nil {
+	if _, err := database.New(f.db).WithTx(tx).LockSessionCredential(context.Background(), database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: f.s.config.ForgeURL}); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)

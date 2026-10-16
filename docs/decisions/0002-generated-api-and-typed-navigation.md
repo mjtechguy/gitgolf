@@ -16,7 +16,7 @@ TanStack Router replaces native history handling, with typed repository routes/s
 
 ## Evidence and limits
 
-The implementation ledger records generated-output checks, actual PostgreSQL transaction/scoping/migration checks, typed-client tests, browser cases and real pinned-Gitea checks. Only existing operations are generated. OAuth, machine credentials, MCP, ACP, organization policy, jobs, runners and deployments are not implemented by this foundation. Wider service schemas will be added with their executable behavior.
+The implementation ledger records generated-output checks, actual PostgreSQL transaction/scoping/migration checks, typed-client tests, browser cases and real pinned-forge checks. Only existing operations are generated. OAuth, machine credentials, MCP, ACP, organization policy, jobs, runners and deployments are not implemented by this foundation. Wider service schemas will be added with their executable behavior.
 
 References: [Connect Go](https://connectrpc.com/docs/go/getting-started/), [Connect Web](https://connectrpc.com/docs/web/getting-started/), [SQLC](https://docs.sqlc.dev/), [TanStack Router](https://tanstack.com/router/latest/docs/framework/react/overview), [guide register](../TECHNOLOGY_GUIDE_REGISTER.md).
 

@@ -153,9 +153,9 @@ func newPrivateDraftFixture(t *testing.T) *privateDraftFixture {
 	t.Cleanup(provider.Close)
 	t.Cleanup(func() { close(f.resume) })
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL = provider.URL
-	config.GiteaOAuthClientID = "fixture-client"
-	config.GiteaOAuthClientSecret = "fixture-secret"
+	config.ForgePublicURL = provider.URL
+	config.ForgeOAuthClientID = "fixture-client"
+	config.ForgeOAuthClientSecret = "fixture-secret"
 	var err error
 	f.s, err = New(config, f.db)
 	if err != nil {
@@ -188,7 +188,7 @@ func editPrivateDraft(out *golfv1.SavePullRequestReviewDraftResponse) *golfv1.Sa
 	return &golfv1.SavePullRequestReviewDraftRequest{Target: out.Draft.Target, DraftId: out.Draft.Id, ExpectedVersion: out.CurrentVersion, ExpectedTargetGeneration: out.TargetGeneration, OperationId: uuid.NewString(), Comparison: &golfv1.SavePullRequestReviewDraftRequest_ComparisonId{ComparisonId: out.Draft.Comparison.Id}, Summary: out.Draft.Summary, Entries: proto.Clone(&golfv1.SavePullRequestReviewDraftRequest{Entries: out.Draft.Entries}).(*golfv1.SavePullRequestReviewDraftRequest).Entries}
 }
 func TestPrivateDraftBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

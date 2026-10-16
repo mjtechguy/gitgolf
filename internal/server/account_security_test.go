@@ -69,10 +69,10 @@ func TestAccountSecurityPostgres(t *testing.T) {
 	ctx := t.Context()
 	actor := enrollLocal(t, f, "alice", false)
 	other := enrollLocal(t, f, "bob", false)
-	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "set-email", LocalAccountInput{Username: "alice", Email: "alice@example.invalid"}); err != nil {
+	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "set-email", LocalAccountInput{Username: "alice", Email: "alice@example.invalid"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.GiteaURL, "set-email", LocalAccountInput{Username: "bob", Email: "bob@example.invalid"}); err != nil {
+	if _, err := ManageLocalAccount(ctx, f.db, f.s.keyring, f.s.config.ForgeURL, "set-email", LocalAccountInput{Username: "bob", Email: "bob@example.invalid"}); err != nil {
 		t.Fatal(err)
 	}
 	first, second := localLogin(t, f, "alice"), localLogin(t, f, "alice")
@@ -145,7 +145,7 @@ func TestAccountSecurityPostgres(t *testing.T) {
 		t.Fatal("independent native PAT session accidentally revoked", err)
 	}
 	hash, _ := apiTokenHash(delegation.Msg.Token)
-	if _, err := database.New(f.db).GetLiveApiCredential(ctx, database.GetLiveApiCredentialParams{TokenHash: hash, ForgeURL: f.s.config.GiteaURL}); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := database.New(f.db).GetLiveApiCredential(ctx, database.GetLiveApiCredentialParams{TokenHash: hash, ForgeURL: f.s.config.ForgeURL}); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal("dependent bearer survived", err)
 	}
 	if _, err := f.s.loginLocalSession(ctx, "alice", localTestPassword, ""); !errors.Is(err, errLocalCredentials) {

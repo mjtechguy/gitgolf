@@ -26,7 +26,7 @@ def main():
             token = admin('generate-access-token', '--username', name, '--token-name', prefix,
                           '--scopes', 'write:user,write:repository', '--raw')
             session = client(); sessions.append(session)
-            rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})
+            rpc(session, 'SessionService/LoginWithForgeToken', {'token': token})
             actors.append((name, token, session))
         name, token, owner = actors[0]
         reader_name, _, reader = actors[1]

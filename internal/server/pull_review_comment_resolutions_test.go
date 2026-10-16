@@ -28,7 +28,7 @@ type resolutionFixture struct {
 
 func newResolutionFixture(t *testing.T) *resolutionFixture {
 	f := &resolutionFixture{reviewCommentsFixture: newReviewCommentsFixture(t)}
-	target, _ := url.Parse(f.s.config.GiteaURL)
+	target, _ := url.Parse(f.s.config.ForgeURL)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		base := "/api/v1/repos/alice/private"
@@ -104,7 +104,7 @@ func newResolutionFixture(t *testing.T) *resolutionFixture {
 	}))
 	t.Cleanup(provider.Close)
 	config := f.s.config
-	config.GiteaURL, config.GiteaPublicURL = provider.URL, provider.URL
+	config.ForgeURL, config.ForgePublicURL = provider.URL, provider.URL
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {

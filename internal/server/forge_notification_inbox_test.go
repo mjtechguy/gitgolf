@@ -22,7 +22,7 @@ func newForgeInboxFixture(t *testing.T) *forgeInboxFixture {
 	provider := httptest.NewServer(http.HandlerFunc(f.serveNotifications))
 	t.Cleanup(provider.Close)
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL, config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
+	config.ForgePublicURL, config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
 	var e error
 	f.s, e = New(config, f.db)
 	if e != nil {

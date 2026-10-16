@@ -90,7 +90,7 @@ def main():
     if binary and not binary.is_file():parser.error('build CLI first')
     ready();prefix='golf-audit-'+secrets.token_hex(5);users=[];sessions=[];actors=[]
     def login(token,session=None):
-        session=session or client();rpc(session,'SessionService/LoginWithGiteaToken',{'token':token})
+        session=session or client();rpc(session,'SessionService/LoginWithForgeToken',{'token':token})
         if session not in sessions:sessions.append(session)
         return session
     try:

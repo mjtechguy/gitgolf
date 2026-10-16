@@ -70,7 +70,7 @@ func (s *Server) GetWorkflowDispatch(ctx context.Context, req *connect.Request[g
 		return s.workflowTransaction(ctx, s.cookieValue(req.Header()), user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, _ []byte) error {
 			// Existing unique(forge_url,user_id,origin,idempotency_key) provides an
 			// exact indexed lookup. No other actor or key inventory is loaded.
-			r, err := scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND user_id=$2 AND origin='manual' AND idempotency_key=$3", s.config.GiteaURL, actor.UserID, m.IdempotencyKey))
+			r, err := scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND user_id=$2 AND origin='manual' AND idempotency_key=$3", s.config.ForgeURL, actor.UserID, m.IdempotencyKey))
 			if errors.Is(err, sql.ErrNoRows) {
 				return errResourceNotFound
 			}

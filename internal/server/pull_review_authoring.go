@@ -133,13 +133,13 @@ func reviewAuthoringWire(r reviewAuthoringRecord) (*golfv1.PullReviewAuthoringOp
 	return w, nil
 }
 func (s *Server) lockReviewAuthoring(ctx context.Context, tx *sql.Tx, id int64) (context.Context, error) {
-	if _, e := tx.ExecContext(ctx, `SELECT golf_review_authoring_lock($1,$2)`, s.config.GiteaURL, id); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_review_authoring_lock($1,$2)`, s.config.ForgeURL, id); e != nil {
 		return nil, errStorageUnavailable
 	}
 	if e := s.protectionDispatchAllowed(ctx, tx, id); e != nil {
 		return nil, e
 	}
-	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, id, tx}), nil
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, id, tx}), nil
 }
 func (s *Server) advanceReviewAuthoring(ctx context.Context, session string, token forgeCredential, r reviewAuthoringRecord, phase string, observed, recipient int64) (reviewAuthoringRecord, error) {
 	actor, e := s.currentUser(ctx, token)
@@ -321,7 +321,7 @@ func (s *Server) GetPullReviewAuthoringOperation(ctx context.Context, req *conne
 	var r reviewAuthoringRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanReviewAuthoring(s.db.QueryRowContext(ctx, `SELECT `+reviewAuthoringColumns+` FROM golf_pull_review_authoring_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanReviewAuthoring(s.db.QueryRowContext(ctx, `SELECT `+reviewAuthoringColumns+` FROM golf_pull_review_authoring_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -381,7 +381,7 @@ func (s *Server) SubmitPullReviewAuthoringOperation(ctx context.Context, req *co
 		if e != nil {
 			return e
 		}
-		r, e = scanReviewAuthoring(tx.QueryRowContext(held, `SELECT `+reviewAuthoringColumns+` FROM golf_pull_review_authoring_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanReviewAuthoring(tx.QueryRowContext(held, `SELECT `+reviewAuthoringColumns+` FROM golf_pull_review_authoring_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(fp, r.Fingerprint) {
 				return errRepositoryAccessConflict
@@ -397,7 +397,7 @@ func (s *Server) SubmitPullReviewAuthoringOperation(ctx context.Context, req *co
 		if _, _, _, e = s.authoringPreflight(held, session, token, m); e != nil {
 			return e
 		}
-		r, e = scanReviewAuthoring(tx.QueryRowContext(held, `INSERT INTO golf_pull_review_authoring_operations(user_id,forge_url,actor_id,operation_id,repository_id,original,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING `+reviewAuthoringColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, scope.repositoryID, reviewAuthoringBytes(m), fp))
+		r, e = scanReviewAuthoring(tx.QueryRowContext(held, `INSERT INTO golf_pull_review_authoring_operations(user_id,forge_url,actor_id,operation_id,repository_id,original,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING `+reviewAuthoringColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, scope.repositoryID, reviewAuthoringBytes(m), fp))
 		fresh = e == nil
 		return e
 	})

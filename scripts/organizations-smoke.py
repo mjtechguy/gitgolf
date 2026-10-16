@@ -15,7 +15,7 @@ import urllib.error
 import urllib.request
 
 sys.dont_write_bytecode = True
-from smoke import GITEA, GOLF, ROOT, admin, client, ready, rpc
+from smoke import FORGE, GOLF, ROOT, admin, client, ready, rpc
 
 
 BROWSER_CHECK = r'''
@@ -64,7 +64,7 @@ try {
   await page.goBack();
   await page.getByRole('heading', { name: 'readers', exact: true }).waitFor();
   stage = 'real membership revocation and private-data removal';
-  const removed = await context.request.delete(config.gitea + '/api/v1/orgs/' + config.organization + '/members/' + config.member,
+  const removed = await context.request.delete(config.forge + '/api/v1/orgs/' + config.organization + '/members/' + config.member,
     { headers: { Authorization: 'token ' + config.ownerToken } });
   check(removed.status() === 204);
   await page.getByRole('button', { name: 'Refresh organization access', exact: true }).click();
@@ -99,7 +99,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def provider(token, method, path, data=None, expected=200):
     headers = {'Authorization': 'token ' + token, 'Content-Type': 'application/json'}
-    req = urllib.request.Request(GITEA + '/api/v1/' + path, method=method,
+    req = urllib.request.Request(FORGE + '/api/v1/' + path, method=method,
         headers=headers, data=None if data is None else json.dumps(data).encode())
     try:
         response = urllib.request.build_opener(NoRedirect()).open(req, timeout=15)
@@ -117,7 +117,7 @@ def call(session, procedure, data=None, expected=200):
 
 
 def cli_call(binary, token, arguments, expected=0):
-    environment = {key: value for key, value in os.environ.items() if key not in {'GOLF_GITEA_TOKEN', 'GOLF_API_TOKEN'}}
+    environment = {key: value for key, value in os.environ.items() if key not in {'GOLF_FORGE_TOKEN', 'GOLF_API_TOKEN'}}
     environment['GOLF_URL'] = GOLF
     result = subprocess.run([str(binary), '--token-stdin', *arguments], input=token + '\n',
         cwd=ROOT, env=environment, text=True, capture_output=True, timeout=30)
@@ -153,7 +153,7 @@ def main():
             credential = admin('generate-access-token', '--username', name, '--token-name', prefix,
                 '--scopes', scopes, '--raw').strip()
             session = client()
-            rpc(session, 'SessionService/LoginWithGiteaToken', {'token': credential})
+            rpc(session, 'SessionService/LoginWithForgeToken', {'token': credential})
             actors[role] = {'name': name, 'token': credential, 'session': session}
         owner, member, outsider = [actors[role] for role in ['owner', 'member', 'outsider']]
         token = owner['token']
@@ -247,7 +247,7 @@ def main():
         narrow_token = admin('generate-access-token', '--username', member['name'], '--token-name', prefix + '-narrow',
             '--scopes', 'read:user,read:repository', '--raw').strip()
         narrow = client()
-        rpc(narrow, 'SessionService/LoginWithGiteaToken', {'token': narrow_token})
+        rpc(narrow, 'SessionService/LoginWithForgeToken', {'token': narrow_token})
         call(narrow, 'ListOrganizations', expected=403)
         if binary:
             cli_call(binary, narrow_token, ['org', 'list'], expected=1)
@@ -256,7 +256,7 @@ def main():
 
         screenshots = ROOT / '.tmp/organization-smoke'
         screenshots.mkdir(parents=True, exist_ok=True)
-        config = {'golf': GOLF, 'gitea': GITEA, 'organization': organization, 'teamId': team_id,
+        config = {'golf': GOLF, 'forge': FORGE, 'organization': organization, 'teamId': team_id,
             'member': member['name'], 'memberToken': member['token'], 'ownerToken': token,
             'screenshots': str(screenshots)}
         result = subprocess.run(['node', '--input-type=module', '-e', BROWSER_CHECK], cwd=ROOT,

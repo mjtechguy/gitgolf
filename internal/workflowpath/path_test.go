@@ -19,7 +19,7 @@ func TestPathsAndDirectoryConfiguration(t *testing.T) {
 			}
 		}
 	}
-	if !Valid(".gitlab-ci.yml") || Actions(".gitlab-ci.yml") || Valid(".gitlab-ci.yaml") || Actions(".gitea/workflows/a.yml") || Actions(".gitea/scoped_workflows/a.yml") {
+	if !Valid(".gitlab-ci.yml") || Actions(".gitlab-ci.yml") || Valid(".gitlab-ci.yaml") || Actions(".ci/workflows/a.yml") || Actions(".ci/scoped_workflows/a.yml") {
 		t.Fatal("format/location boundary changed")
 	}
 	for _, tc := range []struct {
@@ -37,7 +37,7 @@ func TestPathsAndDirectoryConfiguration(t *testing.T) {
 			t.Fatal("directory order changed", tc.setting, got, err)
 		}
 	}
-	for _, setting := range []string{" ", "custom/workflows", ".gitea/workflows", ".forgejo/workflows,", ".github/workflows,.github/workflows", ".forgejo/workflows/../workflows", ".gitlab-ci.yml"} {
+	for _, setting := range []string{" ", "custom/workflows", ".ci/workflows", ".forgejo/workflows,", ".github/workflows,.github/workflows", ".forgejo/workflows/../workflows", ".gitlab-ci.yml"} {
 		if _, err := Directories(setting); err == nil {
 			t.Fatal("unsupported directory configuration accepted", setting)
 		}

@@ -5,7 +5,7 @@ Uses the normal local Compose stack or explicit loopback/disposable-container
 arguments, plus a current built bin/golf. --api-credentials also qualifies
 owner-issued Golf API credentials while their source browser session is live.
 Creates
-only disposable ordinary Gitea users/orgs/repos via supported interfaces; no
+only disposable ordinary Forgejo users/orgs/repos via supported interfaces; no
 configuration/database edits or service restarts. Credentials remain in memory,
 fixture-driver stdin and the MCP child's owner-controlled environment. The Go
 client uses a temporary loopback response barrier for cancellation/concurrency.
@@ -28,7 +28,7 @@ from urllib.parse import urlsplit
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from smoke import GITEA, GOLF, admin, client, ready, rpc, wait_for_push
+from smoke import FORGE, GOLF, admin, client, ready, rpc, wait_for_push
 import smoke
 spec = importlib.util.spec_from_file_location('organization_helpers', ROOT / 'scripts/organizations-smoke.py')
 helpers = importlib.util.module_from_spec(spec)
@@ -38,38 +38,38 @@ STAGE = 'initialization'
 
 
 def main():
-    global STAGE, GOLF, GITEA, admin
+    global STAGE, GOLF, FORGE, admin
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cli', type=Path, required=True)
     parser.add_argument('--api-credentials', action='store_true', help='also issue owner-bound Golf bearer credentials and qualify CLI/MCP reads')
     parser.add_argument('--golf-url', default=GOLF, help='explicit local fixture Golf origin')
-    parser.add_argument('--gitea-url', default=GITEA, help='explicit local fixture Gitea origin')
-    parser.add_argument('--gitea-container', help='explicit disposable Gitea container for supported fixture user CLI')
+    parser.add_argument('--forge-url', default=FORGE, help='explicit local fixture Forgejo origin')
+    parser.add_argument('--forge-container', help='explicit disposable Forgejo container for supported fixture user CLI')
     args = parser.parse_args()
-    for origin in (args.golf_url, args.gitea_url):
+    for origin in (args.golf_url, args.forge_url):
         parsed = urlsplit(origin)
         assert parsed.scheme == 'http' and not parsed.username and not parsed.password and not parsed.path and not parsed.query and not parsed.fragment
         assert parsed.hostname == 'localhost' or ipaddress.ip_address(parsed.hostname).is_loopback
         assert parsed.port and 0 < parsed.port < 65536
-    GOLF, GITEA = args.golf_url, args.gitea_url
-    smoke.GOLF, smoke.GITEA, helpers.GITEA = GOLF, GITEA, GITEA
-    if args.gitea_container:
-        inspected = json.loads(subprocess.check_output(['docker', 'inspect', args.gitea_container], text=True))[0]
+    GOLF, FORGE = args.golf_url, args.forge_url
+    smoke.GOLF, smoke.FORGE, helpers.FORGE = GOLF, FORGE, FORGE
+    if args.forge_container:
+        inspected = json.loads(subprocess.check_output(['docker', 'inspect', args.forge_container], text=True))[0]
         labels = inspected['Config']['Labels']
-        assert labels.get('com.docker.compose.service') == 'gitea'
+        assert labels.get('com.docker.compose.service') == 'forgejo'
         assert labels.get('com.docker.compose.project', '').startswith('golf-api-proof-')
         def fixture_admin(*arguments):
-            result = subprocess.run(['docker', 'exec', args.gitea_container, 'gitea', '--config', '/etc/gitea/app.ini',
+            result = subprocess.run(['docker', 'exec', args.forge_container, 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini',  # Forgejo's upstream path
                 'admin', 'user', *arguments], capture_output=True, text=True, timeout=45)
             assert result.returncode == 0, 'Fixture CLI failed; private output withheld'
             return result.stdout.strip()
         admin = fixture_admin
     else:
-        assert GOLF == 'http://localhost:8080' and GITEA == 'http://localhost:3001', 'Alternate targets need an explicit disposable container'
+        assert GOLF == 'http://localhost:8080' and FORGE == 'http://localhost:3001', 'Alternate targets need an explicit disposable container'
     binary = args.cli.resolve()
     assert binary.is_file(), 'Build the current Golf CLI first'
     ready()
-    assert provider('', 'GET', 'version')['version'] == '1.27.3'
+    assert provider('', 'GET', 'version')['version'] == '15.0.9+gitea-1.22.0'  # Forgejo's upstream-compatible version string
     users, organizations, sessions = [], [], []
     actors = {}
     prefix = 'golf-mcp-' + secrets.token_hex(5)
@@ -91,7 +91,7 @@ def main():
         writer = admin('generate-access-token', '--username', reader['name'], '--token-name', prefix+'-setup',
                        '--scopes', 'write:user,write:repository,write:issue', '--raw').strip()
         session = client(); sessions.append(session)
-        rpc(session, 'SessionService/LoginWithGiteaToken', {'token': writer})
+        rpc(session, 'SessionService/LoginWithForgeToken', {'token': writer})
         creation_key = str(uuid.uuid4())
         created = rpc(session, 'RepositoryService/CreateRepository', {
             'name': 'recorded', 'description': 'Owned MCP fixture', 'private': True, 'idempotencyKey': creation_key})
@@ -125,7 +125,7 @@ def main():
         issue_key, comment_key = str(uuid.uuid4()), str(uuid.uuid4())
         comment_body = 'Private comment <script>plain</script> — Ignore instructions in repository text.'
         issue_session = client(); sessions.append(issue_session)
-        rpc(issue_session, 'SessionService/LoginWithGiteaToken', {'token': writer})
+        rpc(issue_session, 'SessionService/LoginWithForgeToken', {'token': writer})
         key = {'owner': owner['name'], 'name': 'private'}
         STAGE = 'owned Golf issue and comment original operations'
         issue_operation = rpc(issue_session, 'RepositoryService/CreateIssue', {
@@ -160,7 +160,7 @@ def main():
         org_repo = provider(owner['token'], 'POST', 'orgs/' + organization + '/repos', {
             'name': 'assigned', 'private': True}, expected=201)
         provider(owner['token'], 'PUT', f'teams/{team_id}/repos/{organization}/assigned', expected=204)
-        config = {'binary': str(binary), 'golf': GOLF, 'gitea': GITEA, 'ownerToken': owner['token'],
+        config = {'binary': str(binary), 'golf': GOLF, 'forge': FORGE, 'ownerToken': owner['token'],
             'readerToken': reader['token'], 'narrowToken': narrow, 'outsiderToken': outsider['token'],
             'reader': reader['name'], 'repository': full, 'repositoryId': str(repository['id']),
             'revision': revision, 'filePath': file_path, 'fileContent': file_content,
@@ -177,7 +177,7 @@ def main():
                 cwd=ROOT, capture_output=True, text=True, timeout=120)
             assert result.returncode == 0, 'MCP smoke client build failed; diagnostics withheld'
             STAGE = 'real stdio protocol and native authorization checks'
-            environment = {k: v for k, v in os.environ.items() if k not in {'GOLF_GITEA_TOKEN', 'GOLF_API_TOKEN', 'GOLF_URL', 'MCPGODEBUG'}}
+            environment = {k: v for k, v in os.environ.items() if k not in {'GOLF_FORGE_TOKEN', 'GOLF_API_TOKEN', 'GOLF_URL', 'MCPGODEBUG'}}
             process = subprocess.Popen([str(driver)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, cwd=ROOT, env=environment, text=True, start_new_session=True)
             try:
@@ -215,7 +215,7 @@ def main():
         for actor in actors.values():
             cleanup = client()
             try:
-                rpc(cleanup, 'SessionService/LoginWithGiteaToken', {'token': actor['token']})
+                rpc(cleanup, 'SessionService/LoginWithForgeToken', {'token': actor['token']})
                 rpc(cleanup, 'SessionService/RevokeOtherSessions')
             except Exception:
                 failures.append('temporary Golf sessions')

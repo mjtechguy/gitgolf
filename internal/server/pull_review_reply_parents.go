@@ -23,7 +23,7 @@ func (s *Server) enrichReviewReplyParents(ctx context.Context, repoID, pullID in
 		visible[row.Id] = row
 		ids = append(ids, mustDiscussionID(row.Id))
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT `+reviewCommentColumns+` FROM golf_pull_review_comment_operations WHERE forge_url=$1 AND repository_id=$2 AND phase='SUCCEEDED' AND observed_reply_id=ANY($3::bigint[]) ORDER BY id LIMIT 101`, s.config.GiteaURL, repoID, ids)
+	rows, e := s.db.QueryContext(ctx, `SELECT `+reviewCommentColumns+` FROM golf_pull_review_comment_operations WHERE forge_url=$1 AND repository_id=$2 AND phase='SUCCEEDED' AND observed_reply_id=ANY($3::bigint[]) ORDER BY id LIMIT 101`, s.config.ForgeURL, repoID, ids)
 	if e != nil {
 		return errStorageUnavailable
 	}

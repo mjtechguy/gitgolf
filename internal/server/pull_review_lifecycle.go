@@ -194,10 +194,10 @@ func reviewLifecycleWire(r reviewLifecycleRecord) (*golfv1.PullReviewLifecycleOp
 	return &golfv1.PullReviewLifecycleOperation{Contract: reviewLifecycleContract, Original: m, ActorId: strconv.FormatInt(r.ActorID, 10), Phase: golfv1.DiscussionResourceOperationPhase(golfv1.DiscussionResourceOperationPhase_value["DISCUSSION_RESOURCE_OPERATION_PHASE_"+r.Phase]), FailureCode: r.Failure, CreatedAt: r.Created.UTC().Format(time.RFC3339Nano), UpdatedAt: r.Updated.UTC().Format(time.RFC3339Nano)}, nil
 }
 func (s *Server) lockReviewLifecycle(ctx context.Context, tx *sql.Tx, id int64) (context.Context, error) {
-	if _, e := tx.ExecContext(ctx, `SELECT golf_review_lifecycle_lock($1,$2)`, s.config.GiteaURL, id); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_review_lifecycle_lock($1,$2)`, s.config.ForgeURL, id); e != nil {
 		return nil, errStorageUnavailable
 	}
-	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, id, tx}), nil
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, id, tx}), nil
 }
 func (s *Server) advanceReviewLifecycle(ctx context.Context, session string, token forgeCredential, r reviewLifecycleRecord, phase string) (reviewLifecycleRecord, error) {
 	actor, e := s.currentUser(ctx, token)
@@ -283,7 +283,7 @@ func (s *Server) GetPullReviewLifecycleOperation(ctx context.Context, req *conne
 	var r reviewLifecycleRecord
 	e = s.withManagedSession(ctx, session, token, func(_ *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = scanReviewLifecycle(s.db.QueryRowContext(ctx, `SELECT `+reviewLifecycleColumns+` FROM golf_pull_review_lifecycle_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanReviewLifecycle(s.db.QueryRowContext(ctx, `SELECT `+reviewLifecycleColumns+` FROM golf_pull_review_lifecycle_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -346,7 +346,7 @@ func (s *Server) SubmitPullReviewLifecycle(ctx context.Context, req *connect.Req
 		if e != nil {
 			return e
 		}
-		r, e = scanReviewLifecycle(tx.QueryRowContext(held, `SELECT `+reviewLifecycleColumns+` FROM golf_pull_review_lifecycle_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.GiteaURL, m.OperationId))
+		r, e = scanReviewLifecycle(tx.QueryRowContext(held, `SELECT `+reviewLifecycleColumns+` FROM golf_pull_review_lifecycle_operations WHERE user_id=$1 AND forge_url=$2 AND operation_id=$3`, c.UserID, s.config.ForgeURL, m.OperationId))
 		if e == nil {
 			if !bytes.Equal(fingerprint, r.Fingerprint) {
 				return errRepositoryAccessConflict
@@ -356,7 +356,7 @@ func (s *Server) SubmitPullReviewLifecycle(ctx context.Context, req *connect.Req
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanReviewLifecycle(tx.QueryRowContext(held, `INSERT INTO golf_pull_review_lifecycle_operations(user_id,forge_url,actor_id,operation_id,repository_id,original,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING `+reviewLifecycleColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, repoID, reviewLifecycleBytes(m), fingerprint))
+		r, e = scanReviewLifecycle(tx.QueryRowContext(held, `INSERT INTO golf_pull_review_lifecycle_operations(user_id,forge_url,actor_id,operation_id,repository_id,original,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING `+reviewLifecycleColumns, c.UserID, s.config.ForgeURL, actor.ID, m.OperationId, repoID, reviewLifecycleBytes(m), fingerprint))
 		fresh = e == nil
 		return e
 	})

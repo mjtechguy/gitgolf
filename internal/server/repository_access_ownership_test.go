@@ -188,7 +188,7 @@ func TestCollaboratorOwnershipPromotionAfterReservationWaitPostgres(t *testing.T
 		t.Fatal(e)
 	}
 	defer holder.Rollback()
-	if _, e = holder.Exec(`SELECT golf_repository_access_lock($1,$2,$3)`, f.s.config.GiteaURL, int64(9007199254740993), int64(77)); e != nil {
+	if _, e = holder.Exec(`SELECT golf_repository_access_lock($1,$2,$3)`, f.s.config.ForgeURL, int64(9007199254740993), int64(77)); e != nil {
 		t.Fatal(e)
 	}
 	done := make(chan error, 1)

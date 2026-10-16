@@ -62,14 +62,14 @@ func apiRequest(s *Server, token, procedure, body string) *httptest.ResponseReco
 }
 
 func TestApiCredentialBoundary(t *testing.T) {
-	s, err := New(testConfig("http://gitea.invalid"), nil)
+	s, err := New(testConfig("http://forgejo.invalid"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	token := apiTokenPrefix + base64.RawURLEncoding.EncodeToString(make([]byte, 32))
 	for _, procedure := range []string{golfv1connect.ApiCredentialServiceCreateApiCredentialProcedure, golfv1connect.ApiCredentialServiceListApiCredentialsProcedure, golfv1connect.ApiCredentialServiceRevokeApiCredentialProcedure,
-		golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.SessionServiceGetAuthenticationOptionsProcedure,
-		golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure,
+		golfv1connect.SessionServiceLoginWithForgeTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.SessionServiceGetAuthenticationOptionsProcedure,
+		golfv1connect.SessionServiceBeginForgeOAuthProcedure, golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure,
 		golfv1connect.SessionServiceRevokeOtherSessionsProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure, "/golf.v1.FutureService/Read"} {
 		response := apiRequest(s, token, procedure, "{malformed")
 		if response.Code != 403 || response.Header().Get("Cache-Control") != "no-store" {
@@ -431,8 +431,8 @@ SELECT $1,sha256(convert_to('fixture-'||n,'UTF8')),'quota fixture', $2,$3,$4 FRO
 	}
 	// Same DB and ciphertext with a different configured forge cannot delegate.
 	otherConfig := f.s.config
-	otherConfig.GiteaURL += "/different-forge"
-	otherConfig.GiteaPublicURL = otherConfig.GiteaURL
+	otherConfig.ForgeURL += "/different-forge"
+	otherConfig.ForgePublicURL = otherConfig.ForgeURL
 	if _, err := New(otherConfig, f.db); err == nil {
 		t.Fatal("cross-forge startup accepted an existing installation binding")
 	}

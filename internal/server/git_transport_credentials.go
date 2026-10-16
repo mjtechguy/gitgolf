@@ -185,7 +185,7 @@ func (s *Server) gitWritePrerequisites(ctx context.Context, db database.DBTX, cr
 		return errGitBackgroundUnqualified
 	}
 	var qualified bool
-	if e := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_git_transport_profiles WHERE forge_url=$1 AND incarnation=$2 AND native_version='1.27.3' AND suspended_at IS NULL)`, s.config.GiteaURL, c.Incarnation).Scan(&qualified); e != nil {
+	if e := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_git_transport_profiles WHERE forge_url=$1 AND incarnation=$2 AND native_version='1.27.3' AND suspended_at IS NULL)`, s.config.ForgeURL, c.Incarnation).Scan(&qualified); e != nil {
 		return errStorageUnavailable
 	}
 	if !qualified || *repo.Mirror || *repo.NativeActions {
@@ -261,7 +261,7 @@ func (s *Server) GetGitTransport(ctx context.Context, req *connect.Request[golfv
 			if werr == nil && s.gitWritePrerequisites(ctx, s.db, credential, key, wrepo, c) == nil {
 				var blocked bool
 				var active int64
-				if e := s.db.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2),golf_repository_lifecycle_active($1,$2)`, s.config.GiteaURL, wrepo.ID).Scan(&blocked, &active); e == nil && !blocked && active == 0 {
+				if e := s.db.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2),golf_repository_lifecycle_active($1,$2)`, s.config.ForgeURL, wrepo.ID).Scan(&blocked, &active); e == nil && !blocked && active == 0 {
 					out.WriteCredentialAvailable = true
 					out.WriteNotice = "Only unprotected ordinary Git updates are admitted; protected publication remains unavailable."
 				}
@@ -357,7 +357,7 @@ func (s *Server) CreateGitCredential(ctx context.Context, req *connect.Request[g
 	var record gitCredentialRecord
 	e = s.workflowTransaction(ctx, s.cookieValue(req.Header()), actor.ID, func(tx *sql.Tx, caller database.LockManagedSessionRow, sourceHash []byte) error {
 		var count int
-		if e := tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_git_credentials WHERE user_id=$1 AND forge_url=$2 AND revoked_at IS NULL AND expires_at>clock_timestamp()`, caller.UserID, s.config.GiteaURL).Scan(&count); e != nil {
+		if e := tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_git_credentials WHERE user_id=$1 AND forge_url=$2 AND revoked_at IS NULL AND expires_at>clock_timestamp()`, caller.UserID, s.config.ForgeURL).Scan(&count); e != nil {
 			return errStorageUnavailable
 		}
 		if count >= 100 {
@@ -380,7 +380,7 @@ func (s *Server) CreateGitCredential(ctx context.Context, req *connect.Request[g
 				return e
 			}
 		}
-		e = tx.QueryRowContext(ctx, `WITH timing AS MATERIALIZED(SELECT clock_timestamp() AS created_at) INSERT INTO golf_git_credentials(user_id,forge_url,repository_id,owner_id,native_user_id,source_session_id,source_token_hash,token_hash,label,mode,created_at,expires_at) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,created_at,LEAST($11,created_at+$12::integer * interval '1 second') FROM timing RETURNING id,created_at,expires_at`, caller.UserID, s.config.GiteaURL, repo.ID, repo.Owner.ID, actor.ID, caller.SessionID, sourceHash, hash, req.Msg.Label, mode, caller.ExpiresAt, int32(lifetime)).Scan(&record.ID, &record.Created, &record.Expires)
+		e = tx.QueryRowContext(ctx, `WITH timing AS MATERIALIZED(SELECT clock_timestamp() AS created_at) INSERT INTO golf_git_credentials(user_id,forge_url,repository_id,owner_id,native_user_id,source_session_id,source_token_hash,token_hash,label,mode,created_at,expires_at) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,created_at,LEAST($11,created_at+$12::integer * interval '1 second') FROM timing RETURNING id,created_at,expires_at`, caller.UserID, s.config.ForgeURL, repo.ID, repo.Owner.ID, actor.ID, caller.SessionID, sourceHash, hash, req.Msg.Label, mode, caller.ExpiresAt, int32(lifetime)).Scan(&record.ID, &record.Created, &record.Expires)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -425,7 +425,7 @@ func (s *Server) ListGitCredentials(ctx context.Context, req *connect.Request[go
 	}
 	out := &golfv1.ListGitCredentialsResponse{Page: wirePage(0)}
 	e = s.workflowTransaction(ctx, s.cookieValue(req.Header()), actor.ID, func(tx *sql.Tx, caller database.LockManagedSessionRow, _ []byte) error {
-		rows, e := tx.QueryContext(ctx, `SELECT `+gitCredentialColumns+` FROM golf_git_credentials c WHERE c.user_id=$1 AND c.forge_url=$2 AND c.repository_id=$3 AND c.owner_id=$4 ORDER BY c.id DESC LIMIT $5 OFFSET $6`, caller.UserID, s.config.GiteaURL, req.Msg.RepositoryId, req.Msg.OwnerId, limit+1, (page-1)*limit)
+		rows, e := tx.QueryContext(ctx, `SELECT `+gitCredentialColumns+` FROM golf_git_credentials c WHERE c.user_id=$1 AND c.forge_url=$2 AND c.repository_id=$3 AND c.owner_id=$4 ORDER BY c.id DESC LIMIT $5 OFFSET $6`, caller.UserID, s.config.ForgeURL, req.Msg.RepositoryId, req.Msg.OwnerId, limit+1, (page-1)*limit)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -477,7 +477,7 @@ func (s *Server) RevokeGitCredential(ctx context.Context, req *connect.Request[g
 	}
 	e = s.workflowTransaction(ctx, s.cookieValue(req.Header()), actor.ID, func(tx *sql.Tx, caller database.LockManagedSessionRow, _ []byte) error {
 		var exists bool
-		if e := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_git_credentials WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND repository_id=$4 AND owner_id=$5)`, id, caller.UserID, s.config.GiteaURL, req.Msg.RepositoryId, req.Msg.OwnerId).Scan(&exists); e != nil {
+		if e := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_git_credentials WHERE id=$1 AND user_id=$2 AND forge_url=$3 AND repository_id=$4 AND owner_id=$5)`, id, caller.UserID, s.config.ForgeURL, req.Msg.RepositoryId, req.Msg.OwnerId).Scan(&exists); e != nil {
 			return errStorageUnavailable
 		}
 		if !exists {

@@ -50,12 +50,12 @@ func TestAgentTaskPostgres(t *testing.T) {
 	connection := uuid.NewString()
 	task := uuid.NewString()
 	c := []byte(`{"model_id":"model","timeout_seconds":60,"token_budget":1000,"max_concurrent":1}`)
-	_, e := f.db.Exec(`INSERT INTO golf_codex_connections(id,user_id,state,forge_url,harness,provider,name) VALUES($1,$2,'CONNECTED',$3,'codex','openai','fixture')`, connection, user, f.s.config.GiteaURL)
+	_, e := f.db.Exec(`INSERT INTO golf_codex_connections(id,user_id,state,forge_url,harness,provider,name) VALUES($1,$2,'CONNECTED',$3,'codex','openai','fixture')`, connection, user, f.s.config.ForgeURL)
 	if e != nil {
 		t.Fatal(e)
 	}
 	hash, _ := sessionHash(login.Value)
-	_, e = f.db.Exec(`INSERT INTO golf_agent_tasks(id,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,config,policy_fingerprint,idempotency_key,input_hash) VALUES($1,$2,11,42,'alice','example',$3,42,$4,$5,1,$6,$7,$8,'f',$9,$10)`, task, f.s.config.GiteaURL, user, hash, connection, strings.Repeat("a", 40), []byte{}, c, uuid.NewString(), bytes.Repeat([]byte{7}, 32))
+	_, e = f.db.Exec(`INSERT INTO golf_agent_tasks(id,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,config,policy_fingerprint,idempotency_key,input_hash) VALUES($1,$2,11,42,'alice','example',$3,42,$4,$5,1,$6,$7,$8,'f',$9,$10)`, task, f.s.config.ForgeURL, user, hash, connection, strings.Repeat("a", 40), []byte{}, c, uuid.NewString(), bytes.Repeat([]byte{7}, 32))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -94,7 +94,7 @@ func TestAgentTaskPostgres(t *testing.T) {
 
 func TestAgentTaskAdmissionPostgres(t *testing.T) {
 	f := newWorkflowRunFixture(t)
-	f.server.config.GiteaOAuthClientID = "fixture"
+	f.server.config.ForgeOAuthClientID = "fixture"
 	var e error
 	f.session, e = f.server.createSession(t.Context(), f.user, "oauth", encodeOAuth(oauthEnvelope{Version: 1, AccessToken: "run-fixture", RefreshToken: "fixture-refresh", Expiry: time.Now().Add(time.Hour), Verified: true}), "")
 	if e != nil {
@@ -102,11 +102,11 @@ func TestAgentTaskAdmissionPostgres(t *testing.T) {
 	}
 	f.server.config.AgentImage = "sha256:" + strings.Repeat("b", 64)
 	var user int64
-	if e = f.server.db.QueryRow(`SELECT id FROM golf_users WHERE forge_url=$1 AND forge_user_id=42`, f.server.config.GiteaURL).Scan(&user); e != nil {
+	if e = f.server.db.QueryRow(`SELECT id FROM golf_users WHERE forge_url=$1 AND forge_user_id=42`, f.server.config.ForgeURL).Scan(&user); e != nil {
 		t.Fatal(e)
 	}
 	connection := uuid.NewString()
-	_, e = f.server.db.Exec(`INSERT INTO golf_codex_connections(id,user_id,state,auth_method,forge_url,harness,provider,name) VALUES($1,$2,'CONNECTED','chatgptDeviceCode',$3,'codex','openai','fixture')`, connection, user, f.server.config.GiteaURL)
+	_, e = f.server.db.Exec(`INSERT INTO golf_codex_connections(id,user_id,state,auth_method,forge_url,harness,provider,name) VALUES($1,$2,'CONNECTED','chatgptDeviceCode',$3,'codex','openai','fixture')`, connection, user, f.server.config.ForgeURL)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -120,12 +120,12 @@ func TestAgentTaskAdmissionPostgres(t *testing.T) {
 		scope, id string
 		owner     int64
 	}{{"instance", "instance", 0}, {"repository", strconv.FormatInt(f.row.ID, 10), 42}, {"personal", strconv.FormatInt(user, 10), user}} {
-		_, e = f.server.db.Exec(`INSERT INTO golf_agent_usage_settings(forge_url,scope,scope_id,owner_id,config,revision) VALUES($1,$2,$3,$4,$5,1)`, f.server.config.GiteaURL, v.scope, v.id, v.owner, raw)
+		_, e = f.server.db.Exec(`INSERT INTO golf_agent_usage_settings(forge_url,scope,scope_id,owner_id,config,revision) VALUES($1,$2,$3,$4,$5,1)`, f.server.config.ForgeURL, v.scope, v.id, v.owner, raw)
 		if e != nil {
 			t.Fatal(e)
 		}
 	}
-	_, e = f.server.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image) VALUES($1,'fixture',$2)`, f.server.config.GiteaURL, f.server.config.AgentImage)
+	_, e = f.server.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image) VALUES($1,'fixture',$2)`, f.server.config.ForgeURL, f.server.config.AgentImage)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -182,7 +182,7 @@ func TestAgentTaskAdmissionPostgres(t *testing.T) {
 		}
 		positive["spend_limit_cents"] = 1000
 		rawPositive, _ := json.Marshal(positive)
-		if _, err := f.server.db.Exec(`UPDATE golf_agent_usage_settings SET config=$1 WHERE forge_url=$2 AND scope=$3`, rawPositive, f.server.config.GiteaURL, scope); err != nil {
+		if _, err := f.server.db.Exec(`UPDATE golf_agent_usage_settings SET config=$1 WHERE forge_url=$2 AND scope=$3`, rawPositive, f.server.config.ForgeURL, scope); err != nil {
 			t.Fatal(err)
 		}
 		selection := &golfv1.AgentTaskSelection{ConnectionId: connection, ModelId: "model", Reasoning: "high", Trigger: "manual", SpendLimitCents: proto.Uint32(0)}
@@ -209,7 +209,7 @@ func TestAgentTaskAdmissionPostgres(t *testing.T) {
 		if err := f.server.db.QueryRow(`SELECT count(*) FROM golf_agent_tasks`).Scan(&count); err != nil || count != 1 {
 			t.Fatal("legacy capped task admitted", count, err)
 		}
-		if _, err := f.server.db.Exec(`UPDATE golf_agent_usage_settings SET config=$1 WHERE forge_url=$2 AND scope=$3`, raw, f.server.config.GiteaURL, scope); err != nil {
+		if _, err := f.server.db.Exec(`UPDATE golf_agent_usage_settings SET config=$1 WHERE forge_url=$2 AND scope=$3`, raw, f.server.config.ForgeURL, scope); err != nil {
 			t.Fatal(err)
 		}
 	}

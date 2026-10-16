@@ -34,6 +34,7 @@ import recovery
 import smoke
 
 ROOT = Path(__file__).resolve().parents[1]
+FORGEJO_IMAGE = 'codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'
 HISTORY = {
     'golf_repository_access_operations': 'id',
     'golf_repository_access_generations': 'forge_url,repository_id,recipient_id',
@@ -255,11 +256,11 @@ def bootstrap_fresh_policy(compose, keys):
 
 
 def validate_local_fixture_auth(config):
-    # Native ROOT_URL serves native URLs; GITEA_PUBLIC_URL enables OAuth setup.
+    # Native ROOT_URL serves native URLs; GOLF_FORGE_PUBLIC_URL enables OAuth setup.
     # This drill enrolls ordinary native PAT-backed local password accounts only.
     environment = config['services']['golf']['environment']
     assert not any(environment.get(key) for key in
-                   ('GITEA_PUBLIC_URL','GITEA_OAUTH_CLIENT_ID','GITEA_OAUTH_CLIENT_SECRET'))
+                   ('GOLF_FORGE_PUBLIC_URL','GOLF_FORGE_OAUTH_CLIENT_ID','GOLF_FORGE_OAUTH_CLIENT_SECRET'))
 
 
 def collaborator_snapshot(rows, read_permission):
@@ -398,41 +399,60 @@ def self_check():
         changed=dict(after);changed['golf_repository_invitations']=json.dumps([json.loads(after['golf_repository_invitations'])[0]|{key:value}])
         reject(lambda:check_restored_history(before,changed))
     reject(lambda:check_restored_history(before,dict(after,golf_repository_invitation_events=before['golf_repository_invitation_events'])))
-    config = {'services': {'golf': {'environment': {'GITEA_URL': 'http://gitea:3000'}},
-              'gitea': {'environment': {'GITEA__actions__ENABLED': 'false', 'GITEA__mailer__ENABLED': 'false', **{'GITEA__cron.'+name+'__ENABLED':'false' for name in recovery.NATIVE_CRON_TASKS}}}, 'postgres': {}}}
+    config = {'services': {'golf': {'environment': {'GOLF_FORGE_URL': 'http://forgejo:3000', 'GOLF_FORGE_KIND': 'forgejo'}},
+              'forgejo': {'environment': {'FORGEJO__actions__ENABLED': 'false', 'FORGEJO__mailer__ENABLED': 'false', **{'FORGEJO__cron.'+name+'__ENABLED':'false' for name in recovery.NATIVE_CRON_TASKS}}}, 'postgres': {}}}
     recovery.validate_access_config(config)
     validate_local_fixture_auth(config)
-    for key in ('GITEA_PUBLIC_URL','GITEA_OAUTH_CLIENT_ID','GITEA_OAUTH_CLIENT_SECRET'):
+    for key in ('GOLF_FORGE_PUBLIC_URL','GOLF_FORGE_OAUTH_CLIENT_ID','GOLF_FORGE_OAUTH_CLIENT_SECRET'):
         changed = json.loads(json.dumps(config)); changed['services']['golf']['environment'][key] = 'fixture-unused'
         reject(lambda: validate_local_fixture_auth(changed))
-    for key, value in [('HTTP_PROXY', 'http://private.invalid'), ('GOLF_PUSH_CI_ENABLED', 'true')]:
+    for key, value in [('HTTP_PROXY', 'http://private.invalid'), ('GOLF_PUSH_CI_ENABLED', 'true'),
+                       ('GOLF_FORGE_URL', 'http://external.invalid:3000'), ('GOLF_FORGE_KIND', 'other')]:
         changed = json.loads(json.dumps(config)); changed['services']['golf']['environment'][key] = value
         reject(lambda: recovery.validate_access_config(changed))
-    for key in ('GITEA__actions__ENABLED', 'GITEA__mailer__ENABLED', 'GITEA__cron.update_mirrors__ENABLED'):
-        changed = json.loads(json.dumps(config)); changed['services']['gitea']['environment'][key] = 'true'
+    # Forgejo's environment-to-ini decodes _0X2E_ to '.', and also reads its
+    # upstream prefix; a second spelling of one fenced setting is refused.
+    for key in ('FORGEJO__actions__ENABLED', 'FORGEJO__mailer__ENABLED', 'FORGEJO__cron.update_mirrors__ENABLED',
+                'FORGEJO__cron.remove_resolved_reports__ENABLED', 'FORGEJO__cron_0X2E_gc_lfs__ENABLED',
+                recovery.UPSTREAM_ENV_PREFIX+'actions__ENABLED', 'FORGEJO__git.config__core.hooksPath',
+                'FORGEJO__git_0X2E_config__core.hooksPath'):
+        changed = json.loads(json.dumps(config)); changed['services']['forgejo']['environment'][key] = 'true'
+        reject(lambda: recovery.validate_access_config(changed))
+    for name in ('FORGEJO__actions__ENABLED', 'FORGEJO__cron.update_checker__ENABLED'):
+        changed = json.loads(json.dumps(config)); del changed['services']['forgejo']['environment'][name]
         reject(lambda: recovery.validate_access_config(changed))
     # Exercise new archive-native guards independently of Docker/runtime.
     import io, tarfile
     with tempfile.TemporaryDirectory(prefix='golf-access-recovery-guards-') as tmp:
         stage = Path(tmp)
         ini = '[actions]\nENABLED=false\n[mailer]\nENABLED=false\n' + ''.join('[cron.'+name+']\nENABLED=false\n' for name in recovery.NATIVE_CRON_TASKS)
-        def archive(path, name, data, kind=tarfile.REGTYPE):
+        # The single Forgejo data volume carries app.ini; derive the upstream
+        # archive names from recovery.py instead of restating them.
+        top = recovery.DATA_ROOT
+        def archive(path, *rows):
             with tarfile.open(path, 'w:') as tar:
-                row=tarfile.TarInfo(name); row.type=kind; row.size=len(data) if kind==tarfile.REGTYPE else 0
-                tar.addfile(row,io.BytesIO(data) if row.isfile() else None)
-        archive(stage/'gitea-config.tar','gitea/app.ini',ini.encode())
-        archive(stage/'gitea-data.tar','gitea/git/.gitconfig',b'[core]\nquotepath=false\n')
+                for name, data, kind in ((recovery.DATA_APP_INI, ini.encode(), tarfile.REGTYPE), *rows):
+                    row=tarfile.TarInfo(name); row.type=kind; row.size=len(data) if kind==tarfile.REGTYPE else 0
+                    tar.addfile(row,io.BytesIO(data) if row.isfile() else None)
+        archive(stage/'forgejo-data.tar',(top+'/git/.gitconfig',b'[core]\nquotepath=false\n',tarfile.REGTYPE),
+                (top+'/git/repositories/owner/repo.git/hooks/pre-receive.d',b'',tarfile.DIRTYPE),
+                (top+'/git/repositories/owner/repo.git/hooks/pre-receive.d/'+top,b'delegate',tarfile.REGTYPE))
         recovery.validate_access_archive(stage)
         for name,data,kind in [
-            ('gitea/git/.gitconfig',b'[core]\nhooksPath=/outside\n',tarfile.REGTYPE),
-            ('gitea/git/.gitconfig',b'[include]\npath=/outside\n',tarfile.REGTYPE),
-            ('gitea/git/repositories/owner/repo.git/config',b'[core]\nhooksPath=/outside\n',tarfile.REGTYPE),
-            ('gitea/git/repositories/owner/repo.git/custom_hooks',b'',tarfile.DIRTYPE),
-            ('gitea/git/repositories/owner/repo.git/hooks/reference-transaction',b'',tarfile.SYMTYPE),
-            ('gitea/git/repositories/owner/repo.git/hooks/pre-receive.d/extra',b'command',tarfile.REGTYPE),
+            (top+'/git/.gitconfig',b'[core]\nhooksPath=/outside\n',tarfile.REGTYPE),
+            (top+'/git/.gitconfig',b'[include]\npath=/outside\n',tarfile.REGTYPE),
+            (top+'/home/.gitconfig',b'[core]\nhooksPath=/outside\n',tarfile.REGTYPE),
+            (top+'/git/repositories/owner/repo.git/config',b'[core]\nhooksPath=/outside\n',tarfile.REGTYPE),
+            (top+'/git/repositories/owner/repo.git/custom_hooks',b'',tarfile.DIRTYPE),
+            (top+'/git/repositories/owner/repo.git/hooks/reference-transaction',b'',tarfile.SYMTYPE),
+            (top+'/git/repositories/owner/repo.git/hooks/pre-receive.d/extra',b'command',tarfile.REGTYPE),
         ]:
-            archive(stage/'gitea-data.tar',name,data,kind)
+            archive(stage/'forgejo-data.tar',(name,data,kind))
             reject(lambda: recovery.validate_access_archive(stage))
+        for section in ('actions', 'mailer', 'cron.remove_resolved_reports'):
+            ini = ini.replace('['+section+']\nENABLED=false', '['+section+']\nENABLED=true'); archive(stage/'forgejo-data.tar')
+            reject(lambda: recovery.validate_access_archive(stage))
+            ini = ini.replace('['+section+']\nENABLED=true', '['+section+']\nENABLED=false')
     proxy_self_check()
     compile(PROXY_SOURCE, 'owned-proxy-source', 'exec')
     assert 'http.client.HTTPConnection(IP, 3000' in PROXY_SOURCE and "response.status == 204 and body == b''" in PROXY_SOURCE
@@ -457,7 +477,7 @@ def main():
     args.output.mkdir(mode=0o700); output = args.output.resolve()
     proof = {'status': 'running', 'complete': False, 'cleanup': 'not_created', 'sourceRevision': args.source_revision,
              'profile': recovery.ACCESS_PROFILE, 'wholePlatformRecovery': False}
-    environment = {k: v for k, v in os.environ.items() if not k.startswith(('GOLF_', 'GITEA_', 'POSTGRES_', 'COMPOSE_', 'AWS_', 'OTEL_', 'RUSTFS_')) and k != 'DATABASE_URL'}
+    environment = {k: v for k, v in os.environ.items() if not k.startswith(('GOLF_', 'FORGEJO_', 'POSTGRES_', 'COMPOSE_', 'AWS_', 'OTEL_', 'RUSTFS_')) and k != 'DATABASE_URL'}
     forbidden = []
     def record(**fields):
         proof.update(fields); raw = json.dumps(proof, indent=2)
@@ -487,19 +507,19 @@ def main():
     assert proxy_image['Id'] == args.proxy_image
     run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','python3',args.proxy_image,'-c','import http.client,http.server,ipaddress; print("owned-python-ready")')
     images = {name: json.loads(run('docker','image','inspect',ref))[0]['Id'] for name, ref in
-              [('golf', args.image), ('postgres','postgres:18.4-alpine3.24'), ('gitea','gitea/gitea:1.27.3-rootless')]}
+              [('golf', args.image), ('postgres','postgres:18.4-alpine3.24'), ('forgejo',FORGEJO_IMAGE)]}
     assert int(run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--entrypoint','/bin/df',args.image,'-Pk','/').splitlines()[-1].split()[3]) >= 2*1024*1024
     before = foreign(); private(output/'foreign-before.json', json.dumps(before))
     prefix = 'golf-access059-' + secrets.token_hex(5); source, target = prefix+'-source', prefix+'-restore'
     projects = [source, target]; assert not any(any(resources(p).values()) for p in projects)
-    previous = smoke.GOLF, smoke.GITEA
+    previous = smoke.GOLF, smoke.FORGE
     def free_port():
         with socket.socket() as s: s.bind(('127.0.0.1',0)); return s.getsockname()[1]
     ports = []
     while len(ports) < 4:
         value = free_port()
         if value not in ports: ports.append(value)
-    smoke.GOLF, smoke.GITEA = 'http://127.0.0.1:'+str(ports[0]), 'http://127.0.0.1:'+str(ports[1])
+    smoke.GOLF, smoke.FORGE = 'http://127.0.0.1:'+str(ports[0]), 'http://127.0.0.1:'+str(ports[1])
     active_project = source; active_config = None; actors = {}; repos = []; organizations = []
     started = False; passed = False; original = None; cleanup_errors = []
     with tempfile.TemporaryDirectory(prefix=prefix+'-') as temporary:
@@ -509,28 +529,28 @@ def main():
         runner_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('='); forbidden.append(runner_key)
         config = {'services': {
             'postgres': {'image': images['postgres'], 'pull_policy':'never', 'restart':'no', 'command':recovery.ACCESS_PG_COMMAND,
-                'environment':dict(zip(('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD'), passwords)),
-                'volumes':['postgres-data:/var/lib/postgresql',str(ROOT/'deploy/postgres/init.sh')+':/docker-entrypoint-initdb.d/01-golf.sh:ro'],
+                'environment':dict(zip(('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','FORGEJO_DB_PASSWORD'), passwords)),
+                'volumes':['postgres-data:/var/lib/postgresql',str(ROOT/recovery.POSTGRES_INIT)+':/docker-entrypoint-initdb.d/01-golf.sh:ro'],
                 'healthcheck':{'test':['CMD-SHELL','pg_isready -h 127.0.0.1 -U postgres'],'interval':'2s','timeout':'3s','retries':60}},
-            'gitea': {'image':images['gitea'], 'pull_policy':'never', 'restart':'no',
-                'environment':{'HOME':'/var/lib/gitea/git','GITEA__database__DB_TYPE':'postgres','GITEA__database__HOST':'postgres:5432',
-                    'GITEA__database__NAME':'gitea','GITEA__database__USER':'gitea','GITEA__database__PASSWD':passwords[2],
-                    'GITEA__security__INSTALL_LOCK':'true','GITEA__service__DISABLE_REGISTRATION':'true',
-                    'GITEA__server__ROOT_URL':smoke.GITEA+'/', 'GITEA__server__SSH_PORT':str(ports[2]),'GITEA__server__SSH_LISTEN_PORT':'2222',
-                    'GITEA__actions__ENABLED':'false','GITEA__mailer__ENABLED':'false',**{'GITEA__cron.'+name+'__ENABLED':'false' for name in recovery.NATIVE_CRON_TASKS}},
+            'forgejo': {'image':images['forgejo'], 'pull_policy':'never', 'restart':'no',
+                'environment':{'FORGEJO__database__DB_TYPE':'postgres','FORGEJO__database__HOST':'postgres:5432',
+                    'FORGEJO__database__NAME':'forgejo','FORGEJO__database__USER':'forgejo','FORGEJO__database__PASSWD':passwords[2],
+                    'FORGEJO__security__INSTALL_LOCK':'true','FORGEJO__service__DISABLE_REGISTRATION':'true',
+                    'FORGEJO__server__ROOT_URL':smoke.FORGE+'/', 'FORGEJO__server__SSH_PORT':str(ports[2]),'FORGEJO__server__SSH_LISTEN_PORT':'2222',
+                    'FORGEJO__actions__ENABLED':'false','FORGEJO__mailer__ENABLED':'false',**{'FORGEJO__cron.'+name+'__ENABLED':'false' for name in recovery.NATIVE_CRON_TASKS}},
                 'ports':[f'127.0.0.1:{ports[1]}:3000',f'127.0.0.1:{ports[2]}:2222'],
-                'volumes':['gitea-data:/var/lib/gitea','gitea-config:/etc/gitea'], 'depends_on':{'postgres':{'condition':'service_healthy'}}},
+                'volumes':recovery.forgejo_volumes(), 'depends_on':{'postgres':{'condition':'service_healthy'}}},
             'golf': {'image':images['golf'], 'pull_policy':'never','restart':'no',
                 'environment':{'DATABASE_URL':f'postgres://golf:{passwords[1]}@postgres:5432/golf?sslmode=disable',
-                    'GITEA_URL':'http://gitea:3000','GOLF_PUBLIC_URL':smoke.GOLF,
+                    'GOLF_FORGE_URL':'http://forgejo:3000','GOLF_FORGE_KIND':'forgejo','GOLF_FORGE_INSTANCE_ID':str(uuid.uuid4()),'GOLF_PUBLIC_URL':smoke.GOLF,
                     'GOLF_LISTEN_ADDR':':8080','GOLF_ALLOW_INSECURE_COOKIES':'true','GOLF_WEB_DIR':'/app/web/dist',
                     'GOLF_ENCRYPTION_KEYS':json.dumps({'a':key_a,'b':key_b}), 'GOLF_ACTIVE_ENCRYPTION_KEY':'a',
                     'GOLF_RUNNER_KEYS':json.dumps({'recovery-unstarted':runner_key}),
                     'GOLF_RUNNER_IMAGES':json.dumps({'linux':'alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0'}),
                     'GOLF_ACTIONS_ENGINE_CATALOG':CATALOG,'GOLF_ACTIONS_ENGINE_BINARY':'/usr/local/bin/golf-actions-engine','GOLF_RUNNER_JOB_IMAGE':'alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0',
                     'GOLF_PUSH_CI_ENABLED':'false'},'ports':[f'127.0.0.1:{ports[0]}:8080'],
-                'depends_on':{'postgres':{'condition':'service_healthy'},'gitea':{'condition':'service_started'}}},
-            }, 'volumes':{name:{} for name in ('postgres-data','gitea-data','gitea-config')}}
+                'depends_on':{'postgres':{'condition':'service_healthy'},'forgejo':{'condition':'service_started'}}},
+            }, 'volumes':{name:{} for name in recovery.volume_names(False)}}
         validate_local_fixture_auth(config)
         canonical = directory/'source.json'; private(canonical, recovery.compose_bytes(config)); active_config = canonical
         def compose(*argv, **kw): return run('docker','compose','-p',active_project,'-f',str(active_config),*argv,**kw)
@@ -554,7 +574,7 @@ def main():
                     jar = getattr(handler,'cookiejar',None)
                     if jar is not None: forbidden.extend(cookie.value for cookie in jar)
             details = {'stage':STAGE,'services':[]}; facts = []
-            for service in ('postgres','gitea','golf','fault'):
+            for service in ('postgres','forgejo','golf','fault'):
                 try:
                     ids = compose('ps','-aq',service).split()
                     assert len(ids) <= 1 and all(re.fullmatch('[a-f0-9]{12,64}',value) for value in ids)
@@ -633,10 +653,10 @@ def main():
             stage('fresh canonical core and ordinary supported native identities')
             compose('up','-d','--no-build','--pull','never',timeout=180); smoke.ready()
             authentication = smoke.rpc(smoke.client(),'SessionService/GetAuthenticationOptions')
-            assert authentication.get('localPasswordEnabled') is True and not authentication.get('giteaOauthEnabled',False)
+            assert authentication.get('localPasswordEnabled') is True and not authentication.get('forgeOauthEnabled',False)
             record(localPasswordAuthentication=True,oauthConfigured=False)
             assert sql('SELECT max(version_id) FROM goose_db_version WHERE is_applied;')==recovery.ACCESS_SCHEMA
-            admin=['exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user']
+            admin=['exec','-T','forgejo','forgejo','--config',str(recovery.FORGEJO_APP_INI),'admin','user']
             compose(*admin,'create','--username',prefix+'-bootstrap','--email',prefix+'-bootstrap@example.invalid','--random-password','--must-change-password=false','--admin')
             for role in ('owner','recipient','outsider'):
                 name=prefix+'-'+role; a={'name':name,'email':name+'@example.invalid','password':secrets.token_urlsafe(32),'session':smoke.client()}; actors[role]=a
@@ -711,7 +731,7 @@ def main():
             assert typed_original()['state']=='WORKFLOW_RUN_STATE_QUEUED'
             record(realTypedAdmission=True,typedRunId=admitted['id'],jobsExecuted=0)
             stage('actual native204 response loss with unchanged canonical forge URL')
-            native_id=container('gitea'); netrows=json.loads(run('docker','inspect',native_id))[0]['NetworkSettings']['Networks'];assert len(netrows)==1
+            native_id=container('forgejo'); netrows=json.loads(run('docker','inspect',native_id))[0]['NetworkSettings']['Networks'];assert len(netrows)==1
             network_name,network=next(iter(netrows.items()));native_ip=network['IPAddress'];ipaddress.IPv4Address(native_ip)
             net=json.loads(run('docker','network','inspect',network_name))[0];assert net['Labels']['com.docker.compose.project']==source
             subnet=ipaddress.ip_network(net['IPAM']['Config'][0]['Subnet']); assert ipaddress.ip_address(native_ip) in subnet
@@ -729,8 +749,8 @@ def main():
             proxy_row=json.loads(run('docker','inspect',container('fault')))[0];proxy_ip=proxy_row['NetworkSettings']['Networks'][network_name]['IPAddress']
             assert proxy_ip!=native_ip and ipaddress.ip_address(proxy_ip) in subnet and proxy_row['Image']==args.proxy_image
             assert proxy_row['Config']['Labels']['com.docker.compose.project']==source
-            transient['services']['golf']['extra_hosts']=['gitea:'+proxy_ip];private(transient_file,recovery.compose_bytes(transient));compose('up','-d','--no-build','--pull','never','golf');smoke.ready()
-            assert json.loads(run('docker','inspect',container('golf')))[0]['Config']['Env'].count('GITEA_URL=http://gitea:3000')==1
+            transient['services']['golf']['extra_hosts']=['forgejo:'+proxy_ip];private(transient_file,recovery.compose_bytes(transient));compose('up','-d','--no-build','--pull','never','golf');smoke.ready()
+            assert json.loads(run('docker','inspect',container('golf')))[0]['Config']['Env'].count('GOLF_FORGE_URL=http://forgejo:3000')==1
             unknown_intent=intent(repos[2],actors['outsider'],'read');assert proxy_control('/state')['writes']==0
             assert proxy_control('/arm',{})=={'state':'armed'}
             unknown=rpc(owner,'RepositoryAccessService/SetRepositoryCollaborator',unknown_intent)['operation'];assert unknown['phase']=='DISPATCH_UNKNOWN'
@@ -749,7 +769,7 @@ def main():
             proxy_row=json.loads(run('docker','inspect',container('fault')))[0]
             proxy_ip=proxy_row['NetworkSettings']['Networks'][network_name]['IPAddress']
             assert proxy_ip!=native_ip and ipaddress.ip_address(proxy_ip) in subnet
-            transient['services']['golf']['extra_hosts']=['gitea:'+proxy_ip]
+            transient['services']['golf']['extra_hosts']=['forgejo:'+proxy_ip]
             private(transient_file,recovery.compose_bytes(transient));compose('up','-d','--no-build','--pull','never','golf');smoke.ready()
             assert proxy_control('/state')['writes']==proxy_control('/state')['lost']==0
             assert proxy_control('/arm',{})=={'state':'armed'}
@@ -779,7 +799,7 @@ def main():
             account_events=json.loads(rows('golf_local_account_events','id'))
             run_before=json.loads(rows('golf_workflow_runs','id'));assert len(run_before)==1 and run_before[0]['state']=='queued'
             session_count=int(sql('SELECT count(*) FROM golf_sessions;'));assert session_count==3
-            compose('stop','golf','gitea')
+            compose('stop','golf','forgejo')
             age_identity=directory/'age.key';private(age_identity,run('age-keygen',binary=True));recipient_age=run('age-keygen','-y',str(age_identity))
             encrypted=directory/'backup.age'; backup_args=['--project',source,'--compose-file',str(canonical),'--recipient',recipient_age,'--output',str(encrypted),'--writers-drained']
             call_recovery('backup',*backup_args,success=False);assert not encrypted.exists() # explicit profile is mandatory
@@ -792,7 +812,7 @@ def main():
             restored=call_recovery('restore',*verify_args,'--project',target,'--directory',str(directory/'restored'),'--writers-drained')
             assert restored['backup_id']==backup['backup_id'] and restored['sessions_count']==session_count and restored['local_accounts_disabled_count']==3
             active_project=target;active_config=Path(restored['compose_file'])
-            assert all(not json.loads(run('docker','inspect',container(s)))[0]['State']['Running'] for s in ('golf','gitea'))
+            assert all(not json.loads(run('docker','inspect',container(s)))[0]['State']['Running'] for s in ('golf','forgejo'))
             restored_history=histories();expired_count=check_restored_history(history,restored_history);assert expired_count==1
             assert rows('golf_workflow_dispatch_inputs','run_id')==ciphertext
             assert json.loads(rows('golf_crypto_events','id'))==crypto_history
@@ -819,7 +839,7 @@ def main():
                 # Server.New checks registered fingerprints and required key
                 # families before native calls or opening an HTTP listener.
                 compose('run','--rm','--no-deps','-T','-e','GOLF_ENCRYPTION_KEYS='+material,'golf',success=False,timeout=90)
-            assert all(not json.loads(run('docker','inspect',container(s)))[0]['State']['Running'] for s in ('golf','gitea'))
+            assert all(not json.loads(run('docker','inspect',container(s)))[0]['State']['Running'] for s in ('golf','forgejo'))
             assert rows('golf_workflow_dispatch_inputs','run_id')==ciphertext;equal_history(restored_history,histories())
             stage('bounded supported rotation authenticates retained encrypted inputs, with immutable bindings')
             status=keys('status');assert inventory(status)==inventory(key_before)|{'sessions':0,'oauth_attempts':0}
@@ -836,7 +856,7 @@ def main():
                 keyFamilies=list(recovery.KEY_FAMILIES),wrongKeyDenied=True,missingKeyDenied=True,typedRetainedCancelledAndAuthenticated=True,
                 restoredSessionsInvalidated=True,issuerCredentialVersionsAdvanced=True)
             stage('controlled native/core validation restart and explicit current-account enrollment')
-            compose('up','-d','--no-build','--pull','never','gitea','golf');smoke.ready();assert native_snapshot()==native_before
+            compose('up','-d','--no-build','--pull','never','forgejo','golf');smoke.ready();assert native_snapshot()==native_before
             for a in actors.values():
                 rpc(a,'SessionService/GetSession',{},expected=401)
                 rpc({'session':smoke.client()},'SessionService/LoginWithPassword',{'username':a['email'],'password':a['password']},expected=401)
@@ -869,7 +889,7 @@ def main():
                     'currentPassword':owner['password'],'idempotencyKey':str(uuid.uuid4())})['operation']
                 assert refused['phase']=='REJECTED' and refused['failureCode']=='preflight_refused'
             equal_history(restored_history,histories());assert native_snapshot()==native_before
-            compose('restart','gitea','golf');smoke.ready();assert inspect(unknown_intent)==unknown
+            compose('restart','forgejo','golf');smoke.ready();assert inspect(unknown_intent)==unknown
             equal_history(restored_history,histories());assert native_snapshot()==native_before
             assert typed_original()==original_cancelled and sql('SELECT count(*) FROM golf_workflow_runs;')==sql('SELECT count(*) FROM golf_workflow_dispatch_inputs;')=='1'
             assert sql('SELECT count(*) FROM golf_workflow_run_logs;')=='0'
@@ -893,7 +913,7 @@ def main():
                     if found['networks']:run('docker','network','rm',*found['networks'])
                     assert not any(resources(project).values())
                 except BaseException as error:cleanup_errors.append({'project':project,'type':type(error).__name__})
-            smoke.GOLF,smoke.GITEA=previous
+            smoke.GOLF,smoke.FORGE=previous
             unchanged=False;zero=False
             try:
                 after=foreign();private(output/'foreign-after.json',json.dumps(after));unchanged=before==after

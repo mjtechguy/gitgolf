@@ -66,7 +66,7 @@ def main():
         private = Path(directory)
         password = secrets.token_hex(24)
         pg_port, forge_port, golf_port = port(), port(), port()
-        env = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_', 'GITEA_', 'DATABASE_URL', 'COMPOSE_'))}
+        env = {k:v for k,v in os.environ.items() if not k.startswith(('GOLF_', 'FORGEJO_', 'DATABASE_URL', 'COMPOSE_'))}
         try:
             command('go','build','-o',str(private/'golf-server'),'./cmd/golf',cwd=ROOT)
             command('go','build','-o',str(private/'golf'),'./cmd/golfctl',cwd=ROOT)

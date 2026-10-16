@@ -131,11 +131,11 @@ func (s *Server) lockRepositoryLifecycleTransaction(ctx context.Context, tx *sql
 	if tx == nil || repositoryID <= 0 {
 		return nil, errStorageUnavailable
 	}
-	if _, e := tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.GiteaURL, repositoryID); e != nil {
+	if _, e := tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.ForgeURL, repositoryID); e != nil {
 		return nil, errStorageUnavailable
 	}
 	var blocked bool
-	if e := tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.GiteaURL, repositoryID).Scan(&blocked); e != nil {
+	if e := tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.ForgeURL, repositoryID).Scan(&blocked); e != nil {
 		return nil, errStorageUnavailable
 	}
 	if blocked {
@@ -144,7 +144,7 @@ func (s *Server) lockRepositoryLifecycleTransaction(ctx context.Context, tx *sql
 	if e := s.protectionDispatchAllowed(ctx, tx, repositoryID); e != nil {
 		return nil, e
 	}
-	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, repositoryID, tx}), nil
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.ForgeURL, repositoryID, tx}), nil
 }
 
 func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path string, token forgeCredential, input any, request *http.Request) (releaseResult func(), resultErr error) {
@@ -172,7 +172,7 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 		return nil, errInvalidForgeResponse
 	}
 	if held, ok := ctx.Value(repositoryLifecycleTransactionKey{}).(repositoryLifecycleTransaction); ok {
-		if held.tx == nil || held.forge != s.config.GiteaURL || held.repositoryID != repo.ID {
+		if held.tx == nil || held.forge != s.config.ForgeURL || held.repositoryID != repo.ID {
 			cancel()
 			return nil, errLifecycleBlocked
 		}
@@ -185,13 +185,13 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 			return nil, e
 		}
 		var blocked bool
-		if e = held.tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.GiteaURL, repo.ID).Scan(&blocked); e != nil {
+		if e = held.tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.ForgeURL, repo.ID).Scan(&blocked); e != nil {
 			cancel()
 			return nil, errStorageUnavailable
 		}
 		var reviewBlocked bool
 		var authoringBlocked bool
-		if e = held.tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_pull_review_authoring_operations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, s.config.GiteaURL, repo.ID).Scan(&authoringBlocked); e != nil {
+		if e = held.tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_pull_review_authoring_operations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, s.config.ForgeURL, repo.ID).Scan(&authoringBlocked); e != nil {
 			cancel()
 			return nil, errStorageUnavailable
 		}
@@ -199,7 +199,7 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 			cancel()
 			return nil, errLifecycleBlocked
 		}
-		if e = held.tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_pull_review_lifecycle_operations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, s.config.GiteaURL, repo.ID).Scan(&reviewBlocked); e != nil {
+		if e = held.tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_pull_review_lifecycle_operations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, s.config.ForgeURL, repo.ID).Scan(&reviewBlocked); e != nil {
 			cancel()
 			return nil, errStorageUnavailable
 		}
@@ -208,7 +208,7 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 			return nil, errLifecycleBlocked
 		}
 		var commentBlocked bool
-		if e = held.tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_pull_review_comment_operations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, s.config.GiteaURL, repo.ID).Scan(&commentBlocked); e != nil {
+		if e = held.tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_pull_review_comment_operations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, s.config.ForgeURL, repo.ID).Scan(&commentBlocked); e != nil {
 			cancel()
 			return nil, errStorageUnavailable
 		}
@@ -287,7 +287,7 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 		return nil, errStorageUnavailable
 	}
 	release := func() { _ = tx.Rollback(); cancel() }
-	if _, e = tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.GiteaURL, repo.ID); e != nil {
+	if _, e = tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.ForgeURL, repo.ID); e != nil {
 		release()
 		return nil, errStorageUnavailable
 	}
@@ -307,7 +307,7 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 		}
 	} else {
 		var blocked bool
-		e = tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.GiteaURL, repo.ID).Scan(&blocked)
+		e = tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.ForgeURL, repo.ID).Scan(&blocked)
 		if e != nil || blocked {
 			release()
 			if e != nil {
@@ -369,16 +369,16 @@ func (s *Server) lifecycleObservation(ctx context.Context, session string, token
 			}
 			managedBlocked := false
 			e = s.withManagedSession(ctx, session, token, func(q *database.Queries, _ database.LockManagedSessionRow, _ []byte) error {
-				n, e := q.CountRepositoryLifecycleActive(ctx, database.CountRepositoryLifecycleActiveParams{ForgeURL: s.config.GiteaURL, RepositoryID: row.ID})
+				n, e := q.CountRepositoryLifecycleActive(ctx, database.CountRepositoryLifecycleActiveParams{ForgeURL: s.config.ForgeURL, RepositoryID: row.ID})
 				if e != nil {
 					return errStorageUnavailable
 				}
 				result.ActiveWorkCount = strconv.FormatInt(n, 10)
-				result.Unresolved, e = q.RepositoryLifecycleUnresolved(ctx, database.RepositoryLifecycleUnresolvedParams{ForgeURL: s.config.GiteaURL, RepositoryID: row.ID})
+				result.Unresolved, e = q.RepositoryLifecycleUnresolved(ctx, database.RepositoryLifecycleUnresolvedParams{ForgeURL: s.config.ForgeURL, RepositoryID: row.ID})
 				if e != nil {
 					return errStorageUnavailable
 				}
-				managedBlocked, e = q.RepositoryLifecycleBlocked(ctx, database.RepositoryLifecycleBlockedParams{ForgeURL: s.config.GiteaURL, RepositoryID: row.ID})
+				managedBlocked, e = q.RepositoryLifecycleBlocked(ctx, database.RepositoryLifecycleBlockedParams{ForgeURL: s.config.ForgeURL, RepositoryID: row.ID})
 				if e != nil {
 					return errStorageUnavailable
 				}
@@ -465,7 +465,7 @@ func (s *Server) ownLifecycle(ctx context.Context, session string, token forgeCr
 	var r database.GolfRepositoryLifecycleOperation
 	e := s.withManagedSession(ctx, session, token, func(q *database.Queries, c database.LockManagedSessionRow, _ []byte) error {
 		var e error
-		r, e = q.GetOwnRepositoryLifecycle(ctx, database.GetOwnRepositoryLifecycleParams{UserID: c.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key})
+		r, e = q.GetOwnRepositoryLifecycle(ctx, database.GetOwnRepositoryLifecycleParams{UserID: c.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: key})
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
@@ -512,7 +512,7 @@ func (s *Server) lifecycleAdvance(ctx context.Context, session string, token for
 			failure = "preflight_refused"
 		}
 		var e error
-		r, e = q.AdvanceRepositoryLifecycle(ctx, database.AdvanceRepositoryLifecycleParams{ID: r.ID, UserID: r.UserID, ForgeURL: s.config.GiteaURL, Phase: phase, FailureCode: failure})
+		r, e = q.AdvanceRepositoryLifecycle(ctx, database.AdvanceRepositoryLifecycleParams{ID: r.ID, UserID: r.UserID, ForgeURL: s.config.ForgeURL, Phase: phase, FailureCode: failure})
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -591,20 +591,20 @@ func (s *Server) ChangeRepositoryArchiveState(ctx context.Context, req *connect.
 	var r database.GolfRepositoryLifecycleOperation
 	dispatch := false
 	e = s.withManagedSession(ctx, session, token, func(q *database.Queries, c database.LockManagedSessionRow, hash []byte) error {
-		current, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+		current, e := q.GetOwnPasswordConfirmation(ctx, database.GetOwnPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.ForgeURL})
 		if e != nil || !sameOwnSecurity(initial, current) {
 			return errUnauthenticated
 		}
-		if e = q.LockRepositoryLifecycle(ctx, database.LockRepositoryLifecycleParams{ForgeURL: s.config.GiteaURL, RepositoryID: repoID}); e != nil {
+		if e = q.LockRepositoryLifecycle(ctx, database.LockRepositoryLifecycleParams{ForgeURL: s.config.ForgeURL, RepositoryID: repoID}); e != nil {
 			return errStorageUnavailable
 		}
-		active, e := q.CountRepositoryLifecycleActive(ctx, database.CountRepositoryLifecycleActiveParams{ForgeURL: s.config.GiteaURL, RepositoryID: repoID})
+		active, e := q.CountRepositoryLifecycleActive(ctx, database.CountRepositoryLifecycleActiveParams{ForgeURL: s.config.ForgeURL, RepositoryID: repoID})
 		if e != nil {
 			return errStorageUnavailable
 		}
-		r, e = q.ReserveRepositoryLifecycle(ctx, database.ReserveRepositoryLifecycleParams{UserID: c.UserID, ForgeURL: s.config.GiteaURL, ActorID: initial.ForgeUserID, IdempotencyKey: m.IdempotencyKey, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, ExpectedRevision: m.ExpectedRevision, FromArchived: observation.Archived, ToArchived: *m.Archived, Fingerprint: fp[:]})
+		r, e = q.ReserveRepositoryLifecycle(ctx, database.ReserveRepositoryLifecycleParams{UserID: c.UserID, ForgeURL: s.config.ForgeURL, ActorID: initial.ForgeUserID, IdempotencyKey: m.IdempotencyKey, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, ExpectedRevision: m.ExpectedRevision, FromArchived: observation.Archived, ToArchived: *m.Archived, Fingerprint: fp[:]})
 		if errors.Is(e, sql.ErrNoRows) {
-			r, e = q.GetOwnRepositoryLifecycle(ctx, database.GetOwnRepositoryLifecycleParams{UserID: c.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: m.IdempotencyKey})
+			r, e = q.GetOwnRepositoryLifecycle(ctx, database.GetOwnRepositoryLifecycleParams{UserID: c.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: m.IdempotencyKey})
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -621,7 +621,7 @@ func (s *Server) ChangeRepositoryArchiveState(ctx context.Context, req *connect.
 			return errStorageUnavailable
 		}
 		if active > 0 || observation.BlockedReason != "" || observation.Revision != m.ExpectedRevision || observation.Archived == *m.Archived {
-			r, e = q.AdvanceRepositoryLifecycle(ctx, database.AdvanceRepositoryLifecycleParams{ID: r.ID, UserID: c.UserID, ForgeURL: s.config.GiteaURL, Phase: "REJECTED", FailureCode: "preflight_refused"})
+			r, e = q.AdvanceRepositoryLifecycle(ctx, database.AdvanceRepositoryLifecycleParams{ID: r.ID, UserID: c.UserID, ForgeURL: s.config.ForgeURL, Phase: "REJECTED", FailureCode: "preflight_refused"})
 			if e != nil {
 				return errStorageUnavailable
 			}

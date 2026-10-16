@@ -1,12 +1,12 @@
 {
   "format": "golf.compatibility.protocols.v1",
-  "profile": "gitea-1.27.3",
+  "profile": "forgejo-15.0.9",
   "protocols": [
     {
       "id": "git.http",
       "kind": "git",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/git-lfs-setup/",
+      "reference": "https://forgejo.org/docs/v15.0/user/git-cli/",
       "reason": "Existing bounded consumers need full client, role, revocation and native field/protocol assessment.",
       "tests": []
     },
@@ -14,7 +14,7 @@
       "id": "git.ssh",
       "kind": "git",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/installation/install-with-docker/",
+      "reference": "https://forgejo.org/docs/v15.0/admin/installation/docker/",
       "reason": "Existing bounded consumers need full client, role, revocation and native field/protocol assessment.",
       "tests": []
     },
@@ -22,7 +22,7 @@
       "id": "git.lfs",
       "kind": "git",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/git-lfs-setup/",
+      "reference": "https://forgejo.org/docs/v15.0/admin/config-cheat-sheet/",
       "reason": "Existing bounded consumers need full client, role, revocation and native field/protocol assessment.",
       "tests": []
     },
@@ -30,7 +30,7 @@
       "id": "wiki.git",
       "kind": "git",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/",
+      "reference": "https://forgejo.org/docs/v15.0/user/getting-started/wiki/",
       "reason": "Existing bounded consumers need full client, role, revocation and native field/protocol assessment.",
       "tests": []
     },
@@ -38,7 +38,15 @@
       "id": "registry.alpine",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/alpine/",
+      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
+      "tests": []
+    },
+    {
+      "id": "registry.alt",
+      "kind": "registry",
+      "state": "unassessed",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/alt/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -46,7 +54,7 @@
       "id": "registry.arch",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/arch/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -54,7 +62,7 @@
       "id": "registry.cargo",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/cargo/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -62,7 +70,7 @@
       "id": "registry.chef",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/chef/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -70,7 +78,7 @@
       "id": "registry.composer",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/composer/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -78,7 +86,7 @@
       "id": "registry.conan",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/conan/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -86,7 +94,7 @@
       "id": "registry.conda",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/conda/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -94,7 +102,7 @@
       "id": "registry.container",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/container/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -102,7 +110,7 @@
       "id": "registry.cran",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/cran/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -110,7 +118,7 @@
       "id": "registry.debian",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/debian/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -118,7 +126,7 @@
       "id": "registry.generic",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/generic/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -126,7 +134,7 @@
       "id": "registry.go",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/go/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -134,7 +142,7 @@
       "id": "registry.helm",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/helm/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -142,7 +150,7 @@
       "id": "registry.maven",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/maven/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -150,7 +158,7 @@
       "id": "registry.npm",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/npm/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -158,7 +166,7 @@
       "id": "registry.nuget",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/nuget/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -166,7 +174,7 @@
       "id": "registry.pub",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/pub/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -174,7 +182,7 @@
       "id": "registry.pypi",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/pypi/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -182,7 +190,7 @@
       "id": "registry.rpm",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/rpm/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -190,7 +198,7 @@
       "id": "registry.rubygems",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/rubygems/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -198,15 +206,7 @@
       "id": "registry.swift",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
-      "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
-      "tests": []
-    },
-    {
-      "id": "registry.terraform",
-      "kind": "registry",
-      "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/swift/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -214,7 +214,7 @@
       "id": "registry.vagrant",
       "kind": "registry",
       "state": "unassessed",
-      "reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
+      "reference": "https://forgejo.org/docs/v15.0/user/packages/vagrant/",
       "reason": "Registry wire protocol is a separate denominator from package metadata REST; full native client assessment remains open.",
       "tests": []
     },
@@ -222,7 +222,7 @@
       "id": "webhook.create",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
@@ -232,7 +232,7 @@
       "id": "webhook.delete",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
@@ -242,7 +242,7 @@
       "id": "webhook.fork",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
@@ -252,22 +252,22 @@
       "id": "webhook.push",
       "kind": "webhook",
       "state": "native-tested",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
-      "reason": "Owned native HMAC-signed default-branch push, exact event/grant/source binding and one automatic run. Full payload fields, role/fault/other-event matrix remain open.",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
+      "reason": "Owned native HMAC-signed default-branch push on a fresh pinned Forgejo 15.0.9, exact event/grant/source binding and one automatic run. Full payload fields, role/fault/other-event matrix remain open.",
       "tests": [
         "internal/server/repository_events_test.go"
       ],
       "native_hook_configuration": true,
       "category": "native hook event",
       "native_evidence": [
-        "docs/compatibility/evidence/native-gitea-paths.json"
+        "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
       ]
     },
     {
       "id": "webhook.issues",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
@@ -279,7 +279,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -289,7 +289,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -299,7 +299,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -307,7 +307,7 @@
       "id": "webhook.issue_comment",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
@@ -317,7 +317,7 @@
       "id": "webhook.pull_request",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
@@ -329,7 +329,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -339,7 +339,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -349,7 +349,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -359,7 +359,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -369,7 +369,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -379,7 +379,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -387,7 +387,7 @@
       "id": "webhook.pull_request_review_comment",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
@@ -399,7 +399,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -409,7 +409,7 @@
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "native_hook_configuration": true,
       "category": "native hook event"
     },
@@ -417,7 +417,7 @@
       "id": "webhook.wiki",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
@@ -427,7 +427,7 @@
       "id": "webhook.repository",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
@@ -437,7 +437,7 @@
       "id": "webhook.release",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
@@ -447,69 +447,70 @@
       "id": "webhook.package",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": true,
       "category": "native hook event"
-    },
-    {
-      "id": "webhook.status",
-      "kind": "webhook",
-      "state": "unassessed",
-      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
-      "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
-      "native_hook_configuration": true,
-      "category": "native hook event"
-    },
-    {
-      "id": "webhook.pull_request_review",
-      "kind": "webhook",
-      "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
-      "reason": "No full payload consumer qualification in this register.",
-      "tests": [],
-      "native_hook_configuration": false,
-      "category": "review event group"
     },
     {
       "id": "webhook.schedule",
       "kind": "webhook",
       "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
       "reason": "No full payload consumer qualification in this register.",
       "tests": [],
       "native_hook_configuration": false,
       "category": "Actions event only"
     },
     {
-      "id": "webhook.workflow_run",
-      "kind": "webhook",
-      "state": "unassessed",
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
-      "reason": "No full payload consumer qualification in this register.",
-      "tests": [],
-      "native_hook_configuration": true,
-      "category": "Actions event only"
-    },
-    {
-      "id": "webhook.workflow_job",
+      "id": "webhook.workflow_dispatch",
       "kind": "webhook",
       "state": "unassessed",
       "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
       "tests": [],
-      "reference": "https://github.com/go-gitea/gitea/blob/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/webhook/type.go",
-      "native_hook_configuration": true,
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
+      "native_hook_configuration": false,
       "category": "Actions event only"
+    },
+    {
+      "id": "webhook.action_run_failure",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.action_run_recover",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
+    },
+    {
+      "id": "webhook.action_run_success",
+      "kind": "webhook",
+      "state": "unassessed",
+      "reason": "No complete payload/role/lifecycle consumer qualification in this register.",
+      "tests": [],
+      "reference": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
+      "native_hook_configuration": true,
+      "category": "native hook event"
     }
   ],
-  "registry_reference": "https://docs.gitea.com/1.27/usage/packages/overview/",
-  "webhook_source": "fixtures/gitea-webhook-types.go.txt",
+  "registry_reference": "https://forgejo.org/docs/v15.0/user/packages/",
   "webhook_payload_source": {
-    "source_url": "https://raw.githubusercontent.com/go-gitea/gitea/146cc3eec57174711eac0e0a0c7b38670c6e3922/modules/structs/hook.go",
-    "fixture": "fixtures/gitea-hook-payloads.go.txt",
-    "schema_reference": "Pinned public Go structs and JSON field tags; nested common types are referenced by their upstream names. No inferred normalized GitHub/GitLab schema or complete payload consumer qualification.",
+    "source_url": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/structs/hook.go",
+    "raw_url": "https://codeberg.org/forgejo/forgejo/raw/tag/v15.0.9/modules/structs/hook.go",
+    "source_commit": "19b9b9d216bbfb501c18514bd1a8c980246ca3f7",
+    "source_sha256": "f1088fc65af1d839b008823bb3bd04ec5ba6c235d3df31462d5f60b53f4664ae",
+    "schema_reference": "Upstream public Go structs and JSON field tags at the pinned tag; nested common types are referenced by their upstream names. No inferred normalized GitHub/GitLab schema or complete payload consumer qualification.",
     "declared_types": [
       "Hook",
       "CreateHookOption",
@@ -527,15 +528,52 @@
       "ChangesFromPayload",
       "ChangesPayload",
       "PullRequestPayload",
+      "SchedulePayload",
+      "WorkflowDispatchPayload",
       "ReviewPayload",
       "WikiPayload",
       "RepositoryPayload",
       "PackagePayload",
-      "WorkflowDispatchPayload",
-      "WorkflowCallPayload",
-      "CommitStatusPayload",
-      "WorkflowRunPayload",
-      "WorkflowJobPayload"
+      "ActionPayload"
+    ]
+  },
+  "webhook_events": {
+    "source_url": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/type.go",
+    "raw_url": "https://codeberg.org/forgejo/forgejo/raw/tag/v15.0.9/modules/webhook/type.go",
+    "source_commit": "19b9b9d216bbfb501c18514bd1a8c980246ca3f7",
+    "source_sha256": "264994219c783298d84b279d3601dbd317c1b58a6b8f74dd75beda9ff155b9a5",
+    "native_hook_configuration_source_url": "https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/webhook/structs.go",
+    "observed_at": "2026-10-16",
+    "license": "MIT; upstream source is referenced, not copied into this repository",
+    "constants": [
+      "create",
+      "delete",
+      "fork",
+      "push",
+      "issues",
+      "issue_assign",
+      "issue_label",
+      "issue_milestone",
+      "issue_comment",
+      "pull_request",
+      "pull_request_assign",
+      "pull_request_label",
+      "pull_request_milestone",
+      "pull_request_comment",
+      "pull_request_review_approved",
+      "pull_request_review_rejected",
+      "pull_request_review_comment",
+      "pull_request_sync",
+      "pull_request_review_request",
+      "wiki",
+      "repository",
+      "release",
+      "package",
+      "schedule",
+      "workflow_dispatch",
+      "action_run_failure",
+      "action_run_recover",
+      "action_run_success"
     ]
   }
 }

@@ -56,7 +56,7 @@ func TestAdminMFARecoveryNativeProof(t *testing.T) {
 	admin, _, _, adminTransport, adminOrigin := testRPCClients(t, s)
 	target, _, _, targetTransport, targetOrigin := testRPCClients(t, s)
 	pat, _, _, _, _ := testRPCClients(t, s)
-	if _, e = pat.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: in.Token})); e != nil {
+	if _, e = pat.LoginWithForgeToken(t.Context(), connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: in.Token})); e != nil {
 		t.Fatal("native pre-enrollment token session")
 	}
 	enroll := func(session golfv1connect.SessionServiceClient, transport *http.Client, origin, name string) []string {
@@ -168,7 +168,7 @@ func TestAdminMFARecoveryNativeProof(t *testing.T) {
 			data, _ := json.Marshal(payload)
 			command := exec.CommandContext(t.Context(), binary, "local-account", action)
 			command.Stdin = bytes.NewReader(data)
-			command.Env = []string{"PATH=" + os.Getenv("PATH"), "DATABASE_URL=" + address.String(), "GITEA_URL=" + in.URL}
+			command.Env = []string{"PATH=" + os.Getenv("PATH"), "DATABASE_URL=" + address.String(), "GOLF_FORGE_URL=" + in.URL}
 			if !readonly {
 				command.Env = append(command.Env, "GOLF_ENCRYPTION_KEY="+config.EncryptionKey)
 			}

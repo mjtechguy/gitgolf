@@ -299,7 +299,7 @@ CREATE TRIGGER reject_crypto_event BEFORE INSERT ON golf_crypto_events FOR EACH 
 		t.Fatal(err)
 	}
 	defer held.Rollback()
-	if _, err := database.New(f.db).WithTx(held).LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: f.s.config.GiteaURL}); err != nil {
+	if _, err := database.New(f.db).WithTx(held).LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: hash, ForgeURL: f.s.config.ForgeURL}); err != nil {
 		t.Fatal(err)
 	}
 	partial, err := RotateCredentials(ctx, f.db, keys, 10, 2)
@@ -523,7 +523,7 @@ func TestAutomationCredentialKeyLifecyclePostgres(t *testing.T) {
 	f.session(t, "alice", "pat")
 	ids := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	for i, id := range ids {
-		seedAutomationCredential(t, f.db, f.s.keyring, f.s.config.GiteaURL, id, i == 2)
+		seedAutomationCredential(t, f.db, f.s.keyring, f.s.config.ForgeURL, id, i == 2)
 	}
 	keys := rotationKeys(t, f.s.config)
 	status, err := KeyStatus(t.Context(), f.db, keys)
@@ -597,8 +597,8 @@ func TestAutomationCredentialKeyRollbackAndBusyPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	firstID, secondID := uuid.NewString(), uuid.NewString()
-	_, before := seedAutomationCredential(t, db, s.keyring, config.GiteaURL, firstID, false)
-	seedAutomationCredential(t, db, s.keyring, config.GiteaURL, secondID, false)
+	_, before := seedAutomationCredential(t, db, s.keyring, config.ForgeURL, firstID, false)
+	seedAutomationCredential(t, db, s.keyring, config.ForgeURL, secondID, false)
 	keys := rotationKeys(t, config)
 	mustActivate(t, db, keys)
 	if _, err := db.Exec(`CREATE FUNCTION reject_automation_crypto_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture'; END $$; CREATE TRIGGER reject_automation_crypto_fixture BEFORE INSERT ON golf_crypto_events FOR EACH ROW EXECUTE FUNCTION reject_automation_crypto_fixture()`); err != nil {

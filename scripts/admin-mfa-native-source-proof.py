@@ -6,7 +6,7 @@ host PostgreSQL test schema. Retained user accounts/settings are unchanged.
 import argparse, hashlib, json, os, secrets, subprocess, sys, tempfile
 from pathlib import Path
 sys.dont_write_bytecode=True
-from smoke import ROOT, GITEA, command, provider
+from smoke import ROOT, FORGE, command, provider
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -20,7 +20,7 @@ def main():
     stack=args.stack_root.resolve();prefix='golf-mfa-probe-'+secrets.token_hex(5)
     owned=[];tokens=[];report={'passed':False,'ownedUsersPurged':False,'dockerResourcesCreated':0,'servedRuntimeQualified':False}
     def admin(*values):
-        return command('docker','compose','--project-directory',str(stack),'--file',str(stack/'compose.yaml'),'--env-file',str(stack/'.env'),'exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*values)
+        return command('docker','compose','--project-directory',str(stack),'--file',str(stack/'compose.yaml'),'--env-file',str(stack/'.env'),'exec','-T','forgejo','forgejo','--config','/var/lib/gitea/custom/conf/app.ini','admin','user',*values)  # Forgejo's upstream path
     try:
         actors=[]
         for role in ['admin','member']:
@@ -43,7 +43,7 @@ def main():
             report['actualCLISubprocess']=True
         with tempfile.TemporaryDirectory(prefix='golf-owned-admin-mfa-') as folder:
             envelope=Path(folder)/'fixture.json'
-            envelope.write_text(json.dumps({'URL':GITEA,'AdminUsername':actors[0][0],'AdminToken':actors[0][1],'Username':actors[1][0],'Token':actors[1][1]}));envelope.chmod(0o600)
+            envelope.write_text(json.dumps({'URL':FORGE,'AdminUsername':actors[0][0],'AdminToken':actors[0][1],'Username':actors[1][0],'Token':actors[1][1]}));envelope.chmod(0o600)
             result=subprocess.run(['go','test','-race','-p','1','./internal/server','-run','^TestAdminMFARecoveryNativeProof$','-count=1','-v'],cwd=ROOT,env=os.environ|{'GOLF_ADMIN_MFA_NATIVE_PROOF':str(envelope)}|extra_env,capture_output=True,text=True,timeout=180)
             log=result.stdout+result.stderr
             if any(token in log for token in tokens):

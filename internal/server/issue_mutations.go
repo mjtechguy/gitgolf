@@ -102,7 +102,7 @@ func wireIssueMutation(record database.GolfIssueMutation) *golfv1.IssueMutation 
 }
 
 // All provider calls happen outside account locks. These are repeated native
-// observations, not atomic expected-ID predicates on Gitea's slug-based POST.
+// observations, not atomic expected-ID predicates on Forgejo's slug-based POST.
 func (s *Server) observeIssueMutationTarget(ctx context.Context, session string, token forgeCredential, record database.GolfIssueMutation) (Repository, *Issue, *golfv1.IssueComment, error) {
 	ctx = context.WithValue(ctx, pullDiscussionKey{}, record.PullRequest)
 	var repository Repository
@@ -172,7 +172,7 @@ func (s *Server) completeIssueMutation(ctx context.Context, record database.Golf
 	}
 	defer tx.Rollback()
 	queries := database.New(s.db).WithTx(tx)
-	updated, err := queries.CompleteIssueMutation(ctx, database.CompleteIssueMutationParams{MutationID: record.ID, UserID: record.UserID, ForgeURL: s.config.GiteaURL, State: state, FailureCode: failure, IssueID: record.IssueID, IssueNumber: record.IssueNumber, CommentID: record.CommentID, PullRequestID: record.PullRequestID})
+	updated, err := queries.CompleteIssueMutation(ctx, database.CompleteIssueMutationParams{MutationID: record.ID, UserID: record.UserID, ForgeURL: s.config.ForgeURL, State: state, FailureCode: failure, IssueID: record.IssueID, IssueNumber: record.IssueNumber, CommentID: record.CommentID, PullRequestID: record.PullRequestID})
 	if err != nil {
 		return errStorageUnavailable
 	}
@@ -196,7 +196,7 @@ func (s *Server) recordIssueMutationReceipt(ctx context.Context, record database
 	}
 	defer tx.Rollback()
 	queries := database.New(s.db).WithTx(tx)
-	updated, err := queries.RecordIssueMutationReceipt(ctx, database.RecordIssueMutationReceiptParams{MutationID: record.ID, UserID: record.UserID, ForgeURL: s.config.GiteaURL, ObservedResultID: resultID, ObservedNumber: number})
+	updated, err := queries.RecordIssueMutationReceipt(ctx, database.RecordIssueMutationReceiptParams{MutationID: record.ID, UserID: record.UserID, ForgeURL: s.config.ForgeURL, ObservedResultID: resultID, ObservedNumber: number})
 	if err != nil {
 		return errStorageUnavailable
 	}
@@ -226,9 +226,9 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 	dispatch := false
 	err := s.withManagedSession(ctx, session, token, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		var err error
-		record, err = queries.ReserveIssueMutation(ctx, database.ReserveIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key, PayloadFingerprint: fingerprint[:], Kind: input.Kind, RepositoryID: input.RepositoryID, RepositoryOwner: input.Owner, RepositoryName: input.Repository, IssueID: input.IssueID, IssueNumber: int64(input.Number), PullRequest: input.PullRequest, PullRequestID: input.PullRequestID})
+		record, err = queries.ReserveIssueMutation(ctx, database.ReserveIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: key, PayloadFingerprint: fingerprint[:], Kind: input.Kind, RepositoryID: input.RepositoryID, RepositoryOwner: input.Owner, RepositoryName: input.Repository, IssueID: input.IssueID, IssueNumber: int64(input.Number), PullRequest: input.PullRequest, PullRequestID: input.PullRequestID})
 		if errors.Is(err, sql.ErrNoRows) {
-			record, err = queries.GetIssueMutation(ctx, database.GetIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key})
+			record, err = queries.GetIssueMutation(ctx, database.GetIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: key})
 			if err != nil {
 				return errStorageUnavailable
 			}
@@ -391,7 +391,7 @@ func (s *Server) getIssueMutation(ctx context.Context, session string, token for
 	var record database.GolfIssueMutation
 	err := s.withManagedSession(ctx, session, token, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		var err error
-		record, err = queries.GetIssueMutation(ctx, database.GetIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key})
+		record, err = queries.GetIssueMutation(ctx, database.GetIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, IdempotencyKey: key})
 		if errors.Is(err, sql.ErrNoRows) {
 			return errResourceNotFound
 		}

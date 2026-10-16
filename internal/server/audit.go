@@ -69,7 +69,7 @@ func (s *Server) listAuditEvents(ctx context.Context, value string, credential f
 			if cursor == 0 {
 				continue
 			}
-			own, err := queries.OwnAuditCursor(ctx, database.OwnAuditCursorParams{EventID: cursor, UserID: caller.UserID, ForgeURL: s.config.GiteaURL, CallerTokenHash: hash})
+			own, err := queries.OwnAuditCursor(ctx, database.OwnAuditCursorParams{EventID: cursor, UserID: caller.UserID, ForgeURL: s.config.ForgeURL, CallerTokenHash: hash})
 			if err != nil {
 				return errStorageUnavailable
 			}
@@ -79,12 +79,12 @@ func (s *Server) listAuditEvents(ctx context.Context, value string, credential f
 		}
 		var err error
 		if snapshot == 0 {
-			snapshot, err = queries.GetAuditSnapshot(ctx, database.GetAuditSnapshotParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, CallerTokenHash: hash})
+			snapshot, err = queries.GetAuditSnapshot(ctx, database.GetAuditSnapshotParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, CallerTokenHash: hash})
 			if err != nil {
 				return errStorageUnavailable
 			}
 		}
-		rows, err = queries.ListAuditEvents(ctx, database.ListAuditEventsParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, CallerTokenHash: hash, SnapshotID: snapshot, BeforeID: before, RowLimit: int32(limit + 1)})
+		rows, err = queries.ListAuditEvents(ctx, database.ListAuditEventsParams{UserID: caller.UserID, ForgeURL: s.config.ForgeURL, CallerTokenHash: hash, SnapshotID: snapshot, BeforeID: before, RowLimit: int32(limit + 1)})
 		if err != nil {
 			return errStorageUnavailable
 		}

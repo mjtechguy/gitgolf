@@ -223,7 +223,7 @@ func (f *repositoryDeletionFixture) profile(t *testing.T) {
 	f.s.managedGit = managedGitConfiguration{Enabled: true, Incarnation: incarnation}
 	// Only an owned Golf source fixture. This synthetic row does not qualify native
 	// bootstrap, ingress, producers or any retained installation.
-	if _, e := f.s.db.Exec(`INSERT INTO golf_git_transport_profiles(forge_url,incarnation,native_version,receipt_sha256,qualifier_source_commit,golf_image_digest,native_image_digest,native_runtime_id) VALUES($1,$2,'1.27.3',$3,$4,$5,$5,$3)`, f.s.config.GiteaURL, incarnation, strings.Repeat("a", 64), strings.Repeat("b", 40), "sha256:"+strings.Repeat("c", 64)); e != nil {
+	if _, e := f.s.db.Exec(`INSERT INTO golf_git_transport_profiles(forge_url,incarnation,native_version,receipt_sha256,qualifier_source_commit,golf_image_digest,native_image_digest,native_runtime_id) VALUES($1,$2,'1.27.3',$3,$4,$5,$5,$3)`, f.s.config.ForgeURL, incarnation, strings.Repeat("a", 64), strings.Repeat("b", 40), "sha256:"+strings.Repeat("c", 64)); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -314,7 +314,7 @@ func TestRepositoryDeletionExactReceiptPostgres(t *testing.T) {
 			var blocked bool
 			f.s.db.QueryRow(`SELECT count(*) FROM golf_repository_lifecycle_events`).Scan(&phases)
 			f.s.db.QueryRow(`SELECT count(*) FROM golf_repository_activity WHERE topic='source'`).Scan(&activity)
-			f.s.db.QueryRow(`SELECT golf_repository_lifecycle_blocked($1,$2)`, f.s.config.GiteaURL, f.row.ID).Scan(&blocked)
+			f.s.db.QueryRow(`SELECT golf_repository_lifecycle_blocked($1,$2)`, f.s.config.ForgeURL, f.row.ID).Scan(&blocked)
 			if phases != 3 || activity != 1 || !blocked {
 				t.Fatal("durable phases/activity/original-ID fence", phases, activity, blocked)
 			}
@@ -407,7 +407,7 @@ func TestRepositoryDeletionStaleAndActivePostgres(t *testing.T) {
 		t.Fatal("active work not refused", e)
 	}
 	var active int64
-	f.s.db.QueryRow(`SELECT golf_repository_lifecycle_active($1,$2)`, f.s.config.GiteaURL, f.row.ID).Scan(&active)
+	f.s.db.QueryRow(`SELECT golf_repository_lifecycle_active($1,$2)`, f.s.config.ForgeURL, f.row.ID).Scan(&active)
 	if active != 1 {
 		t.Fatal("previous active-family wrapper lost", active)
 	}

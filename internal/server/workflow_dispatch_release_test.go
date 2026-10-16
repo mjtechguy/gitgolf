@@ -291,9 +291,9 @@ func TestWorkflowManualReleaseLateAuthorityPostgres(t *testing.T) {
 						t.Fatal("late logout fixture", err)
 					}
 				case "policy":
-					_, err = f.server.db.Exec(`UPDATE golf_execution_policies SET manual_dispatch_enabled=false,revision=revision+1,revocation_epoch=revocation_epoch+1 WHERE forge_url=$1 AND scope='instance'`, f.server.config.GiteaURL)
+					_, err = f.server.db.Exec(`UPDATE golf_execution_policies SET manual_dispatch_enabled=false,revision=revision+1,revocation_epoch=revocation_epoch+1 WHERE forge_url=$1 AND scope='instance'`, f.server.config.ForgeURL)
 				case "worker":
-					_, err = f.server.db.Exec(`INSERT INTO golf_runner_controls(forge_url,runner_id,state,version) VALUES($1,'fixture','revoked',1)`, f.server.config.GiteaURL)
+					_, err = f.server.db.Exec(`INSERT INTO golf_runner_controls(forge_url,runner_id,state,version) VALUES($1,'fixture','revoked',1)`, f.server.config.ForgeURL)
 				case "cancel":
 					_, err = f.server.db.Exec(`UPDATE golf_workflow_runs SET cancel_requested=true,version=version+1 WHERE id=$1`, admitted.Id)
 				}

@@ -38,7 +38,7 @@ func TestApiWriteGrantNative(t *testing.T) {
 	}
 	sessions, _, _, httpClient, origin := testRPCClients(t, s)
 	s.config.PublicURL = origin.String()
-	login, e := sessions.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: fixture.Token}))
+	login, e := sessions.LoginWithForgeToken(t.Context(), connect.NewRequest(&golfv1.LoginWithForgeTokenRequest{Token: fixture.Token}))
 	if e != nil || login.Msg.User == nil {
 		t.Fatal("native source login", connect.CodeOf(e))
 	}

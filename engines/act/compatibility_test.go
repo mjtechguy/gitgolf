@@ -29,7 +29,7 @@ func TestPinnedRequestsLintRefusal(t *testing.T) {
 	}
 }
 
-func TestGiteaWorkflowPlanBinding(t *testing.T) {
+func TestForgejoWorkflowPlanBinding(t *testing.T) {
 	input := testInputAtPath(t, ".forgejo/workflows/graph.yml", "on: [workflow_dispatch, push]\njobs:\n  check:\n    runs-on: linux\n    steps:\n      - run: echo owned\n", nil)
 	for _, event := range []string{"workflow_dispatch", "push"} {
 		input.Event = event

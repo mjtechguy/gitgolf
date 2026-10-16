@@ -22,7 +22,7 @@ os.umask(0o077)
 args.output.mkdir(parents=True, exist_ok=False)
 common = Path(subprocess.check_output(['git', 'rev-parse', '--git-common-dir'], text=True).strip()).resolve()
 def admin(*args):
-    return smoke.command('docker', 'compose', 'exec', '-T', 'gitea', 'gitea', '--config', '/etc/gitea/app.ini', 'admin', 'user', *args, cwd=common.parent)
+    return smoke.command('docker', 'compose', 'exec', '-T', 'forgejo', 'forgejo', '--config', '/var/lib/gitea/custom/conf/app.ini', 'admin', 'user', *args, cwd=common.parent)  # Forgejo's upstream path
 name = 'golf-engagement-' + secrets.token_hex(5)
 report = {'passed': False, 'ownedUserPurged': False, 'servedRuntimeQualified': False}
 created, reader, organization, token = False, None, None, None
@@ -40,7 +40,7 @@ try:
     comment = smoke.provider(token, 'POST', route+'/issues/'+str(issue['number'])+'/comments', {'body': 'Owned ordinary native comment'}, expected=201)
     probe = smoke.provider(token, 'POST', route+'/issues', {'title': 'Owned native status probe'}, expected=201)
     smoke.provider(token, 'POST', route+'/issues/'+str(probe['number'])+'/reactions', {'content': '+1'}, expected=201)
-    request = urllib.request.Request(smoke.GITEA+'/api/v1/'+route+'/issues/'+str(probe['number'])+'/reactions', data=json.dumps({'content': '+1'}).encode(), method='DELETE', headers={'Authorization': 'token '+token, 'Content-Type': 'application/json'})
+    request = urllib.request.Request(smoke.FORGE+'/api/v1/'+route+'/issues/'+str(probe['number'])+'/reactions', data=json.dumps({'content': '+1'}).encode(), method='DELETE', headers={'Authorization': 'token '+token, 'Content-Type': 'application/json'})
     with urllib.request.urlopen(request, timeout=15) as response:
         report['nativeReactionDeleteStatus'] = response.status
     reader = name+'-reader'
@@ -55,7 +55,7 @@ try:
     org_repo = smoke.provider(token, 'POST', 'orgs/'+organization+'/repos', {'name': 'labels', 'private': True}, expected=201)
     org_issue = smoke.provider(token, 'POST', 'repos/'+org_repo['full_name']+'/issues', {'title': 'Owned inherited label issue'}, expected=201)
     org_label = smoke.provider(token, 'POST', 'orgs/'+organization+'/labels', {'name': 'inherited/bug', 'color': 'abcdef'}, expected=201)
-    payload = {'NativeURL': smoke.GITEA, 'Token': token, 'Owner': name, 'Name': repo['name'], 'RepositoryID': str(repo['id']), 'IssueID': str(issue['id']), 'Number': issue['number'], 'CommentID': str(comment['id']), 'ReaderToken': reader_token, 'Organization': organization, 'OrganizationRepositoryID': str(org_repo['id']), 'OrganizationIssueID': str(org_issue['id']), 'OrganizationNumber': org_issue['number'], 'OrganizationLabelID': str(org_label['id'])}
+    payload = {'NativeURL': smoke.FORGE, 'Token': token, 'Owner': name, 'Name': repo['name'], 'RepositoryID': str(repo['id']), 'IssueID': str(issue['id']), 'Number': issue['number'], 'CommentID': str(comment['id']), 'ReaderToken': reader_token, 'Organization': organization, 'OrganizationRepositoryID': str(org_repo['id']), 'OrganizationIssueID': str(org_issue['id']), 'OrganizationNumber': org_issue['number'], 'OrganizationLabelID': str(org_label['id'])}
     report['sourceRevision'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
     report['sourceFilesSha256'] = {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in ['internal/server/discussion_engagement.go', 'internal/server/discussion_resource_operations.go', 'internal/server/discussion_engagement_native_test.go', 'internal/server/forge_notification_inbox.go', 'internal/server/issue_templates.go', 'internal/server/repository_labels.go', 'api/golf/v1/golf.proto', 'scripts/discussion-engagement-native-proof.py']}
     report['nativeVersion'] = smoke.provider(token, 'GET', 'version')['version']

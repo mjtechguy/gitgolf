@@ -31,7 +31,7 @@ func newReviewCommentsFixture(t *testing.T) *reviewCommentsFixture {
 	provider := httptest.NewServer(http.HandlerFunc(f.serveComments))
 	t.Cleanup(provider.Close)
 	config := testConfig(provider.URL)
-	config.GiteaPublicURL, config.GiteaOAuthClientID, config.GiteaOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
+	config.ForgePublicURL, config.ForgeOAuthClientID, config.ForgeOAuthClientSecret = provider.URL, "fixture-client", "fixture-secret"
 	var err error
 	f.s, err = New(config, f.db)
 	if err != nil {
