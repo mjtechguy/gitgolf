@@ -1,5 +1,17 @@
 # Golf implementation status
 
+## 2026-10-16 — Indexes for the review's reads; recent landings by last update (schema 55)
+
+- **Migration 0055** adds four indexes, all `CREATE INDEX IF NOT EXISTS`:
+  - `pull_merge_operations(updated_at, actor_id, operation_id)` for successful merges, used by AI impact's merge read;
+  - `land_operations(repository_id, updated_at, id)`;
+  - `evidence_jobs(repository_id, created_at, id)`;
+  - `previews(repository_id, created_at, id)`.
+- **Query plans:** `EXPLAIN QUERY PLAN` on `schema.sql` shows each read searching its new index with no temporary sort. Before, the merge read scanned successful merges; the other three read every row of the repository and then sorted.
+- **Recent landings** now lists the most recently updated land operations first, as the review suggested, so a landing reverted or retried later is brought forward. The page text and `docs/AGENTIC_MODE.md` say so.
+- **Schema version:** the release manifest says 55. Diagnostics detect schema versions by table, so they keep reporting 54, the same as after the index-only migrations 0050 and 0051.
+- **Checks:** forge suite 801 pass, 0 fail. `land` and `agentic-mode` specs 12 of 12. Typecheck passes.
+
 ## 2026-10-16 — An external review's 26 findings checked and fixed (#163–#166, no migration, on hosted)
 
 - **Source:** an external review listed 26 findings, mostly lists whose caps, order or labels did not match what they read, plus some races and one secret-handling gap. Each was checked against the code first; 24 were real, 2 were partly real. All have a fix, each with a test that fails on the old code.

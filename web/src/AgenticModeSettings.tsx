@@ -112,8 +112,8 @@ function RecentLandings({ userId, owner, name, target }: { userId: string; owner
   return <section className="browser-panel" aria-labelledby="agentic-landings-title"><div className="browser-panel-heading"><h2 id="agentic-landings-title">Recent landings</h2>
     <button className="button secondary" aria-label="Refresh recent landings" disabled={lands.isFetching} onClick={() => void lands.refetch()}><RefreshCw size={15} className={lands.isFetching ? 'spin' : ''} />Refresh</button></div>
     {lands.error ? <PanelError error={lands.error} retry={() => void lands.refetch()} /> : !lands.data ? <Loading label="Reading recent landings…" /> : <>
-      {lands.data.more ? <p className="field-help">The {lands.data.operations.length} most recently started land operations are loaded; older ones are not, and search and sorting cover only these.</p>
-        : lands.data.operations.length ? <p className="field-help">{lands.data.operations.length === 1 ? 'The one land operation is' : `All ${lands.data.operations.length} land operations are`} loaded, newest started first.</p> : null}
+      {lands.data.more ? <p className="field-help">The {lands.data.operations.length} most recently updated land operations are loaded; older ones are not, and search and sorting cover only these.</p>
+        : lands.data.operations.length ? <p className="field-help">{lands.data.operations.length === 1 ? 'The one land operation is' : `All ${lands.data.operations.length} land operations are`} loaded, most recently updated first.</p> : null}
       <DataTable data={lands.data.operations} columns={columns} getRowId={op => op.id} label="Recent landings" emptyMessage="Nothing has been landed through agentic mode yet." />
     </>}
   </section>;

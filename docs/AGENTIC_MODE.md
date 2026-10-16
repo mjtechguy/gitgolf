@@ -226,10 +226,10 @@ reads and evaluations are not recorded.
   cover that list.
   - **Edit agentic mode** opens a TanStack Form. The paths and checks are one per line.
   - Turning on **Land without a person** shows a warning about broad low-risk patterns.
-  - **Recent landings** (schema 42): up to the 50 most recently started land operations
+  - **Recent landings** (schema 42): up to the 50 most recently updated land operations
     in the shared DataTable (pull request, state, who landed it, outcome, last update).
-    The read is ordered by start time, which its index covers, not by last update: an
-    older landing reverted or retried later is not brought forward. The page says how
+    An older landing reverted or retried later is brought forward; the
+    `(repository_id, updated_at, id)` index (schema 55) covers the order. The page says how
     many were loaded and, only when older ones exist, that they are omitted and that
     search and sorting cover only the loaded ones.
 - **Pull request sidebar → Landing.** It is shown while agentic mode is on for the
