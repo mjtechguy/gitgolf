@@ -54,6 +54,9 @@ async function fixture(page: Page, count = 1, showByDefault = true) {
 
 // An exact attribute match: getByLabel computes accessible names across all 1000 rows on every poll, which competes
 // with the page for the main thread and made these tests depend on machine load.
+// Row reads start only after the listing commits. In the dev build, rendering 1000 rows is one main-thread task of
+// seconds under parallel load, so wait for the listing before asserting on its reads.
+const listed = (page: Page) => expect(page.locator('.source-tree>li')).toHaveCount(1000);
 const entry = (page: Page, path = 'row-000.ts') => page.locator(`.source-entry-commit[aria-label="Latest change for ${path}"]`);
 
 test('directory renders files before optional latest-change reads', async ({ page }) => {
@@ -86,7 +89,7 @@ test('directory changes bind each visible path to the exact repository/snapshot 
 test('1000-row directory does not eagerly request offscreen history and permits only three active row reads', async ({ page }) => {
   const state = await fixture(page, 1000); state.hold = true;
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await page.goto(`/alex/entry-history/tree/${ref}`); await listed(page);
   await expect.poll(() => state.calls.length).toBe(3);
   expect(state.active).toBe(3); expect(state.peak).toBe(3);
   expect(state.calls.some(call => call.path === 'row-050.ts')).toBe(false);
@@ -103,7 +106,7 @@ test('scrolling away cancels inflight and queued row reads before newly visible 
   const state = await fixture(page, 1000); state.hold = true;
   const canceled: string[] = [];
   page.on('requestfailed', req => { if (req.url().endsWith('/ListCommits')) canceled.push(req.postDataJSON().path); });
-  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await page.goto(`/alex/entry-history/tree/${ref}`); await listed(page);
   await expect.poll(() => state.calls.length).toBe(3);
   await entry(page, 'row-980.ts').scrollIntoViewIfNeeded();
   await expect.poll(() => canceled.length).toBeGreaterThan(0);
@@ -128,14 +131,14 @@ for (const invalid of ['path', 'ref', 'repository', 'sha', 'empty', 'multiple', 
 
 test('sign-out cancels queued/inflight changes and a new account cannot receive the old result', async ({ page }) => {
   const state = await fixture(page, 1000); state.hold = true;
-  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await page.goto(`/alex/entry-history/tree/${ref}`); await listed(page);
   await expect.poll(() => state.calls.length).toBe(3);
   await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   state.hold = false; state.held.splice(0).forEach(release => release());
   await expect(page.locator('.source-entry-commit')).toHaveCount(0);
   state.user = create(UserSchema, { id: '9007199254740994', login: 'sam', fullName: 'Sam' }); state.signedIn = true;
-  await page.reload();
+  await page.reload(); await listed(page);
   await expect(entry(page).getByRole('link')).toHaveText('PRIVATE sam: row-000.ts');
   await expect(page.locator('main')).not.toContainText('PRIVATE alex');
 });
@@ -244,7 +247,7 @@ test('invalid commit dates retain the unavailable fallback without inventing a r
 test('repeated scrolling preserves the accepted row DOM and performs no duplicate exact history read', async ({ page }) => {
   const state = await fixture(page, 1000);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await page.goto(`/alex/entry-history/tree/${ref}`); await listed(page);
   const link = entry(page).getByRole('link');
   await expect(link).toHaveText('PRIVATE alex: row-000.ts');
   await link.evaluate(element => { (window as Window & { acceptedRow?: Element }).acceptedRow = element; });
@@ -266,7 +269,7 @@ test('repeated scrolling preserves the accepted row DOM and performs no duplicat
 
 test('terminal row authority denial remains unavailable across viewport reentry without retrying', async ({ page }) => {
   const state = await fixture(page, 1000); state.invalid = 'denied';
-  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await page.goto(`/alex/entry-history/tree/${ref}`); await listed(page);
   await expect(entry(page)).toHaveText('Latest change unavailable');
   const calls = state.calls.filter(call => call.path === 'row-000.ts').length;
   await entry(page, 'row-050.ts').scrollIntoViewIfNeeded();

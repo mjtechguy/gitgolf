@@ -19,6 +19,9 @@ async function backend(page:Page){
  await page.route('**/rpc/**',async route=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,portableRuntimeFixture);
+  // No live stream: answer the way a Connect server reports an unimplemented streaming method. rpc.ts's HTTP 501 reaches a
+  // stream as Unknown, a dropped stream whose fallback revalidates the pull (and hides private content) every 1-15 s.
+  if(method==='WatchRepository'){const body=Buffer.from(JSON.stringify({error:{code:'unimplemented',message:'No live stream in this unary fixture.'}}));const header=Buffer.alloc(5);header[0]=2;header.writeUInt32BE(body.length,1);return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([header,body])});}
   if(method==='GetSession')return state.signedIn?respond(route,GetSessionResponseSchema,{user:state.user}):reject(route,'unauthenticated','Sign in required.');
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
   if(method==='Logout'){state.signedIn=false;return respond(route,LogoutResponseSchema,{});}

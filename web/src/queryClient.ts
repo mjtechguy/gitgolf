@@ -30,7 +30,9 @@ export function createQueryClient() {
   let pruning = false;
   const measured = new WeakMap<object, { data: unknown; bytes: number }>();
   client.getQueryCache().subscribe(event => {
-    if (pruning || !event.query.meta?.privateNavigation || !['updated', 'observerRemoved'].includes(event.type)) return;
+    // Only a query that holds data can change what is retained. Skipping the rest keeps a directory's row reads (one event
+    // each per fetch, cancel and unmount) from rescanning the whole cache every time.
+    if (pruning || !event.query.meta?.privateNavigation || !['updated', 'observerRemoved'].includes(event.type) || event.query.state.data === undefined) return;
     pruning = true;
     try {
       const retained = client.getQueryCache().findAll({ predicate: query => Boolean(query.meta?.privateNavigation) && query.state.data !== undefined });
