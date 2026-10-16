@@ -196,6 +196,8 @@ test('assigning an issue shows unusable tools disabled with their reason, stream
   await expect(dialog.getByRole('radio', { name: /Grok/ })).toBeDisabled();
   await expect(dialog.getByText('only the person who registered it may run tools')).toBeVisible();
   await dialog.getByLabel('Instructions').fill('Keep the public API unchanged.');
+  // The prompt bound and what it cuts first (agent-hosts.mjs buildPrompt).
+  await expect(dialog.getByText('in a prompt of at most 32 KiB. When they do not fit, Golf shortens the description first, then leaves out the oldest of those comments')).toBeVisible();
   await dialog.getByRole('button', { name: 'Assign', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   const create = state.calls.find(c => c.action === 'create')!;

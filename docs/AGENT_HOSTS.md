@@ -253,8 +253,12 @@ operations administrators.
 - `create` `{ target: { kind, number }, hostId, tool, model?, instructions?, idempotencyKey }`
   → `{ task }`. `instructions` ≤ 4 KiB. The server builds the prompt from the issue or
   pull request title and body, up to the 20 most recent comments, and the
-  instructions (total ≤ 32 KiB, truncated with a marker), plus a fixed preamble that
-  says to change files in the working copy only and not to push.
+  instructions (total ≤ 32 KiB), plus a fixed preamble that says to change files in the
+  working copy only and not to push. Over the bound the description is cut first (with a
+  marker, down to half of what the discussion may use), so the newest comments stay;
+  older comments are then left out whole and the comments heading says how many, and a
+  newest comment that alone does not fit is cut with a marker. Instructions are never
+  cut. The assign form states this rule.
   Issue → base is the default branch head. Pull request → base is the pull request's
   head commit and branch.
 - `list` `{ target? }` → `{ tasks, canAssign }` (newest first, 50).
