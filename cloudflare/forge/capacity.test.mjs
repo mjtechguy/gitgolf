@@ -90,6 +90,22 @@ test('pools group runners by engine and label names; queued jobs match the claim
   assert.deepEqual({ queued: only.queued, running: only.running, online: only.online, unmatched: unmatched.queued }, { queued: 1, running: 2, online: 1, unmatched: 2 });
 });
 
+test('a truncated queue read keeps the longest waits, not the lowest job ids, and says only the job read was cut', async t => {
+  const f = await fixture(t);
+  f.sql.exec(`INSERT INTO pipeline_runners(id,uuid,engine,scope,scope_id,name,labels,token_digest,state,created_by,created_at,last_seen_at) VALUES(1,'u1','gitlab-ci','installation','','gl','[]','d1','ACTIVE',1,'t','${ago(5)}');
+    INSERT INTO pipeline_runs(id,repository_id,artifact_name,engine,number,workflow_path,workflow_name,event,ref,commit_id,actor_id,trusted,state,created_at,updated_at) VALUES(1,1,'repo-1','gitlab-ci',1,'.gitlab-ci.yml','ci','push','refs/heads/main','c',1,1,'QUEUED','t','t')`);
+  const job = f.sql.prepare("INSERT INTO pipeline_jobs(run_id,attempt,engine,job_key,name,runs_on,payload,state,created_at,queued_at,updated_at) VALUES(1,1,'gitlab-ci',?,?,'[]','x','QUEUED','t',?,'t')");
+  // The lowest id was just re-queued by a retry; the highest id has waited longest.
+  job.run('j0', 'j0', ago(10));
+  for (let i = 1; i <= 5000; i++) job.run('j' + i, 'j' + i, ago(100));
+  job.run('old', 'old', ago(9000));
+  const { value } = await f.call('alice', '/native/capacity/read', { action: 'read' });
+  assert.deepEqual([value.selfHosted.truncated, value.selfHosted.runnersTruncated, value.selfHosted.jobsTruncated], [true, false, true]);
+  const [pool] = value.selfHosted.pools;
+  assert.equal(pool.queued, 5000);
+  assert.ok(pool.oldestWaitSeconds >= 8999, String(pool.oldestWaitSeconds));
+});
+
 test('the capacity inventory is for operations administrators, read in the stateless Worker, and reports every source honestly', async t => {
   const f = await fixture(t);
   assert.equal(concurrentRead(new Request(origin + '/native/capacity/read', { method: 'POST' })), true);
