@@ -45,7 +45,7 @@ applied; a person who lost access makes the run `REFUSED`, and nothing is writte
 | `list` | read | — | `{ scope, canManage, featureOn, featureReason, automations, inherited, inheritedTruncated, tools, engines, enginesRegistered, hosts, places }`. `inherited`: the organization and installation automations reaching a repository (targets every repository in scope or names this one, filtered before the limit), read-only, by scope then name; `inheritedTruncated` when more than both scopes' bound (200) match. |
 | `get` | read | `id` | `{ automation (with instructions), instructionVersions }` |
 | `instructions` | read | `id`, `version` | `{ version, text, createdBy, createdAt, current }` |
-| `runs` | read | `automationId?` | `{ runs, truncated }`, newest 50. A repository sees every run on it. |
+| `runs` | read | `automationId?` | `{ runs, truncated }`: the 50 most recently created (by `created_at`, not start), `truncated` when older runs exist. A repository sees every run on it. The runs table shows the created time with the start time beneath it. |
 | `create` | change | `tool` and any definition field | `{ automation }` |
 | `update` | change | `id`, `expectedVersion`, changed fields | `{ automation }` |
 | `setEnabled` | change | `id`, `expectedVersion`, `enabled` | `{ automation }` |

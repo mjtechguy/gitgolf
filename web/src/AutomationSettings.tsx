@@ -297,9 +297,15 @@ function RunNow({ automation, inventory, target, close, done }: { automation: Au
 }
 
 // ---------- runs ----------
+// The page is the newest runs by creation (the order the server reads), not by start.
+function loadedRuns({ runs, truncated }: { runs: Run[]; truncated: boolean }, where: string) {
+  if (!runs.length) return '';
+  return truncated ? `The ${runs.length} most recently created runs${where} are loaded; older runs are not shown. Search and sorting cover only those. `
+    : `${runs.length === 1 ? 'The only run' : `All ${runs.length} runs`}${where} ${runs.length === 1 ? 'is' : 'are'} loaded. `;
+}
 function RunsPanel({ target, runs }: { target: AutomationTarget; runs: UseQueryResult<{ runs: Run[]; truncated: boolean }> }) {
   const columns: DataTableColumn<Run>[] = [
-    { accessorKey: 'createdAt', header: 'Started', enableGlobalFilter: false, cell: ({ row: { original: r } }) => <DateLabel value={r.startedAt || r.createdAt} relative /> },
+    { accessorKey: 'createdAt', header: 'Created', enableGlobalFilter: false, cell: ({ row: { original: r } }) => <div className="automation-cell"><DateLabel value={r.createdAt} relative />{r.startedAt ? <small>started <DateLabel value={r.startedAt} relative /></small> : <small>not started</small>}</div> },
     { accessorKey: 'automationName', header: 'Automation' },
     ...(target.scope === 'repository' ? [] : [{ accessorKey: 'repository', header: 'Repository' } as DataTableColumn<Run>]),
     { id: 'trigger', header: 'Trigger', accessorFn: r => `${triggerLabels[r.trigger] || r.trigger}${r.requestedBy ? ` ${r.requestedBy}` : ''}`,
@@ -314,7 +320,7 @@ function RunsPanel({ target, runs }: { target: AutomationTarget; runs: UseQueryR
   return <section className="browser-panel" aria-labelledby="automation-runs-title"><div className="browser-panel-heading"><h2 id="automation-runs-title">Runs</h2>
     <button className="button secondary" aria-label="Refresh runs" disabled={runs.isFetching} onClick={() => void runs.refetch()}><RefreshCw size={15} className={runs.isFetching ? 'spin' : ''} />Refresh</button></div>
     {runs.error ? <PanelError error={runs.error} retry={() => void runs.refetch()} /> : !runs.data ? <Loading label="Reading runs…" /> : <>
-      <p className="field-help">The 50 most recent runs{target.scope === 'repository' ? ' on this repository' : ''} are loaded{runs.data.truncated ? '; older runs are not shown' : ''}. Search and sorting cover only those. Output is written by a model or a coding CLI: it is automated and unverified, and is shown as plain text.</p>
+      <p className="field-help">{loadedRuns(runs.data, target.scope === 'repository' ? ' on this repository' : '')}Output is written by a model or a coding CLI: it is automated and unverified, and is shown as plain text.</p>
       <DataTable data={runs.data.runs} columns={columns} getRowId={r => r.id} label="automation runs" emptyMessage="No automation has run here yet." />
     </>}
   </section>;
