@@ -48,7 +48,7 @@ async function open(page:Page){await page.goto('/owner/sample/pull/3');await pag
 
 test('comments load only on explicit request, preserve IDs/reply authors and render old/new file lines',async({page})=>{
  const s=await backend(page);await page.goto('/owner/sample/pull/3');await expect(page.getByRole('button',{name:'Show inline comments (3)',exact:true})).toBeVisible();expect(s.reads).toHaveLength(0);await page.getByRole('button',{name:'Show inline comments (3)',exact:true}).click();await expect(panel(page).getByRole('article')).toHaveCount(3);
- expect(s.reads).toHaveLength(2);for(const read of s.reads)expect(read).toMatchObject({repository:{owner:'owner',name:'sample'},repositoryId:'7',pullRequestId:'13',number:3,reviewId:review.id,reviewCommitId:head});expect(Object.keys(s.reads[0]!)).not.toContain('page');
+ expect(s.reads).toHaveLength(1);for(const read of s.reads)expect(read).toMatchObject({repository:{owner:'owner',name:'sample'},repositoryId:'7',pullRequestId:'13',number:3,reviewId:review.id,reviewCommitId:head});expect(Object.keys(s.reads[0]!)).not.toContain('page');
  await expect(panel(page)).toContainText('Current observed head');await expect(panel(page)).toContainText('contributor');await expect(panel(page)).toContainText('Deleted or unavailable author');await expect(panel(page)).toContainText('Old line 4');await expect(panel(page)).toContainText('New line 3');await expect(panel(page).getByRole('link',{name:/View .*line/})).toHaveCount(0);await expect(panel(page).getByRole('button',{name:/Load more/})).toHaveCount(0);
  await expect(panel(page).getByRole('article',{name:`Inline comment ${comment.id}`,exact:true})).toContainText('Comment resolved');await expect(panel(page).getByRole('article',{name:`Inline comment ${reply.id}`,exact:true})).not.toContainText('Comment resolved');
  await panel(page).getByRole('article',{name:`Inline comment ${comment.id}`,exact:true}).getByText('Comment details',{exact:true}).click();await expect(panel(page)).toContainText('Deleted or unavailable resolver');await expect(panel(page)).toContainText('Line / blame commit');await expect(panel(page)).toContainText(base);
@@ -65,18 +65,18 @@ for(const current of ['earlier','unavailable'])test(`${current} head is labeled 
 });
 
 for(const wrong of ['repository','pull','review','review-commit','count','head'])test(`mismatched ${wrong} receipt reveals no comment text`,async({page})=>{
- const s=await backend(page);s.wrong=wrong;await open(page);await expect(panel(page).getByRole('alert')).toContainText('do not match');await expect(panel(page)).not.toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(2);
+ const s=await backend(page);s.wrong=wrong;await open(page);await expect(panel(page).getByRole('alert')).toContainText('do not match');await expect(panel(page)).not.toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(1);
 });
 
 for(const invalid of ['duplicate','id','review-id','zero-lines','both-lines','huge-line','path','date','blame','hunk','body','collection'])test(`invalid ${invalid} fails the whole bounded collection`,async({page})=>{
  const s=await backend(page);const first=s.comments[0]!;
  if(invalid==='duplicate')s.comments[1]=clone(PullRequestReviewCommentSchema,first);
  if(invalid==='id')first.id='0';if(invalid==='review-id')first.reviewId='99';if(invalid==='zero-lines')first.newLine=0;if(invalid==='both-lines')first.oldLine=3;if(invalid==='huge-line')first.newLine=2147483648;if(invalid==='path')first.path='../secret';if(invalid==='date')first.createdAt='not-a-date';if(invalid==='blame')first.commitId='main';if(invalid==='hunk')first.diffHunk='x'.repeat(65537);if(invalid==='body')first.body='x'.repeat(262145);if(invalid==='collection')s.comments=Array.from({length:101},(_,i)=>create(PullRequestReviewCommentSchema,{...first,id:String(i+1)}));
- await open(page);await expect(panel(page).getByRole('alert')).toBeVisible();await expect(panel(page).getByRole('article')).toHaveCount(0);await expect(panel(page)).not.toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(2);
+ await open(page);await expect(panel(page).getByRole('alert')).toBeVisible();await expect(panel(page).getByRole('article')).toHaveCount(0);await expect(panel(page)).not.toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(1);
 });
 
 test('a current complete zero-comment read is distinct from a stale list count',async({page})=>{
- const s=await backend(page);s.comments=[];await open(page);await expect(panel(page)).toContainText('No inline comments are visible in this current review observation.');expect(s.reads).toHaveLength(2);
+ const s=await backend(page);s.comments=[];await open(page);await expect(panel(page)).toContainText('No inline comments are visible in this current review observation.');expect(s.reads).toHaveLength(1);
 });
 
 test('native zero count and pending records do not trigger eager reads or claim comment absence',async({page})=>{
@@ -84,7 +84,7 @@ test('native zero count and pending records do not trigger eager reads or claim 
 });
 
 test('refresh hides private comments while revalidating and denial clears the collection',async({page})=>{
- const s=await backend(page);await open(page);await expect(panel(page)).toContainText('PRIVATE INLINE');let release!:()=>void;s.hold=new Promise(r=>release=r);s.denied=true;await page.getByRole('button',{name:`Refresh inline comments for review ${review.id}`} ).click();await expect(panel(page)).toContainText('Reading inline comments');await expect(panel(page)).not.toContainText('PRIVATE INLINE');release();await expect(panel(page).getByRole('alert')).toContainText('inaccessible');await expect(panel(page)).not.toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(3);
+ const s=await backend(page);await open(page);await expect(panel(page)).toContainText('PRIVATE INLINE');let release!:()=>void;s.hold=new Promise(r=>release=r);s.denied=true;await page.getByRole('button',{name:`Refresh inline comments for review ${review.id}`} ).click();await expect(panel(page)).toContainText('Reading inline comments');await expect(panel(page)).not.toContainText('PRIVATE INLINE');release();await expect(panel(page).getByRole('alert')).toContainText('inaccessible');await expect(panel(page)).not.toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(2);
 });
 
 test('a dropped live stream revalidates reviews without collapsing an opened inline-comment panel',async({page})=>{
@@ -94,11 +94,11 @@ test('a dropped live stream revalidates reviews without collapsing an opened inl
 });
 
 test('collapse cancels an inflight read; later reopen performs a fresh read',async({page})=>{
- const s=await backend(page);let release!:()=>void;s.hold=new Promise(r=>release=r);await open(page);await expect.poll(()=>s.reads.length).toBe(2);await page.getByRole('button',{name:'Hide inline comments (3)',exact:true}).click();await expect(panel(page)).toHaveCount(0);release();s.hold=undefined;await page.getByRole('button',{name:'Show inline comments (3)',exact:true}).click();await expect(panel(page)).toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(4);
+ const s=await backend(page);let release!:()=>void;s.hold=new Promise(r=>release=r);await open(page);await expect.poll(()=>s.reads.length).toBe(1);await page.getByRole('button',{name:'Hide inline comments (3)',exact:true}).click();await expect(panel(page)).toHaveCount(0);release();s.hold=undefined;await page.getByRole('button',{name:'Show inline comments (3)',exact:true}).click();await expect(panel(page)).toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(2);
 });
 
 test('PR access revocation removes an open reader and late results cannot restore private content',async({page})=>{
- const s=await backend(page);let release!:()=>void;s.hold=new Promise(r=>release=r);await open(page);await expect.poll(()=>s.reads.length).toBe(2);s.detailDenied=true;await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(panel(page)).toHaveCount(0);release();await expect(page.locator('body')).not.toContainText('PRIVATE INLINE');
+ const s=await backend(page);let release!:()=>void;s.hold=new Promise(r=>release=r);await open(page);await expect.poll(()=>s.reads.length).toBe(1);s.detailDenied=true;await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(panel(page)).toHaveCount(0);release();await expect(page.locator('body')).not.toContainText('PRIVATE INLINE');
 });
 
 test('expired comment read immediately signs out and discards private workspace',async({page})=>{
@@ -106,7 +106,7 @@ test('expired comment read immediately signs out and discards private workspace'
 });
 
 test('sign-out cancels delayed reads and a new account does not receive old private results',async({page})=>{
- const s=await backend(page);let release!:()=>void;s.hold=new Promise(r=>release=r);await open(page);await expect.poll(()=>s.reads.length).toBe(2);await page.getByLabel('Your account',{exact:true}).click();await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.getByLabel('Email or username')).toBeVisible();release();s.hold=undefined;s.signedIn=true;s.user=create(UserSchema,{id:'5',login:'new-reader'});await page.reload();await expect(page.getByRole('button',{name:'Show inline comments (3)',exact:true})).toBeVisible();await expect(panel(page)).toHaveCount(0);await expect(page.locator('body')).not.toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(2);
+ const s=await backend(page);let release!:()=>void;s.hold=new Promise(r=>release=r);await open(page);await expect.poll(()=>s.reads.length).toBe(1);await page.getByLabel('Your account',{exact:true}).click();await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.getByLabel('Email or username')).toBeVisible();release();s.hold=undefined;s.signedIn=true;s.user=create(UserSchema,{id:'5',login:'new-reader'});await page.reload();await expect(page.getByRole('button',{name:'Show inline comments (3)',exact:true})).toBeVisible();await expect(panel(page)).toHaveCount(0);await expect(page.locator('body')).not.toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(1);
 });
 
 for(const theme of ['dark','light'])for(const width of [1280,390])test(`compact inline comments fit ${theme} at ${width} with keyboard disclosures`,async({page})=>{
@@ -116,7 +116,7 @@ for(const theme of ['dark','light'])for(const width of [1280,390])test(`compact 
 
 test('own pending review comments are visible before explicit authoring inspection; foreign pending has no read action',async({page})=>{
  const s=await backend(page);s.review.state=PullRequestReviewState.PENDING;s.review.updatedAt='2026-10-04T13:00:00Z';await open(page);const reviews=page.getByRole('region',{name:'Reviews',exact:true});await expect(reviews).toContainText('Draft updated');await expect(reviews.locator('.pull-review-list > li > p.muted time')).toHaveCount(1);await expect(reviews.locator('.pull-review-list > li > p.muted time')).toHaveAttribute('datetime',s.review.updatedAt);await expect(page.getByRole('region',{name:'Reviews',exact:true})).not.toContainText('Submitted');await expect(panel(page)).toContainText('Private pending review');await expect(panel(page)).toContainText('PRIVATE INLINE');await expect(panel(page).getByRole('button',{name:/Submit|Reply|Discard/})).toHaveCount(0);
- await page.getByRole('button',{name:'Hide inline comments (3)',exact:true}).click();s.review.user=create(UserSchema,{id:'8',login:'other'});await page.getByRole('button',{name:'Refresh reviews',exact:true}).click();await expect(page.getByRole('button',{name:/Show inline comments/})).toHaveCount(0);expect(s.reads).toHaveLength(2);
+ await page.getByRole('button',{name:'Hide inline comments (3)',exact:true}).click();s.review.user=create(UserSchema,{id:'8',login:'other'});await page.getByRole('button',{name:'Refresh reviews',exact:true}).click();await expect(page.getByRole('button',{name:/Show inline comments/})).toHaveCount(0);expect(s.reads).toHaveLength(1);
 });
 
 test('pending response cannot swap ownership into the selected reader',async({page})=>{
@@ -154,7 +154,7 @@ test('resolved author identity is per comment and native stale remains separate 
 });
 
 test('closing Files changed comments cancels delayed reads and removes the private reader',async({page})=>{
- const s=await backend(page);let release!:()=>void;s.hold=new Promise(r=>release=r);await page.goto('/owner/sample/pull/3/files');await page.getByRole('button',{name:'Show review comments',exact:true}).click();await page.getByRole('button',{name:'Show inline comments (3)',exact:true}).click();await expect.poll(()=>s.reads.length).toBe(2);await page.getByRole('button',{name:'Hide review comments',exact:true}).click();release();s.hold=undefined;await expect(panel(page)).toHaveCount(0);await expect(page.locator('body')).not.toContainText('PRIVATE INLINE');await page.getByRole('button',{name:'Show review comments',exact:true}).click();await expect(page.getByRole('button',{name:'Show inline comments (3)',exact:true})).toBeVisible();await expect(panel(page)).toHaveCount(0);expect(s.reads).toHaveLength(2);
+ const s=await backend(page);let release!:()=>void;s.hold=new Promise(r=>release=r);await page.goto('/owner/sample/pull/3/files');await page.getByRole('button',{name:'Show review comments',exact:true}).click();await page.getByRole('button',{name:'Show inline comments (3)',exact:true}).click();await expect.poll(()=>s.reads.length).toBe(1);await page.getByRole('button',{name:'Hide review comments',exact:true}).click();release();s.hold=undefined;await expect(panel(page)).toHaveCount(0);await expect(page.locator('body')).not.toContainText('PRIVATE INLINE');await page.getByRole('button',{name:'Show review comments',exact:true}).click();await expect(page.getByRole('button',{name:'Show inline comments (3)',exact:true})).toBeVisible();await expect(panel(page)).toHaveCount(0);expect(s.reads).toHaveLength(1);
 });
 
 
@@ -163,5 +163,5 @@ test('constant workspace navigation keeps keyboard focus while private pull cont
 });
 
 test('explicit inline refresh stays available while live and observes native edits without a journal event',async({page})=>{
- const s=await backend(page);s.live=true;await open(page);await expect(page.getByText('Live',{exact:true})).toBeVisible();await expect(page.locator('.repository-browser.live-connected')).toBeVisible();await expect(panel(page)).toContainText('PRIVATE INLINE');await expect(panel(page).getByRole('button',{name:`Refresh inline comments for review ${review.id}`,exact:true})).toBeVisible();await expect(panel(page).getByRole('button',{name:`Refresh inline comments for review ${review.id}`,exact:true})).not.toHaveClass(/manual-refresh/);s.comments[0]!.body='Updated native review comment';s.comments[0]!.resolved=false;s.comments[0]!.resolver=undefined;let release!:()=>void;s.hold=new Promise(r=>release=r);await panel(page).getByRole('button',{name:`Refresh inline comments for review ${review.id}`,exact:true}).click();await expect(panel(page)).toContainText('Reading inline comments…');await expect(panel(page)).not.toContainText('PRIVATE INLINE');release();s.hold=undefined;await expect(panel(page)).toContainText('Updated native review comment');await expect(panel(page).getByRole('article',{name:`Inline comment ${comment.id}`,exact:true})).not.toContainText('Comment resolved');expect(s.reads).toHaveLength(3);
+ const s=await backend(page);s.live=true;await open(page);await expect(page.getByText('Live',{exact:true})).toBeVisible();await expect(page.locator('.repository-browser.live-connected')).toBeVisible();await expect(panel(page)).toContainText('PRIVATE INLINE');await expect(panel(page).getByRole('button',{name:`Refresh inline comments for review ${review.id}`,exact:true})).toBeVisible();await expect(panel(page).getByRole('button',{name:`Refresh inline comments for review ${review.id}`,exact:true})).not.toHaveClass(/manual-refresh/);s.comments[0]!.body='Updated native review comment';s.comments[0]!.resolved=false;s.comments[0]!.resolver=undefined;let release!:()=>void;s.hold=new Promise(r=>release=r);await panel(page).getByRole('button',{name:`Refresh inline comments for review ${review.id}`,exact:true}).click();await expect(panel(page)).toContainText('Reading inline comments…');await expect(panel(page)).not.toContainText('PRIVATE INLINE');release();s.hold=undefined;await expect(panel(page)).toContainText('Updated native review comment');await expect(panel(page).getByRole('article',{name:`Inline comment ${comment.id}`,exact:true})).not.toContainText('Comment resolved');expect(s.reads).toHaveLength(2);
 });

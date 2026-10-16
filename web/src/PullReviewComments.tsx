@@ -1,7 +1,7 @@
 import {PullReviewSuggestions} from "./PullReviewSuggestions";
 import {PullReviewAuthoring} from "./PullReviewAuthoring";
 import {PullReviewCommentResolution} from './PullReviewCommentResolution';
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { ExternalLink, FileCode, MessageSquare, RefreshCw, UserRound } from 'lucide-react';
@@ -50,7 +50,10 @@ function CommentsRead(props:Props){
  const prefix=JSON.stringify(queryKey);
  const key=useMemo(()=>[...queryKey,'pull',pull.number,'review-comments',repositoryId,pull.id,review.id,review.commitId],[prefix,repositoryId,pull.id,pull.number,review.id,review.commitId]);
  useLayoutEffect(()=>{active.current=true;return()=>{active.current=false;void client.cancelQueries({queryKey:key,exact:true});};},[client,key]);
- const query=useQuery({...privateQuery,retry:false,queryKey:key,queryFn:async({signal})=>{const response=await repositoryClient.getPullRequestReviewComments({repository:repositoryKey,repositoryId,pullRequestId:pull.id,number:pull.number,reviewId:review.id,reviewCommitId:review.commitId},{signal,timeoutMs:8000});if(!active.current||client.getQueryData<User|null>(['session'])?.id!==userId)throw new ConnectError('This comment read belongs to an inactive account or selection.',Code.Canceled);return validate(response,props);}});
+ // The read starts after mounting settles. Development's simulated remount otherwise started a read and aborted it at once
+ // (the observer briefly unsubscribes), so an open made one or two reads depending on timing; now it makes one in every build.
+ const [mounted,setMounted]=useState(false);useEffect(()=>setMounted(true),[]);
+ const query=useQuery({...privateQuery,retry:false,enabled:mounted,queryKey:key,queryFn:async({signal})=>{const response=await repositoryClient.getPullRequestReviewComments({repository:repositoryKey,repositoryId,pullRequestId:pull.id,number:pull.number,reviewId:review.id,reviewCommitId:review.commitId},{signal,timeoutMs:8000});if(!active.current||client.getQueryData<User|null>(['session'])?.id!==userId)throw new ConnectError('This comment read belongs to an inactive account or selection.',Code.Canceled);return validate(response,props);}});
 
  return <section className="review-inline-comments" aria-label={`Inline comments for review ${review.id}`}>
   {query.isError?<PanelError error={query.error} retry={()=>void query.refetch()}/>:!query.isSuccess||query.isFetching?<Loading label="Reading inline comments…"/>:<><div className="review-inline-summary">{query.data.review?.state===PullRequestReviewState.PENDING?<span className="visibility">Private pending review</span>:null}<span>{query.data.comments.length} inline {query.data.comments.length===1?'comment':'comments'}</span><span className="visibility">{!query.data.currentHeadCommitId?'Current snapshot unavailable':query.data.review?.commitId===query.data.currentHeadCommitId?'Current observed head':'Earlier snapshot'}</span>{query.data.review?.stale?<span className="visibility">Outdated</span>:null}{query.data.review?.dismissed?<span className="visibility">Dismissed</span>:null}<button type="button" className="icon-button" aria-label={`Refresh inline comments for review ${review.id}`} title="Refresh inline comments" onClick={()=>void query.refetch()}><RefreshCw size={15}/></button></div>
