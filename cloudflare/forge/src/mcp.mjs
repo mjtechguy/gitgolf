@@ -59,7 +59,7 @@ const catalogue = [
     input({ query: str('What to look for, in words (2 to 500 characters).') }, ['query']), async (c, a) => c.call('/native/search/read', { action: 'query', repository: c.key, query: text(a, 'query', { max: 500 }) })],
   ['grep', false, 'Exact text search of every file at a branch, tag or commit: each matching line with its path, line, column and text, ordered by path and line. pattern is a literal string (regular expressions are not available yet). Binary files and files over 1 MiB are skipped; says when the search stopped early (maxResults, 5,000 files, 32 MiB).',
     input({ pattern: str('Literal text to find within one line (at most 1,000 characters).'), ref: refArg,
-      regex: { type: 'boolean', description: 'Not available yet: true is refused. Default false.' }, caseSensitive: { type: 'boolean', description: 'Default true.' },
+      regex: { type: 'boolean', description: 'pattern is a JavaScript regular expression (no newlines). Default false: a literal string.' }, caseSensitive: { type: 'boolean', description: 'Default true.' },
       paths: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 20, description: 'Only these paths: * matches within a path segment, ** across segments, ? one character; a plain path names a file or a directory.' },
       maxResults: int('Matching lines to return, 1 to 500 (default 100).', 1, 500) }, ['pattern']), async (c, a) => {
       for (const key of ['regex', 'caseSensitive']) if (a[key] !== undefined && typeof a[key] !== 'boolean') fail(`${key} must be true or false.`);

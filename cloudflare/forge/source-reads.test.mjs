@@ -276,8 +276,8 @@ test('grep refuses unsafe or invalid patterns and bad arguments before reading',
   const f = await fixture(t);
   grepTree(f);
   const refused = async (body, pattern) => { const result = await f.call('grep', body); assert.equal(result.status, 400, JSON.stringify(result.body)); assert.match(result.body.message, pattern); return result.body; };
-  // Regular expressions are refused until the scan runs outside the workspace: a slow pattern would stall every request.
-  for (const pattern of ['(a+)+$', 'fo+\\b', 'TODO|todo']) assert.equal((await refused({ pattern, regex: true }, /not available yet/)).reason, 'regex_unavailable', pattern);
+  // Outside the stateless Worker (the shared Workspace) regular expressions are refused: a slow pattern would stall every request.
+  for (const pattern of ['(a+)+$', 'fo+\\b', 'TODO|todo']) assert.equal((await refused({ pattern, regex: true }, /not available here/)).reason, 'regex_unavailable', pattern);
   await refused({ pattern: 'x'.repeat(1001) }, /1 to 1000 characters/);
   await refused({ pattern: '' }, /1 to 1000/);
   await refused({ pattern: 'a\nb' }, /newline/);
@@ -335,6 +335,20 @@ test('blame and grep are reads: admitted alongside reads, refused outside a toke
   assert.equal(blamed.isError, undefined, JSON.stringify(blamed));
   assert.deepEqual(JSON.parse(blamed.content[0].text).ranges, [{ start: 2, end: 2, commitId: id }]);
   const unsafe = await f.mcp('grep', { pattern: '(a+)+', regex: true, ref: 'main' });
-  assert.equal(unsafe.isError, true); assert.match(unsafe.content[0].text, /not available yet/);
+  assert.equal(unsafe.isError, true); assert.match(unsafe.content[0].text, /not available here/);
   assert.match((await f.mcp('blame', { path: 'src/app.js', startLine: 0, ref: 'main' })).content[0].text, /startLine must be a whole number/);
+});
+
+test('regular-expression grep runs where the stateless Worker serves it, and only there', { skip: !gitAvailable }, async t => {
+  const f = await fixture(t);
+  grepTree(f);
+  f.env.statelessWorker = true;
+  const found = await f.ok('grep', { pattern: 'TODO (one|two)', regex: true });
+  assert.ok(found.matches.length > 0); assert.ok(found.matches.every(m => /TODO (one|two)/.test(m.text)));
+  const any = await f.ok('grep', { pattern: '^todo', regex: true, caseSensitive: false });
+  assert.ok(any.matches.every(m => /^todo/i.test(m.text)));
+  const invalid = await f.call('grep', { pattern: '(unclosed', regex: true });
+  assert.equal(invalid.status, 400); assert.match(invalid.body.message, /not a valid JavaScript regular expression/);
+  delete f.env.statelessWorker;
+  assert.equal((await f.call('grep', { pattern: 'TODO|todo', regex: true })).body.reason, 'regex_unavailable');
 });
