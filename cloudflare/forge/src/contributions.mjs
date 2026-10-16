@@ -21,7 +21,7 @@ export const contributionKinds = ['commit', 'pull_opened', 'pull_merged', 'revie
 export const aiTiers = ['agent', 'token', 'assisted', 'declared', 'none'];
 // Per maintenance pass: rows read from each D1 source, repositories walked and commits read from each, Artifacts commit reads outside
 // the batched log, and repositories enrolled for their first walk.
-export const contributionLimits = { events: 500, tasks: 200, evidence: 200, repositories: 3, commits: 200, reads: 40, enroll: 20 };
+export const contributionLimits = { events: 500, tasks: 200, evidence: 200, repositories: 3, commits: 200, reads: 40, enroll: 20, merges: 20000 };
 // Rows younger than this are left to their writers and the next pass, so a batch that commits a moment late is not skipped.
 const lagMs = 120_000;
 // Evidence agent proposals finish within minutes; one an hour old that has not succeeded is not counted.
@@ -396,8 +396,10 @@ async function impactView(db, env, body) {
     read('land-operations', `SELECT trigger,state,count(*) AS count FROM land_operations WHERE created_at>=? AND created_at<?${scope('repository_id')} GROUP BY trigger,state`, [start, end]),
     read('automation-runs', `SELECT state,count(*) AS count,SUM(json_extract(usage,'$.costUsd') IS NOT NULL) AS costed,SUM(COALESCE(json_extract(usage,'$.costUsd'),0)) AS cost,SUM(${tokens('usage')}) AS tokens
       FROM automation_runs WHERE created_at>=? AND created_at<?${scope('COALESCE(repository_id,0)')} GROUP BY state`, [start, end]),
-    read('merges', `SELECT d.created_at AS opened,m.updated_at AS merged,o.kind AS origin,${policyLanded} AS policy FROM pull_merge_operations m JOIN pull_requests p ON p.id=m.pull_request_id
-      JOIN discussions d ON d.id=p.discussion_id LEFT JOIN pull_request_origins o ON o.pull_request_id=p.id WHERE m.phase='SUCCEEDED' AND m.updated_at>=? AND m.updated_at<?${scope('m.repository_id')} LIMIT 20000`, [start, end]),
+    // The earliest merges by settle time, one past the cap so a full period is not called truncated; joins run only for that window.
+    read('merges', `SELECT d.created_at AS opened,m.updated_at AS merged,o.kind AS origin,${policyLanded} AS policy FROM (SELECT actor_id,operation_id,pull_request_id,updated_at FROM pull_merge_operations
+      WHERE phase='SUCCEEDED' AND updated_at>=? AND updated_at<?${scope('repository_id')} ORDER BY updated_at,actor_id,operation_id LIMIT ${contributionLimits.merges + 1}) m
+      JOIN pull_requests p ON p.id=m.pull_request_id JOIN discussions d ON d.id=p.discussion_id LEFT JOIN pull_request_origins o ON o.pull_request_id=p.id ORDER BY m.updated_at,m.actor_id,m.operation_id`, [start, end]),
   ]);
   const heat = new Map(), kinds = Object.fromEntries(contributionKinds.map(kind => [kind, emptyTiers()]));
   for (const row of days) {
@@ -408,7 +410,7 @@ async function impactView(db, env, body) {
   const sum = (rows, pick) => rows.reduce((total, row) => total + (Number(pick(row)) || 0), 0);
   const fromTasks = origins.find(row => row.kind === 'agent-task') || { opened: 0, merged: 0 };
   const hours = (row) => (Date.parse(row.merged) - Date.parse(row.opened)) / 3600_000;
-  const timed = merges.filter(row => Number.isFinite(hours(row)) && hours(row) >= 0);
+  const truncated = merges.length > contributionLimits.merges, timed = merges.slice(0, contributionLimits.merges).filter(row => Number.isFinite(hours(row)) && hours(row) >= 0);
   const group = rows => ({ count: rows.length, medianHours: median(rows.map(hours)) });
   const involved = row => row.policy || row.origin === 'agent-task' || row.origin === 'api-token';
   const costRows = [...tasks, ...automations];
@@ -423,7 +425,7 @@ async function impactView(db, env, body) {
     automations: automations.map(row => ({ state: row.state, count: row.count, tokens: row.tokens || 0, costed: row.costed || 0, costUsd: row.cost || 0 })),
     costs: { reportedUsd: Math.round(sum(costRows, row => row.cost) * 100) / 100, reportingRuns: sum(costRows, row => row.costed), runs: sum(costRows, row => row.count) },
     comparison: { label: 'Time from opening to merge, by how the pull request was opened. A comparison of what happened, not a measured effect of AI.',
-      aiInvolved: group(timed.filter(involved)), other: group(timed.filter(row => !involved(row))), truncated: merges.length >= 20000 } };
+      aiInvolved: group(timed.filter(involved)), other: group(timed.filter(row => !involved(row))), truncated } };
 }
 
 async function saveSettings(db, person, request, body) {

@@ -306,6 +306,17 @@ test('the AI impact page is for operations administrators and holds anonymous in
   f.sql.exec(`INSERT INTO repository_features(repository_id,artifact_name,feature,enabled,version,updated_by,updated_at) VALUES(2,'repo-${'e'.repeat(32)}','contribution-graphs',0,1,1,'t')`);
   const narrowed = await f.access('/native/contributions/read', { action: 'impact' });
   assert.deepEqual(narrowed.heatmap, [{ day, agent: 3, token: 0, assisted: 2, declared: 0, none: 4 }]); assert.equal(narrowed.excludedRepositories, 1);
+  // The comparison's cap keeps the earliest merges by settle time, and a period that exactly fills it is not truncated.
+  t.after(() => { contributionLimits.merges = 20000; });
+  f.sql.exec(`INSERT INTO discussions(id,repository_id,number,kind,author_id,title,body,state,created_at,updated_at) VALUES(12,1,12,'pull',1,'C','','CLOSED','${ago(3 * hour)}','t');
+    INSERT INTO pull_requests(id,discussion_id,base_branch,head_branch,base_commit,head_commit,draft) VALUES(12,12,'main','c','${hash(1)}','${hash(4)}',0);
+    INSERT INTO pull_merge_operations(actor_id,operation_id,repository_id,pull_request_id,input_hash,original,phase,merge_commit_id,created_at,updated_at) VALUES(1,'m3',1,12,'h','{}','SUCCEEDED','${hash(7)}','${ago(1.5 * hour)}','${ago(1.5 * hour)}')`);
+  contributionLimits.merges = 3;
+  const full = (await f.access('/native/contributions/read', { action: 'impact' })).comparison;
+  assert.equal(full.truncated, false); assert.equal(full.aiInvolved.count + full.other.count, 3);
+  contributionLimits.merges = 1;
+  const capped = (await f.access('/native/contributions/read', { action: 'impact' })).comparison;
+  assert.equal(capped.truncated, true); assert.deepEqual([capped.aiInvolved.count, capped.other.count], [0, 1]);
 });
 
 test('a confirmed push to the default branch makes its Git walk due; a push to another branch does not', async t => {

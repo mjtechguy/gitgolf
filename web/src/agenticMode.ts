@@ -26,7 +26,7 @@ export const decisionLabels: Record<LandingDecision, string> = { land: 'May land
 export const riskLabels = { low: 'Low risk', normal: 'Normal risk', sensitive: 'Sensitive' } as const;
 export const landKey = (userId: string, owner: string, name: string) => ['native-land', userId, owner, name] as const;
 export const listLands = (target: Target, options: { number?: number; limit?: number }, signal?: AbortSignal) =>
-  nativeAPI<{ repositoryId: string; operations: LandOperation[]; limit: number }>('/native/land/read', { ...target, action: 'list', ...options }, signal);
+  nativeAPI<{ repositoryId: string; operations: LandOperation[]; limit: number; more?: boolean }>('/native/land/read', { ...target, action: 'list', ...options }, signal);
 // idempotencyKey: one per confirmation, so a retried request returns the original land operation.
 export const landPull = (target: Target, number: number, headCommitId: string, method: LandMethod, idempotencyKey: string) =>
   nativeAPI<{ operation: LandOperation; phase: 'LANDED' | 'LANDING' | 'LAND_REFUSED' }>('/native/land', { ...target, action: 'land', number, headCommitId, method, idempotencyKey });

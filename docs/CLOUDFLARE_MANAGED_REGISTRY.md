@@ -38,7 +38,10 @@ image receipt.
   to 32 MiB, manifests to 1 MiB and live uploads to 64 per workspace. Interrupted
   provider uploads rely on Cloudflare's lifecycle, not CFCR's recovery contract.
 - Packages reads and digest-verifies at most 20 named tags, omitting Cloudflare's
-  digest aliases. Search/sort covers the loaded inventory only.
+  digest aliases. It follows the tag list's `last` cursor, at most five pages of
+  21 entries, until a 21st named tag or the end of the list; the inventory is
+  marked truncated only when a 21st named tag exists or the list continues past
+  those pages. Search/sort covers the loaded inventory only.
 - Scan reports, signature verification, package retention/pull policies and
   image-derived static previews are unavailable. Source previews remain available.
   Customer-runner socketless build receipts do not implement registry publication.

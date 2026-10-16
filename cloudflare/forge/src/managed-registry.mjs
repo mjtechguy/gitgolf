@@ -74,15 +74,21 @@ export function managedRegistry(env, authorize, providerFetch = fetch) {
     if (!(await authorize(input)).read) deny();
     if (input.action !== 'status') unsupported();
     const name = registryRepository(env, { id: input.binding.repositoryId });
-    const response = await managedFetch(env, '/v2/' + name + '/tags/list?n=21', {}, providerFetch);
-    let tags = [], truncated = false;
-    if (response.status !== 404) {
+    // Cloudflare includes digest aliases in its tags list; display named tags only. Pages follow `last` until a 21st named tag
+    // shows more exist or the list ends, at most 5 pages; a list that continues past them is also reported as truncated.
+    const tags = [], seen = new Set();
+    let last = '', more = false;
+    for (let page = 0; page < 5 && tags.length <= 20; page++) {
+      const response = await managedFetch(env, '/v2/' + name + '/tags/list?n=21' + (last ? '&last=' + encodeURIComponent(last) : ''), {}, providerFetch);
+      if (response.status === 404) { await response.body?.cancel(); more = false; break; }
       let result; try { result = JSON.parse(new TextDecoder().decode(await bounded(response.body, 32768))); } catch { unavailable(); }
       if (result.name !== name || result.tags !== null && (!Array.isArray(result.tags) || result.tags.length > 1000 || result.tags.some(t => !tagOK(t) && !digestOK(t)))) unavailable();
-      // Cloudflare includes digest aliases in its tags list; display named tags only.
-      truncated = (result.tags || []).length > 20;
-      tags = (result.tags || []).filter(tagOK);
-    } else await response.body?.cancel();
+      const list = (result.tags || []).filter(t => !seen.has(t));
+      for (const t of list) { seen.add(t); if (tagOK(t)) tags.push(t); }
+      more = (result.tags || []).length >= 21; last = list.at(-1);
+      if (!more || !list.length) break;
+    }
+    const truncated = tags.length > 20 || more;
     const artifacts = [];
     for (const tag of tags.slice(0, 20)) { const item = await manifest(env, name, tag, providerFetch); if (item) artifacts.push({ ...item, tag }); }
     if (!(await authorize(input)).read) deny();

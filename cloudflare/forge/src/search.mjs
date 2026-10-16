@@ -52,11 +52,15 @@ export async function embed(env, model, dimensions, texts, query = false) {
   return data;
 }
 
-// Counts embedding calls per UTC day; false once the limit is reached. User 0 is the background indexer.
-export async function spend(db, userId, limit) {
+// Counts embedding calls per UTC day, reserved before the call so concurrent requests cannot pass the limit; false once it is reached.
+// User 0 is the background indexer. refund returns a reservation whose call never reached the model.
+export async function spend(db, userId, limit, day = now().slice(0, 10)) {
   const result = await db.prepare('INSERT INTO search_usage(day,user_id,calls) VALUES(?,?,1) ON CONFLICT(day,user_id) DO UPDATE SET calls=calls+1 WHERE calls<?')
-    .bind(now().slice(0, 10), userId, limit).run();
+    .bind(day, userId, limit).run();
   return result.meta.changes === 1;
+}
+async function refund(db, userId, day) {
+  try { return (await db.prepare('UPDATE search_usage SET calls=calls-1 WHERE day=? AND user_id=? AND calls>0').bind(day, userId).run()).meta.changes === 1; } catch { return false; }
 }
 
 // Text files only: at most 64 KiB, UTF-8, no NUL bytes and not minified. null means skipped.
@@ -137,10 +141,16 @@ async function query(db, env, person, row, artifact, body, readTree) {
   const current = await status(db, env, row);
   if (!current.index?.served) return { ...current, query: text, results: [], filtered: 0 };
   const state = await db.prepare('SELECT * FROM search_state WHERE repository_id=?').bind(row.id).first();
-  if (!await spend(db, person.id, searchLimits.userDaily)) throw new Fault('resource_exhausted', 429, `You can run ${searchLimits.userDaily} semantic searches a day on this installation.`);
+  const day = now().slice(0, 10), counted = `it counts toward your ${searchLimits.userDaily} semantic searches a day`;
+  if (!await spend(db, person.id, searchLimits.userDaily, day)) throw new Fault('resource_exhausted', 429, `You can run ${searchLimits.userDaily} semantic searches a day on this installation.`);
   let vector;
   try { [vector] = await embed(env, state.model, state.dimensions, [text], true); }
-  catch (error) { throw error instanceof SearchRefusal ? new Fault('failed_precondition', 412, error.message) : new Fault('unavailable', 503, 'Workers AI could not read this search. Try again.'); }
+  catch (error) {
+    // The model answered (unusably), or ran past aiRun's deadline and may still have run: counted. Any other failure is refunded.
+    if (error instanceof SearchRefusal) throw new Fault('failed_precondition', 412, `${error.message} This attempt was answered by the model, so ${counted}.`);
+    if (error?.message === 'Inference deadline') throw new Fault('unavailable', 503, `Workers AI did not answer this search in time. Try again; this attempt may have run, so ${counted}.`);
+    throw new Fault('unavailable', 503, await refund(db, person.id, day) ? 'Workers AI could not read this search. Try again; this attempt was not counted.' : `Workers AI could not read this search. Try again; ${counted}.`);
+  }
   const found = await env.SEARCH_INDEX.query(vector, { topK: searchLimits.topK, filter: { repository: String(row.id) }, returnMetadata: 'none', returnValues: false });
   const scores = new Map((found?.matches || []).filter(match => /^[a-f0-9]{64}$/.test(match.id) && Number.isFinite(match.score)).map(match => [match.id, match.score]));
   const ids = [...scores.keys()].slice(0, searchLimits.topK);

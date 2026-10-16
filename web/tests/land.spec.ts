@@ -46,7 +46,7 @@ async function backend(page: Page, { landing = true, canLand = true, operations 
     }
     if (path === '/native/land/read' || path === '/native/land') {
       state.calls.push({ path, ...body });
-      if (body.action === 'list') return json({ repositoryId, operations: state.operations.filter(o => body.number === undefined || o.number === body.number).slice(0, Number(body.limit) || 20), limit: body.limit });
+      if (body.action === 'list') { const all = state.operations.filter(o => body.number === undefined || o.number === body.number), limit = Number(body.limit) || 20; return json({ repositoryId, operations: all.slice(0, limit), limit: body.limit, more: all.length > limit }); }
       if (body.action === 'land') {
         if (refuse) return json({ code: 'failed_precondition', message: refuse }, 412);
         const landed = op({ method: body.method, createdAt: at(0), updatedAt: at(0) });
@@ -127,7 +127,7 @@ test('Settings → Agentic mode lists recent landings in the shared table, inclu
   const current = page.getByRole('region', { name: 'Current setting' });
   await expect(current).toContainText('Revert on failureOn — a change Golf landed on its own is reverted');
   const recent = page.getByRole('region', { name: 'Recent landings', exact: true });
-  await expect(recent).toContainText('The 50 most recent land operations are loaded; search and sorting cover only those.');
+  await expect(recent).toContainText('All 3 land operations are loaded, newest started first.');
   const table = recent.getByRole('table', { name: 'Recent landings' });
   await expect(table.getByRole('row').filter({ hasText: '#9' })).toContainText('Reverted');
   await expect(table.getByRole('row').filter({ hasText: '#9' })).toContainText('Golf (agentic mode)');
@@ -138,4 +138,12 @@ test('Settings → Agentic mode lists recent landings in the shared table, inclu
   expect(state.calls.find(c => c.action === 'list')).toEqual({ path: '/native/land/read', action: 'list', repository: key, repositoryId, limit: 50 });
   await recent.getByRole('searchbox').fill('sam');
   await expect(table.getByRole('row')).toHaveCount(2);
+});
+
+test('Recent landings says older land operations are omitted only when the list is full', async ({ page }) => {
+  await backend(page, { operations: Array.from({ length: 51 }, (_, i) => op({ number: i + 1, updatedAt: at(i) })) });
+  await page.goto('/alex/demo/settings/agentic-mode');
+  const recent = page.getByRole('region', { name: 'Recent landings', exact: true });
+  await expect(recent).toContainText('The 50 most recently started land operations are loaded; older ones are not, and search and sorting cover only these.');
+  await expect(recent.getByText('newest started first')).toHaveCount(0);
 });
