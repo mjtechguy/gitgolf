@@ -295,12 +295,22 @@ export async function autoLand(env, repositoryId, { commitId, limit = landLimits
   const { row, person: principal } = context, artifact = action => withArtifact(env, row, action);
   const [settings, feature] = await Promise.all([agenticSettings(db, row), agenticFeature(db, env, row)]);
   if (!feature.allowed || !settings.enabled || !settings.landWithoutPerson || await featureOff(db, env, row, 'pull-requests')) return { evaluated: 0, landed: 0 };
-  // Open, non-draft pull requests without a land in progress, in a rotating order so a long list is covered across sweeps.
-  const { results: pulls } = await db.prepare(`SELECT d.number,p.id AS pull_id,p.head_branch FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id
-    WHERE d.repository_id=? AND d.kind='pull' AND d.state='OPEN' AND p.draft=0 AND NOT EXISTS(SELECT 1 FROM land_operations l WHERE l.pull_request_id=p.id AND l.state IN ('QUEUED','LANDING'))
-    ORDER BY (p.id*7919+?)%104729 LIMIT 200`).bind(row.id, rotate).all();
+  // Open, non-draft pull requests without a land in progress. A sweep takes them in a rotating order so a long list is covered across
+  // sweeps; a targeted pass (landSoon: a check reported, a pull request opened) takes exactly those whose head branch is now at its
+  // commit, however many pull requests are open (a fixed 200 of a longer list never reached the others).
+  const open = `SELECT d.number,p.id AS pull_id,p.head_branch FROM discussions d JOIN pull_requests p ON p.discussion_id=d.id
+    WHERE d.repository_id=? AND d.kind='pull' AND d.state='OPEN' AND p.draft=0 AND NOT EXISTS(SELECT 1 FROM land_operations l WHERE l.pull_request_id=p.id AND l.state IN ('QUEUED','LANDING'))`;
+  let refs, pulls;
+  if (commitId) {
+    refs = await artifact(repo => inventory(env, row, repo, providerFetch));
+    const branches = [...refs].filter(([ref, hash]) => hash === commitId && ref.startsWith('refs/heads/')).map(([ref]) => ref.slice('refs/heads/'.length));
+    if (!branches.length) return { evaluated: 0, landed: 0 };
+    pulls = (await db.prepare(`${open} AND p.head_branch IN (SELECT value FROM json_each(?)) ORDER BY d.number LIMIT 20`).bind(row.id, JSON.stringify(branches.slice(0, 20))).all()).results;
+  } else {
+    pulls = (await db.prepare(`${open} ORDER BY (p.id*7919+?)%104729 LIMIT 200`).bind(row.id, rotate).all()).results;
+    if (pulls.length) refs = await artifact(repo => inventory(env, row, repo, providerFetch));
+  }
   if (!pulls.length) return { evaluated: 0, landed: 0 };
-  const refs = await artifact(repo => inventory(env, row, repo, providerFetch));
   let evaluated = 0, landedCount = 0;
   for (const pull of pulls) {
     if (evaluated >= limit) break;
