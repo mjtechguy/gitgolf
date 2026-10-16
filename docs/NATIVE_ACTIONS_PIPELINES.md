@@ -404,7 +404,7 @@ recorded as a note and not applied. Workflow `concurrency` groups cancel earlier
 Task payload: single-job YAML, a `github` context Struct like Forgejo's (`server_url` = the public origin,
 `repository`, `ref`, `sha`, `event`, `run_id`, `run_number`, `run_attempt`, `token`, `forgejo_runtime_token`,
 `forgejo_default_actions_url`), `secrets` (repository secrets only for trusted, same-repository runs, plus
-`GITHUB_TOKEN`/`GITEA_TOKEN`/`FORGEJO_TOKEN` = the job token), `vars`, and `needs` (merged outputs and aggregate result).
+`GITHUB_TOKEN`/`GITEA_TOKEN` (Forgejo's upstream runner name)/`FORGEJO_TOKEN` = the job token), `vars`, and `needs` (merged outputs and aggregate result).
 `uses: owner/action@ref` resolves from `ACTIONS_DEFAULT_URL` (default `https://github.com`).
 
 Checkout: `actions/checkout` fetches `${server_url}/${owner}/${repo}` with `AUTHORIZATION: basic x-access-token:<job

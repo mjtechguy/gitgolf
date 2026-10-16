@@ -10,7 +10,7 @@ Native delivery increment (2026-10-09): [Access login and native reviewer contro
 
 Draft for discussion, 2026-10-07. Build a complete agent collaboration and application delivery workflow on Cloudflare, then extend it into a global managed SaaS. Keep the portable product usable without Cloudflare and let self-hosted operators adopt individual integrations.
 
-This companion refines P5/P6/P7/P8 in the [implementation plan](../GOLF_IMPLEMENTATION_PLAN.md). The user selected fully Cloudflare-native hosting as the long-term managed SaaS target on 2026-10-07. The existing Gitea/Go/PostgreSQL core is a migration bridge, while the portable product retains its independent supported implementation. Native authority and forge cutover still require a concrete ADR and qualification; no existing owner changes merely because a service appears here. Current implementation and provider evidence remain in the [status ledger](IMPLEMENTATION_STATUS.md).
+This companion refines P5/P6/P7/P8 in the [implementation plan](../GOLF_IMPLEMENTATION_PLAN.md). The user selected fully Cloudflare-native hosting as the long-term managed SaaS target on 2026-10-07. The existing Forgejo/Go/PostgreSQL core is a migration bridge, while the portable product retains its independent supported implementation. Native authority and forge cutover still require a concrete ADR and qualification; no existing owner changes merely because a service appears here. Current implementation and provider evidence remain in the [status ledger](IMPLEMENTATION_STATUS.md).
 
 ## Current priority: Cloudflare reliability and repository speed (2026-10-09)
 
@@ -66,7 +66,7 @@ Live prototype setup selected on 2026-10-07: use the repository-bound `golf` Clo
 
 ## Competition milestone
 
-Control hostname update (2026-10-08): use `gitgolf.mjtechguy.com` following the user's suggestion after the initial `golf.mjtechguy.com` selection. The separate [bridge setup](CLOUDFLARE_SETUP.md) now has source-qualified Workers assets/API routing, isolated Compose/TLS and R2 configuration. No control-domain deployment or canonical Git migration is established by that work. Artifacts remains the canonical Git destination for eligible native repositories; existing agent-fork proofs do not mean Gitea repositories have moved. Keep native repository/authority implementation central rather than treating the bridge as the completed Cloudflare track.
+Control hostname update (2026-10-08): use `gitgolf.mjtechguy.com` following the user's suggestion after the initial `golf.mjtechguy.com` selection. The separate [bridge setup](CLOUDFLARE_SETUP.md) now has source-qualified Workers assets/API routing, isolated Compose/TLS and R2 configuration. No control-domain deployment or canonical Git migration is established by that work. Artifacts remains the canonical Git destination for eligible native repositories; existing agent-fork proofs do not mean portable forge repositories have moved. Keep native repository/authority implementation central rather than treating the bridge as the completed Cloudflare track.
 
 Demonstrate two real agents working concurrently from a recorded commit, with independent Artifacts repositories, retained task context, visible proposal comparison and a deliberate overlapping change or moved base. Test the combined candidate, deploy it with isolated D1/R2/AI bindings, verify its protected custom-domain preview and publish exact-version evidence into the PR.
 
@@ -90,7 +90,7 @@ Use the existing frontend, generated API contracts, identity/keyring, native for
 
 | State or operation | First implementation | Cloudflare-native destination |
 | --- | --- | --- |
-| Canonical repositories, issues, PRs, reviews and forge permissions | Gitea through supported APIs; connected GitHub/GitLab retain their own authority. | Golf-owned collaboration with qualified Artifacts canonical storage or another proven Git backend; separate ADR and migration. |
+| Canonical repositories, issues, PRs, reviews and forge permissions | Forgejo through supported APIs; connected GitHub/GitLab retain their own authority. | Golf-owned collaboration with qualified Artifacts canonical storage or another proven Git backend; separate ADR and migration. |
 | Effective access, approval policy, run admission and credentials | Existing Golf/PostgreSQL authority plus current native permissions. | Explicit tenant-owned authority partition and revocation contract; qualify D1/DO before cutover. |
 | Task Git workspaces and proposals | Artifacts for eligible repositories; native Git fallback. | Same workspace contract, independently of canonical forge. |
 | Immutable outputs and evidence | Existing private object-store contract, qualified on R2. | R2 with exact digest, account/resource identity and retained access policy. |
@@ -210,7 +210,7 @@ Verify DNS, certificate, routing, Access and application health independently. T
 
 Publish a stable PR URL and immutable exact-deployment URL through Golf's supported forge publication path. A link update is its own journaled effect, with current authority and ambiguity reconciliation. Closing the PR or reaching TTL expires access and schedules owned-resource cleanup; retained evidence has its own policy.
 
-Worker Previews supplies code/config/URL isolation and automatic separate DO/Container resources. D1/R2/KV account resources need explicit separate bindings. Native provider PR comments do not establish a Golf/Gitea publication adapter. Source: [Worker Previews](https://developers.cloudflare.com/changelog/post/2026-09-22-worker-previews/).
+Worker Previews supplies code/config/URL isolation and automatic separate DO/Container resources. D1/R2/KV account resources need explicit separate bindings. Native provider PR comments do not establish a Golf/Forgejo publication adapter. Source: [Worker Previews](https://developers.cloudflare.com/changelog/post/2026-09-22-worker-previews/).
 
 Gate: protected custom-domain preview, exact-version PR receipt, Browser Run evidence and verified teardown. Compute health without access or TLS readiness does not make the preview ready.
 
@@ -234,7 +234,7 @@ Gate: new and adopted projects can provision, preview, promote, observe and reco
 
 Implement the selected Cloudflare-native destination under an authority/forge migration ADR before moving live state. Specify tenant home/placement, repository ownership, D1 partitions, DO responsibilities, fresh authorization/revocation reads, import/export, rollback boundary and reconciliation across stores. Build a bounded native collaboration consumer first: repository, issue, PR, exact-commit review/check and permissions. Qualify protected Git publication and every ingress before enabling it. Migrate a disposable tenant first; preserve one writer during cutover. Add the remaining forge capabilities under the same compatibility and evidence contracts, with explicit unsupported states until they pass.
 
-Run the managed control plane and forge state on qualified Cloudflare services; external Gitea/PostgreSQL is not a required component of the destination. Existing stateless Go helpers may run in qualified Containers where that is simpler than a rewrite. Keep the portable Go/PostgreSQL/Gitea implementation as its own supported hosting path. The bridge can serve existing tenants while native tenancy gains functionality, but native migration status must remain visible.
+Run the managed control plane and forge state on qualified Cloudflare services; external Forgejo/PostgreSQL is not a required component of the destination. Existing stateless Go helpers may run in qualified Containers where that is simpler than a rewrite. Keep the portable Go/PostgreSQL/Forgejo implementation as its own supported hosting path. The bridge can serve existing tenants while native tenancy gains functionality, but native migration status must remain visible.
 
 Partition work by tenant/project/run rather than one global DO, queue consumer or database. Separate active Linux execution capacity from agent records and live connections. Use per-tenant admission, weighted fairness, queue limits and provider quotas; distinguish exact authorized spending reservations from eventual edge rate limits. Add Workers for Platforms and Cloudflare for SaaS for managed customer applications/domains.
 

@@ -17,14 +17,14 @@ kubectl apply --server-side -f https://github.com/cloudnative-pg/plugin-barman-c
 kubectl rollout status -n cnpg-system deployment/barman-cloud
 ```
 
-Supply same-namespace existing basic-auth Secrets: `golf-auth` (`username=golf`, `password`) and `gitea-auth` (`username=gitea`, `password`). Supply `backup-auth` containing `ACCESS_KEY_ID`, `ACCESS_SECRET_KEY`, `REGION`; use a dedicated bucket prefix with restricted backup credentials. Provision these through your secret manager; never put secret values in Helm values, shell arguments or Git. Choose an explicit CSI storage class, volume capacity and resource budget.
+Supply same-namespace existing basic-auth Secrets: `golf-auth` (`username=golf`, `password`) and `forgejo-auth` (`username=forgejo`, `password`). Supply `backup-auth` containing `ACCESS_KEY_ID`, `ACCESS_SECRET_KEY`, `REGION`; use a dedicated bucket prefix with restricted backup credentials. Provision these through your secret manager; never put secret values in Helm values, shell arguments or Git. Choose an explicit CSI storage class, volume capacity and resource budget.
 
 ```yaml
 # Example operator-reviewed values; these are names, not credentials.
 clusterName: golf-db
 storage: {storageClass: YOUR_CSI_CLASS, size: 50Gi}
 golfAuthSecret: golf-auth
-giteaAuthSecret: gitea-auth
+forgejoAuthSecret: forgejo-auth
 backup:
   destinationPath: s3://YOUR_BUCKET/golf/production/postgres/
   endpointURL: https://rustfs-svc.YOUR_NAMESPACE.svc:9000
@@ -38,11 +38,11 @@ helm upgrade --install golf-db deploy/kubernetes/cnpg --namespace YOUR_NAMESPACE
 python3 deploy/kubernetes/cnpg/check.py
 ```
 
-The native Cluster initializes `golf` owned by `golf`; the supported managed-role and Database resources create `gitea` owned by a distinct non-superuser role. Both roles are barred from cross-database network connections. Three instances use required host anti-affinity and one synchronous acknowledgement with required durability. Loss of every eligible synchronous standby can block writes: this deliberately favors durability over silent asynchronous fallback. Three pods on one physical host, local-path volumes or one storage failure domain do **not** provide production HA. [Role management](https://cloudnative-pg.io/docs/1.30/declarative_role_management/), [Database management](https://cloudnative-pg.io/docs/1.30/declarative_database_management/), [Failover and synchronous replication](https://cloudnative-pg.io/docs/1.30/failover/).
+The native Cluster initializes `golf` owned by `golf`; the supported managed-role and Database resources create `forgejo` owned by a distinct non-superuser role. Both roles are barred from cross-database network connections. Three instances use required host anti-affinity and one synchronous acknowledgement with required durability. Loss of every eligible synchronous standby can block writes: this deliberately favors durability over silent asynchronous fallback. Three pods on one physical host, local-path volumes or one storage failure domain do **not** provide production HA. [Role management](https://cloudnative-pg.io/docs/1.30/declarative_role_management/), [Database management](https://cloudnative-pg.io/docs/1.30/declarative_database_management/), [Failover and synchronous replication](https://cloudnative-pg.io/docs/1.30/failover/).
 
 ## Connect Golf and the native forge
 
-The writer Service is `golf-db-rw.YOUR_NAMESPACE.svc`; CNPG creates `golf-db-ca` with key `ca.crt` in that namespace. Mount that CA read-only into both application clients, require `verify-full`, and use the Service DNS name. Configure Golf's supported `PGSSLROOTCERT` file path. Gitea 1.27 exposes `database.SSL_MODE`, but **no** `database.SSL_CA` setting; use a qualified driver/root-trust arrangement rather than inventing an environment variable. The application chart owns client mounts and restart/CA-rotation qualification. Basic-auth Secrets must match the native role passwords. Native Gitea access remains through supported application APIs.
+The writer Service is `golf-db-rw.YOUR_NAMESPACE.svc`; CNPG creates `golf-db-ca` with key `ca.crt` in that namespace. Mount that CA read-only into both application clients, require `verify-full`, and use the Service DNS name. Configure Golf's supported `PGSSLROOTCERT` file path. Forgejo 15.0.9 exposes `database.SSL_MODE`, but **no** `database.SSL_CA` setting ([database settings](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/setting/database.go)); use a qualified driver/root-trust arrangement rather than inventing an environment variable. The application chart owns client mounts and restart/CA-rotation qualification. Basic-auth Secrets must match the native role passwords. Native Forgejo access remains through supported application APIs.
 
 Restrict PostgreSQL ingress to application clients, operator/instance management and replication; restrict backup egress to your object store and required DNS. Network-policy selectors, workload identities, ingress TLS, certificate renewal, placement across zones, alerts and capacity testing belong to the platform's deployment review. This chart does not claim those controls are supplied by rendering resources.
 

@@ -30,7 +30,7 @@ def main():
         'source_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)),
         'source_files': {file: hashlib.sha256((ROOT / file).read_bytes()).hexdigest() for file in files},
         'schema': max(path.name.split('_')[0] for path in (ROOT / 'internal/server/database/migrations').glob('*.sql')),
-        'profiles': {key: profile[key] for key in ('gitea', 'actions', 'gitlab', 'connected')},
+        'profiles': {key: profile[key] for key in ('forgejo', 'actions', 'gitlab', 'connected')},
         'fixture': profile['requests'], 'cases': [], 'passed': False,
         'native_execution': False, 'deployed': False,
         'cleanup': 'Only isolated test schemas managed by the existing database test helpers; no native source commands are admitted.',
@@ -52,7 +52,7 @@ def main():
         ('inventory.pins_and_drift', ['python3', 'scripts/compatibility/inventory.py', '--check']),
         ('inventory.generator', ['python3', '-m', 'unittest', 'discover', '-s', 'scripts/compatibility', '-p', 'test_*.py']),
         ('F1.source_selection', ['go', 'test', '-p', '1', './internal/workflowpath', './internal/server', '-run', '^(TestPathsAndDirectoryConfiguration|TestActionsWorkflowDirectorySelection|TestWorkflowDefinitionUsesSelectedDirectory|TestExecutionWorkflowPath|TestExecutionPolicyDenyDominance)$', '-count=1']),
-        ('F2.unchanged_refusal_and_native_path', ['go', '-C', 'engines/act', 'test', '-p', '1', '-run', '^(TestPinnedRequestsLintRefusal|TestGiteaWorkflowPlanBinding)$', '-count=1', './...']),
+        ('F2.unchanged_refusal_and_native_path', ['go', '-C', 'engines/act', 'test', '-p', '1', '-run', '^(TestPinnedRequestsLintRefusal|TestForgejoWorkflowPlanBinding)$', '-count=1', './...']),
     ]
     if args.layer == 'database':
         commands.append(('F1.database_authority', ['go', 'test', '-p', '1', './internal/server', '-run', '^(TestWorkflowDiscoveryPostgres|TestWorkflowPostWaitDenialPostgres|TestWorkflowRunDurableIntentPostgres|TestWorkflowRunConcurrentDispatchAndCancelPostgres|TestWorkflowRunSourceWaitRechecksPostgres|TestWorkflowPlannerFailureClassificationPostgres)$', '-count=1']))

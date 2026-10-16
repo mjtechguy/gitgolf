@@ -121,7 +121,7 @@ def report(rows, catalogs, protocols, profile):
     complete = [row for row in rows if row['assessment'].get('complete') is True]
     return {
         'format': 'golf.compatibility.report.v1',
-        'gitea_profile': 'gitea-' + profile['gitea']['version'], 'denominator': len(rows),
+        'forge_profile': 'forgejo-' + profile['forgejo']['version'], 'denominator': len(rows),
         'assessed': len(rows) - states['unassessed'],
         'states': {state: states[state] for state in sorted(STATES)},
         'implemented_complete': len(complete),
@@ -130,7 +130,7 @@ def report(rows, catalogs, protocols, profile):
         'catalogs': {name: dict(sorted(Counter(feature['state'] for feature in catalog['features']).items())) for name, catalog in sorted(catalogs.items())},
         'protocols': {kind: dict(sorted(Counter(row['state'] for row in protocols if row['kind'] == kind).items())) for kind in sorted({row['kind'] for row in protocols})},
         'full_compatibility': False,
-        'installed_spec_comparison': profile['gitea']['installed_comparison'],
+        'installed_spec_comparison': profile['forgejo']['installed_comparison'],
     }
 
 
@@ -140,8 +140,12 @@ def main():
     args = parser.parse_args()
     profile = read_json(DATA / 'profile.json')
     verify_pins(profile)
-    spec = read_json(DATA / 'gitea-1.27.3.swagger.json')
-    annotations = read_json(DATA / 'gitea-annotations.json')
+    spec = read_json(DATA / ('forgejo-' + profile['forgejo']['version'] + '.swagger.json'))
+    # The served document was re-serialized with sorted keys; also bind the qualifier's canonical form.
+    canonical = json.dumps(spec, sort_keys=True, separators=(',', ':')).encode()
+    if hashlib.sha256(canonical).hexdigest() != profile['forgejo']['spec_canonical_sha256']:
+        raise ValueError('served Forgejo specification differs from the qualified canonical hash')
+    annotations = read_json(DATA / 'forgejo-annotations.json')
     rows = build(spec, annotations)
     catalogs = {name: read_json(DATA / (name + '.json')) for name in ('actions', 'gitlab', 'connected')}
     protocols = read_json(DATA / 'protocols.json')['protocols']
@@ -150,10 +154,15 @@ def main():
         if row['id'] in seen_protocols or row['state'] not in STATES or row['kind'] not in {'git', 'registry', 'webhook'} or not row.get('reason'):
             raise ValueError('invalid protocol assessment: ' + row['id'])
         seen_protocols.add(row['id'])
-    webhook_source = (DATA / 'fixtures/gitea-webhook-types.go.txt').read_text()
-    events = set(re.findall(r'HookEvent[A-Za-z]+\s+HookEventType\s*=\s*"([a-z_]+)"', webhook_source))
-    if {row['id'].removeprefix('webhook.') for row in protocols if row['kind'] == 'webhook'} != events:
-        raise ValueError('webhook/event register differs from pinned Gitea source')
+    # Upstream source is referenced by URL and hash, not vendored; the check never fetches it.
+    declared = read_json(DATA / 'protocols.json')['webhook_events']
+    events = declared['constants']
+    if len(set(events)) != len(events) or not all(re.fullmatch(r'[a-z_]+', event) for event in events):
+        raise ValueError('invalid declared webhook/event constants')
+    if not re.fullmatch(r'[0-9a-f]{64}', declared['source_sha256']) or '/tag/v' + profile['forgejo']['version'] + '/' not in declared['source_url']:
+        raise ValueError('webhook/event constants are not pinned to the profile version')
+    if {row['id'].removeprefix('webhook.') for row in protocols if row['kind'] == 'webhook'} != set(events):
+        raise ValueError('webhook/event register differs from the declared pinned Forgejo constants')
     for name, catalog in catalogs.items():
         seen = set()
         for feature in catalog['features']:
@@ -168,7 +177,7 @@ def main():
                     if not path.is_relative_to(ROOT) or not path.is_file():
                         raise ValueError('missing feature proof: ' + reference)
     outputs = {
-        'gitea-operations.json': {'format': 'golf.gitea.operations.v1', 'profile': profile['gitea'], 'operations': rows},
+        'forgejo-operations.json': {'format': 'golf.forgejo.operations.v1', 'profile': profile['forgejo'], 'operations': rows},
         'report.json': report(rows, catalogs, protocols, profile),
     }
     for name, value in outputs.items():

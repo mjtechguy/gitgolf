@@ -1,6 +1,6 @@
 # Optional local monitoring
 
-This overlay adds a local Jaeger collector/query UI, Prometheus and Grafana to Golf's canonical three-service Compose installation. It instruments the existing HTTP API, Golf's Gitea client and PostgreSQL calls. It does not deploy jobs, runners, a log collector, alerts, a production monitoring service or Cloudflare infrastructure.
+This overlay adds a local Jaeger collector/query UI, Prometheus and Grafana to Golf's canonical three-service Compose installation. It instruments the existing HTTP API, Golf's Forgejo client and PostgreSQL calls. It does not deploy jobs, runners, a log collector, alerts, a production monitoring service or Cloudflare infrastructure.
 
 From the repository root, after preparing the normal `.env` and building Golf:
 
@@ -24,7 +24,7 @@ All published monitoring ports bind to loopback. Other local users/processes and
 
 The overlay explicitly sets `GOLF_METRICS_ADDR=:9090`, `GOLF_METRICS_TOKEN`, `GOLF_OTLP_HTTP_ENDPOINT=http://jaeger:4318`, `GOLF_OTLP_INSECURE=true` and `GOLF_TRACE_SAMPLE_RATIO=1`. This profile samples all requests; the application default ratio outside the overlay is 0.1 when export is enabled. Remove ambient nonempty `OTEL_*` settings from the Golf process: enabled export rejects them rather than accepting hidden SDK overrides. Trace transport is best effort, bounded and independent of request completion; an export failure is a fixed log message and counter, not a request failure. Lost batches are not replayed indefinitely.
 
-The provisioned **Golf local runtime** dashboard shows scrape reachability, request counts/errors, request latency, Gitea calls, PostgreSQL queries and trace-export results. Gitea duration ends at response headers; it does not measure subsequent body download. Use the Jaeger UI at `http://localhost:16687` for traces. The Grafana Jaeger datasource is not provisioned: its health check did not qualify against this pinned Jaeger release. Match `golf.request_id`/trace ID to Golf JSON logs. Routes and SQL verbs are bounded labels; repository names, identities, arbitrary paths, SQL statements/arguments, credentials and source bodies are excluded from Golf telemetry. HTTP status panels reflect transport status; a typed `OUTCOME_UNKNOWN` repository creation can legitimately return HTTP 200 and is not a measured successful mutation. Missing/empty metric series are not proof of zero failures. No SLO or availability certification is implied.
+The provisioned **Golf local runtime** dashboard shows scrape reachability, request counts/errors, request latency, Forgejo calls (`golf_forge_requests_total`, `golf_forge_request_duration_seconds`), PostgreSQL queries and trace-export results. Forgejo call duration ends at response headers; it does not measure subsequent body download. Use the Jaeger UI at `http://localhost:16687` for traces. The Grafana Jaeger datasource is not provisioned: its health check did not qualify against this pinned Jaeger release. Match `golf.request_id`/trace ID to Golf JSON logs. Routes and SQL verbs are bounded labels; repository names, identities, arbitrary paths, SQL statements/arguments, credentials and source bodies are excluded from Golf telemetry. HTTP status panels reflect transport status; a typed `OUTCOME_UNKNOWN` repository creation can legitimately return HTTP 200 and is not a measured successful mutation. Missing/empty metric series are not proof of zero failures. No SLO or availability certification is implied.
 
 Jaeger retains at most 5,000 traces in memory and loses them on restart. Prometheus retention is limited to 24 hours and 256 MB of retained blocks (WAL/head data and filesystem usage add overhead); Grafana/Prometheus use their own named volumes. The containers have memory limits; these are modest developer defaults, not measured production capacity. No log aggregation or monitoring backup is configured.
 
@@ -38,7 +38,7 @@ docker compose --env-file .env --env-file .tmp/observability/monitoring.env \
   -f compose.yaml -f deploy/compose/compose.observability.yaml rm -f jaeger prometheus grafana
 ```
 
-These commands preserve application and monitoring volumes. Do **not** use `down --volumes` on the shared installation to remove monitoring: that also removes PostgreSQL/Gitea data. Changing Grafana's initial admin-password file does not reset the password already stored in its database; use Grafana's supported password management. Reuse existing initializer files to restart the same monitoring installation.
+These commands preserve application and monitoring volumes. Do **not** use `down --volumes` on the shared installation to remove monitoring: that also removes PostgreSQL/Forgejo data. Changing Grafana's initial admin-password file does not reset the password already stored in its database; use Grafana's supported password management. Reuse existing initializer files to restart the same monitoring installation.
 
 ## Reproducible native qualification
 
@@ -47,17 +47,17 @@ docker build -f deploy/docker/Dockerfile -t golf-local:observability .
 python3 scripts/observability-smoke.py --image golf-local:observability
 ```
 
-The proof uses a fresh randomly named six-service Compose project, private temporary credentials, random loopback ports and fresh native PostgreSQL/Gitea volumes. It never restarts the normal stack. It requires a locally available current Golf image; monitoring images may be pulled by immutable digest. It creates ordinary fixture users/repositories through supported Gitea CLI/API, exercises real Golf sign-in, durable creation, source browsing and private denial, then verifies:
+The proof uses a fresh randomly named six-service Compose project, private temporary credentials, random loopback ports and fresh native PostgreSQL/Forgejo volumes. It never restarts the normal stack. It requires a locally available current Golf image; monitoring images may be pulled by immutable digest. It creates ordinary fixture users/repositories through supported Forgejo CLI/API, exercises real Golf sign-in, durable creation, source browsing and private denial, then verifies:
 
 - Metrics reject missing/incorrect bearer tokens, Prometheus actually scrapes them and the provisioned authenticated Grafana dashboard/datasources load.
-- A source request's real Gitea client and PostgreSQL spans share its API parent; Golf logs correlate the same opaque request/trace IDs.
+- A source request's real Forgejo client and PostgreSQL spans share its API parent; Golf logs correlate the same opaque request/trace IDs.
 - Observed metric families and labels match the contract; fixture tokens, cookies, encryption/database secrets, usernames, repository/source paths/content and SQL fragments are absent from the collected Golf logs/traces/metrics. Caller trace IDs/baggage/request IDs cannot inject those values.
 - Stopping only the isolated collector produces an export-error counter while native application reads remain usable; restarting it resumes successful exports.
 - Fixture identities are purged and all isolated containers, volumes and network are removed.
 
-This bounded proof checks actual local integration and canaries, not every possible sensitive value, load condition, exporter, architecture or Kubernetes telemetry deployment. Gitea/PostgreSQL internal server tracing is not enabled: dependency spans describe Golf's client calls. Provider logs are outside this Golf telemetry privacy claim. Background/job correlation remains unimplemented.
+This bounded proof checks actual local integration and canaries, not every possible sensitive value, load condition, exporter, architecture or Kubernetes telemetry deployment. Forgejo/PostgreSQL internal server tracing is not enabled: dependency spans describe Golf's client calls. Provider logs are outside this Golf telemetry privacy claim. Background/job correlation remains unimplemented.
 
-The full native drill passed on 2026-10-02 using Golf image `sha256:8ee648f2f7a3e81b8f884ffa90112bc0258b6805d1c9d18b26ca14ac47bbcdaa`, PostgreSQL 18.4, Gitea 1.27.3 and the monitoring pins below. It included collector outage/recovery and independent verification that the disposable project's containers, volumes and network were gone. This is local evidence, not a production performance or recovery guarantee.
+An earlier full native drill passed on 2026-10-02 on the since-retired backend, using Golf image `sha256:8ee648f2f7a3e81b8f884ffa90112bc0258b6805d1c9d18b26ca14ac47bbcdaa`, PostgreSQL 18.4 and the monitoring pins below; it has not been repeated on Forgejo, and its metric names predate the `golf_forge_*` rename. It included collector outage/recovery and independent verification that the disposable project's containers, volumes and network were gone. This is local evidence, not a production performance or recovery guarantee.
 
 ## Pinned upstream components
 

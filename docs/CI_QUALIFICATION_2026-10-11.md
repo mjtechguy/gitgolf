@@ -23,7 +23,7 @@ not identify an uncommitted build. All ports bind loopback at allocated high por
 | Packet | Actual acceptance exercised | Current scope |
 | --- | --- | --- |
 | `scripts/ci-compose-smoke.py --forge-kind forgejo` | Actions/GitLab execution, source and step receipts, restart queue recovery, failure, cancellation, policy revocation, log/history pagination, cleanup | Forgejo shell profile; not full Actions or GitLab Runner |
-| `scripts/actions-two-job-smoke.py --with-push --ordinary-actions-bundles … --git-image-proof … --ci-job-image … --seed-approved-images` | Unchanged PSF Requests lint workflow, pinned checkout/setup-python actions, pre-commit, actual Git source, push admission and scoped dependency access | Maintained act on the existing Gitea portable profile; not a hosted-native result |
+| `scripts/actions-two-job-smoke.py --with-push --ordinary-actions-bundles … --git-image-proof … --ci-job-image … --seed-approved-images` | Unchanged PSF Requests lint workflow, pinned checkout/setup-python actions, pre-commit, actual Git source, push admission and scoped dependency access | Maintained act on the portable profile (run on 2026-10-11 against the since-retired backend, then on Forgejo; see Results); not a hosted-native result |
 | `scripts/workflow-artifacts-smoke.py --rustfs --proxy-binary …` | GitLab-format build, exact private artifact bytes, immutable source/run binding, current-reader and revocation fences, private object storage | Bounded shell artifacts; not GitHub artifact/cache protocol compatibility |
 | `scripts/repository-execution-values-smoke.py` | Actions matrix/dependency jobs, explicitly approved secret/variable injection, output masking and credential authority changes | Pinned maintained engine; not arbitrary workflow secret access |
 | `scripts/cloudflare-forge-smoke.py --account-id … --profile golf --workers-subdomain … --evidence --container-tests` | Canonical Artifacts YAML bytes, disabled workflow capability, typed 501 inspection/dispatch refusal, real PR container tests and private evidence | Native tests only; Actions/GitLab pipeline execution is **unsupported** |
@@ -50,10 +50,11 @@ owned resource journal. There is no long-lived demo in this qualification.
 
 The advanced Actions launcher now accepts `--forge-kind forgejo --forgejo-spec
 PATH`. Use the frozen OpenAPI file produced by `scripts/forgejo-qualify.py`;
-its digest must match `docs/compatibility/forgejo-inventory.json`. The launcher
+its digest must match `forgejo.spec_sha256` in `docs/compatibility/profile.json`. The launcher
 uses the digest-pinned Forgejo image, a fresh installation identity, the separate
-Forgejo Compose file and native Actions disabled. Omitting the flag retains the
-Gitea profile. Run the unchanged Requests packet with these additional flags.
+Forgejo Compose file and native Actions disabled. Forgejo is now the only accepted
+`--forge-kind`, and `--forgejo-spec` is required. Run the unchanged Requests packet
+with these additional flags.
 
 For worker loss, use the same immutable core/runner binary arguments with
 `--forge-kind forgejo --forgejo-spec PATH --workflow-directory .forgejo/workflows
@@ -80,11 +81,11 @@ started. This profile excludes agents and a retained demo.
 
 ### Bugs exposed by the deeper tests
 
-Forgejo's webhook contract differs from the pinned Gitea contract. Its native and
+Forgejo's webhook contract differs from the earlier backend's contract. Its native and
 compatibility delivery/event/signature headers must match; the installation-scope
 header is absent in the pinned release. Golf now accepts that exact Forgejo
 contract while retaining HMAC validation and immutable repository/owner binding.
-Gitea still requires its repository-scope header. Duplicate/mixed headers,
+Duplicate/mixed headers,
 organization scope, invalid signatures and signed wrong-repository payloads
 remain rejected. The Forgejo Compose callback allowlist also belongs under
 `webhook`, not `security`. See the pinned provider's
@@ -138,7 +139,7 @@ qualification result.
 3. Extend the Forgejo qualification beyond the now-passing unchanged Requests
    profile to the remaining matrix, secret, artifact and compatibility packets.
    Preserve installation identity and source/permission fences; these results
-   do not approve a retained Gitea migration or production rollout.
+   do not approve a production rollout.
 4. GitHub-compatible artifacts/cache, reusable workflows, fork/PR trust boundaries,
    service containers, deployment approvals and concurrent tenant resource budgets
    need their own real positive and negative packets. Existing narrower evidence
@@ -151,11 +152,13 @@ qualification result.
 
 - Forgejo shell CI: passed; [receipt](compatibility/evidence/ci-review-20261011.json).
 - Unchanged Requests Actions workflow plus network, timeout and cancellation
-  boundaries: passed; [receipt](compatibility/evidence/requests-review-20261011.json).
-- Matrix jobs, secret masking, authority changes and encryption rotation: passed;
-  [receipt](compatibility/evidence/execution-values-review-20261011.json).
+  boundaries: passed on the since-retired backend (receipt removed with it); the
+  Forgejo result is listed below.
+- Matrix jobs, secret masking, authority changes and encryption rotation: passed
+  on the since-retired backend (receipt removed with it); not yet repeated on Forgejo.
 - GitLab private artifacts, object-store outage refusal, restart and access
-  revocation: passed; [receipt](compatibility/evidence/artifacts-review-20261011.json).
+  revocation: passed on the since-retired backend (receipt removed with it); not
+  yet repeated on Forgejo.
 - Cloudflare exact-head Python test execution: passed; Actions/GitLab YAML
   execution: **unsupported**, not passed;
   [receipt](compatibility/evidence/ci-hosted-review-20261011.json).

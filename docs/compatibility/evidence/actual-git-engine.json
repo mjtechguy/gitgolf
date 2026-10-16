@@ -59,7 +59,7 @@
     "inodesPerMount": 8192
   },
   "limitations": [
-    "Owned TLS native Git fixture; no Golf/Gitea enrollment in this receipt.",
+    "Owned TLS native Git fixture; no Golf/native forge enrollment in this receipt.",
     "Exact admitted H/depth1 protocol-v0 only; no checkout action, job credentials, remote actions, dependency egress or Requests.",
     "Controlled CLI drops acknowledgement after real owned Docker create in the lost_create case."
   ]

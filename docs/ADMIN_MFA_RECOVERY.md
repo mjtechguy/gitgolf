@@ -24,7 +24,7 @@ Inspect the enrolled account without changing data:
 printf '%s\n' '{"username":"golf-admin"}' | golf local-account inspect
 ```
 
-`inspect` accepts only a canonical username on bounded stdin. It reads only nonsecret Golf metadata, including local account ID (`id`), Golf user ID (`user_id`), native user ID, credential/MFA versions, role, enabled/disabled status and pending setup expiry. It needs `DATABASE_URL` and the configured `GITEA_URL`; it does not need encryption keys, decrypt credentials, contact a provider, or run migrations. A PostgreSQL read-only connection is supported.
+`inspect` accepts only a canonical username on bounded stdin. It reads only nonsecret Golf metadata, including local account ID (`id`), Golf user ID (`user_id`), native user ID, credential/MFA versions, role, enabled/disabled status and pending setup expiry. It needs `DATABASE_URL` and the configured `GOLF_FORGE_URL`; it does not need encryption keys, decrypt credentials, contact a provider, or run migrations. A PostgreSQL read-only connection is supported.
 
 Copy the exact current values into an operator-owned input file:
 

@@ -85,7 +85,7 @@ Existing offline recovery disables local accounts in its transaction; the new re
 
 Source evidence in the isolated webhook worktree:
 
-- Real disposable PostgreSQL race tests: extended worker/key-family packet **29.932 s**, derived-binding/key bootstrap501/rotation-fault/worker/CAS/accepted-HTTP-lost-SQL subset **8.728 s**, full webhook packet **21.192 s**, and final frozen-owner/native-admin/transfer isolation subset **12.183 s**, with containers removed after each run. These exercise actual SQL migrations/constraints/queries and local owned HTTP receivers; native authorization is a controlled HTTP boundary substitute, not actual Gitea qualification.
+- Real disposable PostgreSQL race tests: extended worker/key-family packet **29.932 s**, derived-binding/key bootstrap501/rotation-fault/worker/CAS/accepted-HTTP-lost-SQL subset **8.728 s**, full webhook packet **21.192 s**, and final frozen-owner/native-admin/transfer isolation subset **12.183 s**, with containers removed after each run. These exercise actual SQL migrations/constraints/queries and local owned HTTP receivers; native authorization is a controlled HTTP boundary substitute, not actual Forgejo qualification.
 - Focused browser fixtures cover explicit editor/consent/CAS, lost acknowledgement and reload without writes, exact receipts, queue/history/redelivery, access loss/late response clearing and shared dark/light 390/1440 layout. The final **12 cases passed in 16.5 s**. These are source browser tests, not retained-stack screenshots.
 - Pure transport tests independently verify HMAC bytes, owned TLS, redirect refusal, address pinning, mixed/rebound DNS, exact operator exceptions and late authority denial before HTTP bytes.
 

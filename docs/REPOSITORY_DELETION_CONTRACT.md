@@ -14,9 +14,9 @@ The immutable-ID `/repositories/{id}` route is GET-only. The deletion handler
 has no expected repository ID, revision or native conditional-write receipt.
 Its supported admin command inventory does not provide a repository deletion
 command. These are primary-source observations, not live native proof:
-[API routes](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/api.go),
-[delete handler](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/repo.go),
-[admin commands](https://github.com/go-gitea/gitea/blob/v1.27.3/cmd/admin.go).
+[API routes](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/api.go),
+[delete handler](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/repo.go),
+[admin commands](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/cmd/admin.go).
 
 Address replacement or rename between Golf's observation and native dispatch
 cannot be closed by a Golf revision, UUID, typed name or header. Consequently

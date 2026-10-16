@@ -4,9 +4,9 @@ Proposed implementation design, 2026-10-03. Applies to both infrastructure track
 
 ## Decision and evidence
 
-Continue with the fully mediated publisher experiment on unchanged Gitea 1.27.3. First prove a complete admission boundary and interrupted-publication behavior in a disposable installation. Build production merge authoring only after that gate passes. Keep the scoped publisher and exact-candidate Git transport; do not replace them with a preflight check followed by the native merge endpoint.
+Continue with the fully mediated publisher experiment on an unchanged native forge. The earlier experiment ran on the since-retired backend; it has not been repeated on Forgejo 15.0.9. First prove a complete admission boundary and interrupted-publication behavior in a disposable installation. Build production merge authoring only after that gate passes. Keep the scoped publisher and exact-candidate Git transport; do not replace them with a preflight check followed by the native merge endpoint.
 
-The existing live [protected-write qualification](GITEA_PROTECTED_WRITE_QUALIFICATION.md), [publisher qualification](GITEA_PUBLISHER_QUALIFICATION.md), and [mutation inventory](GITEA_MUTATION_BOUNDARY_INVENTORY.md) already establish these constraints:
+Earlier live protected-write and publisher qualifications and a mutation-boundary inventory, all on the since-retired backend and not repeated on Forgejo, established these constraints:
 
 | Primitive | Supported useful behavior | Remaining gap |
 | --- | --- | --- |
@@ -17,13 +17,13 @@ The existing live [protected-write qualification](GITEA_PROTECTED_WRITE_QUALIFIC
 | Supported manual-merge bookkeeping | Records an already published candidate in native PR state | Requires independent proof of the actual published object, operation identity and finalization outcome |
 | Durable experimental uncertainty record | Stops the experiment from replacing an issued operation | Does not enforce a new epoch inside an already accepted native write |
 
-The pinned [merge API handler](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/pull.go) passes an expected head to synchronous merge and uses a distinct scheduled path. Its PR read handler can start delayed checking. Native merge uses a provider lifetime context, so request cancellation does not establish write cancellation. [Pinned merge service](https://github.com/go-gitea/gitea/blob/v1.27.3/services/pull/merge.go).
+The pinned [merge API handler](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/pull.go) passes an expected head to synchronous merge and uses a distinct scheduled path. Its PR read handler can start delayed checking. Native merge uses a provider lifetime context, so request cancellation does not establish write cancellation. [Pinned merge service](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/services/pull/merge.go).
 
 **Conclusion:** current native routes alone cannot implement Golf's full protected contract when independent writers remain. A managed gateway is a candidate composition whose exclusivity must be demonstrated. A supported upstream conditional-publication extension remains the fallback if complete mediation cannot be proved. This decision retains the required merge/squash/rebase scope; it does not turn the missing enforcement into an optional feature.
 
 ## Read-only current installation observations
 
-On 2026-10-03, `docker ps` showed `golf-gitea-1` running `gitea/gitea:1.27.3-rootless` with loopback HTTP `3001→3000` and SSH `2222→2222` published. `GET http://localhost:8080/readyz` returned database and forge ready. Running Golf image prefix was `b54ca4a502f5`. These are exposure/readiness observations, not authenticated policy or protection proof. No token, password, environment or native database was read for this inventory; no mutation or restart was performed.
+On 2026-10-03, the then-running local installation used the since-retired backend, with loopback native HTTP `3001→3000` and SSH `2222→2222` published. `GET http://localhost:8080/readyz` returned database and forge ready. Running Golf image prefix was `b54ca4a502f5`. These are exposure/readiness observations, not authenticated policy or protection proof. No token, password, environment or native database was read for this inventory; no mutation or restart was performed.
 
 The checked-in [Compose configuration](../compose.yaml) exposes those direct native ports, disables native Actions, and does not establish the proposed mutation broker. The [Helm network policy](../deploy/helm/golf/templates/networkpolicy.yaml) admits Golf to native HTTP and configurable ingress to native HTTP/SSH; it classifies peers and ports, not HTTP operations. Neither topology currently proves complete mutation admission. Other running projects were outside this task and were not changed.
 
@@ -99,7 +99,7 @@ A mode/message/author/signing change generates a different candidate and invalid
 
 ## Approval and trusted check evaluation
 
-Review presence/count is insufficient. Collect every required native review page, verify stable PR/reviewer identity, exact reviewed H, current decision and dismissal, and resolve effective reviewer/team eligibility under P. Deduplicate reviewers; honor active change requests, author self-approval restrictions, configured code-owner requirements and required conversation resolution. Missing/ambiguous/incomplete review or ownership data yields a typed blocked reason. Do not accept an asynchronously refreshed stale flag in place of the reviewed commit. Native review submission records commit identity, but freshness and eligible grants still require Golf's final binding. [Pinned review service](https://github.com/go-gitea/gitea/blob/v1.27.3/services/pull/review.go).
+Review presence/count is insufficient. Collect every required native review page, verify stable PR/reviewer identity, exact reviewed H, current decision and dismissal, and resolve effective reviewer/team eligibility under P. Deduplicate reviewers; honor active change requests, author self-approval restrictions, configured code-owner requirements and required conversation resolution. Missing/ambiguous/incomplete review or ownership data yields a typed blocked reason. Do not accept an asynchronously refreshed stale flag in place of the reviewed commit. Native review submission records commit identity, but freshness and eligible grants still require Golf's final binding. [Pinned review service](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/services/pull/review.go).
 
 Human review creation/dismissal/re-requesting can be built independently through supported APIs with immutable selection and uncertainty handling. Protected publication stays gated until those mutations participate in the complete admission boundary. A read-only list of old reviews is useful display evidence, not authorization to merge.
 
@@ -117,7 +117,7 @@ Operator or owner changes cannot silently bypass this promise. Emergency operati
 
 ## Native PR bookkeeping and post-merge branch deletion
 
-After exact-C publication, verify the observed target, candidate parents/tree, operation identity and retained authority. Under the reservation call the supported `manually-merged` API only for the bound PR/C. Preserve `published / finalization pending` if bookkeeping is unknown. Native history membership alone is not proof that this operation published the authorized candidate. The pinned native service checks that the supplied commit exists in branch history; Golf must supply the stronger selection proof. [Manual merge service](https://github.com/go-gitea/gitea/blob/v1.27.3/services/pull/merge.go).
+After exact-C publication, verify the observed target, candidate parents/tree, operation identity and retained authority. Under the reservation call the supported `manually-merged` API only for the bound PR/C. Preserve `published / finalization pending` if bookkeeping is unknown. Native history membership alone is not proof that this operation published the authorized candidate. The pinned native service checks that the supplied commit exists in branch history; Golf must supply the stronger selection proof. [Manual merge service](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/services/pull/merge.go).
 
 Independently qualify bookkeeping for merge, squash, rebase and fast-forward: rewritten source ancestry and native PR-check processing can differ. The API/manual style must be enabled for the scoped broker without opening ordinary manual-mark routes. Reconciliation may inspect observed outcome; it must not repost after uncertainty merely because an old PR GET still shows open. Provider asynchronous processing and native auto-detection need explicit experiments.
 

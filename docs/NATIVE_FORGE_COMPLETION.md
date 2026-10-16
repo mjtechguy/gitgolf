@@ -1,6 +1,6 @@
 # Portable native forge completion
 
-Source packet, 2026-10-05. This document records implemented consumers and limits, not a localhost deployment or full Gitea/GitHub parity claim.
+Source packet, 2026-10-05. This document records implemented consumers and limits, not a localhost deployment or full Forgejo/GitHub parity claim.
 
 ## Release management
 
@@ -20,9 +20,9 @@ Migration074 retains immutable original operation identity and phase events, wit
 
 Real PostgreSQL tests cover all five effects, semantic fingerprints, preflight authority/identity/revision refusals, uncertain native outcomes for all five kinds, no replay/replacement, retained phase events and anonymous/cross-origin/delegated-token refusal. Native HTTP in these source tests is a controlled supported-API fixture, not a real forge qualification. Browser source tests cover all five explicit controls, no bare form, original-key reload/inspection, denial, late reply after account transition and shared dark/light390/1440 layouts. Early source checks exposed and fixed the requested form reset and cache-denial reentrancy bugs; final checks must pass before deployment.
 
-Actual pinned Gitea native/served qualification, current-schema restore and deployment remain separate gates. Wider uploads/streaming, contributor releases-unit write permissions and native pending-release lifecycle rules remain open.
+Actual pinned Forgejo native/served qualification, current-schema restore and deployment remain separate gates. Wider uploads/streaming, contributor releases-unit write permissions and native pending-release lifecycle rules remain open.
 
-Primary endpoint reference: [Gitea1.27 API](https://docs.gitea.com/api/1.27/), repository release and attachment operations.
+Primary endpoint reference: the pinned [Forgejo 15.0.9 Swagger](compatibility/forgejo-15.0.9.swagger.json), repository release and attachment operations.
 
 Actual pinned native source qualification now passes all five operations through production HTTP handlers and a disposable real PostgreSQL schema: edit, exact binary upload, rename, asset deletion, release deletion, same-key replay and explicit original inspection. Independent native reads confirm effects and preservation of the original Git tag. The owned fixture actor is purged. Run `GOLF_TEST_DATABASE_URL=<owned PostgreSQL> python3 scripts/release-management-native-source-proof.py --compose-root <retained Compose root> --output <new evidence directory>` to reproduce. No new Docker jobs or service restarts occur.
 

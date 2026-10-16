@@ -1,7 +1,7 @@
 # Everyday forge consumers089
 
 This adds bounded consumers to deployed084 review authoring and076 web files.
-Gitea1.27.3 supported APIs remain the only forge write/read boundary. No new
+Forgejo's supported APIs remain the only forge write/read boundary. No new
 service, Docker capacity, repository CI or provider/model execution is required.
 
 ## One native batch commit and rename
@@ -125,7 +125,8 @@ success. Metadata-only original inspection remains separate from dispatch. Uploa
 bytes are volatile and cleared on cancellation/account loss; tab storage retains
 only exact identities/hashes/size, with no automatic retry.
 
-Native upload attempt3 passed in74.100s against1.27.3, rerunning all existing089
+Native upload attempt3 passed in74.100s against the since-retired backend (not
+repeated on Forgejo 15.0.9), rerunning all existing089
 native checks plus own PR-body/comment uploads, exact original replay/inspection,
 stale refusal and independent bytes. All owned fixtures were purged, with0 Docker
 resources. Upload attempt1 preserved a host Go linker disk failure before test

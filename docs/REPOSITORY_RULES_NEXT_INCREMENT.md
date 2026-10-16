@@ -10,13 +10,14 @@ request. Repository Rules remains Partial under
 
 ## Current native contract
 
-The supported Gitea 1.27.3 branch API returns `protected` and
+The supported native branch API returns `protected` and
 `user_can_merge`. Native conversion observes the first applicable native branch
 protection and caller branch-policy result; an unprotected branch reports the
 caller's native write flag. These are independent observations, not a lease over
-policy, reviews, source or target. See pinned primary source
-[GetBranch](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/branch.go)
-and [ToBranch](https://github.com/go-gitea/gitea/blob/v1.27.3/services/convert/convert.go).
+policy, reviews, source or target (characterized on the since-retired backend;
+Forgejo inherits this code but it has not been re-qualified). See Forgejo source
+[GetBranch](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/branch.go)
+and [ToBranch](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/services/convert/convert.go).
 The supported repository response supplies native merge/update strategy flags and
 defaults. Golf requires their presence and validates their supported values.
 

@@ -186,7 +186,7 @@ kubectl --kubeconfig "$GOLF_KUBECONFIG" --context "$GOLF_KUBE_CONTEXT" \
   --random-password --must-change-password=false
 ```
 
-The chart mounts Forgejo configuration at `/etc/gitea/app.ini`; the service and executable are Forgejo. Store the printed native password privately. Sign into Forgejo, then create a dedicated per-user token under Settings → Applications. Basic sign-in/browsing needs `read:user` and `read:repository`; creation needs `write:user` and `write:repository`; issues and organization features need their own documented scopes.
+The chart mounts Forgejo configuration at `/etc/gitea/app.ini` (the Forgejo rootless image's upstream configuration path); the service and executable are Forgejo. Store the printed native password privately. Sign into Forgejo, then create a dedicated per-user token under Settings → Applications. Basic sign-in/browsing needs `read:user` and `read:repository`; creation needs `write:user` and `write:repository`; issues and organization features need their own documented scopes.
 
 Prepare an ignored mode-0600 `.tmp/kubernetes/account.json` through your editor/secret manager. Its shape is:
 

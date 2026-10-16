@@ -1,6 +1,6 @@
 # Issue form consumer
 
-Golf reads templates from one exact default-branch commit through the supported forge contents API. Markdown templates remain editable prefilled drafts. YAML forms in `.github/ISSUE_TEMPLATE` and `.gitea/ISSUE_TEMPLATE` now have a bounded real renderer for `markdown`, `input`, `textarea`, `dropdown` and `checkboxes`.
+Golf reads templates from one exact default-branch commit through the supported forge contents API. Markdown templates remain editable prefilled drafts. YAML forms in `.github/ISSUE_TEMPLATE` and `.forgejo/ISSUE_TEMPLATE` now have a bounded real renderer for `markdown`, `input`, `textarea`, `dropdown` and `checkboxes`.
 
 The parser refuses unknown schema keys/field types, duplicate IDs/options, YAML aliases/anchors/multiple documents, invalid option indices/render languages and malformed/oversized content. A file is capped at6000UTF-8bytes,30fields,50options per choice field, and the existing50-template inventory bound remains. Supported constraints include required fields, required checkbox options, minimum text length, dropdown defaults/multiple selection and textarea code rendering. Unsupported upload fields and future constraints are counted as unsupported; they are not silently dropped.
 
@@ -10,4 +10,4 @@ Source evidence consists of the strict Go parser checks and issue browser tests 
 
 Attachments, template configuration/contact links, unsupported schema extensions, query-parameter prefills and complete cross-provider form parity remain acceptance work.
 
-Primary schema references: [GitHub form schema](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-githubs-form-schema), [Gitea issue templates](https://docs.gitea.com/usage/issues-prs/issue-pull-request-templates/).
+Primary schema references: [GitHub form schema](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-githubs-form-schema), [Forgejo issue templates](https://forgejo.org/docs/v15.0/user/issue-pull-request-templates/).

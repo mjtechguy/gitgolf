@@ -42,9 +42,9 @@ The same transaction appends `ADMIN_CREATED`, `ADMIN_PASSWORD_RESET` or `ADMIN_E
 
 `go test -race ./internal/server -run '^TestInstanceLifecycle' -count=1 -timeout 120s` uses isolated real-PostgreSQL schemas when `GOLF_TEST_DATABASE_URL` is provided. It covers transport and role boundaries, immutable mapping/encryption, reset/enable state, local-session/delegation revocation, concurrent version-fenced resets, audit-insertion rollback for all three actions, post-wait actor revocation, input validation and foreign-forge targets. Without that DSN, database cases skip.
 
-`python3 scripts/account-lifecycle-smoke.py --image <current-Golf-image>` creates one disposable Compose core with pinned Gitea and PostgreSQL, uses supported native administration only for fixture setup, and removes all project containers, volumes, network and private configuration in `finally`. It combines the three administrator methods with the two self-service account-security changes.
+`python3 scripts/account-lifecycle-smoke.py --image <current-Golf-image>` creates one disposable Compose core with pinned Forgejo and PostgreSQL, uses supported native administration only for fixture setup, and removes all project containers, volumes, network and private configuration in `finally`. It combines the three administrator methods with the two self-service account-security changes.
 
-The native drill passed against Golf image `sha256:a26132c709660b91c794be9e12f0f2f128bb80b1a3c80807ed2314a2b1b0d5ad`, Gitea 1.27.3 and PostgreSQL 18.4. It verified:
+The native drill passed against Golf image `sha256:a26132c709660b91c794be9e12f0f2f128bb80b1a3c80807ed2314a2b1b0d5ad` and PostgreSQL 18.4 in an earlier native qualification on a since-retired backend; it has not been repeated on Forgejo 15.0.9. It verified:
 
 - All three administrator operations, two own-account credential changes, password/Origin/PAT/delegated/ordinary-account denials, administrator-target protection and stale-version rejection.
 - Expected-native-ID mismatch rejection; ordinary enrollment even with an ignored, forged administrator-role JSON field; encrypted source credentials; and a newly issued matching provider token on enable while retaining the historical AEAD binding.

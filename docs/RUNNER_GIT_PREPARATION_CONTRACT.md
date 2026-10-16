@@ -13,11 +13,11 @@ The preparation image and every selected Actions platform image must separately
 be approved and contain usable Git/tar. This opt-in does not install Git into an
 archive-only job image; missing native tools refuse setup before job release.
 
-[Enrolled native evidence](compatibility/evidence/native-historical-git.json)
-executes historical admitted H in two independent fresh jobs after its native
+Enrolled native evidence, collected on the since-retired backend (receipt
+removed with it; not repeated on Forgejo), executed historical admitted H in two independent fresh jobs after its native
 branch advances. Independent native Git fetch/readback verifies H, actual tree,
-workflow blob and executable100755 mode in each job. Gitea's REST commit tree
-field aliases H, so that field is not accepted as independent tree evidence.
+workflow blob and executable100755 mode in each job. That backend's REST commit
+tree field aliased H, so the field is not accepted as independent tree evidence.
 Original source/archive, graph ordering, scoped logs and restart/replay identities
 remain bound. An abrupt SIGKILL during a real source step leaves owned residue;
 normal worker startup refuses it. Explicit coordinator recovery marks the
@@ -44,7 +44,7 @@ Git readback remain mandatory.
 The trusted preparation profile remains exact-H/depth1/v0 and network-none.
 The later separate [remote Actions profile](ACTIONS_REMOTE.md) qualifies genuine
 private exact-H/depth1 checkout, scoped job credentials and controlled dependency
-egress in the [unchanged Requests push receipt](compatibility/evidence/requests-local.json).
+egress; on Forgejo, see the 2026-10-11 [Forgejo Requests receipt](compatibility/evidence/requests-forgejo-deep-20261011.json).
 Statements below about an undelivered candidate describe historical receipts.
 Broader checkout, long-step refresh and the full A1 exit remain open; neither
 opt-in profile is deployed to the retained installation.
@@ -103,7 +103,7 @@ native provider credentials enter this capsule or the native request.
 These new job routes inherit the ordinary15-second router limit. They do not
 have the separately routed managed-human Git transport's longer deadline.
 Current source qualification uses real PostgreSQL with controlled native/graph
-fixtures; it is not deployed token delivery, Gitea checkout or pinned checkout
+fixtures; it is not deployed token delivery, native forge checkout or pinned checkout
 compatibility. Worker coordination and PublicURL can be different origins;
 actual authenticated issuer reachability, exact job delivery/rotation/masking,
 TLS/origin and Git protocol behavior must pass before activation. No Host spoof,
@@ -122,7 +122,7 @@ unknown commands and duplicate headers/capabilities remain refused. Repository
 metadata discovery is unchanged in scope. This is based on the
 [Git v2 contract](https://git-scm.com/docs/gitprotocol-v2), not a custom Git codec.
 SHA-256 framing has source counterexamples; the real v2 client fixture is SHA-1.
-Controlled native responses in PostgreSQL cases do not qualify actual Gitea v2,
+Controlled native responses in PostgreSQL cases do not qualify actual Forgejo v2,
 private token delivery, action execution or the complete checkout options.
 
 Eight additional native Git source cases qualify nested paths, export-ignore/
@@ -228,7 +228,8 @@ That failure mode needs real recovery qualification before activation.
 passes27.083s for SHA-1/SHA-256 root and child commits through a real TLS
 Git2.39.5 origin into native container Git2.54.0. Four actual kernel cgroup/mount
 profiles and complete owned removal are recorded. It uses a3.4-MiB scratch
-qualification image built from the already-cached owned Gitea Git binaries with
+qualification image built from the already-cached owned Git binaries of the
+since-retired native backend image, with
 no package download; this is not a distribution/Compose release contract.
 Original regular-file admitted fixture archive equality is checked. Full worker
 race20 top-level cases passes3.213s, full internal runner race13.270s and vet
@@ -236,7 +237,7 @@ passes. Controlled lifecycle tests additionally cover native corrupt/dangling
 packs, restrictive profiles, metadata substitution, cancellation and ownership/
 cleanup refusal. Adversarial memory/disk exhaustion and lost-create recovery
 are still source-only or unqualified; positive profile observations do not prove
-all such failures. This is not actual Gitea/enrolled Golf transport or enabled CI.
+all such failures. This is not actual Forgejo/enrolled Golf transport or enabled CI.
 
 ### Earlier host consumer and server evidence
 
@@ -245,7 +246,7 @@ binds four committed worker/checker files. All 18 full-package race cases pass
 in2.559s with no skips, and runner vet passes. Nine actual TLS1.3/Git2.39.5
 consumer scenarios include success, malformed/duplicate receipts, MIME and
 compression refusal, native denial, redirects, cancellation and insecure-client
-refusal. The origin uses an owned real `git http-backend`, not actual Gitea or
+refusal. The origin uses an owned real `git http-backend`, not actual Forgejo or
 the enrolled Golf server. Success fetches exact H at depth1 into a fresh
 unmaterialized repository and independently compares its native tree with the
 original archive SHA, all blob bytes/executable modes and workflow identity.
@@ -278,7 +279,7 @@ database cases remain HTTP fixtures.
 A separate installed Git2.39.5 check uses a real local `git http-backend` and an
 owned two-commit repository: fetch/checkout yields exact H, depth1, one commit and
 the expected file bytes. It tests the actual negotiation grammar, not an actual
-Gitea/Golf end-to-end checkout. The original failed database attempt remains
+Forgejo/Golf end-to-end checkout. The original failed database attempt remains
 preserved; its decorator rounded a deliberate bigint native ID, and later its
 database entered recovery. Correcting the decoder and using a fresh larger
 bounded database fixture earns a separate passing receipt, not a relabeled

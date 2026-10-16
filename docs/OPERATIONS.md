@@ -6,7 +6,7 @@ The page is read-only. It never allocates resources, queries arbitrary URLs or e
 
 ## Authorization and scope
 
-Portable profiles require a current, operator-enrolled Golf administrator password session. A Gitea administrator, personal provider token or delegated API token does not acquire instance administration. Authority is checked again after dependency/metrics collection.
+Portable profiles require a current, operator-enrolled Golf administrator password session. A Forgejo administrator, personal provider token or delegated API token does not acquire instance administration. Authority is checked again after dependency/metrics collection.
 
 Native installations require current Cloudflare Access identity, an active Golf user and an active `operations_admins` record in their native D1 partition. Repository creation permission, repository administrator grants and ordinary Git bearer credentials never acquire operational authority. The API rechecks both the role and its current email-to-user mapping before returning data. The shared administration flag exposes the portal, but its native scope is explicitly the single installed workspace, not every SaaS tenant or the Cloudflare account.
 
@@ -32,9 +32,9 @@ Native snapshots use one fixed D1 batch for inventory aggregates. Completed evid
 
 The Operations RPC is included in the ordinary Golf Go backend; deploy the matching generated contracts/frontend. Existing administrator enrollment applies. Telemetry uses the injected process registry and does not require scraping, Prometheus or Grafana to serve the page.
 
-It shows PostgreSQL/Gitea readiness, process metrics and telemetry configuration, plus configured object storage, enrolled runners, managed execution, Access bridge and preview runtime. Configuration rows do not establish successful jobs or provider access. Dependency probes have a three-second collection deadline and authority is checked after the wait.
+It shows PostgreSQL/Forgejo readiness, process metrics and telemetry configuration, plus configured object storage, enrolled runners, managed execution, Access bridge and preview runtime. Configuration rows do not establish successful jobs or provider access. Dependency probes have a three-second collection deadline and authority is checked after the wait.
 
-Available process metrics include HTTP requests/transport server errors, Gitea requests, database queries, failed trace-export batches and approximate p50/p95/p99 durations for HTTP handlers, database operations and Gitea response headers. Counters and histogram estimates cover this process since start. They are not a fleet-wide rolling window, browser navigation timing, database billing or proof of protected mutation success. Empty metric families remain unknown.
+Available process metrics include HTTP requests/transport server errors, Forgejo requests, database queries, failed trace-export batches and approximate p50/p95/p99 durations for HTTP handlers, database operations and Forgejo response headers. Counters and histogram estimates cover this process since start. They are not a fleet-wide rolling window, browser navigation timing, database billing or proof of protected mutation success. Empty metric families remain unknown.
 
 The optional Docker monitoring overlay remains separately documented in `deploy/observability/README.md`; it can provide the existing Grafana dashboard and Jaeger UI. Kubernetes can expose the protected metrics listener and send traces to an external collector using Helm's existing observability settings. The chart does not install a collector, Grafana or CRDs. This source increment does not claim live Kubernetes scraper qualification.
 
@@ -80,7 +80,7 @@ The example is a configuration shape; replace the placeholder with the actual ap
 ## Existing native installation upgrade
 
 1. Build matching portable/native frontend assets and prepare the native bundle/release manifest.
-2. Apply the additive `cloudflare/forge/migrations/0010_operations.sql` using the existing native release operator's `migrate` action. Never apply it to PostgreSQL/Gitea.
+2. Apply the additive `cloudflare/forge/migrations/0010_operations.sql` using the existing native release operator's `migrate` action. Never apply it to PostgreSQL/Forgejo.
 3. Read back the new tables and reviewed indexes. The release operator checks the new schema before rollout; it does not roll back the database.
 4. Enroll the intended existing native user's immutable numeric ID in `operations_admins`, after independently verifying their active Access email/user mapping. Existing `can_create` values and repository grants are deliberately not converted into administration.
 5. Deploy through the guarded release flow, read back the served release/schema and verify Access admission, ordinary-user denial and role revocation.
@@ -93,7 +93,7 @@ INSERT INTO operations_admins(user_id,active) VALUES(?,1)
 ON CONFLICT(user_id) DO UPDATE SET active=1;
 ```
 
-Revocation sets `active=0` for that exact ID. Do not authorize account administration from a username supplied by a browser or write Gitea's database. The live setup/upgrade is not performed by this source increment; the old disposable demo remains stopped.
+Revocation sets `active=0` for that exact ID. Do not authorize account administration from a username supplied by a browser or write Forgejo's database. The live setup/upgrade is not performed by this source increment; the old disposable demo remains stopped.
 
 ## Native inventory and provider observations
 

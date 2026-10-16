@@ -120,7 +120,7 @@
   "limitations": [
     "Actual enrolled historical-source receipt binds the earlier v0 build; this v2 candidate has separate source/database evidence.",
     "Native CGI tests exercise real fresh and repeated exact-H/depth1 v2 fetches with no tags and no recursive submodules; SHA-256 framing has source counterexamples only.",
-    "Database native responses remain controlled fixtures. No private job credential delivery/rotation/masking, actual Gitea v2 checkout, Node24 actions or Requests qualification."
+    "Database native responses remain controlled fixtures. No private job credential delivery/rotation/masking, actual native forge v2 checkout, Node24 actions or Requests qualification."
   ],
   "native_client_checks": {
     "exitCode": 0,

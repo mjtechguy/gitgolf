@@ -1,45 +1,64 @@
 # Offline recovery for the canonical Docker installation
 
-Updated: 2026-10-04. This is bounded P1.6 recovery for the canonical core and optional local RustFS developer profile, not a completed production recovery gate. The [operator script](../scripts/recovery.py) creates an encrypted coordinated backup, validates it and restores it into a fresh, quarantined Docker Compose project. It never starts restored Golf, Gitea or RustFS. Historical real PostgreSQL invalidation tests, offline archive checks and bounded native recovery drills **pass**, including their recorded core restart and local RustFS cases. The new explicit schema059 Access profile below is source-prepared; its first actual attempt failed before fixture actors or recovery operations. See the [evidence ledger](IMPLEMENTATION_STATUS.md).
+Updated: 2026-10-16. This is bounded P1.6 recovery for the canonical Forgejo core and the optional local RustFS developer profile. It is not a completed production recovery gate. The [operator script](../scripts/recovery.py) creates an encrypted, coordinated backup, validates it and restores it into a fresh, quarantined Docker Compose project. It never starts the restored Golf, Forgejo or RustFS services.
 
-Cloudflare and AI are not required. The same origin-side procedure can apply to the canonical Docker core of either track; it does not back up Cloudflare resources or external deployment state. Kubernetes, external databases/object stores and modified topologies require separate recovery qualification.
+**Qualification status.** Every native backup/restore drill that previously passed ran on the retired earlier topology. Those drills do not qualify Forgejo. On 2026-10-16 the recovery tooling was ported to the Forgejo 15.0.9 topology in `compose.yaml`. The port is adapted from source and covered by unit tests only. `scripts/recovery-test.py` and `scripts/repository-access-recovery-smoke.py --self-check` pass, but **no Forgejo backup/restore drill has run yet**: neither `scripts/recovery-smoke.py` nor the Access-core059 drill. Until one passes, treat Forgejo recovery as unqualified. The record of results is the [evidence ledger](IMPLEMENTATION_STATUS.md).
 
-## Actual Access-core059 qualification
+The P1.6 exception covers privileged offline recovery only. It uses documented native PostgreSQL and Docker procedures into a fresh, stopped target, with every writer drained and traffic quarantined. It does not authorize application features to write Forgejo's database or repository files, schema surgery across products, or ad hoc edits to a live installation.
 
-[Fresh attempt4](../.tmp/repository-access059-recovery-attempt4/manifest.json) passes on component source `05ab5bf`/core `8f99f647` with exact owned cleanup. Real personal/org grants, team membership, shared RO/RW deploy keys, retained grant/invitation histories and both native204 effect-loss originals survive encrypted backup and fresh quarantined restore. Session/issuer-version invalidation expires the one pending invitation through the specified trigger; reenrollment neither restores old consent nor resends uncertain writes. Independent native bindings remain unchanged. One actual encrypted typed queued run is retained and cancelled without replay, wrong/missing content keys refuse, and all thirteen credential families are counted during supported authenticated rotation. This is the closed scoped profile, not whole-platform or schema060 qualification. Failed attempts1–3 remain preserved below.
+Cloudflare and AI are not required. The same origin-side procedure can apply to the canonical Docker core of either track. It does not back up Cloudflare resources or external deployment state. Kubernetes, external databases or object stores and modified topologies each need their own recovery qualification.
 
 ## Supported profile and trust boundary
 
 | Requirement | Current contract |
 | --- | --- |
-| Services | Exactly one `golf`, one rootless `gitea` and one `postgres`, optionally one canonical `rustfs`, belonging to the named Compose project. Supply the complete ordered configuration with repeatable `--compose-file`; captured service file lists must be ordered subsets with the same base file. Remove drained worker/daemon containers before capture. |
-| Versions | PostgreSQL **18.4**, Gitea **1.27.3**, Golf schema **202610020021** or historically qualified **202610020019/008/009**. Schema020 alone and other schemas are rejected. Schema **202610040059** is accepted only with explicit `--profile access-core059` under the stricter closed requirements below; this is not whole-platform recovery qualification. Restore uses the source's actual Docker image IDs with `pull_policy: never`; all captured images must already exist locally. Images are not included in the backup. |
-| Databases | Separate `golf` and `gitea` databases/roles in the bundled PostgreSQL service; canonical initialization script and matching resolved application credentials. No published PostgreSQL port. |
-| Persistent state | Named PostgreSQL volume at `/var/lib/postgresql`; Gitea volumes at `/var/lib/gitea` and `/etc/gitea`. The optional RustFS profile also captures its canonical `/data` named volume. No extra application mounts, privileged containers or host networking. |
-| Runtime configuration | Image-default command, entrypoint, user and working directory; no restart policy, custom resource/security/device/host overrides covered by the validator, or extra networks. Named volumes use the default local driver without options and belong to this project. The optional RustFS service permits only its validated canonical security/resource/scratch configuration. Modified profiles are rejected rather than silently simplified during restore. |
-| Exposure | Golf HTTP, Gitea HTTP and Gitea SSH bindings are loopback-only. Existing public URLs, origin settings and port bindings are preserved, not automatically changed for another hostname. |
-| Writers | Golf, Gitea and optional RustFS stopped, PostgreSQL running, no other active container using the captured volumes, and no ordinary client connections to either application database. The operator must also drain every external/direct writer. |
-| Host tools | Python 3.11+ on a Unix host, Docker with Compose, and `age`. `age-keygen` is needed when provisioning a backup identity. The live drill additionally needs Git, Git LFS, GnuPG and `ssh-keyscan`. |
+| Services | Exactly one `golf`, one rootless `forgejo` and one `postgres` service, optionally one canonical `rustfs`, all in the named Compose project. Supply the complete ordered configuration with repeatable `--compose-file`. Each captured service's file list must be an ordered subset that starts with the same base file. Remove drained worker and daemon containers before capture. |
+| Versions | PostgreSQL **18.4**, Forgejo **15.0.9** (`forgejo --version` must report `15.0.9+gitea-1.22.0`, which is Forgejo's own version string) and Golf schema **202610020021**, or the historically allowlisted **202610020019/008/009**. Schema020 on its own and any other schema are rejected. Schema **202610040059** is accepted only with explicit `--profile access-core059`, under the stricter closed requirements below. Restore uses the source's actual Docker image IDs with `pull_policy: never`, so every captured image must already exist locally. Images are not part of the backup. |
+| Databases | Separate `golf` and `forgejo` databases and roles in the bundled PostgreSQL service, created by the byte-identical canonical [`deploy/postgres/forgejo-init.sh`](../deploy/postgres/forgejo-init.sh), with matching resolved credentials (`GOLF_DB_PASSWORD`, `FORGEJO_DB_PASSWORD`). No published PostgreSQL port. |
+| Forgejo configuration | `FORGEJO__database__*` must name `postgres:5432`, database and user `forgejo`, and the PostgreSQL service's `FORGEJO_DB_PASSWORD`. The rootless image's own path variables must keep their defaults, so `app.ini` is `/var/lib/gitea/custom/conf/app.ini` inside the data volume. `FORGEJO_WORK_DIR`/`FORGEJO_CUSTOM` overrides, `__FILE` indirection and the legacy `GITEA__` environment prefix are refused. Forgejo reads both prefixes, so refusing the legacy one stops a second spelling from silently overriding a checked setting. Two variables that decode to the same setting are also refused. |
+| Golf configuration | `GOLF_FORGE_URL=http://forgejo:3000`, `GOLF_FORGE_KIND=forgejo`, a lowercase UUIDv4 `GOLF_FORGE_INSTANCE_ID` and a `DATABASE_URL` that matches the bundled `golf` role. |
+| Persistent state | A named PostgreSQL volume at `/var/lib/postgresql` and the single Forgejo volume `forgejo-data` at `/var/lib/gitea`. That path is the upstream rootless image's data directory; the service is Forgejo. The optional RustFS profile also captures its canonical `/data` named volume. No extra application mounts, privileged containers or host networking. |
+| Runtime configuration | Image-default command, entrypoint, user and working directory. No restart policy, no custom resource, security, device or host overrides covered by the validator, and no extra networks. Named volumes must use the default local driver with no options and belong to this project. The optional RustFS service permits only its validated canonical security, resource and scratch configuration. Modified profiles are rejected; the script does not quietly simplify them during restore. |
+| Exposure | Golf HTTP, Forgejo HTTP and Forgejo SSH bindings are loopback-only. Existing public URLs, origin settings and port bindings are kept as they are; the script does not change them for another hostname. |
+| Writers | Golf, Forgejo and optional RustFS are stopped while PostgreSQL runs. No other active container may use the captured volumes, and there must be no ordinary client connections to either application database. The operator must also drain every external or direct writer. |
+| Host tools | Python 3.11+ on a Unix host, Docker with Compose, and `age`. `age-keygen` is needed to provision a backup identity. The live drill also needs Git, Git LFS, GnuPG and `ssh-keyscan`. |
 
-Restore accepts only archives created by a trusted operator from a trusted installation. Successful age decryption establishes ciphertext integrity, **not the sender's identity**: anyone with the public recipient can encrypt another archive. Archive checks do not turn arbitrary Compose configuration, SQL or repository hooks into safe input. PostgreSQL explicitly warns that restoring a database dump can execute source-controlled code. Maintain backup provenance separately from the encrypted file and its checksum. See [age's public-recipient model](https://github.com/FiloSottile/age) and [PostgreSQL's restore trust warning](https://www.postgresql.org/docs/18/app-pgrestore.html).
+Restore accepts only archives that a trusted operator created from a trusted installation. Successful age decryption proves ciphertext integrity, **not who sent it**: anyone with the public recipient can encrypt a different archive. Archive checks do not make arbitrary Compose configuration, SQL or repository hooks safe input. PostgreSQL warns explicitly that restoring a dump can execute code controlled by the source. Keep backup provenance separately from the encrypted file and its checksum. See [age's public-recipient model](https://github.com/FiloSottile/age) and [PostgreSQL's restore trust warning](https://www.postgresql.org/docs/18/app-pgrestore.html).
 
-## Explicit schema059 Access-core profile (prepared, actual drill pending)
+## Explicit schema059 Access-core profile (prepared; Forgejo drill not run)
 
-`backup --profile access-core059` is an additional closed profile, not a general schema allowlist extension. Older profiles keep their existing validation and command syntax. Its archive records the exact profile, bounded admission observations and the supported operator's complete thirteen-family key inventory. Verify refuses missing/unknown profile metadata, unsupported schemas or nonzero forbidden inventories. Restore verifies the authenticated archive before creating a target; after restoring the databases into that stopped fresh target, it independently rechecks the actual schema/closed inventories and configured key fingerprints/counts **before** copying native volumes or invalidating credentials. A semantic database mismatch may therefore leave a quarantined fresh PostgreSQL target requiring exact owned cleanup; it never opens either application.
+`backup --profile access-core059` is an additional closed profile. It does not extend the general schema allowlist. Older profiles keep their existing validation and command syntax. The archive records the exact profile, bounded admission observations and the complete thirteen-family key inventory from the supported operator. Verify refuses missing or unknown profile metadata, unsupported schemas and nonzero forbidden inventories. Restore verifies the authenticated archive before it creates a target. After restoring the databases into the stopped fresh target, it rechecks the actual schema, the closed inventories and the configured key fingerprints and counts independently. It does this **before** it copies the native volume or invalidates credentials. A semantic database mismatch can therefore leave a quarantined fresh PostgreSQL target that needs exact owned cleanup, but it never opens either application.
 
-This profile requires exactly canonical Golf, Gitea and PostgreSQL services, with the existing image/mount/volume/port/writer fences. RustFS, extra workers, daemons, proxies, extra hosts, private TLS bind mounts, active external source storage, managed-Git transport, native mirrors/webhooks/Actions/mail and other enabled background consumers are refused. Golf's canonical forge identity remains `http://gitea:3000`; a qualification fault adapter is removed and Golf recreated without its transient DNS override before capture. Only the precise PostgreSQL command `postgres -c max_wal_size=64MB -c min_wal_size=32MB -c checkpoint_timeout=30s` is additionally permitted and preserved for bounded WAL; arbitrary command overrides remain refused.
+The profile requires exactly the canonical Golf, Forgejo and PostgreSQL services, with the existing image, mount, volume, port and writer fences. It refuses RustFS, extra workers, daemons, proxies, extra hosts, private TLS bind mounts, active external source storage, managed-Git transport, native mirrors, webhooks, Actions and mail, and any other enabled background consumer. Golf's canonical forge identity stays `http://forgejo:3000`. A qualification fault adapter must be removed, and Golf recreated without its transient DNS override, before capture. The only additional PostgreSQL command permitted and preserved is `postgres -c max_wal_size=64MB -c min_wal_size=32MB -c checkpoint_timeout=30s`, for bounded WAL. Arbitrary command overrides are still refused.
 
-The native profile requires Actions and the native mailer disabled and every pinned basic/extended `cron.<task>.ENABLED=false` in both environment and archived `app.ini`. Gitea1.27.3 maps each task's configuration individually; a global `cron.ENABLED=false` does not establish this fence. The closed task inventory follows the pinned [basic](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/services/cron/tasks_basic.go), [extended](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/services/cron/tasks_extended.go) and [configuration mapping](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/modules/setting/cron.go) sources. Native mirror, push-mirror, webhook, hook-task and Actions-run tables must be empty. Custom receiver hook directories, extra hook delegates, reference-transaction hooks and persistent global/repository Git hook-path or include overrides are excluded. These are operator recovery guards, not a production egress sandbox or protection from a hostile Docker/database administrator; all external Git/API/database writers must still be fenced and drained.
+The native fence requires Actions and the native mailer to be disabled, and `cron.<task>.ENABLED=false` for every task in the closed inventory. Each must hold both in the decoded `FORGEJO__` environment (a literal `.` or the `_0X2E_` escape both work) and in the archived `app.ini`. Forgejo 15.0.9 has no global cron switch: each task reads its own `[cron.<task>]` section (see [`modules/setting/cron.go`](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/modules/setting/cron.go)). The inventory is every task registered in v15.0.9 [`tasks_basic.go`](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/services/cron/tasks_basic.go) and [`tasks_extended.go`](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/services/cron/tasks_extended.go), including tasks registered only conditionally (for example `remove_resolved_reports`). The source was checked: a search of every Go file at that tag found no other registrations. The `tasks_actions.go` tasks register nothing while `[actions] ENABLED=false`, which this profile requires separately. The native mirror, push-mirror, webhook, hook-task and Actions-run tables must be empty. Excluded: custom receiver hook directories, hook delegates other than Forgejo's generated one, reference-transaction hooks, and any persistent `.gitconfig` (image home or `[git] HOME_PATH`) or repository `config` that sets a hook path or an include. These are operator recovery guards, not a production egress sandbox or protection from a hostile Docker or database administrator. All external Git, API and database writers must still be fenced and drained.
 
-Golf must have no enabled automation grants/intake connections, active agents, uncertain review/publication/lifecycle/rules/Git/issue/repository-creation intents, active webhook/email subscriptions/transport/deliveries or running workflows. At most **one** unclaimed manual queued workflow with an exact retained typed-input row is permitted. Schema059's completeness constraints bind that row to the immutable run/source/schema/map metadata. Invalidation cancels it and clears its attempt capability, retaining its authenticated encrypted content; restoration never dispatches it or changes its original input digests.
+Golf must not have any of the following:
 
-Access and invitation unresolved operations are the deliberate exception. The original Access generation/operation/event and invitation operation/event rows remain exact, including UUIDs, request fingerprints, generations, native identities and `SUCCEEDED`/`DISPATCH_UNKNOWN` histories. Existing schema044 account-invalidation triggers intentionally advance each original `PENDING` invitation to `EXPIRED` with revision+1/updated time and append exactly one expiry event. Its immutable issuer version, consent and target remain unchanged; `GRANTING` and terminal invitation rows are not rewritten. Unknown work stays exclusionary; restore, status lookup, restart and re-enrollment do not replay, adopt or clear it. See the [Access contract](REPOSITORY_ACCESS_CONTRACT.md) and [invitation contract](REPOSITORY_INVITATION_CONTRACT.md).
+- enabled automation grants or intake connections
+- active agents
+- uncertain intents for review, publication, lifecycle, rules, Git, issues or repository creation
+- active webhook or email subscriptions, transports or deliveries
+- running workflows
 
-All local accounts remain disabled and advance credential versions. An invitation's original issuer version and persistent-consent record remain unchanged. Even after explicit current-authority enrollment enables the issuer and recipient, historical invitation operation inspection/replay remains denied (403) when that captured issuer version is stale. A new accept against the now-expired pending invitation is a state-conflict refusal (400), not a successful grant or refreshed consent. Do not refresh consent or manufacture a successful historical receipt. Keep its offline history as evidence; a genuinely new invitation requires an explicit new authorized action after any pending/unknown exclusion has been reconciled. Original direct-grant status/replay still requires current native owner/direct-admin authority and the exact original target observation.
+At most **one** unclaimed, manually queued workflow with an exact retained typed-input row is permitted. Schema059's completeness constraints bind that row to the immutable run, source, schema and map metadata. Invalidation cancels the run and clears its attempt capability while keeping its authenticated encrypted content. Restoration never dispatches it or changes its original input digests.
 
-The key inventory accounts for `sessions`, `oauth_attempts`, `local_accounts`, `infrastructure_connections`, `automation_credentials`, `review_contents`, `conversation_contents`, `webhook_credentials`, `repository_execution_values`, `organization_execution_values`, `workflow_quarantined_outputs`, `notification_contents` and `workflow_dispatch_inputs`. Replaced configured key material fails the operator fingerprint check. Missing retained-key material is visible as `configured:false` in diagnostic status; this profile rejects that inventory and ordinary core startup refuses the missing used key before opening a listener. Registered-key `keys status` validates labels/material and counts; it does **not** decrypt every registered ciphertext. The prepared drill deliberately retains the real admitted typed payload under an inactive key, then uses bounded supported `keys rotate` to authenticate retained account/input content, compares all noncipher identity fields and verifies inactive retirement eligibility. Zero counts are explicit, not evidence that populated histories from all other feature families have been restored successfully.
+Unresolved Access and invitation operations are the deliberate exception. The original Access generation, operation and event rows and the invitation operation and event rows stay exact. That includes UUIDs, request fingerprints, generations, native identities and `SUCCEEDED`/`DISPATCH_UNKNOWN` histories. The existing schema044 account-invalidation triggers deliberately move each original `PENDING` invitation to `EXPIRED`, with revision+1 and a new updated time, and append exactly one expiry event. The invitation's immutable issuer version, consent and target stay unchanged, and `GRANTING` and terminal invitation rows are not rewritten. Unknown work stays exclusionary: restore, status lookup, restart and re-enrollment do not replay, adopt or clear it. See the [Access contract](REPOSITORY_ACCESS_CONTRACT.md) and [invitation contract](REPOSITORY_INVITATION_CONTRACT.md).
 
-Run the prepared drill only in the independently reviewed fresh fixture window, using existing exact cached images (including a Python3 image for its bounded fault adapter):
+Every local account stays disabled and its credential version advances. An invitation's original issuer version and persistent-consent record are unchanged. Even after explicit current-authority enrollment enables the issuer and recipient, inspecting or replaying a historical invitation operation is denied (403) while that captured issuer version is stale. A new accept against the now-expired pending invitation is refused as a state conflict (400); it does not grant access or refresh consent. Do not refresh consent or manufacture a successful historical receipt. Keep the offline history as evidence. A genuinely new invitation needs an explicit new authorized action, after any pending or unknown exclusion has been reconciled. Status lookup and replay of an original direct grant still require current native owner or direct-admin authority and the exact original target observation.
+
+The key inventory covers these families:
+
+- `sessions`, `oauth_attempts` and `local_accounts`
+- `infrastructure_connections` and `automation_credentials`
+- `review_contents`, `conversation_contents` and `notification_contents`
+- `webhook_credentials`
+- `repository_execution_values` and `organization_execution_values`
+- `workflow_quarantined_outputs` and `workflow_dispatch_inputs`
+
+If configured key material has been replaced, the operator fingerprint check fails. Missing retained-key material shows as `configured:false` in diagnostic status. This profile rejects that inventory, and ordinary core startup refuses the missing used key before it opens a listener. Registered-key `keys status` validates labels, material and counts; it does **not** decrypt every registered ciphertext. Zero counts are stated explicitly; they are not evidence that populated histories from every other feature family were restored.
+
+Run the prepared drill only in an independently reviewed fresh fixture window, with existing exact cached images (including a Python 3 image for the bounded fault adapter) and the pinned Forgejo image already present locally:
 
 ```sh
 python3 scripts/repository-access-recovery-smoke.py --self-check
@@ -50,73 +69,67 @@ python3 scripts/repository-access-recovery-smoke.py \
   --output /absolute/private/new-access-recovery-proof
 ```
 
-The helper prepares real supported personal/organization grants, inherited team attachments, separate shared deploy-key associations, accepted/rejected/revoked/pending/uncertain invitation histories and two distinct actual native204 acknowledgement-loss cases. It admits one typed run through the real prepare/dispatch RPCs; no worker/job executes. It requires encrypted backup/fresh restore, exact original history/key-registry comparisons with only the required pending-invitation expiry transition/events, wrong age identity refusal before target creation, wrong-key fingerprint refusal, missing-key diagnostic/profile refusal and ordinary core startup denial for both, cancelled retained inputs authenticated by rotation and original-key status after current-account enrollment, old cookies/password denial, unchanged native identities/memberships/key modes, stale issuer consent denial after re-enrollment, unknown/new-key/archive exclusion and restart without replay. Its private manifest retains only metadata/hashes/closed failure locations; credentials, submitted values, dumps and fixture source stay in owner-only temporary files and are removed with the fresh resources. Existing failed/qualified historical fixtures are not relabeled.
+The helper sets up real personal and organization grants, inherited team attachments, shared deploy-key associations, invitation histories in every state, and two distinct native 204 acknowledgement-loss cases. It also admits one typed run through the real prepare and dispatch RPCs; no job executes. It then performs encrypted backup and fresh restore. Its checks include:
 
-The first actual attempt failed at initial readiness before actors, typed admission or recovery, with complete owned cleanup and unchanged foreign resource identities ([private receipt](../.tmp/repository-access059-recovery-attempt1/manifest.json)). Source inspection found that the fresh database starts with active key `legacy`, while the fixture immediately configured `a`; this is a source diagnosis, not a retained startup-log observation. The corrected helper starts only PostgreSQL, activates `a` with the supported operator CLI before application/native writers exist, and checks the real thirteen-family inventory has only configured `a`/`b` with zero uses. It then starts the applications without extending the readiness deadline. Failure collection reads only the owned service states and bounded logs before teardown, redacts known fixture credentials, and retains a mode-0600 private diagnostic file; the manifest exposes only closed states, command outcomes and the file hash/size. It never prints service logs or environments.
+- exact comparison of the original history and key registry; the only permitted changes are the required pending-invitation expiry transition and its events
+- refusal of a wrong age identity before any target is created, and refusal of a wrong-key fingerprint
+- diagnostic and profile refusal of a missing key, and ordinary core startup refusing both bad-key cases
+- cancelled retained inputs authenticated by rotation
+- denial of old cookies and passwords, and denial of stale issuer consent after re-enrollment
+- unchanged native identities, memberships and key modes, and a restart without replay
 
-The second actual attempt passed the operator key bootstrap but failed before actors at application startup, with complete cleanup and unchanged foreign identities ([private receipt](../.tmp/repository-access059-recovery-attempt2/manifest.json)). Its bounded private diagnostics observed Golf exit1 because `GITEA_PUBLIC_URL` was set without the required OAuth client ID/secret. The fixture now omits all three optional OAuth settings; native `ROOT_URL` still supplies native external URLs and canonical `GITEA_URL` is unchanged. Pure checks reject accidental OAuth configuration, and actual startup must report local-password authentication available with OAuth disabled. No artificial OAuth credentials or application validation exceptions are introduced.
+The private manifest keeps only metadata, hashes and closed failure locations. Credentials, dumps and fixture source stay in owner-only temporary files, which are removed along with the fresh resources.
 
-The third actual attempt reached a real typed queued admission and both native204 acknowledgement-loss originals/replays, then failed before backup because the fixture expected a `permissions` field on collaborator-list users ([private receipt](../.tmp/repository-access059-recovery-attempt3/manifest.json)). Complete owned cleanup and unchanged foreign identities remain recorded; no restore was qualified. The corrected snapshot uses the [pinned collaborator-list API](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/collaborators.go) for exact membership IDs/logins and separately reads each user's supported permission endpoint with the ordinary owner credential. It validates the returned user binding and closed `permission`/`role_name` values, comparing membership and aggregate access before/after restore. These are independent observations, not stored-role CAS or an atomic native access snapshot.
-
-The corrected actual drill is **pending**. The next run uses its independently pinned current source/image; earlier e04 fixture receipts retain their original provenance. It cannot complete production P1.6, whole-platform/latest-schema recovery, large-capacity recovery, post-backup native revocation reconciliation, protected integration or the entire Access/settings scope.
+Earlier Access-core059 attempts, including the one that passed, ran on the retired earlier topology. They do not qualify Forgejo. The Forgejo drill has **not run**. Even when it passes, it cannot complete production P1.6, whole-platform or latest-schema recovery, large-capacity recovery, reconciliation of native revocations made after the backup, protected integration, or the full Access/settings scope.
 
 ## What is captured
 
-The083 restored-authority transaction additionally clears copied MFA setup/sign-in
-challenges and recovery digests, resets enabled/pending local factors with an
-immutable operator audit, and retains all local accounts disabled until deliberate
-reenrollment. A factor's copied counter/recovery state must not be reused after
-restore. Reenroll the account with a fresh password and independently verified
-matching native credential, then enroll a new authenticator under the instance's
-policy before reopening its traffic. Quarantine is not permission to weaken MFA
-policy. Old encrypted content remains historical at-rest data; this is revocation,
-not secure erasure or upstream provider revocation.
+The restored-authority transaction (schema 083) also clears copied MFA setup and sign-in challenges and recovery digests. It resets enabled and pending local factors with an immutable operator audit record, and keeps every local account disabled until it is deliberately re-enrolled. Re-enroll an account with a fresh password and an independently verified matching native credential, then enroll a new authenticator before reopening its traffic. Old encrypted content remains historical at-rest data. This is revocation, not secure erasure or upstream provider revocation.
 
-The same transaction removes copied managed agent authentication, marks connected
-or pending connections as requiring reauthentication, cancels queued tasks and
-marks running attempts lost with their original identities retained. Reviewers
-are disabled. Reserved/unknown publication journals remain unresolved and cannot
-be treated as successful cancellation. Pending email/webhook deliveries are
-cancelled with possible-duplicate metadata, email verification challenges are
-removed, and managed Git WRITE qualification profiles are suspended. Terminal
-history and private conversation bytes remain unchanged. Committed counts are
-part of the original append-only recovery event; any storage/audit/commit failure
-rolls back the entire transaction.
+The same transaction also does the following:
 
-Source PostgreSQL/race checks qualify these controls on isolated host schemas.
-They are not a coordinated native-volume restore, an effective-write fence or
-proof that an old external effect stopped. The full current-schema fresh-target
-drill, provider tombstone/revocation reconciliation, operator writer drain and
-traffic quarantine remain required before production recovery is advertised.
+- removes copied managed agent authentication and marks connected or pending connections as needing reauthentication
+- cancels queued agent tasks and marks running attempts lost, keeping their original identities
+- disables reviewers; reserved or unknown publication journals stay unresolved
+- cancels pending email and webhook deliveries, recording that duplicates are possible
+- removes email verification challenges
+- suspends managed Git WRITE qualification profiles
 
-The encrypted `golf.backup.v1` archive contains a manifest plus these six core payloads, and `rustfs-data.tar` when the validated local RustFS profile is selected:
+Committed counts are part of the original append-only recovery event. Any storage, audit or commit failure rolls back the whole transaction.
+
+The encrypted `golf.backup.v1` archive contains a manifest and these five core payloads, plus `rustfs-data.tar` when the validated local RustFS profile is selected:
 
 | Payload | Purpose |
 | --- | --- |
-| `golf.dump` | Full Golf database schema/data, including identities, session/account history, repository-creation operations/events, API credential metadata/events, encryption policy/registry and operator history, execution/organization policy, immutable infrastructure profiles, native event receipts, workflow runs/logs and automation grants/credential history. |
-| `gitea.dump` | Full native Gitea database schema/data. |
-| `gitea-data.tar` | Entire `/var/lib/gitea` volume: canonical repositories, local LFS/attachments/releases and other local persistent state, including SSH/signing material stored there. |
-| `gitea-config.tar` | Entire `/etc/gitea` volume, including `app.ini` and captured configuration/key files. |
-| `compose.json` | Resolved runtime environment and actual image IDs, mount/port mapping and dependency configuration. This includes database passwords, all configured Golf encryption keys, configured worker/intake signing keys and any configured OAuth client secret. It is private plaintext inside the encrypted archive. |
-| `postgres-init.sh` | The byte-identical canonical initialization script that recreates the two database roles/databases. |
+| `golf.dump` | The full Golf database schema and data. |
+| `forgejo.dump` | The full native Forgejo database schema and data. |
+| `forgejo-data.tar` | The entire Forgejo volume (`/var/lib/gitea` in the rootless image). It holds repositories, local LFS objects, attachments and releases, `custom/conf/app.ini` and its referenced secrets and keys, SSH and signing material, and other local persistent state. |
+| `compose.json` | The resolved runtime environment and actual image IDs, mount and port mapping, and dependency configuration. It includes database passwords, all configured Golf encryption keys, configured worker and intake signing keys, and any configured OAuth client secret. It is private plaintext inside the encrypted archive. |
+| `postgres-init.sh` | The byte-identical canonical `forgejo-init.sh`, which recreates the two database roles and databases. |
 
-The manifest records a random 32-character lowercase hexadecimal backup ID, creation time, source project, exact versions/image IDs and each payload's size/SHA-256. It is an integrity inventory, not an independent signature or a list proving every repository/object is usable.
+The archive layout changed with the Forgejo port. A bundle from the retired earlier topology fails verification on its payload inventory, versions and service names; it is never reinterpreted. The manifest records a random 32-character lowercase hexadecimal backup ID, the creation time, the source project, exact versions and image IDs, and each payload's size and SHA-256. It is an integrity inventory, not an independent signature.
 
-Golf uses native `pg_dump -Fc` for each database and `pg_restore --single-transaction --exit-on-error` on a fresh target. `--no-owner --no-acl` with the explicit target role recreates canonical Golf/Gitea ownership; this does **not** export arbitrary cluster roles, extensions outside the supported profile or custom ACLs. Schema functions/triggers are restored with the data, including the append-only history guards. Gitea documents stopping the service for consistency and using native PostgreSQL dumps. This is an offline operator restore procedure, not an application feature writing into Gitea's database. See [Gitea backup/restore](https://docs.gitea.com/administration/backup-and-restore/#backup-consistency), [PostgreSQL 18 pg_dump](https://www.postgresql.org/docs/18/app-pgdump.html) and [pg_restore](https://www.postgresql.org/docs/18/app-pgrestore.html).
+Golf runs native `pg_dump -Fc` for each database and `pg_restore --single-transaction --exit-on-error` on a fresh target. `--no-owner --no-acl` together with the explicit target role recreates canonical Golf and Forgejo ownership. Forgejo documents stopping the service for a consistent backup. This is an offline operator restore procedure, not an application feature that writes into Forgejo's database. See [Forgejo upgrade and backup guidance](https://forgejo.org/docs/latest/admin/upgrade/), [PostgreSQL 18 pg_dump](https://www.postgresql.org/docs/18/app-pgdump.html) and [pg_restore](https://www.postgresql.org/docs/18/app-pgrestore.html).
 
-Both Gitea volumes are copied from stopped containers with ownership-preserving tar streams, then restored to stopped containers using [Docker's native `cp -a` interface](https://docs.docker.com/reference/cli/docker/container/cp/). Archive validation rejects duplicate/noncanonical paths, traversal, special files, unsupported ownership/modes, unsafe links and missing parents. Persistent storage/configuration paths must remain within the two captured volumes; external storage is rejected. File URI and explicit SSH host-key references must resolve to captured files. The sole scratch exception is native `repository.local.LOCAL_COPY_PATH` and `repository.upload.TEMP_PATH` within `/tmp/gitea`; in-flight local clones/uploads are not preserved or resumed. Runtime sockets are not backup payloads; stop/drain relevant processes rather than weakening archive validation.
+The Forgejo volume is copied from the stopped container with an ownership-preserving tar stream and restored to the stopped target container using [Docker's native `cp -a`](https://docs.docker.com/reference/cli/docker/container/cp/). Archive validation rejects:
+
+- duplicate or noncanonical paths, and path traversal
+- special files, and ownership or modes outside the supported set
+- unsafe links, and missing parent directories
+
+Every persistent storage or configuration path in `app.ini` must stay inside the captured volume, and external storage is rejected. File URIs and explicit SSH host-key references must resolve to captured files. The only scratch exception is `repository.local.LOCAL_COPY_PATH` and `repository.upload.TEMP_PATH` inside the image's temporary directory (`/tmp/gitea`). In-flight local clones and uploads are not preserved or resumed.
 
 ## Storage and credential handling
 
-Backup takes one classic native `age1…` public recipient. The private identity is not needed on the backup host. Verify/restore require an identity file owned by the invoking user, with no group/world permissions and no symlink; use mode `0600`. This wrapper does not qualify age plugins, SSH recipients, passphrase prompts, multiple recipients or post-quantum recipients. See [age key generation and usage](https://github.com/FiloSottile/age#usage).
+Backup takes one classic native `age1…` public recipient; the backup host never needs the private identity. Verify and restore need an identity file owned by the invoking user, with no group or world permissions and no symlink (use mode `0600`). This wrapper does not qualify age plugins, SSH recipients, passphrase prompts, multiple recipients or post-quantum recipients.
 
-The default `--max-bytes` is **8 GiB** of combined payload bytes. The accepted flag range is 1 MiB–1 TiB; raising it does not establish tested capacity. Separate bounded headroom covers outer-tar headers and age authentication overhead; it does not increase the permitted payload. Child output is bounded and native commands have timeouts, but this is not a constant-space stream: private temporary files hold database dumps, volume tars and the complete plaintext bundle. Allow several times the payload size for staging, ciphertext and fresh target storage. Use a trusted encrypted local disk and a private `TMPDIR` when necessary. Cleanup removes ordinary temporary files; it does not guarantee secure erasure after a crash, snapshots or swap.
+The default `--max-bytes` is **8 GiB** of combined payload. The flag accepts 1 MiB to 1 TiB, and raising it does not establish tested capacity. This is not a constant-space stream: private temporary files hold the database dumps, the volume tar and the complete plaintext bundle. Allow several times the payload size for staging, ciphertext and the fresh target. Use a trusted encrypted local disk and a private `TMPDIR` where needed. Cleanup removes ordinary temporary files, but it does not guarantee secure erasure after a crash, snapshot or swap.
 
-The ciphertext is written as a private temporary file next to the destination and published atomically without overwriting an existing path. Restore's new directory is `0700`; its `compose.json` and manifest are `0600`. The copied initialization script is executable/readable because the PostgreSQL OS user needs it; it contains no literal secrets. The restored configuration remains sensitive after completion. The generated Compose file escapes literal dollar signs so runtime secrets are not reinterpreted as host substitutions; see [Compose interpolation](https://docs.docker.com/reference/compose-file/interpolation/).
+The ciphertext is written as a private temporary file next to the destination and published atomically, never overwriting an existing path. Restore's new directory is `0700`, and its `compose.json` and manifest are `0600`. The generated Compose file escapes literal dollar signs so that runtime secrets are not reinterpreted as host substitutions.
 
 ## Back up and verify
 
-Run from this repository with the exact current recovery script and a matching built Golf image. The example assumes the default project `golf` and `compose.yaml`. Choose fresh private paths outside the repository and retain the private identity separately from backup files.
+Run from this repository with the exact current recovery script and a matching built Golf image. `compose.yaml` names its project `golf-forgejo`. Choose fresh private paths outside the repository, and keep the private identity apart from the backup files.
 
 ```sh
 umask 077
@@ -125,142 +138,123 @@ age-keygen -o /absolute/private/golf-backup-identity.txt
 chmod 600 /absolute/private/golf-backup-identity.txt
 ```
 
-Record the public recipient produced by `age-keygen`; only that public value goes in `--recipient`. Before the following stop, fence incoming HTTP/SSH, scheduled/native automation, other Golf replicas, pending OAuth exchanges and direct database clients. Wait for authorized in-flight operations to finish or resolve their outcome. Coordinate with every administrator that could restart a writer.
+Before the stop below, fence these writers:
+
+- incoming HTTP and SSH
+- scheduled or native automation
+- other Golf replicas
+- pending OAuth exchanges
+- direct database clients
+
+Wait for authorized in-flight operations to finish or resolve.
 
 ```sh
-docker compose -p golf -f compose.yaml stop golf gitea
+docker compose -p golf-forgejo -f compose.yaml stop golf forgejo
 python3 scripts/recovery.py backup \
-  --project golf --compose-file compose.yaml --writers-drained \
+  --project golf-forgejo --compose-file compose.yaml --writers-drained \
   --recipient '<PUBLIC_CLASSIC_AGE_RECIPIENT>' \
-  --output /absolute/private/golf-backups/recovery-2026-10-02.age
+  --output /absolute/private/golf-backups/recovery.age
 python3 scripts/recovery.py verify \
-  --input /absolute/private/golf-backups/recovery-2026-10-02.age \
+  --input /absolute/private/golf-backups/recovery.age \
   --identity /absolute/private/golf-backup-identity.txt
 ```
 
-Use `stop`, not `down`: backup needs the stopped containers and their resolved runtime configuration. PostgreSQL remains running. `--writers-drained` is a mandatory **operator assertion**, not an implemented distributed/admin fence. The script checks ordinary container/connection state before and after capture and rejects mismatches; another administrator or direct database client can still race these checks. If all writers cannot be reliably drained, this profile cannot provide a coordinated recovery point.
-
-Successful backup/verify return exit 0, `schema_version: "golf.backup.v1"`, `state: "complete"` and non-credential result metadata. Backup includes the ciphertext checksum; verify includes recorded image IDs and payload bytes. Verify waits for complete age authentication, checks the payload inventory/hashes and validates archive/configuration boundaries before any target mutation. Restore also compares the actual restored Golf migration version with the manifest before invalidation; a mismatch leaves applications stopped and requires operator inspection of the partial fresh target. It does not restore data or establish functional recovery. These operations do not restart the source; source resumption after a backup is a separate operator decision. During a cutover, keep the old source fenced throughout validation and traffic transfer.
+Use `stop`, not `down`. PostgreSQL stays running. `--writers-drained` is a mandatory **operator assertion**, not an implemented distributed fence. The script checks container and connection state before and after capture, but another administrator or a direct database client can still race those checks. Verify waits for complete age authentication, then checks the payload inventory, the hashes and the archive and configuration boundaries before it touches any target.
 
 ## Restore into quarantine
 
-Use an unused project name and a nonexistent directory. The script rejects existing project containers, labeled or canonical-name volumes/networks, existing target directories, missing local image IDs and incompatible versions. It neither overwrites a live installation nor downloads images.
+Use an unused project name and a directory that does not exist yet. The script rejects existing project containers, existing volumes or networks (labeled or with canonical names), existing target directories, missing local image IDs and incompatible versions.
 
 ```sh
 python3 scripts/recovery.py restore \
-  --input /absolute/private/golf-backups/recovery-2026-10-02.age \
+  --input /absolute/private/golf-backups/recovery.age \
   --identity /absolute/private/golf-backup-identity.txt \
-  --project golf-recovery-20261002 \
-  --directory /absolute/private/golf-recovery-20261002 \
+  --project golf-recovery-20261016 \
+  --directory /absolute/private/golf-recovery-20261016 \
   --writers-drained
 ```
 
-Restore creates the captured three or four containers, starts only PostgreSQL and waits for its **TCP** health check so the temporary initialization server cannot be mistaken for the final server. It restores both databases and both Gitea volumes, then runs Golf's one-shot recovery invalidation command. Golf, Gitea and optional RustFS stay stopped. Success returns exit 0 and `state: "quarantined"` with the backup ID, generated Compose path and exact invalidated session/attempt counts. It does not mean traffic may reopen.
+Restore runs these steps in order:
 
-The native whole-stack restart drill passes with bounded database readiness retries. Docker can temporarily withdraw the `postgres` DNS name while restarting PostgreSQL; Golf retries connection readiness at 250ms intervals before migrations, under the caller's deadline or a 60s readiness limit when no deadline exists. Retryable cases include transport refusal/reset/timeouts, temporary or not-found DNS answers, PostgreSQL startup/recovery and temporary connection-slot exhaustion. A syntactically valid but misspelled hostname also waits until the deadline; unresolved DNS is not promised to fail immediately. Malformed DSNs, authentication failures, missing databases and migration errors are not retried. Migration execution itself is not wrapped in a retry loop, and cancellation remains effective.
+1. Creates the captured three or four containers.
+2. Starts only PostgreSQL and waits for its **TCP** health check.
+3. Restores both databases and compares the restored Golf migration version with the manifest.
+4. Copies the Forgejo volume (and RustFS data, if present) into the stopped containers.
+5. Runs Golf's one-shot `recovery invalidate-sessions` command.
 
-On failure, the JSON is `state: "failed"` with sanitized diagnostics; no application startup is requested. A failed restore can leave a partial private directory, database and project resources for investigation. Do not start those applications or retry over the same target. Inspect only that explicitly named recovery project, preserve needed evidence and remove or replace that failed target deliberately. This command never erases it automatically.
+Golf, Forgejo and optional RustFS stay stopped. Success returns `state: "quarantined"`, which does not mean traffic may reopen. On failure the JSON reports `state: "failed"` with sanitized diagnostics, and no application startup is requested. A failed restore may leave a partial target behind for investigation. Never start it or retry over it.
 
-## Restored-session invalidation and its ledger
-
-The server operator command is separate from the read-only user CLI:
+## Restored-session invalidation
 
 ```sh
-# DATABASE_URL is supplied securely through the environment, never an argument.
+# DATABASE_URL is supplied securely through the environment, never as an argument.
 ./bin/golf-server recovery invalidate-sessions \
   --backup-id '<32_LOWERCASE_HEXADECIMAL_BACKUP_ID>' --timeout 60s
 ```
 
-The container binary is `/usr/local/bin/golf`; `recovery.py restore` invokes it automatically using the restored private Compose environment. This operation requires only the Golf `DATABASE_URL`, not an HTTP login or encryption key. Opening the database can apply Golf migrations. The timeout defaults to 60s and permits 1s–5m. All Golf writers must already be drained; there is no preserve-sessions flag, automatic startup invalidation or admin HTTP endpoint.
+One transaction does all of the following:
 
-One transaction locks the session, OAuth-attempt and local-account credential tables, deletes **all** Golf sessions and pending OAuth attempts, including expired records, and appends an independent `golf_recovery_events` record. Schema007 also disables **every local password account** and advances its credential version, including accounts already disabled. It retains the local password verifier, encrypted native credential, immutable mapping, role and previous operator events; it adds one `RECOVERY_DISABLED` event per account. A stored password cannot silently reopen restored access. Disabled local-account ciphertext still counts as stored key use.
+- deletes **all** Golf sessions and pending OAuth attempts
+- disables and version-fences every local password account
+- cancels queued and running workflow runs
+- revokes enabled automation grants
+- blocks interrupted push materializations
+- appends an independent `golf_recovery_events` record
 
-Schema019 additionally cancels every queued/running workflow run, clears its attempt capability and records a quarantine reason without replay. Every enabled automation grant is revoked with a revision/epoch increment and a RECOVERY_REVOKED event, including sponsors without a local password account. Already-revoked grants remain unchanged; all delegated ciphertext and credential-version/key references are retained. Fresh sign-in or local-account re-enablement does not restore old grants. Policy values and historical event receipts are preserved, not an authorization to replay them. Reconcile current provider permissions, runner/intake enrollment, policies and external effects before reopening traffic.
-
-The transaction retains Golf identities, previous account session history, repository-creation and issue-mutation operations/events, API credential metadata/events, encryption operation history, key-label/material registry and active policy. Restoring mutation evidence does not dispatch a provider request or resolve an unknown outcome. The invalidator neither decrypts credentials nor invents per-account sign-outs. Retained read-only API credentials lose authority because their exact issuing session is absent; a fresh sign-in does not revive them. Thus pre-backup Golf cookies and pending PKCE callbacks cannot authenticate against the successfully invalidated restored database. Native Gitea sessions and provider grants are a separate reconciliation problem.
-
-The `golf.recovery.v1` JSON contains `action: "invalidate-sessions"`, `state: "complete"` and committed `result` metadata: `backup_id`, random `operation_id`, UTC `occurred_at`, PostgreSQL `current_user` as `actor`, `sessions_count`, `oauth_attempts_count` and `local_accounts_disabled_count`. The local count includes every version-fenced local account, not only previously enabled rows. Counts are JSON integers; consumers must preserve exact integer values. The actor is a database role, not a claimed human identity. Failed/interrupted operations emit sanitized errors and no successful counts, credential IDs, ciphertext, hashes, key material or DSN. A lost commit response is ambiguous: keep quarantine and inspect the operator ledger before retrying. Repeating an ID creates a new record; session/PKCE counts may be zero, but retained local accounts are disabled and version-fenced again. It does not erase the first event.
-
-For the example restored project, inspect the latest operator records without starting either application:
-
-```sh
-docker compose -p golf-recovery-20261002 \
-  -f /absolute/private/golf-recovery-20261002/compose.json \
-  exec -T postgres psql -U golf -d golf -c \
-  'SELECT backup_id, operation_id, occurred_at, actor, sessions_count, oauth_attempts_count, local_accounts_disabled_count FROM golf_recovery_events ORDER BY id DESC LIMIT 20;'
-```
-
-Ordinary UPDATE/DELETE/TRUNCATE guards protect this independent ledger. As with the existing audit tables, a database owner can alter guards; this is not externally tamper-proof history. Transactional table locks also do not fence a stale writer after commit. Drain remains a precondition.
+Identities, account, crypto and mutation histories and the key registry are kept. Restoring mutation evidence does not dispatch a provider request or resolve an unknown outcome. Native Forgejo sessions and provider grants are a separate reconciliation problem.
 
 ## Required reconciliation before reopening
 
-Golf credential invalidation is intentionally narrower than complete restore authorization. Maintain authoritative evidence outside the backup recovery point for post-backup changes, then resolve at least:
+1. **Provider access and deletion:** Forgejo browser sessions, PATs, OAuth grants and applications, SSH and deploy keys, memberships and roles, visibility and protection changes, and deletion tombstones. Restoring the provider database can bring back access that was revoked after the backup. Apply the current authoritative decisions through supported Forgejo or operator procedures.
+2. **External issuers and keys:** reconcile issuer state separately from Golf keyring restoration.
+3. **Outbound work:** restored mirrors, webhook queues, scheduled jobs, runners and integrations may act as soon as Forgejo starts. Establish outbound quarantine before any validation startup. The script does not install an egress boundary.
+4. **Data and identity:** verify repositories and refs, Git integrity, LFS objects, attachments, protections, IDs, SSH fingerprints and signing identity. Then verify fresh Golf login and denial of private cross-user access.
+5. **Cutover:** validate public URLs, callbacks, cookies and TLS, DNS, ports and the fencing of the old source.
 
-1. **Provider access and deletion:** Gitea/native browser sessions, PATs, OAuth grants/applications, SSH/deploy keys, memberships/roles, repository visibility/protection changes and deletion tombstones. Restoring the provider database can resurrect access that was revoked after the backup. Apply the authoritative current decisions through supported provider/operator procedures; this script does not replay a revocation ledger.
-2. **External issuers and keys:** an OAuth issuer may already have rotated or revoked a refresh token after capture. Restoring bytes cannot reverse that event. Keep issuer reconciliation distinct from Golf keyring restoration; reauthentication or revocation may be required. Preserve the age identity and historical encryption material needed for older retained backups even after live key retirement.
-3. **Outbound work:** restored mirrors, webhook queues, scheduled jobs, runners and integrations may perform effects as soon as Gitea starts. Establish outbound/network quarantine and resolve pending work before even a validation startup. The script does not install such an egress boundary or disable native background writers.
-4. **Data and identity:** verify expected repositories/refs and ordinary Git integrity, reachable LFS content, attachments/releases, native protections, account/repository IDs, SSH fingerprints and signing identity; then verify fresh Golf login, exact origin handling and private cross-user denial. A checksum alone does not satisfy these checks.
-5. **Cutover:** validate preserved public URLs, callbacks, cookies/TLS, DNS, ports and old-source fencing. Reopen one deliberate authoritative writer only after recording the reconciliation outcome. A changed topology or version requires its own qualification rather than editing this profile into a production migration.
-
-For local passwords, reconcile the present account decision before running the explicit [local-account enable operation](LOCAL_AUTHENTICATION.md#operator-enrollment). It requires a new Golf password and a currently validated provider credential matching the original immutable forge/user ID; reset-password alone leaves a restored account disabled. Historical hash/token bytes are preserved for inventory, not accepted as evidence that access remains authorized. Local disable does not revoke separate PAT/OAuth/native identities; those remain subject to the provider reconciliation above.
-
-There is no universal safe `start` command for an arbitrary restored provider. The disposable smoke fixture has no outbound automation and deliberately starts its isolated target for qualification; that controlled action is not evidence that a real customer's restored queues/grants are reconciled. If authoritative post-backup revocation/deletion evidence is unavailable, keep quarantine rather than treating the backup as current authorization.
+For local passwords, run the explicit [local-account enable operation](LOCAL_AUTHENTICATION.md#operator-enrollment) after reconciliation. Reset-password alone leaves a restored account disabled. If authoritative revocation or deletion evidence from after the backup is unavailable, keep the quarantine in place.
 
 ## Evidence and remaining work
 
-Run checks locally; there are no repository CI workflows:
+Run the checks locally; there are no repository CI workflows:
 
 ```sh
 python3 scripts/recovery-test.py
+python3 scripts/repository-access-recovery-smoke.py --self-check
 # Supply GOLF_TEST_DATABASE_URL through a private environment for a dedicated disposable PostgreSQL database.
 make test-integration
-# Supply an already-built, locally available current Golf image.
+# Not yet run on Forgejo. Supply an already-built Golf image and the pinned Forgejo image locally.
 python3 scripts/recovery-smoke.py --image '<LOCAL_GOLF_IMAGE_TAG_OR_ID>'
 ```
 
-| Evidence | Current result |
+| Evidence | Current result on the Forgejo topology |
 | --- | --- |
-| Real PostgreSQL/server-operator tests | Pass: mixed PAT/OAuth and expired-record removal; exact independent ledger metadata; preserved identities/account/crypto history and key registry/policy; append-only guards; insert/deferred-commit rollback; deadline/lock handling; argument/output privacy. Full race suite also passes. |
-| Offline archive/configuration checks | Pass: paths, duplicates, links, modes/owners/types, external storage/key-file references, private-file/no-overwrite behavior, Compose dollar escaping, kernel-enforced subprocess output limits and ciphertext-headroom arithmetic. These checks need Docker Compose parsing but do not mutate containers/data. |
-| Full native encrypted backup/fresh restore | **Pass, exit 0:** live-writer/no-overwrite rejection; age authentication and manifest-checksum rejection before target mutation; fresh database/volume restoration; stopped-application quarantine and exact session/PKCE invalidation; preserved identity/account/crypto history, key policy/registry and captured key configuration after partial rotation; byte-equivalent repository-creation operations/events with own lookup/same-key replay and foreign-key denial; private refs/signatures, hydrated LFS, attachments, protections, SSH/signing identity, fresh login/cross-user denial, new signed writes/force-push denial, simultaneous whole-stack restart persistence and complete disposable-resource cleanup. |
+| Offline archive and configuration checks (`recovery-test.py`) | **Pass (2026-10-16).** Covers the single-volume Forgejo archive (paths, duplicates, links, modes, owners and types; `app.ini` database, storage and reference checks), `FORGEJO__` decoding (literal and `_0X2E_` dots, conflict, legacy-prefix and `__FILE` refusal), image path and database environment checks, local RustFS checks, private-file and no-overwrite behavior, Compose dollar escaping and bounded subprocess output. Compose is parsed with `docker compose config`; no container is touched. |
+| Access-core059 self-check | **Pass (2026-10-16).** Covers profile, history and key-family boundaries, the Forgejo actions, mailer and cron fences in the environment and `app.ini`, hook and `.gitconfig` exclusions, and fault-adapter guards. No runtime resources. |
+| Real PostgreSQL invalidation tests | Golf-only and topology-independent; see the ledger. |
+| Full native encrypted backup and fresh restore (`recovery-smoke.py`) | **Not run on Forgejo.** |
+| Access-core059 native drill | **Not run on Forgejo.** |
 
-The previous native run on 2026-10-02 qualified schema **202610020004**, including the [repository-creation journal](REPOSITORY_CREATION_CONTRACT.md), and used `python3 scripts/recovery-smoke.py --image golf-golf:latest`, resolved to Docker image ID `sha256:2cb73e4238034ec564cc9e8696a30b850e1ab7d0f265df05fa87a7005b02f9ad`. This is the local image ID recorded by the manifest, not a registry manifest digest or an immutable promise about the `latest` tag. Final `make check` and real-PostgreSQL `go test -race ./... -count=1 -timeout 120s` pass for this increment; existing Helm checks (including 21 rejected configurations) and `scripts/recovery-test.py` also pass.
+The following are unverified until a Forgejo drill passes:
 
-The final native fixture was smaller than 1 MiB, so the harness explicitly reported **SKIP** for its payload-exceeds-minimum-cap case. The separate offline check proves bounded subprocess output and overhead arithmetic; neither check is an actual 8 GiB backup, capacity/load test or full inventory proof.
+- the exact `forgejo --version` output (the check expects `forgejo version 15.0.9+gitea-1.22.0 …`, derived from Forgejo's Makefile and CLI source)
+- `docker cp` round-tripping of the rootless volume
+- whether `app.ini` mode and ownership pass the archive checks
+- end-to-end restore of Git, LFS, attachments, SSH and signing identity
 
-The pending-verifier fixture represents stored PKCE state, not a real issuer callback or OAuth exchange across recovery. The passing native fixture qualifies only the bounded canonical Docker profile. Production recovery objectives, Kubernetes/external PostgreSQL/S3/R2, large repositories/LFS capacity, all-repository inventory reconciliation, off-host image distribution, PITR, cross-version restoration, comprehensive provider revocation/tombstone replay and outbound-work reconciliation remain open. P1.6 and the broader P1.3/production release gates stay open.
+Earlier drills ran on the retired earlier topology. They do not qualify Forgejo.
 
-The previous schema005 recovery tool required schema **202610020005**, adding the [API credential metadata/event boundary](API_CREDENTIAL_CONTRACT.md). The schema005 native drill passed on image `sha256:4dbc64b946d0de111cf8abf1c923c197dc5ebc46e0c207b39452883846af8632`, including byte-equivalent API credential metadata/events, denial of all old bearer tokens after fresh same-user login and a new credential surviving whole-stack restart. The historical schema004 image above is separate provenance.
+Still open: production recovery objectives, Kubernetes, external PostgreSQL/S3/R2, large-capacity recovery, all-repository inventory reconciliation, off-host image distribution, PITR, cross-version restoration, provider revocation and tombstone replay, and outbound-work reconciliation. P1.6 and the broader P1.3 and production release gates stay open.
 
-The schema006 recovery qualification includes both issue mutation and phase-event tables, preserving provisional receipt observations as well as terminal outcomes. Its final image is recorded separately in the implementation ledger; historical schema004/005 image evidence is unchanged.
+## Optional local RustFS
 
-The historical schema008 recovery profile added operator-enrolled email aliases. The prior schema007 qualification added local password accounts, encrypted native-credential inventory and local operator events. The updated native drill passes on qualified image `sha256:44c422c7f61225cb963a8a4e8ec793ec04bb79ce821f739f144ef0c635910d18`: five sessions and one pending PKCE attempt are removed, while both an enabled and an already-disabled local account remain disabled/version-fenced after restore. Exact ciphertext/hash/mapping and previous history are preserved; matching recovery events and count2 are recorded; password-only reset and wrong-identity enable fail; deliberate current-authority enable permits a fresh local login and native read. Full signed Git/LFS/attachment/protection/SSH/new-write/restart regression and cleanup also pass. The final real-PostgreSQL race suite and frozen-runtime checks also pass, as recorded in the implementation ledger. Earlier encrypted-restore passes are separate provenance and do not imply full account/provider revocation reconciliation.
+Backups that include local RustFS keep the v1 envelope and add `storage_profile=local_rustfs`, a pinned fourth service and an integrity-checked `rustfs-data.tar`. Only the canonical local labeled `/data` volume and Golf's exact default storage binding are accepted. Remote environment S3, any profile-backed source and any active object profile are rejected. Remove worker, image-init and daemon containers first. The executor daemon state and certificates are not archived.
 
-Schema008 native encrypted-backup/restore qualification passes on `sha256:58601e2d499e044634dc2c9e738ea08956cd5bd58afe8e1466e2c13c19dd902d`, preserving email aliases alongside exact password/ciphertext/mapping/history records. Local accounts are disabled/version-fenced before explicit mapped re-enablement. Signed Git/LFS/attachments/protection/SSH/new writes and restart pass. The below-minimum 1 MiB payload fixture still explicitly skips that cap-negative case.
-
-Schema019 canonical-core recovery qualification passes on Docker image ID `sha256:1ff8978ebcb6bba7ef8be14cdfa92451cc90862bcd861c5216677f09d5b2cb2b`. The drill creates actual native signed Git pushes and receipts, two owner-sponsored grants (one already revoked), a third token-only sponsor, a tested encrypted PostgreSQL connection profile, and queued/leased manual runs. Encrypted backup/fresh restore preserves immutable profile/event/policy/credential history, revokes both enabled grants, preserves the prior revocation, cancels both runs and denies old attempt capabilities before any new work. After explicit local-account reconciliation, the saved profile decrypts and tests; three retained automation credentials and one profile rotate to the active key, the inactive key is retirement-eligible, and no old grant/run reactivates. A manifest/dump schema mismatch fails before invalidation with both applications stopped. Signed Git/LFS/attachments/protection/SSH/new writes, whole-core restart and full disposable cleanup pass. The fixture remains below the 1 MiB negative size-cap threshold, so that case explicitly skips.
-
-This qualifies the canonical three-service schema019 core. It does not cover RustFS object restoration, external database/provider resources, the live worker-daemon topology, an executing/orphan Docker process, automatic-run authority, Kubernetes or production failover. The leased-run fixture exercises control-plane capability quarantine; it does not claim a Docker job ran. Run the matching topology's complete recovery drill before production release.
-
-Source schema020 adds automatic run origins and changes the manual intent uniqueness target. It requires a coordinated stopped-writer upgrade; mixed old/new serving binaries are unsupported. Schema020 remains outside the recovery allowlist. The subsequent schema021 drill qualifies its complete automatic-origin/materialization schema; a schema019 proof alone does not.
-
-Schema021 adds canonical payload and push-materialization history. Source recovery quarantines pending/preparing leases as terminal blocked decisions, clears preparation capabilities and revokes restored grants. Schema021 now passes the expanded native/RustFS/automatic-run drill below; schema020 alone remains outside the allowlist.
-
-
-## Schema021 and optional local RustFS qualification
-
-The full native encrypted backup/fresh-restore drill passes on image `sha256:27f9e813321169f851c6f281f9855611c5bc6fc7bb9c4830c40fb3e5117d9583`, with the same qualified backend binary `a3f234c3aa0e92436d01fc7b51c9fcd613f8f2e7e59f1ba8c4e3dd4ac5e11eef`. It admits two actual signed automatic pushes, retains exact source/provenance, and snapshots one queued and one HTTP-leased run of each origin. Interrupted pending/preparing materializations are additional explicit Golf-owned fixtures, not claimed executions. Fresh restore preserves every stopped RustFS file SHA-256 and native Git/LFS/attachment/signature/protection/SSH evidence, revokes restored grants, cancels four runs, blocks interrupted materializations, clears leases and denies both old attempt capabilities. Fresh login and fifth-family key rotation never reactivate work. Ciphertext/checksum/schema mismatch, live-writer/no-overwrite and size-cap negatives pass. All disposable projects/private files are removed.
-
-Backups with local RustFS retain the v1 envelope plus `storage_profile=local_rustfs`, a pinned fourth service and integrity-checked `rustfs-data.tar`. Only the canonical `/data` local labeled volume and exact Golf default storage binding are admitted. Source Golf/Gitea/RustFS must be stopped and all writers drained. Worker/image-init/daemon containers must be removed; dedicated executor jobs/volumes must first be reconciled. The executor daemon state and certificates are not archived or restored. Fresh restore leaves RustFS stopped until the operator explicitly starts it after quarantine.
-
-Remote environment S3, any profile-backed source or active object profile is rejected by this local-only tool. Dormant encrypted connection profiles are configuration history, not proof that their external resource data is backed up. External databases/storage, TLS edge volumes, live/orphan executable processes, Kubernetes, HA and production multi-tenant recovery remain separate gates.
-
-Repeat `--compose-file` for the selected base/overlays. Containers created before an overlay was selected may legitimately retain an ordered subset of those file labels; foreign/reordered/duplicate paths are rejected. Overlays now live under `deploy/compose/`; containers created while they sat at the repository root keep the old paths in their labels, so recreate them with the current files (`up -d --force-recreate`) before a backup. Structural image, entrypoint, local volume, security, service and storage-binding checks remain mandatory.
+Repeat `--compose-file` for the selected base file and each overlay:
 
 ```sh
-python3 scripts/recovery.py backup --project golf \
+python3 scripts/recovery.py backup --project golf-forgejo \
   --compose-file compose.yaml --compose-file deploy/compose/compose.ci.yaml --compose-file deploy/compose/compose.storage.yaml \
   --recipient "$PUBLIC_AGE_RECIPIENT" --output /private/path/golf.age --writers-drained
 ```
 
-Use the full restored profile's generated private Compose file and explicit operator reconciliation; never start a restored worker merely because a backup succeeded. For retained development, the pre-schema021 encrypted rollback snapshot and its private identity/configuration are under the ignored `.tmp/local-upgrade-*` directory. Protect/copy that directory separately; the same-host development copy is not an offsite recovery claim.
+Never start a restored worker just because a backup succeeded.

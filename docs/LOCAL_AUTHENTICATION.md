@@ -1,14 +1,14 @@
 # Golf local authentication
 
-This contract covers an operator-enrolled Golf email or username and password, separate from the connected Gitea account's password. Isolated native API/browser and encrypted-restore qualification pass on the qualified image below, and the full real-PostgreSQL race regression passes. This increment does not complete the plan's enrollment, identity administration or account-recovery lifecycle.
+This contract covers an operator-enrolled Golf email or username and password, separate from the connected Forgejo account's password. Isolated native API/browser and encrypted-restore qualification passed on the qualified image below in an earlier native qualification on a since-retired backend; it has not been repeated on Forgejo 15.0.9. The full real-PostgreSQL race regression passes. This increment does not complete the plan's enrollment, identity administration or account-recovery lifecycle.
 
 ## Identity and authority
 
-Golf verifies the local password itself. An operator explicitly binds the local account to an existing Golf identity, which is keyed by the configured forge URL and immutable native user ID. The bound scoped Gitea personal access token is encrypted for supported provider API calls. A matching display name, username or email never establishes this link.
+Golf verifies the local password itself. An operator explicitly binds the local account to an existing Golf identity, which is keyed by the configured forge URL and immutable native user ID. The bound scoped Forgejo personal access token is encrypted for supported provider API calls. A matching display name, username or email never establishes this link.
 
-The Golf password is not sent to Gitea and is not a Git transport credential. Native repository, organization and issue permissions still govern provider operations. A local login does not create an unrestricted forge administrator token. Native Gitea administrator status does not imply Golf instance-administrator authority; any Golf role is an explicit operator assignment and does not supply unimplemented administration screens or permissions.
+The Golf password is not sent to Forgejo and is not a Git transport credential. Native repository, organization and issue permissions still govern provider operations. A local login does not create an unrestricted forge administrator token. Native Forgejo administrator status does not imply Golf instance-administrator authority; any Golf role is an explicit operator assignment and does not supply unimplemented administration screens or permissions.
 
-Existing scoped PAT bootstrap and configured Gitea browser OAuth remain separate sign-in methods. The read-only user CLI and local MCP adapter retain their existing PAT/API-credential inputs; this browser-login increment does not add password arguments, unattended password storage, a CLI OAuth flow or write tools.
+Existing scoped PAT bootstrap and configured Forgejo browser OAuth remain separate sign-in methods. The read-only user CLI and local MCP adapter retain their existing PAT/API-credential inputs; this browser-login increment does not add password arguments, unattended password storage, a CLI OAuth flow or write tools.
 
 ## Password and credential storage
 
@@ -34,7 +34,7 @@ PostgreSQL counters admit 120 attempts per global 60-second fixed window and 10 
 
 ## Operator enrollment
 
-Enrollment is a privileged server-operator action using `DATABASE_URL`, `GITEA_URL` and the existing keyring configuration from the environment. The server binary is `./bin/golf-server` on the host or `/usr/local/bin/golf` in the container; this is separate from the read-only `bin/golf` user CLI. There is no public default password or open self-registration endpoint.
+Enrollment is a privileged server-operator action using `DATABASE_URL`, `GOLF_FORGE_URL` and the existing keyring configuration from the environment. The server binary is `./bin/golf-server` on the host or `/usr/local/bin/golf` in the container; this is separate from the read-only `bin/golf` user CLI. There is no public default password or open self-registration endpoint.
 
 | Action | Exact JSON fields on standard input | Behavior |
 | --- | --- | --- |

@@ -90,7 +90,7 @@ In another terminal, forward `service/golf-dev-golf-forgejo` with `3006:3000 222
 
 On October 14, 2026 the chart passed one-node Kubernetes runtime proofs: the k3d disposable smoke, and a kind install that covered install, account enrollment, password sign-in, repository push, an idempotent upgrade, restart persistence and enforced NetworkPolicy. Multi-node failover, public ingress/TLS, private-CA rotation and other CNI/storage profiles remain unqualified.
 
-For OAuth, first register a confidential Forgejo application with the exact callback `http://localhost:8086/auth/forgejo/callback`, add its ID and secret to the existing Secret, and set `oauth.enabled: true`. Production uses the corresponding HTTPS callback. The current flow requests `write:user`, `write:repository`, `read:issue` and `read:organization`; see the [OAuth decision](../../../docs/decisions/0003-gitea-oauth-and-session-refresh.md).
+For OAuth, first register a confidential Forgejo application with the exact callback `http://localhost:8086/auth/forgejo/callback`, add its ID and secret to the existing Secret, and set `oauth.enabled: true`. Production uses the corresponding HTTPS callback. The current flow requests `write:user`, `write:repository`, `read:issue` and `read:organization`; see the [OAuth decision](../../../docs/decisions/0003-forge-oauth-and-session-refresh.md).
 
 ## Production and external dependencies
 

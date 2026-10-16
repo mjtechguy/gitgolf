@@ -4,9 +4,9 @@ This packet implements Golf-managed invitations to existing native accounts, wit
 
 ## Native boundary and scope
 
-Pinned Gitea 1.27.3 `PUT /repos/{owner}/{repo}/collaborators/{username}` immediately adds or changes a collaborator and returns 204. It does not create a native pending invitation or recipient acceptance object. Golf therefore stores private pending metadata and invokes that supported API only after the intended native account accepts.
+The native `PUT /repos/{owner}/{repo}/collaborators/{username}` immediately adds or changes a collaborator and returns 204. It does not create a native pending invitation or recipient acceptance object. (This was characterized on the since-retired backend; Forgejo inherits this code but it has not been re-qualified.) Golf therefore stores private pending metadata and invokes that supported API only after the intended native account accepts.
 
-Primary pinned sources: [collaborator handlers](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/repo/collaborators.go), [collaboration service](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/services/repository/collaboration.go), and [organization permissions](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/org/org.go). Native calls use the existing forge client and shared lifecycle write hook. No application code writes native SQL or repository files.
+Primary upstream sources (Forgejo): [collaborator handlers](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/repo/collaborators.go) and [organization permissions](https://codeberg.org/forgejo/forgejo/src/tag/v15.0.9/routers/api/v1/org/org.go). Native calls use the existing forge client and shared lifecycle write hook. No application code writes native SQL or repository files.
 
 The issuer must use a current managed Golf password account. Creation requires explicit, logout-persistent delegation to that account's **existing encrypted credential**, pinned by immutable local-account ID and credential version. No credential is copied into an invitation, operation or new encryption family. Logout alone does not cancel that consent; disabling the issuer or changing its credential version expires pending invitations. Already granted native access is separate and is not removed by invitation expiry or revocation.
 

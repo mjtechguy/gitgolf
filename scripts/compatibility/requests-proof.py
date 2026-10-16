@@ -35,13 +35,13 @@ def qualify(*, stack, output, directory, actors, command, execute, metadata, rpc
         raise AssertionError('Log page bound exceeded')
     stage('acquire original Requests Git history without native or controller credentials')
     source = directory / 'requests.git'
-    git_environment = {key: value for key, value in environment.items() if not key.startswith(('GIT_', 'GOLF_', 'GITEA_')) and key.upper() not in ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY')}
+    git_environment = {key: value for key, value in environment.items() if not key.startswith(('GIT_', 'GOLF_', 'FORGEJO_')) and key.upper() not in ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY')}
     git_environment.update(PATH='/usr/local/bin:/usr/bin:/bin', HOME=str(directory), GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null', GIT_TERMINAL_PROMPT='0', LANG='C')
 
     def git(*argv, native=False, body=None):
         env = git_environment.copy()
         if native:
-            env.update(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='http.'+smoke.GITEA+'/.extraHeader', GIT_CONFIG_VALUE_0='Authorization: Basic '+base64.b64encode(('x-access-token:'+owner['token']).encode()).decode())
+            env.update(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='http.'+smoke.FORGE+'/.extraHeader', GIT_CONFIG_VALUE_0='Authorization: Basic '+base64.b64encode(('x-access-token:'+owner['token']).encode()).decode())
         env.update(GIT_AUTHOR_NAME='Golf qualification',GIT_AUTHOR_EMAIL='qualification@example.invalid',GIT_COMMITTER_NAME='Golf qualification',GIT_COMMITTER_EMAIL='qualification@example.invalid')
         result = subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'credential.helper=', '-c', 'http.followRedirects=false', '-c', 'http.proxy=', *argv], input=body, env=env, capture_output=True, timeout=180)
         assert result.returncode == 0 and len(result.stdout) <= 16 << 20 and len(result.stderr) <= 1 << 20, 'Bounded native Git failed; private bytes withheld'
@@ -56,7 +56,7 @@ def qualify(*, stack, output, directory, actors, command, execute, metadata, rpc
     native = smoke.provider(owner['token'], 'POST', 'user/repos', {'name':'requests-proof', 'private':True, 'auto_init':False}, expected=201)
     repository = {'owner':owner['name'], 'name':native['name']}
     base = 'repos/'+native['full_name']
-    native_url = smoke.GITEA+'/'+native['full_name']+'.git'
+    native_url = smoke.FORGE+'/'+native['full_name']+'.git'
     git('-C', str(source), 'push', '--quiet', native_url, HEAD+':refs/heads/source', native=True)
     git('-C', str(source), 'push', '--quiet', native_url, HEAD+'^:refs/heads/proof', native=True)
     smoke.wait_for_push(owner['token'], native['full_name'])
@@ -97,7 +97,7 @@ def qualify(*, stack, output, directory, actors, command, execute, metadata, rpc
     assert len(networks)==1
     overlay['services']['runner']['environment']['GOLF_RUNNER_ACTIONS_EGRESS_HOST']=next(iter(networks.values()))['IPAddress']
     (directory/'services.json').write_text(json.dumps(overlay))
-    smoke.provider(owner['token'],'POST',base+'/hooks', {'type':'gitea','active':True,'events':['push'],'branch_filter':'*','config':{'url':'http://golf:8080/hooks/forgejo/'+connection,'content_type':'json','http_method':'POST','secret':secret}}, expected=201)
+    smoke.provider(owner['token'],'POST',base+'/hooks', {'type':'forgejo','active':True,'events':['push'],'branch_filter':'*','config':{'url':'http://golf:8080/hooks/forgejo/'+connection,'content_type':'json','http_method':'POST','secret':secret}}, expected=201)
     command('up','-d','--no-build','--pull','never','runner-image-init','runner-actions-image-init')
     command('up','-d','--no-build','--pull','never','runner')
     time.sleep(7)

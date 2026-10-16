@@ -18,8 +18,9 @@ protected merge or establish an atomic native expected-head compare-and-swap.
 - Display reply parents only from successful Golf reply receipts with both IDs,
   author and exact native review/path/side visible. External ancestry is unknown.
 
-Native PENDING requires a nonempty summary: pinned1.27.3 returned HTTP422 for
-empty pending headers, including inline batches. Golf withholds that shape before
+Native PENDING requires a nonempty summary: the native forge returned HTTP422 for
+empty pending headers, including inline batches (characterized on the since-retired
+backend; Forgejo inherits this code but it has not been re-qualified). Golf withholds that shape before
 dispatch. Empty APPROVED submission is supported; COMMENT and REQUEST_CHANGES
 require a summary. PR authors may prepare pending comments and submit COMMENT;
 approval/change-request self-review remains refused.
@@ -86,7 +87,8 @@ no native schema/files are changed. Generate protobuf/Connect/web output normall
 ## Qualification
 
 At source `17c2874e130a4bbedec572b24eaf1afd893e02cb`, actual production
-HTTP handlers against pinned native 1.27.3 passed in 59.902s. The disposable launcher
+HTTP handlers passed in 59.902s in an earlier native qualification on a since-retired
+backend; it has not been repeated on Forgejo 15.0.9. The disposable launcher
 created ordinary owned actors, one private organization/repository and native
 review changes through supported APIs, then purged every owned fixture and logged
 out temporary Golf sessions. No runtime restart, new Docker resources, workflow
@@ -121,5 +123,5 @@ isolated browser qualifier.
 Remaining acceptance criteria: native pending append/rebase and multi-line/ranged
 suggestions; automatic suggestion commits with native expected-head CAS; complete
 external ancestry/thread resolution; protected approval eligibility, merge queues
-and every-ingress fences. Those are not verified by this slice. Full GitHub/Gitea
+and every-ingress fences. Those are not verified by this slice. Full GitHub/Forgejo
 parity and P0.8 remain open.

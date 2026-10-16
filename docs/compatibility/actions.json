@@ -11,16 +11,16 @@
         "internal/server/workflow_directories_test.go"
       ],
       "limitations": [
-        "First existing configured .forgejo/.gitea/.github directory, direct literal files only. Forgejo uses its explicit three-directory profile; legacy order stays unchanged. Owned manual/signed-push proof and Forgejo shell dispatch; nested/custom locations and retained deployment remain unqualified."
+        "First existing configured directory, direct literal files only; Forgejo default order .forgejo/workflows then .github/workflows (GOLF_FORGE_WORKFLOW_DIRS). The 2026-10-11 owned manual/signed-push receipt selected .forgejo/workflows first under an earlier three-directory order; the 2026-10-16 qualification inspected .github/workflows sources on the pinned image. Nested/custom locations and retained deployment remain unqualified."
       ],
       "native_evidence": [
-        "docs/compatibility/evidence/native-gitea-paths.json",
-        "docs/compatibility/evidence/forgejo-local.json"
+        "docs/compatibility/evidence/forgejo-local.json",
+        "docs/compatibility/evidence/forgejo-qualify-20261016.json"
       ],
       "runtime_evidence": [
-        "docs/compatibility/evidence/native-gitea-paths.json",
         "docs/compatibility/evidence/forgejo-local.json",
-        "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
+        "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json",
+        "docs/compatibility/evidence/forgejo-qualify-20261016.json"
       ],
       "deployment_evidence": []
     },
@@ -39,15 +39,10 @@
         "Exact-H/depth1: trusted preparation v0 and genuine action checkout bounded v2, independently verified native source/tree/workflow; no retained rollout. Full history/tags/sparse/submodule/LFS remain unavailable."
       ],
       "native_evidence": [
-        "docs/compatibility/evidence/native-gitea-paths.json",
-        "docs/compatibility/evidence/native-historical-git.json"
+        "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
       ],
       "runtime_evidence": [
-        "docs/compatibility/evidence/native-gitea-paths.json",
-        "docs/compatibility/evidence/native-historical-git.json",
         "docs/compatibility/evidence/actual-git-engine.json",
-        "docs/compatibility/evidence/requests-local.json",
-        "docs/compatibility/evidence/requests-review-20261011.json",
         "docs/compatibility/evidence/requests-forgejo-deep-20261011.json",
         "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
       ],
@@ -106,10 +101,9 @@
         "Owned input-free two-job manual and default-branch signed push; exact path/source/grant binding and zero duplicate triggers. PR/tag/glob/path/reuse and retained deployment remain unqualified."
       ],
       "native_evidence": [
-        "docs/compatibility/evidence/native-gitea-paths.json"
+        "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
       ],
       "runtime_evidence": [
-        "docs/compatibility/evidence/native-gitea-paths.json",
         "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
       ],
       "deployment_evidence": []
@@ -127,9 +121,6 @@
       ],
       "native_evidence": [],
       "runtime_evidence": [
-        "docs/compatibility/evidence/native-gitea-paths.json",
-        "docs/compatibility/evidence/requests-local.json",
-        "docs/compatibility/evidence/requests-review-20261011.json",
         "docs/compatibility/evidence/requests-forgejo-deep-20261011.json",
         "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
       ],
@@ -162,7 +153,6 @@
       "native_evidence": [],
       "runtime_evidence": [
         "docs/compatibility/evidence/actual-git-engine.json",
-        "docs/compatibility/evidence/native-historical-git.json",
         "docs/compatibility/evidence/worker-loss-forgejo-deep-20261011.json"
       ],
       "deployment_evidence": []
@@ -181,8 +171,6 @@
       ],
       "native_evidence": [],
       "runtime_evidence": [
-        "docs/compatibility/evidence/requests-local.json",
-        "docs/compatibility/evidence/requests-review-20261011.json",
         "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
       ],
       "deployment_evidence": []
@@ -200,8 +188,6 @@
       ],
       "native_evidence": [],
       "runtime_evidence": [
-        "docs/compatibility/evidence/requests-local.json",
-        "docs/compatibility/evidence/requests-review-20261011.json",
         "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
       ],
       "deployment_evidence": []
@@ -220,8 +206,6 @@
       ],
       "native_evidence": [],
       "runtime_evidence": [
-        "docs/compatibility/evidence/requests-local.json",
-        "docs/compatibility/evidence/requests-review-20261011.json",
         "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
       ],
       "deployment_evidence": []
@@ -240,8 +224,6 @@
       ],
       "native_evidence": [],
       "runtime_evidence": [
-        "docs/compatibility/evidence/requests-local.json",
-        "docs/compatibility/evidence/requests-review-20261011.json",
         "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
       ],
       "deployment_evidence": []
@@ -295,8 +277,6 @@
       ],
       "native_evidence": [],
       "runtime_evidence": [
-        "docs/compatibility/evidence/requests-local.json",
-        "docs/compatibility/evidence/requests-review-20261011.json",
         "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
       ],
       "deployment_evidence": []
@@ -422,8 +402,6 @@
       ],
       "native_evidence": [],
       "runtime_evidence": [
-        "docs/compatibility/evidence/requests-local.json",
-        "docs/compatibility/evidence/requests-review-20261011.json",
         "docs/compatibility/evidence/requests-forgejo-deep-20261011.json"
       ],
       "deployment_evidence": []

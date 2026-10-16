@@ -88,10 +88,10 @@ Generated from every `api/golf/v1/*.proto` contract by `node cloudflare/forge/ca
 | DiscussionAttachmentUploadService/SubmitDiscussionAttachmentUpload | forge089.proto | Bounded adapter |
 | DiscussionAttachmentUploadService/GetDiscussionAttachmentUploadOperation | forge089.proto | Bounded adapter |
 | SessionService/GetAuthenticationOptions | golf.proto | Bounded adapter |
-| SessionService/BeginGiteaOAuth | golf.proto | Missing native adapter |
+| SessionService/BeginForgeOAuth | golf.proto | Missing native adapter |
 | SessionService/LoginWithPassword | golf.proto | Missing native adapter |
 | SessionService/CompletePasswordMFA | golf.proto | Missing native adapter |
-| SessionService/LoginWithGiteaToken | golf.proto | Missing native adapter |
+| SessionService/LoginWithForgeToken | golf.proto | Missing native adapter |
 | SessionService/GetSession | golf.proto | Bounded adapter |
 | SessionService/ListSessions | golf.proto | Missing native adapter |
 | SessionService/RevokeSession | golf.proto | Missing native adapter |

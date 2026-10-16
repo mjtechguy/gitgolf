@@ -84,7 +84,7 @@ immutable grants, old-token refusal, one native fixture dispatch across replay,
 wrong ID/slug/unit/scope refusal and revocation. `TestApiWriteGrantValidationPostgres`
 rejects unsupported/duplicate scopes, absent targets and mismatched IDs without
 creating credentials. These use real PostgreSQL and an HTTP native-protocol
-fixture; they do not claim actual Gitea or served deployment qualification.
+fixture; they do not claim actual Forgejo or served deployment qualification.
 
 CLI/MCP checks exercise typed inputs, both supported MCP protocol revisions,
 write discovery/annotations, owner-configured bearer-only transport, original
@@ -94,17 +94,17 @@ shared inventory/editor behavior, one-time secrets and light/dark/mobile control
 Actual native delegation and the retained localhost rollout are recorded separately
 in the implementation ledger when qualified.
 
-The optional `scripts/scoped-collaboration-native-proof.py` now passes against
-actual Gitea1.27.3 through production source HTTP handlers and isolated Golf
-PostgreSQL. Independent native readback verifies exactly one issue/comment after
+The optional `scripts/scoped-collaboration-native-proof.py` passed in an earlier
+native qualification on a since-retired backend, through production source HTTP
+handlers and isolated Golf PostgreSQL; it has not been repeated on Forgejo 15.0.9. Independent native readback verifies exactly one issue/comment after
 original-key replay, and revoked delegation is refused. Owned actors/repositories
 are purged. Receipt: [native attempt1](../.tmp/portable-completion075/native-delegation-attempt1/manifest.json).
 This qualifies the bounded native issue/comment slice; it does not qualify all six
 write operations, the CLI/MCP against actual native transport, or served localhost.
 
 The integrated [native CLI/MCP attempt](../.tmp/portable-completion075/native-cli-mcp-attempt1/manifest.json)
-also passes the CLI and actual stdio MCP in both supported protocol revisions
-against those production source handlers and real Gitea. Reusing the original
+also passed the CLI and actual stdio MCP in both supported protocol revisions
+against those production source handlers and the same since-retired native backend. Reusing the original
 comment operation produces exactly one native comment. This remains bounded
 issue/comment qualification, separate from broader PR writes and served rollout.
 

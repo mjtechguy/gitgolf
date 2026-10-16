@@ -1,6 +1,6 @@
 # Owner-issued read-only API credentials
 
-Golf API credentials delegate the existing signed-in owner's read access. They do not create a separate identity, copy a Gitea token, extend a provider grant or implement an OAuth authorization server. The portable and Cloudflare tracks use the same boundary.
+Golf API credentials delegate the existing signed-in owner's read access. They do not create a separate identity, copy a Forgejo token, extend a provider grant or implement an OAuth authorization server. The portable and Cloudflare tracks use the same boundary.
 
 ## Issuance and lifetime
 
@@ -14,15 +14,15 @@ Issuance and the separate append-only `CREATED` event commit together. Explicit 
 
 Send exactly one `Authorization: Bearer TOKEN` header, with no cookies. Query/form tokens, malformed or duplicate authorization, mixed cookie/bearer requests and nonmatching origin are rejected. Clients use the configured Golf origin, reject redirects and require HTTPS except the explicit local development loopback allowance. This follows the transport protections in [RFC 6750](https://www.rfc-editor.org/rfc/rfc6750); issuance itself is not an OAuth flow.
 
-The explicit allowlist contains the current 21 CLI/MCP reads plus `SessionService/GetSession`. API credentials cannot log in/out, create repositories/issues/comments, manage sessions, issue/list/revoke credentials or call unreviewed future procedures. Authorization runs before body decoding. Every delegated request requires an unexpired/unrevoked credential, the original live source session's exact ID/hash/owner/forge binding, and the matching current native Gitea identity. Post-wait checks re-resolve delegation, and successful unary results receive a final native/local authority check before encoding.
+The explicit allowlist contains the current 21 CLI/MCP reads plus `SessionService/GetSession`. API credentials cannot log in/out, create repositories/issues/comments, manage sessions, issue/list/revoke credentials or call unreviewed future procedures. Authorization runs before body decoding. Every delegated request requires an unexpired/unrevoked credential, the original live source session's exact ID/hash/owner/forge binding, and the matching current native Forgejo identity. Post-wait checks re-resolve delegation, and successful unary results receive a final native/local authority check before encoding.
 
 Ending the issuing session invalidates all its credentials. Other still-live sessions are independent. Credential expiry/revocation denies access even while the source session remains live. Native token, membership and repository permission changes still govern each read; a Golf token does not override them. Existing OAuth session refresh can still update upstream session state, so local MCP discovery keeps conservative side-effect annotations.
 
 ## CLI and local MCP
 
-Use `GOLF_API_TOKEN` or `--api-token-stdin` for CLI reads. Neither path opens an ephemeral browser session or calls login/logout. Never pass the secret as a command-line argument. Mixing API-token and Gitea-token sources is rejected before reading stdin or making requests. Existing Gitea PAT mode remains available.
+Use `GOLF_API_TOKEN` or `--api-token-stdin` for CLI reads. Neither path opens an ephemeral browser session or calls login/logout. Never pass the secret as a command-line argument. Mixing API-token and Forgejo-token sources is rejected before reading stdin or making requests. Existing Forgejo PAT mode remains available.
 
-For `golf mcp`, the process owner supplies exactly one of `GOLF_API_TOKEN` or `GOLF_GITEA_TOKEN`. Stdin remains reserved for protocol messages; tool arguments cannot override credentials or destinations. Both modes use the same 21 tools, bounds, cancellation guard and output contracts described in [the MCP contract](MCP_CONTRACT.md).
+For `golf mcp`, the process owner supplies exactly one of `GOLF_API_TOKEN` or `GOLF_FORGE_TOKEN`. Stdin remains reserved for protocol messages; tool arguments cannot override credentials or destinations. Both modes use the same 21 tools, bounds, cancellation guard and output contracts described in [the MCP contract](MCP_CONTRACT.md).
 
 ## Recovery and remaining scope
 
@@ -39,11 +39,11 @@ The native CLI/MCP proof accepts explicit isolated endpoints and the disposable 
 ```sh
 python3 scripts/mcp-smoke/run.py --cli bin/golf --api-credentials \
   --golf-url http://127.0.0.1:GOLF_PORT \
-  --gitea-url http://127.0.0.1:GITEA_PORT \
-  --gitea-container DISPOSABLE_GITEA_CONTAINER
+  --forge-url http://127.0.0.1:FORGEJO_PORT \
+  --forge-container DISPOSABLE_FORGEJO_CONTAINER
 python3 scripts/mcp-cancellation-check.py --cli bin/golf --api-token-mode
 ```
 
-For native browser qualification, `node web/tests/api-credentials-live.mjs --target PRIVATE_TARGET_JSON` requires an already isolated core. Its target file contains `golf` (loopback origin with a non8080 port), `project` (a `golf-api-proof-` prefix) and `container` (that project's Gitea container). The browser script creates/removes its own native user and session, checks real issuance/read-only denial/revocation/lost acknowledgment/pagination/privacy and captures secret-free layout images under ignored `.tmp`. The isolated core's owner removes its databases, volumes and private configuration afterward. None of these checks qualifies production scale, remote MCP or named agent execution.
+For native browser qualification, `node web/tests/api-credentials-live.mjs --target PRIVATE_TARGET_JSON` requires an already isolated core. Its target file contains `golf` (loopback origin with a non8080 port), `project` (a `golf-api-proof-` prefix) and `container` (that project's Forgejo container). The browser script creates/removes its own native user and session, checks real issuance/read-only denial/revocation/lost acknowledgment/pagination/privacy and captures secret-free layout images under ignored `.tmp`. The isolated core's owner removes its databases, volumes and private configuration afterward. None of these checks qualifies production scale, remote MCP or named agent execution.
 
-The final native browser, CLI/MCP and encrypted-recovery proofs pass on the same exact image recorded in the ledger. The normal local core is updated to that image and its native source/session/Git/CLI regression passes. Marketing/docs remain independent static sites; no repository CI or live Cloudflare deployment was added.
+The final native browser, CLI/MCP and encrypted-recovery proofs passed on the same exact image recorded in the ledger, in an earlier native qualification on a since-retired backend; they have not been repeated on Forgejo 15.0.9. The normal local core is updated to that image and its native source/session/Git/CLI regression passes. Marketing/docs remain independent static sites; no repository CI or live Cloudflare deployment was added.

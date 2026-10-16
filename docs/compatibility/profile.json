@@ -1,27 +1,37 @@
 {
   "format": "golf.compatibility.profile.v1",
-  "retrieved_at": "2026-10-07",
-  "gitea": {
-    "version": "1.27.3",
-    "source_commit": "146cc3eec57174711eac0e0a0c7b38670c6e3922",
-    "spec_source": "https://raw.githubusercontent.com/go-gitea/gitea/146cc3eec57174711eac0e0a0c7b38670c6e3922/templates/swagger/v1_json.tmpl",
-    "spec_kind": "official-versioned-source-template",
-    "spec_sha256": "5a95a50cf527825dfb251071f1dea4634d1ec28adca93f408d1cbc2380779215",
-    "installed_comparison": "Fresh owned Gitea 1.27.3 paths/definitions/security match; retained installation comparison still required.",
+  "retrieved_at": "2026-10-16",
+  "forgejo": {
+    "version": "15.0.9",
+    "reported_version": "15.0.9+gitea-1.22.0",
+    "image": "codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413",
+    "container_manifest_digest": "sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413",
+    "source_repository": "https://codeberg.org/forgejo/forgejo",
+    "source_tag": "v15.0.9",
+    "source_commit": "19b9b9d216bbfb501c18514bd1a8c980246ca3f7",
+    "spec_source": "GET /swagger.v1.json served by a disposable container of the pinned image during make forgejo-qualify",
+    "spec_kind": "served-document-reserialized-with-sorted-keys",
+    "spec_captured_at": "2026-10-16",
+    "spec_sha256": "657cfc907353f1182b2a85c906d0ad2e48e71367454411685246a387a3fbfc1e",
+    "spec_canonical_sha256": "98d1a3969ec545b9dab7745de948d9bfacf19990589dabfe779a3991febd3208",
+    "installed_comparison": "Served by a fresh owned Forgejo 15.0.9 from the pinned image digest; canonical hash matches the 2026-10-11 and 2026-10-16 qualification receipts. Each retained installation still needs its own comparison.",
     "enabled_features": {
       "qualification_instance": {
         "native_actions": false,
-        "workflow_dirs": ".gitea/workflows,.github/workflows"
+        "workflow_dirs": ".forgejo/workflows,.github/workflows"
       },
-      "retained_installation": "not inspected or changed by this packet"
+      "retained_installation": "not inspected or changed by this register"
     },
     "default_workflow_dirs": [
-      ".gitea/workflows",
+      ".forgejo/workflows",
       ".github/workflows"
     ],
+    "workflow_dirs_configuration": {
+      "environment": "GOLF_FORGE_WORKFLOW_DIRS",
+      "helm_value": "forgejo.workflowDirs"
+    },
     "native_actions_execution_owner": "disabled in the managed Golf profile",
-    "container_manifest_digest": "sha256:1c17ecaead42eb3b5391553d8708103a4beb0e86edf5b9ebc1eb269c318845f2",
-    "installed_spec_evidence": "evidence/native-gitea-paths.json"
+    "installed_spec_evidence": "evidence/forgejo-qualify-20261016.json"
   },
   "actions": {
     "provider_reference": "GitHub Actions public documentation observed 2026-10-07",
@@ -45,7 +55,7 @@
       "catalog": "golf.workflow.act.v0.2.89.linux.remote-node24.v1",
       "platform": "linux/amd64",
       "operator_recipe": "deploy/docker/actions/Dockerfile",
-      "evidence": "evidence/requests-local.json",
+      "evidence": "evidence/requests-forgejo-deep-20261011.json",
       "python_archive_sha256": "fa74abc70a55c10f6631967784878704eef81bbde9b8ec27469534f6ba997cb3",
       "python_version": "3.14.8",
       "node_version": "24.19.0",
@@ -59,7 +69,8 @@
         "pythonToolcache": "3.14.8",
         "pythonArchiveSHA256": "fa74abc70a55c10f6631967784878704eef81bbde9b8ec27469534f6ba997cb3",
         "operatorAcquisition": true
-      }
+      },
+      "qualified_ci_image_evidence": "Identity recorded 2026-10-07 by an earlier receipt removed from this register on 2026-10-16 (retained in Git history). The 2026-10-11 Forgejo Requests receipt does not record the job image digest."
     }
   },
   "gitlab": {
@@ -175,15 +186,15 @@
       "state": "runtime-tested",
       "event": "push",
       "source_unmodified": true,
-      "evidence": "evidence/requests-local.json",
+      "evidence": "evidence/requests-forgejo-deep-20261011.json",
       "pull_request_qualified": false
     }
   },
   "files": [
     {
-      "path": "gitea-1.27.3.swagger.json",
-      "bytes": 870731,
-      "sha256": "5a95a50cf527825dfb251071f1dea4634d1ec28adca93f408d1cbc2380779215"
+      "path": "forgejo-15.0.9.swagger.json",
+      "bytes": 511969,
+      "sha256": "657cfc907353f1182b2a85c906d0ad2e48e71367454411685246a387a3fbfc1e"
     },
     {
       "path": "fixtures/requests-lint.yml",
@@ -206,11 +217,6 @@
       "sha256": "e6dc8046c02bd3c9f7bf2fea6ba2e59b4e83c7de2b26ec2149a1627f5d66f96c"
     },
     {
-      "path": "fixtures/gitea-webhook-types.go.txt",
-      "bytes": 4866,
-      "sha256": "401464d9b7c99d0053b676ab44c25e1adfd5f1b61cf4410cc1f253e0ff7a7e38"
-    },
-    {
       "path": "fixtures/LICENSE.requests",
       "bytes": 10142,
       "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
@@ -226,19 +232,9 @@
       "sha256": "7d070f6b64d9bcc530fe99cc21eaaa4b3c364e0b2d367d7735671fa202a03b32"
     },
     {
-      "path": "fixtures/LICENSE.gitea",
-      "bytes": 1097,
-      "sha256": "ed2f10a9d78b8c6c9ef33f1420d0eb266981891caf2f15d630553f02dc60d3ae"
-    },
-    {
       "path": "fixtures/requests-roadmap-lint.yml",
       "bytes": 588,
       "sha256": "2adbd62821e06ee622aff3e1e6e283a9cf3e2dcf694a04040b43fd4291d96f99"
-    },
-    {
-      "path": "fixtures/gitea-hook-payloads.go.txt",
-      "bytes": 22854,
-      "sha256": "2c91282c32fda6fa0ae390ba16855a7eaeaa5c1691c53c8de787770911e3c39b"
     }
   ]
 }
