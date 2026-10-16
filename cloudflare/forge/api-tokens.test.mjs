@@ -52,6 +52,26 @@ test('a token is shown once, stored as SHA-256, listed and revoked from a browse
   assert.ok(audit.every(row => !JSON.stringify(row).includes(created.secret.slice(9))));
 });
 
+test('the token picker lists exactly the repositories a token can name: granted, active, by owner and name, 100 a page', async t => {
+  const f = await accessFixture(t);
+  // A third repository bob has no grant on (public or not) is never offered, and create refuses it.
+  f.sql.exec(`INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at) VALUES(3,'aardvark','','repo-${'f'.repeat(32)}',1,'k3','h3','ACTIVE','2026-10-14T00:00:00Z');
+    INSERT INTO grants VALUES(3,1,'admin')`);
+  const page = async (who, extra = {}) => { const value = await f.session({ action: 'repositories', ...extra }, who); assert.equal(value.status, 200, value.message); return value; };
+  assert.deepEqual((await page('bob')).repositories, [{ id: '1', fullName: 'alice/project' }, { id: '2', fullName: 'alice/tooling' }]);
+  assert.deepEqual((await page('alice')).repositories.map(r => r.fullName), ['alice/aardvark', 'alice/project', 'alice/tooling']);
+  const none = await page('dave'); assert.deepEqual([none.repositories, none.nextPage], [[], 0]);
+  assert.equal((await f.session({ action: 'create', label: 'x', permission: 'read', lifetimeHours: 24, repositories: ['3'] }, 'bob')).status, 400);
+  // Past 100, the next page continues in the same order.
+  const values = Array.from({ length: 120 }, (_, i) => `(${10 + i},'r${String(i).padStart(3, '0')}','','repo-${'0'.repeat(28)}${String(1000 + i)}',1,'m${i}','m${i}','ACTIVE','2026-10-14T00:00:00Z')`).join(',');
+  f.sql.exec(`INSERT INTO repositories(id,name,description,artifact_name,creator_id,creation_key,input_hash,state,created_at) VALUES ${values}; INSERT INTO grants SELECT id,4,'read' FROM repositories WHERE id>=10`);
+  const first = await page('dave'), second = await page('dave', { page: 2 });
+  assert.deepEqual([first.repositories.length, first.nextPage, second.repositories.length, second.nextPage], [100, 2, 20, 0]);
+  assert.deepEqual([first.repositories[0].fullName, second.repositories[0].fullName, second.repositories.at(-1).fullName], ['alice/r000', 'alice/r100', 'alice/r119']);
+  assert.equal((await f.session({ action: 'repositories', page: 0 }, 'dave')).status, 400);
+  assert.equal((await f.session({ action: 'repositories', limit: 500 }, 'dave')).status, 400);
+});
+
 test('fifty active tokens per account; expiry and an identity change stop a token at once, and use is recorded at most once a minute', async t => {
   const f = await accessFixture(t);
   for (let i = 0; i < 50; i++) await f.create({ label: 'bulk ' + i }, 'carol');

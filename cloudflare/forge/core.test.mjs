@@ -2160,6 +2160,22 @@ test('invitation acceptance checks authority in its transaction and recovers a l
   assert.equal(f.sql.prepare('SELECT generation FROM collaborator_versions WHERE user_id=3').get().generation, 1);
 });
 
+test('invitation acceptance never lowers a role the recipient gained after the preflight', async t => {
+  const f = await invitationFixture(t), { invitation } = await f.createInvitation('bob', 'write'), batch = f.env.DB.batch;
+  f.env.DB.batch = async statements => { f.sql.exec("INSERT INTO grants VALUES(1,2,'admin')"); return batch(statements); };
+  const response = await f.invite('RespondRepositoryInvitation', { invitationId: invitation.id, expectedRevision: '1', decision: 1, idempotencyKey: crypto.randomUUID() }, 'bob@example.invalid');
+  assert.equal(response.status, 200, await response.clone().text()); const result = await response.json();
+  assert.equal(result.operation.phase, 'REJECTED'); assert.equal(result.invitation.state, 'PENDING');
+  assert.equal(f.sql.prepare('SELECT role FROM grants WHERE user_id=2').get().role, 'admin');
+  // The rank fence is in the write itself, not only in the generation fence the grant triggers maintain.
+  const g = await invitationFixture(t); g.sql.exec("INSERT INTO grants VALUES(1,2,'read')");
+  const promoted = await g.createInvitation('bob', 'write'), original = g.env.DB.batch;
+  g.env.DB.batch = async statements => { g.sql.exec("DROP TRIGGER grants_update_revision; UPDATE grants SET role='admin' WHERE user_id=2"); return original(statements); };
+  const raced = await (await g.invite('RespondRepositoryInvitation', { invitationId: promoted.invitation.id, expectedRevision: '1', decision: 1, idempotencyKey: crypto.randomUUID() }, 'bob@example.invalid')).json();
+  assert.equal(raced.operation.phase, 'REJECTED'); assert.equal(raced.invitation.state, 'PENDING');
+  assert.equal(g.sql.prepare('SELECT role FROM grants WHERE user_id=2').get().role, 'admin');
+});
+
 async function resourcesFixture(t) {
   const f = await fixture(t); await f.create();
   const target = { repository: { owner: 'alice', name: 'project' }, repositoryId: '1' };
@@ -2216,6 +2232,13 @@ test('native issue metadata assignment, filters, milestone counts and removal wo
   f.sql.prepare('DELETE FROM grants WHERE user_id=2').run();
   assert.equal((await f.read()).metadata.assignees.length, 0);
   assert.equal((await f.value(await f.call('ListIssues', { ...filter, query: { assignee: 'bob' } }))).issues.length, 0);
+  // A save from the panel replaces only the assignees it shows: bob, hidden without a grant, keeps his row and returns with it.
+  f.sql.exec("INSERT INTO users(id,login) VALUES(3,'carol'); INSERT INTO grants VALUES(1,3,'read')");
+  await f.value(await f.update({ assignees: { expectedAssigneeIds: [], assignees: [{ id: '3', login: 'carol' }] } }));
+  await f.value(await f.update({ assignees: { expectedAssigneeIds: ['3'], assignees: [] } }));
+  assert.deepEqual(f.sql.prepare('SELECT user_id FROM discussion_assignees ORDER BY user_id').all().map(r => r.user_id), [2]);
+  f.sql.exec("INSERT INTO grants VALUES(1,2,'read')");
+  assert.deepEqual((await f.read()).metadata.assignees.map(u => u.login), ['bob']);
 });
 test('metadata rejects foreign IDs, conflicting exclusive labels, closed milestones and unauthorized changes', async t => {
   const f = await resourcesFixture(t), a = (await f.label('status/type/bug', { exclusive: true })).label, b = (await f.label('status/type/feature', { exclusive: true })).label;
@@ -2532,6 +2555,23 @@ test('native signed webhook tests retain original operations and never leak rece
  await f.save({expectedVersion:'1',enabled:false,authorizeBackground:false,endpoint:'',signingSecret:''});
  assert.equal((await f.value(await f.invoke('TestRepositoryWebhook',input))).delivery.state,'accepted');
  assert.equal((await drainWebhooks(f.env,{fetch:async()=>{throw Error('must not send');}})).processed,0);
+});
+
+test('disabling or re-saving a webhook cancels its queued deliveries; Redeliver sends them under the current secret',async t=>{
+ const f=await webhookFixture(t);await f.save();const {drainWebhooks}=await import('./src/webhooks.mjs');
+ const queue=async version=>(await f.value(await f.invoke('TestRepositoryWebhook',{subscriptionId:f.draft.id,expectedVersion:version,operationId:crypto.randomUUID()}))).delivery;
+ const history=async()=>(await f.value(await f.invoke('ListRepositoryWebhookDeliveries',{subscriptionId:f.draft.id}))).deliveries;
+ const first=await queue('1');
+ await f.save({expectedVersion:'1',enabled:false,authorizeBackground:false,endpoint:'',signingSecret:''});
+ assert.equal((await drainWebhooks(f.env,{fetch:async()=>{throw Error('must not send');}})).processed,0);
+ assert.deepEqual((await history()).map(d=>[d.id,d.state,d.failureCode]),[[first.id,'cancelled','authority_changed']]);
+ const secret='y'.repeat(40);await f.save({expectedVersion:'2',endpoint:'',signingSecret:secret});
+ const second=await queue('3');await f.save({expectedVersion:'3',endpoint:'',signingSecret:'z'.repeat(40)});
+ assert.equal((await drainWebhooks(f.env,{fetch:async()=>{throw Error('must not send');}})).processed,0);
+ assert.equal((await history()).find(d=>d.id===second.id).state,'cancelled');
+ const again=await f.value(await f.invoke('RedeliverRepositoryWebhook',{deliveryId:first.id,expectedVersion:'4',operationId:crypto.randomUUID()}));
+ assert.equal(again.delivery.eventId,first.eventId);const {createHmac}=await import('node:crypto');
+ assert.equal((await drainWebhooks(f.env,{fetch:async(url,options)=>{assert.equal(options.headers['X-Golf-Signature-256'],'sha256='+createHmac('sha256','z'.repeat(40)).update(options.headers['X-Golf-Timestamp']+'\n'+options.headers['X-Golf-Event-ID']+'\n'+options.body).digest('hex'));return new Response(null,{status:204});}})).processed,1);
 });
 
 test('removing a webhook origin in installation policy fails queued deliveries at their next attempt and refuses new saves',async t=>{

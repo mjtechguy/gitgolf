@@ -230,11 +230,14 @@ export async function sshHostsAPI(db, env, person, request, body) {
   if (action === 'trustHostKey') {
     // Trust on first use, explicitly: the person confirms the fingerprint the latest test was offered; nothing is pinned without it.
     if (!fields(body, ['action', 'id', 'scope', 'organization', 'fingerprint', 'expectedVersion']) || typeof body.fingerprint !== 'string') invalid('Confirm the fingerprint the connection test showed.');
+    if (body.expectedVersion !== row.version) refuse('The SSH host changed; refresh before confirming its host key.');
     const offered = parse(row.probe_result, {}).offered;
     if (!offered || row.probe_state === 'RUNNING') refuse('Test the connection first; Golf pins only a host key a test was offered.');
     if (offered.fingerprint !== body.fingerprint) refuse('That fingerprint is not the one the latest connection test was offered; test again and compare.');
     const changed = await db.batch([
-      db.prepare('UPDATE ssh_hosts SET host_key=?,host_key_fingerprint=?,host_key_pinned_by=?,host_key_pinned_at=?,updated_at=? WHERE host_id=? AND probe_id=?').bind(offered.key, offered.fingerprint, person.id, time, time, row.host_id, row.probe_id),
+      // Pinned only if the host version and the test result read above still stand: a move or rotation in between clears them.
+      db.prepare(`UPDATE ssh_hosts SET host_key=?,host_key_fingerprint=?,host_key_pinned_by=?,host_key_pinned_at=?,updated_at=? WHERE host_id=? AND probe_id=? AND probe_state<>'RUNNING' AND probe_result=?
+        AND EXISTS(SELECT 1 FROM agent_hosts WHERE id=? AND version=? AND deleted=0)`).bind(offered.key, offered.fingerprint, person.id, time, time, row.host_id, row.probe_id, row.probe_result, row.host_id, row.version),
       db.prepare('UPDATE agent_hosts SET version=version+1 WHERE id=? AND changes()=1').bind(row.host_id),
     ]);
     if (changed[0].meta.changes !== 1) refuse('The connection test changed; refresh and confirm again.');

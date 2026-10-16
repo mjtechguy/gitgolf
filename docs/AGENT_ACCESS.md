@@ -17,8 +17,9 @@ Coding agents reach Golf with a personal API token:
 - **Fields:** a label (up to 64 bytes), the owner, an expiry from 1 hour to 90 days,
   last used (updated at most once a minute) and revoked.
 - **Scope:**
-  - repositories: a list (up to 100), or all repositories the owner can access,
-    including ones granted later;
+  - repositories: a list (up to 100) of repositories the owner holds a grant on (a
+    public repository the owner is not a member of cannot be listed), or all
+    repositories the owner can access, including ones granted later;
   - permission: `read` or `write`;
   - write branch pattern (write tokens only): an exact branch name, or a prefix
     ending in `*` such as `agent/*`. With a pattern, pushes and Source API writes to
@@ -42,7 +43,8 @@ Coding agents reach Golf with a personal API token:
 
 Settings → Developer → **API tokens** (`/account/api-tokens`) lists your tokens first:
 repositories, permission, write branches, expiry, last use and state. **New token**
-opens the form. After creation the page shows the secret once, with ready-to-paste
+opens the form. "Only selected repositories" lists the repositories you are a member of,
+by owner and name, 100 at a time with **Load more repositories**. After creation the page shows the secret once, with ready-to-paste
 setups for Claude Code, Codex, OpenCode and Git.
 
 The user API is `POST /native/api-tokens` with `action`:
@@ -50,6 +52,7 @@ The user API is `POST /native/api-tokens` with `action`:
 | Action | Request | Response |
 | --- | --- | --- |
 | `list` | `{}` | `{ tokens: [token], active, limit: 50, mcpUrl, origin }` (newest 200) |
+| `repositories` | `{ page? }` (1–1000) | `{ repositories: [{ id, fullName }], nextPage }`: the repositories `create` accepts, by owner then name, 100 a page |
 | `create` | `{ label, repositories: null \| [id], permission, branchPattern?, lifetimeHours }` (1–2160) | `{ token, secret, mcpUrl, origin }` |
 | `revoke` | `{ id }` | `{ id, revoked: true }` |
 

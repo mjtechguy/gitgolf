@@ -66,7 +66,7 @@ async function fixture(t, { execution = true, key = true } = {}) {
     const first = probes.at(-1);
     await recordSSHProbe(f.env.DB, f.env, Number(host.id), first.probeId, { hostKey: offered, matched: null, authenticated: false });
     const fingerprint = (await parseHostKey(offered)).fingerprint;
-    const pinned = await ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, fingerprint });
+    const pinned = await ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, expectedVersion: host.version, fingerprint });
     assert.equal(pinned.status, 200, JSON.stringify(pinned));
     await ssh({ action: 'test', scope: 'personal', id: host.id });
     await recordSSHProbe(f.env.DB, f.env, Number(host.id), probes.at(-1).probeId, { hostKey: offered, matched: true, authenticated: true, os: 'linux', arch: 'amd64', tools });
@@ -194,7 +194,7 @@ test('host keys are pinned only from a test the person confirmed; a changed key 
   const f = await fixture(t);
   const host = (await f.create()).host, offered = await hostKey(), fingerprint = (await parseHostKey(offered)).fingerprint;
   // Nothing to pin before a test; a test runs one at a time.
-  assert.equal((await f.ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, fingerprint })).status, 412);
+  assert.equal((await f.ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, expectedVersion: host.version, fingerprint })).status, 412);
   const started = await f.ssh({ action: 'test', scope: 'personal', id: host.id });
   assert.deepEqual([started.host.probe.state, f.probes.length, f.probes[0].name], ['RUNNING', 1, 'probe:' + f.probes[0].probeId]);
   assert.equal((await f.ssh({ action: 'test', scope: 'personal', id: host.id })).status, 409);
@@ -203,9 +203,20 @@ test('host keys are pinned only from a test the person confirmed; a changed key 
   await recordSSHProbe(f.env.DB, f.env, Number(host.id), f.probes[0].probeId, { hostKey: offered, fingerprint: 'SHA256:forged', authenticated: true, matched: true, tools: toolsReport });
   let view = (await f.ssh({ action: 'list', scope: 'personal' })).hosts[0];
   assert.deepEqual([view.probe.state, view.probe.offered.fingerprint, view.tools.length], ['SUCCEEDED', fingerprint, 0]);
-  assert.equal((await f.ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, fingerprint: 'SHA256:forged' })).status, 412);
-  assert.equal((await f.ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, fingerprint }, 'bob')).status, 403);
-  view = (await f.ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, fingerprint })).host;
+  assert.equal((await f.ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, expectedVersion: host.version, fingerprint: 'SHA256:forged' })).status, 412);
+  assert.equal((await f.ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, expectedVersion: host.version, fingerprint }, 'bob')).status, 403);
+  // A confirm read before a move does not pin the old test's key onto the new address (the move lands between its read and its write).
+  const batch = f.env.DB.batch;
+  f.env.DB.batch = statements => { f.env.DB.batch = batch;
+    f.sql.exec("UPDATE ssh_hosts SET address='moved.example.net',host_key='',host_key_fingerprint='',probe_state='NONE',probe_result='{}'; UPDATE agent_hosts SET version=version+1");
+    return batch.call(f.env.DB, statements); };
+  assert.equal((await f.ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, expectedVersion: host.version, fingerprint })).status, 412);
+  assert.deepEqual({ ...f.sql.prepare('SELECT host_key,probe_result FROM ssh_hosts').get() }, { host_key: '', probe_result: '{}' });
+  // A stale version is refused before anything is read; a new test of the new address can be confirmed.
+  await f.ssh({ action: 'test', scope: 'personal', id: host.id });
+  await recordSSHProbe(f.env.DB, f.env, Number(host.id), f.probes.at(-1).probeId, { hostKey: offered, matched: null, authenticated: false });
+  assert.equal((await f.ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, expectedVersion: host.version, fingerprint })).status, 412);
+  view = (await f.ssh({ action: 'trustHostKey', scope: 'personal', id: host.id, expectedVersion: host.version + 1, fingerprint })).host;
   assert.deepEqual([view.hostKey.pinned, view.hostKey.fingerprint, view.hostKey.pinnedBy, view.ready], [true, fingerprint, 'alice', true]);
   // A proven test records tools, OS and the call-in time.
   await f.ssh({ action: 'test', scope: 'personal', id: host.id });

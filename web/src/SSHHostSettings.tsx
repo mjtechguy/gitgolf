@@ -88,7 +88,7 @@ export function SSHHostSettings({ target, userId, EditHost }: { target: HostScop
       <p className="field-help">Key fingerprint <code className="ssh-fingerprint">{installing.host.keyFingerprint}</code>.</p>
     </section> : null}
     {reviewed?.probe.offered && manage ? <HostKeyReview host={reviewed} busy={busy} close={() => setReviewing(undefined)}
-      trust={async () => { if (await ssh({ action: 'trustHostKey', id: reviewed.id, fingerprint: reviewed.probe.offered!.fingerprint }, `The host key of ${reviewed.name} is pinned. Testing the connection with it…`)) { setReviewing(undefined); await ssh({ action: 'test', id: reviewed.id }); } }} /> : null}
+      trust={async () => { if (await ssh({ action: 'trustHostKey', id: reviewed.id, expectedVersion: reviewed.version, fingerprint: reviewed.probe.offered!.fingerprint }, `The host key of ${reviewed.name} is pinned. Testing the connection with it…`)) { setReviewing(undefined); await ssh({ action: 'test', id: reviewed.id }); } }} /> : null}
     {editing && manage ? <EditHost key={`${editing.id}/${editing.version}`} host={editing} busy={busy} close={() => setEditing(undefined)}
       save={async value => { if (await call('/native/agent-hosts', { action: 'update', id: editing.id, expectedVersion: editing.version, ...value }, `${value.name} was saved.`)) setEditing(undefined); }} /> : null}
     {connecting && manage && data ? <ConnectionForm key={`${connecting.id}/${connecting.version}`} host={connecting} inventory={data} busy={busy} close={() => setConnecting(undefined)}

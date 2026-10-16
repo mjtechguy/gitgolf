@@ -7,6 +7,7 @@ export const invitationMethods = new Set(methods);
 export const ownInvitationMethods = new Set(['ListOwnRepositoryInvitations', 'RespondRepositoryInvitation', 'GetRepositoryInvitationOperation']);
 const stale = () => { throw new Fault('failed_precondition', 412, 'Invitation or repository authority changed. Refresh before continuing.'); };
 const rank = role => ['none', 'read', 'write', 'admin'].indexOf(role || 'none');
+const rankSQL = column => `CASE ${column} WHEN 'read' THEN 1 WHEN 'write' THEN 2 WHEN 'admin' THEN 3 ELSE 0 END`;
 const contextSQL = `SELECT i.*,r.name,r.state AS repository_state,r.artifact_name AS current_artifact,COALESCE(o.id,w.id) AS owner_id,o.slug AS owner_slug,o.kind AS owner_kind,
   u.login AS issuer_login,u.full_name AS issuer_name,u.active AS issuer_active,
   t.login AS recipient_login,t.full_name AS recipient_name,t.active AS recipient_active,
@@ -76,13 +77,14 @@ export async function invitations(db, env, person, row, method, body, request) {
       await record.run();
       return { operation, invitation: wire(env, invitation) };
     }
-    const qualified = `${currentAuthority} AND c.id=? AND recipient_id=? AND state='PENDING' AND revision=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')${accepted ? ' AND current_recipient_generation=recipient_generation' : ''}`;
+    const qualified = `${currentAuthority} AND c.id=? AND recipient_id=? AND state='PENDING' AND revision=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')${accepted ? ` AND current_recipient_generation=recipient_generation AND ${rankSQL('recipient_role')}<${rankSQL('permission')}` : ''}`;
     const guardedRecord = db.prepare(`INSERT INTO repository_invitation_operations(actor_id,operation_key,invitation_id,input_hash,receipt)
       SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM (${contextSQL}) c WHERE ${qualified})`)
       .bind(person.id, body.idempotencyKey, invitation.id, hash, JSON.stringify(operation), env.ARTIFACTS_NAMESPACE, invitation.id, person.id, Number(body.expectedRevision));
+    // The receipt, grant and state change rerun the preflight rank check, so a role gained in between is never lowered.
     const guard = 'EXISTS(SELECT 1 FROM repository_invitation_operations WHERE actor_id=? AND operation_key=?)';
     const statements = [guardedRecord];
-    if (accepted) statements.push(db.prepare(`INSERT INTO grants(repository_id,user_id,role) SELECT ?,?,? WHERE ${guard} ON CONFLICT(repository_id,user_id) DO UPDATE SET role=excluded.role`).bind(invitation.repository_id, person.id, invitation.permission, person.id, body.idempotencyKey));
+    if (accepted) statements.push(db.prepare(`INSERT INTO grants(repository_id,user_id,role) SELECT ?,?,? WHERE ${guard} ON CONFLICT(repository_id,user_id) DO UPDATE SET role=excluded.role WHERE ${rankSQL('grants.role')}<${rankSQL('excluded.role')}`).bind(invitation.repository_id, person.id, invitation.permission, person.id, body.idempotencyKey));
     statements.push(db.prepare(`UPDATE repository_invitations SET state=?,revision=revision+1 WHERE id=? AND ${guard}`).bind(decision, invitation.id, person.id, body.idempotencyKey));
     const results = await db.batch(statements);
     if (results[0].meta.changes !== 1) {

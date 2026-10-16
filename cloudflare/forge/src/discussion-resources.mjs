@@ -169,7 +169,10 @@ export async function metadataChange(db, person, row, d, body, op) {
     .bind(op.id, person.id, row.id, body.idempotencyKey, isPull ? 'UpdatePullRequest' : 'UpdateIssue', op.hash, isPull ? 'pull' : 'issue', isPull ? d.pull_id : d.id, op.time, ...authorityValues(row, person), d.id, d.revision, JSON.stringify(dependencies));
   const result = await db.batch([
     record,
-    db.prepare(`DELETE FROM ${table} WHERE discussion_id=? AND ${guard}`).bind(d.id, person.id, body.idempotencyKey),
+    // The panel shows only assignees who are active and hold a grant; a replace keeps the rows it cannot show.
+    field === 'assignees' ? db.prepare(`DELETE FROM discussion_assignees WHERE discussion_id=? AND ${guard} AND (user_id IN (SELECT value FROM json_each(?))
+      OR EXISTS(SELECT 1 FROM users u JOIN grants g ON g.user_id=u.id AND g.repository_id=? WHERE u.id=discussion_assignees.user_id AND u.active=1))`).bind(d.id, person.id, body.idempotencyKey, JSON.stringify(selected), row.id)
+      : db.prepare(`DELETE FROM ${table} WHERE discussion_id=? AND ${guard}`).bind(d.id, person.id, body.idempotencyKey),
     db.prepare(`INSERT INTO ${table}(discussion_id,${column}) SELECT ?,value FROM json_each(?) WHERE ${guard}`).bind(d.id, JSON.stringify(selected), person.id, body.idempotencyKey),
     db.prepare(`UPDATE discussions SET revision=revision+1,updated_at=? WHERE id=? AND ${guard}`).bind(op.time, d.id, person.id, body.idempotencyKey),
     ...discussionEvent(db, person, d.id, op.time, field === 'labels' ? 'label' : field, {}, guard, [person.id, body.idempotencyKey]),

@@ -113,27 +113,13 @@ func (s *Server) ListOwnForgeNotifications(ctx context.Context, req *connect.Req
 	out := &golfv1.ListOwnForgeNotificationsResponse{}
 	e = s.withForgeCaller(ctx, session, token, func(User) error {
 		return s.withNativePageSize(ctx, token, limit, func(limit uint32) error {
-			rows, next, e := s.ownNotificationPage(ctx, token, page, limit, req.Msg.IncludeRead)
-			if e != nil {
-				return e
-			}
-			seen := map[int64]bool{}
-			for _, row := range rows {
-				if seen[row.ID] {
-					return errInvalidForgeResponse
-				}
-				seen[row.ID] = true
-				v, e := s.authorizeOwnNotification(ctx, session, token, row)
-				if sourceNotFound(e) || isForgeDenied(e) {
-					continue
-				}
-				if e != nil {
-					return e
-				}
-				out.Notifications = append(out.Notifications, v)
-			}
-			out.Page = wirePage(next)
-			return nil
+			rows, next, e := fillOwnNotifications(page, ownNotificationPages, func(page uint32) ([]nativeForgeNotification, uint32, error) {
+				return s.ownNotificationPage(ctx, token, page, limit, req.Msg.IncludeRead)
+			}, func(row nativeForgeNotification) (*golfv1.OwnForgeNotification, error) {
+				return s.authorizeOwnNotification(ctx, session, token, row)
+			})
+			out.Notifications, out.Page = rows, wirePage(next)
+			return e
 		})
 	})
 	if e != nil {
@@ -142,6 +128,42 @@ func (s *Server) ListOwnForgeNotifications(ctx context.Context, req *connect.Req
 	return connect.NewResponse(out), nil
 }
 func isForgeDenied(e error) bool { return connect.CodeOf(rpcError(e)) == connect.CodePermissionDenied }
+
+// ownNotificationPages bounds the native pages one inbox page reads past threads the caller can no longer open.
+const ownNotificationPages = 3
+
+// fillOwnNotifications leaves out missing or denied threads, so a page can be shorter than its limit, but it reads on
+// (up to maxPages native pages) rather than return a page that filter emptied while a later page exists. The cursor is
+// the next native page not yet read.
+func fillOwnNotifications(page uint32, maxPages int, read func(uint32) ([]nativeForgeNotification, uint32, error), authorize func(nativeForgeNotification) (*golfv1.OwnForgeNotification, error)) ([]*golfv1.OwnForgeNotification, uint32, error) {
+	var out []*golfv1.OwnForgeNotification
+	for range maxPages {
+		rows, next, e := read(page)
+		if e != nil {
+			return nil, 0, e
+		}
+		seen := map[int64]bool{}
+		for _, row := range rows {
+			if seen[row.ID] {
+				return nil, 0, errInvalidForgeResponse
+			}
+			seen[row.ID] = true
+			v, e := authorize(row)
+			if sourceNotFound(e) || isForgeDenied(e) {
+				continue
+			}
+			if e != nil {
+				return nil, 0, e
+			}
+			out = append(out, v)
+		}
+		if len(out) > 0 || next == 0 {
+			return out, next, nil
+		}
+		page = next
+	}
+	return out, page, nil
+}
 
 // Native thread GET permits administrators to access others' threads. Ownership is
 // established from the current actor's list endpoint before ever reading a thread ID.
