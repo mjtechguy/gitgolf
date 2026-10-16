@@ -6,6 +6,7 @@ import (
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -108,6 +109,53 @@ func TestOwnForgeNotificationForeignThreadRefusedPostgres(t *testing.T) {
 	m := &golfv1.SubmitDiscussionResourceOperationRequest{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "private"}, RepositoryId: "11", IssueId: "77", Number: 7, PullRequest: true, ResourceId: "901", ExpectedRevision: strings.Repeat("a", 64), Kind: 13, OperationId: randomUUID()}
 	if _, e := writes.SubmitDiscussionResourceOperation(t.Context(), connect.NewRequest(m)); connect.CodeOf(e) != connect.CodeNotFound || f.notificationWrites != 0 {
 		t.Fatal("foreign native admin-readable thread adopted", e, f.notificationWrites)
+	}
+}
+func TestFillOwnNotificationsReadsPastFilteredPages(t *testing.T) {
+	// Native pages 1 and 2 hold only threads the caller can no longer open; page 3 holds one it can.
+	pages := map[uint32][]int64{1: {1, 2}, 2: {3}, 3: {4, 5}, 4: {6}}
+	read := func(reads *[]uint32) func(uint32) ([]nativeForgeNotification, uint32, error) {
+		return func(page uint32) ([]nativeForgeNotification, uint32, error) {
+			*reads = append(*reads, page)
+			rows := []nativeForgeNotification{}
+			for _, id := range pages[page] {
+				rows = append(rows, nativeForgeNotification{ID: id})
+			}
+			if page == 4 {
+				return rows, 0, nil
+			}
+			return rows, page + 1, nil
+		}
+	}
+	authorize := func(n nativeForgeNotification) (*golfv1.OwnForgeNotification, error) {
+		switch n.ID {
+		case 1:
+			return nil, errResourceNotFound
+		case 2, 3:
+			return nil, forgeError{status: 403}
+		}
+		return &golfv1.OwnForgeNotification{Id: strconv.FormatInt(n.ID, 10)}, nil
+	}
+	var reads []uint32
+	rows, next, e := fillOwnNotifications(1, 3, read(&reads), authorize)
+	if e != nil || len(rows) != 2 || rows[0].Id != "4" || rows[1].Id != "5" || next != 4 || len(reads) != 3 {
+		t.Fatal("filtered pages ended the inbox", rows, next, reads, e)
+	}
+	// A short page is returned as it is; the next read continues where it stopped.
+	reads = nil
+	if rows, next, e = fillOwnNotifications(4, 3, read(&reads), authorize); e != nil || len(rows) != 1 || next != 0 || len(reads) != 1 {
+		t.Fatal("last page", rows, next, reads, e)
+	}
+	// The bound holds: denied threads alone return an empty page whose cursor is the next unread native page.
+	reads = nil
+	if rows, next, e = fillOwnNotifications(1, 2, read(&reads), authorize); e != nil || len(rows) != 0 || next != 3 || len(reads) != 2 {
+		t.Fatal("bounded reads", rows, next, reads, e)
+	}
+	// Other failures still fail the page.
+	if _, _, e = fillOwnNotifications(1, 3, read(&reads), func(nativeForgeNotification) (*golfv1.OwnForgeNotification, error) {
+		return nil, errInvalidForgeResponse
+	}); e == nil {
+		t.Fatal("authorization failure ignored")
 	}
 }
 func TestMarkdownIssueTemplateBoundaries(t *testing.T) {
