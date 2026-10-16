@@ -302,6 +302,29 @@ test('each reader has a daily search allowance', async t => {
   assert.equal((await f.search('cache', 'alice')).status, 200);
 });
 
+test('a search Workers AI fails is refunded; one past the deadline or answered unusably counts, and says so', async t => {
+  const f = await fixture(t), run = f.env.AI.run;
+  t.after(() => { f.env.AI.run = run; });
+  f.git.commit(sources);
+  await f.call('/native/search', { action: 'index' }, 'alice'); await f.maintain();
+  const used = () => f.sql.prepare('SELECT calls FROM search_usage WHERE user_id=2').get()?.calls ?? 0;
+  assert.equal((await f.search('cache')).status, 200); assert.equal(used(), 1);
+  f.env.AI.run = async () => { throw Error('Workers AI 3040: capacity'); };
+  const failed = await f.search('cache');
+  assert.deepEqual([failed.status, failed.value.message, used()], [503, 'Workers AI could not read this search. Try again; this attempt was not counted.', 1]);
+  // At the limit, a refunded failure leaves the allowance where it was, so the next search still runs.
+  f.sql.prepare('UPDATE search_usage SET calls=199 WHERE user_id=2').run();
+  assert.equal((await f.search('cache')).status, 503); assert.equal(used(), 199);
+  f.env.AI.run = async () => { throw Error('Inference deadline'); };
+  const late = await f.search('cache');
+  assert.equal(late.status, 503); assert.match(late.value.message, /did not answer this search in time.*counts toward your 200 semantic searches a day/); assert.equal(used(), 200);
+  assert.equal((await f.search('cache')).status, 429);
+  f.sql.prepare('UPDATE search_usage SET calls=0 WHERE user_id=2').run();
+  f.env.AI.run = async () => ({ shape: [1, 3], data: [[1, 2, 3]] });
+  const unusable = await f.search('cache');
+  assert.equal(unusable.status, 412); assert.match(unusable.value.message, /answered by the model, so it counts/); assert.equal(used(), 1);
+});
+
 test('the per-repository model comes from model selection; a different stored model rebuilds, and no usable model fails the build', async t => {
   const f = await fixture(t), original = searchModels.resolve;
   t.after(() => { searchModels.resolve = original; });
