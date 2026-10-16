@@ -1,5 +1,42 @@
 # Golf implementation status
 
+## 2026-10-16 — An external review's 26 findings checked and fixed (#163–#166, no migration, on hosted)
+
+- **Source:** an external review listed 26 findings, mostly lists whose caps, order or labels did not match what they read, plus some races and one secret-handling gap. Each was checked against the code first; 24 were real, 2 were partly real. All have a fix, each with a test that fails on the old code.
+- **Security and authority:**
+  - GitLab trace uploads redacted each upload on its own, so a secret split across two uploads was stored. The possible start of a secret at the end of an upload is now held back, sealed with the repository value key, and decided by the next upload or the job's end. Actions log rows were already whole lines (now tested).
+  - Accepting an invitation re-checks the rank in the write and only ever raises a grant. The existing grant-generation fence already blocked the race; this makes the rule explicit.
+  - A stale SSH host-key confirm can no longer pin a key that a move cleared (version, probe and test result are checked in the write).
+- **Behaviour:**
+  - Runner claims page past jobs they cannot take; capacity reads queued jobs longest-waiting first.
+  - The runner admin disables New pool and Enroll host only at their real limits.
+  - A workflow log write that crosses the cap keeps the part that fits.
+  - Long agent prompts trim the description first so the newest comments survive.
+  - Inherited automations are filtered to this repository before the limit.
+  - PR previews and per-PR runs are matched by number before their caps.
+  - Clef ignores archived labels.
+  - On Cloudflare-native, a tag rule blocks release notes only for the tags it names.
+  - The token repository picker lists exactly what a token can name, with Load more.
+  - Profile pins outside the newest 100 can be cleared.
+  - The notification inbox reads up to 3 forge pages past inaccessible threads.
+  - Assignee edits keep rows for people the panel hid.
+  - Saving a paused email subscription resumes it.
+  - Failed semantic searches refund the daily allowance when the model never ran.
+  - A truncated source tree is now exactly the first 10,000 paths, so grep's order claim holds.
+  - AI impact reads the earliest 20,000 merges.
+  - Package tags follow the registry cursor and ignore digest aliases.
+- **Labels made honest instead:**
+  - recent landings and automation runs (an index would allow ordering by update);
+  - the Actions pull list ("the 100 newest, open and closed");
+  - the agent task log footnote;
+  - webhook and email cancellation. Cancelling queued deliveries on disable or save is kept deliberately and now documented.
+- **Checks:** forge suite 801 pass, 0 fail, 1 skipped. `go test ./internal/runner/ ./internal/server/` passes, but the PostgreSQL cases are skipped without a database. Web typecheck and builds pass. Targeted Playwright specs pass.
+- **Hosted:** deployed to the demo at ae2980e. The plan showed 12 updates and no create, replace or delete; Login, ControlAccess and PreviewAccess stayed noop.
+- **Open:**
+  - **Optional indexes for later:** `pull_merge_operations(updated_at)` for successful merges, `land_operations(repository_id, updated_at)`, and `(repository_id, created_at)` on `evidence_jobs` and `previews`.
+  - **Orphaned fragments:** a held log fragment of a GitLab job ended by timeout or a lost runner stays in R2. It is sealed, but nothing cleans it up.
+  - **Notification pages:** they can still be short. Exact pages need a cursor that can stop mid-page.
+
 ## 2026-10-16 — Forgejo is the only portable backend; the earlier backend is retired
 
 - **Decision:** the owner retired the earlier backend. No Golf installation was backed by it, so there was nothing to migrate. The planned data transfer and identity migration (FJ-4), the dress rehearsal (FJ-6) and the existing-install cutover (FJ-7) are superseded by this decision; they were not done. Forgejo 15.0.9, the default for fresh Compose, Helm and `install.sh` installs since 2026-10-12/13, is the only portable backend. Cloudflare-native Golf keeps Artifacts/D1/Workers.
