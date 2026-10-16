@@ -2232,6 +2232,13 @@ test('native issue metadata assignment, filters, milestone counts and removal wo
   f.sql.prepare('DELETE FROM grants WHERE user_id=2').run();
   assert.equal((await f.read()).metadata.assignees.length, 0);
   assert.equal((await f.value(await f.call('ListIssues', { ...filter, query: { assignee: 'bob' } }))).issues.length, 0);
+  // A save from the panel replaces only the assignees it shows: bob, hidden without a grant, keeps his row and returns with it.
+  f.sql.exec("INSERT INTO users(id,login) VALUES(3,'carol'); INSERT INTO grants VALUES(1,3,'read')");
+  await f.value(await f.update({ assignees: { expectedAssigneeIds: [], assignees: [{ id: '3', login: 'carol' }] } }));
+  await f.value(await f.update({ assignees: { expectedAssigneeIds: ['3'], assignees: [] } }));
+  assert.deepEqual(f.sql.prepare('SELECT user_id FROM discussion_assignees ORDER BY user_id').all().map(r => r.user_id), [2]);
+  f.sql.exec("INSERT INTO grants VALUES(1,2,'read')");
+  assert.deepEqual((await f.read()).metadata.assignees.map(u => u.login), ['bob']);
 });
 test('metadata rejects foreign IDs, conflicting exclusive labels, closed milestones and unauthorized changes', async t => {
   const f = await resourcesFixture(t), a = (await f.label('status/type/bug', { exclusive: true })).label, b = (await f.label('status/type/feature', { exclusive: true })).label;
