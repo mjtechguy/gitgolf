@@ -51,6 +51,18 @@ test('more than 20 labels is refused at admission with the limit named; archived
   assert.equal(f.calls.length, 0);
 });
 
+test('archived labels never fill the page: live labels past a thousand archived ones are still counted', async t => {
+  const f = await setup(t);
+  f.sql.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<1001) INSERT INTO discussion_resources(repository_id,kind,name,payload)
+    SELECT 1,'label','old-'||i,json_object('name','old-'||i,'description','','color','d73a4a','exclusive',json('false'),'archived',json('true'),'organizationOwned',json('false')) FROM n`);
+  assert.equal((await f.create('triage', { number: 4 })).status, 200);
+  for (let i = 0; i < 18; i++) label(f.sql, 'late-' + i);
+  const refused = await f.create('triage', { number: 4 });
+  assert.equal(refused.status, 412);
+  assert.equal(refused.value.message, 'Clef can choose among at most 20 labels; this repository has 21 (archived labels are not counted).');
+  assert.equal(f.calls.length, 0);
+});
+
 test('labels added after admission refuse the run at prepare without a model call', async t => {
   const f = await setup(t), admitted = await f.create('triage', { number: 4 });
   for (let i = 0; i < 18; i++) label(f.sql, 'late-' + i);
