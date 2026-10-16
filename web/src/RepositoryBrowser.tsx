@@ -11,7 +11,7 @@ import { useRuntimeCapabilities } from './useRuntimeCapabilities';
 import { RepositorySidebar } from './RepositorySidebar';
 import { RepositoryStars } from './RepositoryStars';
 import { forgetPrivateQueries } from './queryClient';
-import { sourceNavigationOptions, prefetchSource } from './sourceNavigation';
+import { sourceNavigationOptions, prefetchSource, sortedSourceEntries } from './sourceNavigation';
 import { sourceRepositoryID } from './sourceReads';
 import { useRepositorySourceSelection } from './RepositorySourceSelection';
 import { SourceRefChoice } from './SourceRefChoice';
@@ -23,12 +23,12 @@ import { CommitList } from './CommitList';
 import { transientRetry } from './nativeAPI';
 import { useRepositoryLive, RepositoryLiveStatus, RepositoryLiveContext } from './RepositoryLive';
 import { DiffViewer } from './DiffViewer';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppearance } from './ThemeSwitch';
 import { finderSlot, SummaryBand, useShellSlot, useWideViewport } from './Layout';
 import { openIssues, openPulls, RepositoryOverview } from './RepositoryOverview';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Bot, BookOpen, ChevronRight, ChevronsUpDown, CircleDot, Code2, File, Folder, Package, GitBranch, GitCommitHorizontal, GitPullRequest, Link2, Play, RefreshCw, Settings, Sparkles, Tag } from 'lucide-react';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useNavigate, useRouter } from '@tanstack/react-router';
@@ -84,6 +84,14 @@ function EntryIcon({ type }: { type: SourceEntry['type'] }) {
   const Icon = type === SourceEntryType.DIRECTORY ? Folder : type === SourceEntryType.FILE ? File : type === SourceEntryType.SYMLINK ? Link2 : GitCommitHorizontal;
   return <Icon size={18} aria-hidden="true" />;
 }
+
+type SourceRowProps = { entry: SourceEntry; location: RepositoryLocation; commitId: string; sourceCommitId: string; cache: QueryClient; queryKey: readonly unknown[]; repositoryId: string; changes: boolean; onOutcome: (available: boolean) => void };
+// A directory lists up to 1000 rows and the panel re-renders on every read state change, so a row renders only when its
+// own entry or listing changes.
+const SourceRow = memo(function SourceRow({ entry, location, commitId, sourceCommitId, cache, queryKey, repositoryId, changes, onOutcome }: SourceRowProps) {
+  const prefetch = () => prefetchSource(cache, queryKey, repositoryId, commitId, entry);
+  return <li><Link title={entry.path} {...sourceOptions(location, commitId, entry.path, entry.type !== SourceEntryType.DIRECTORY)} onPointerEnter={prefetch} onFocus={prefetch}><EntryIcon type={entry.type} /><span className="source-name">{entry.name}</span><span className="entry-type sr-only">{entryTypeLabel(entry.type)}</span>{entry.type !== SourceEntryType.DIRECTORY ? <Size value={entry.size} className="sr-only" /> : <span className="sr-only" /> }<ChevronRight size={14} /></Link>{changes ? <SourceEntryCommit userId={String(queryKey[1]||'')} repositoryId={repositoryId} commitId={sourceCommitId} path={entry.path} location={location} latestChange={entry.latestChange} onOutcome={onOutcome}/> : null}</li>;
+});
 
 function useRetainedRepositoryAccess(repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>, queryKey: readonly unknown[], repositoryId: string, contentKey: readonly unknown[]) {
   const cache = useQueryClient();
@@ -157,6 +165,8 @@ function SourcePanel({ repositoryKey, queryKey, location, addressLocation, snaps
     const file = source.kind !== SourceEntryType.DIRECTORY;
     if ((file ? 'blob' : 'tree') !== location.sourceRoute) void navigate({ ...sourceOptions(location, source.commitId, source.path, file), hash: current.hash, replace: true });
   }, [source, location, addressLocation, navigate, router]);
+  // Sorted once per listing, not per render: the rows are memoized against these entry objects.
+  const entries = useMemo(() => sortedSourceEntries(query.data?.pages.flatMap(page => page.entries) || []), [query.data]);
   if (access.isError) return <PanelError error={access.error} retry={() => void access.refetch()}/>;
   if (!admitted) return <Loading label="Checking repository access…"/>;
   const crumbs = location.path.split('/').filter(Boolean);
@@ -165,7 +175,7 @@ function SourcePanel({ repositoryKey, queryKey, location, addressLocation, snaps
     {location.path ? <div className="source-path-bar"><nav className="source-breadcrumbs" aria-label="Source path"><Link {...sourceOptions(location, commitId, '')}>{location.name}</Link>{crumbs.map((crumb, index) => <span key={index}><ChevronRight size={13} /><Link {...sourceOptions(location, commitId, crumbs.slice(0, index + 1).join('/'), index === crumbs.length - 1 && source?.kind !== SourceEntryType.DIRECTORY)} aria-current={index === crumbs.length - 1 ? 'page' : undefined}>{crumb}</Link></span>)}</nav></div> : null}
     {source?<RuntimeFeature id="repository.source-write"><Suspense fallback={null}><RepositoryFileChanges location={location} repositoryId={repositoryId} userId={String(queryKey[1]||'')} commitId={source.commitId} path={source.path} directory={source.kind===SourceEntryType.DIRECTORY} blobId={source.file?.entry?.type===SourceEntryType.FILE&&source.file.entry.size<=256n*1024n&&!source.file.previewReason?.includes('LFS')?source.file.entry.sha:undefined} text={source.file?.entry?.type===SourceEntryType.FILE&&!source.file.previewReason?source.file.content:undefined} onComplete={(path,file)=>{onLatest();const branch=location.refKind==='branch'?location.refName:location.branch;if(branch)void navigate(repositoryOptions(location,{view:'source',ref:branch,refKind:'branch',refName:branch,branch,tag:undefined,path},file?'file':undefined));}}/></Suspense></RuntimeFeature>:null}
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !source ? <Loading label="Reading source…" /> : source.kind === SourceEntryType.DIRECTORY ? <>
-      {source.entries?.length ? <><ul className={`source-tree ${withChanges ? 'source-tree-with-commits' : changesUnavailable ? 'source-tree-changes-unavailable' : ''}`}>{[...source.entries].sort((a,b)=>Number(b.type===SourceEntryType.DIRECTORY)-Number(a.type===SourceEntryType.DIRECTORY)||a.name.localeCompare(b.name)).map((entry) => <li key={entry.path}><Link title={entry.path} {...sourceOptions(location, commitId, entry.path, entry.type !== SourceEntryType.DIRECTORY)} onPointerEnter={() => prefetchSource(cache, queryKey, repositoryId, commitId, entry)} onFocus={() => prefetchSource(cache, queryKey, repositoryId, commitId, entry)}><EntryIcon type={entry.type} /><span className="source-name">{entry.name}</span><span className="entry-type sr-only">{entryTypeLabel(entry.type)}</span>{entry.type !== SourceEntryType.DIRECTORY ? <Size value={entry.size} className="sr-only" /> : <span className="sr-only" /> }<ChevronRight size={14} /></Link>{showLatestChanges ? <SourceEntryCommit userId={String(queryKey[1]||'')} repositoryId={repositoryId} commitId={source.commitId} path={entry.path} location={location} latestChange={entry.latestChange} onOutcome={rowOutcome}/> : null}</li>)}</ul></> : <div className="empty-state"><Folder size={25} /><h3>This directory is empty.</h3></div>}
+      {source.entries?.length ? <><ul className={`source-tree ${withChanges ? 'source-tree-with-commits' : changesUnavailable ? 'source-tree-changes-unavailable' : ''}`}>{entries.map(entry => <SourceRow key={entry.path} entry={entry} location={location} commitId={commitId} sourceCommitId={source.commitId} cache={cache} queryKey={queryKey} repositoryId={repositoryId} changes={showLatestChanges} onOutcome={rowOutcome}/>)}</ul></> : <div className="empty-state"><Folder size={25} /><h3>This directory is empty.</h3></div>}
       <More hasMore={query.hasNextPage} loading={query.isFetchingNextPage} load={() => void query.fetchNextPage()} label="files"/>
       <p className="panel-footnote">{source.entries?.length || 0}{source.totalEntries ? ` of ${source.totalEntries}` : ''} entries · Read-only snapshot at <code>{shortSHA(source.commitId)}</code>{changesUnavailable ? ' · Latest changes are unavailable for this snapshot' : ''}</p>
       <Suspense fallback={<Loading label="Opening README…"/>}><RepositoryReadme repositoryId={repositoryId} owner={repositoryKey.owner} name={repositoryKey.name} refId={source.commitId} path={location.path} entries={source.entries} location={location} userId={String(queryKey[1]||'')}/></Suspense>

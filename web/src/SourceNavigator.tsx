@@ -3,7 +3,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { ChevronDown, ChevronRight, File, Folder, FolderOpen, GitCommitHorizontal, Link2, ListTree } from 'lucide-react';
-import { sourceNavigationOptions, prefetchSource } from './sourceNavigation';
+import { sourceNavigationOptions, prefetchSource, sortedSourceEntries } from './sourceNavigation';
 import { readExactSource, sourcePath } from './sourceReads';
 import { SourceEntryType } from './gen/golf/v1/golf_pb';
 import type { SourceEntry } from './gen/golf/v1/golf_pb';
@@ -62,7 +62,6 @@ function Folders({ location, commitId, repositoryId, userId }: Props) {
   useEffect(() => {
     if (selectedDirectory && selectedDirectory.split('/').length <= maxDepth) setExpanded(previous => previous.has(selectedDirectory) || previous.size >= maxFolders ? previous : new Set([...previous, selectedDirectory]));
   }, [selectedDirectory]);
-  const sorted = (entries: SourceEntry[]) => [...entries].sort((a, b) => Number(b.type === SourceEntryType.DIRECTORY) - Number(a.type === SourceEntryType.DIRECTORY) || a.name.localeCompare(b.name));
   function toggle(path: string) {
     setNotice('');
     if (expanded.has(path)) setExpanded(previous => new Set([...previous].filter(value => value !== path && !value.startsWith(`${path}/`))));
@@ -78,7 +77,7 @@ function Folders({ location, commitId, repositoryId, userId }: Props) {
     if (!query) return null;
     if (query.isError) return <PanelError error={query.error} retry={() => void query.refetch()}/>;
     if (!query.isSuccess || query.isFetching) return <Loading label={`Loading ${path || 'repository'} files…`}/>;
-    return query.data.entries.length ? <ul className={depth >= 8 ? 'source-navigator-deep' : undefined}>{sorted(query.data.entries).map(entry => <li key={entry.path}>
+    return query.data.entries.length ? <ul className={depth >= 8 ? 'source-navigator-deep' : undefined}>{sortedSourceEntries(query.data.entries).map(entry => <li key={entry.path}>
       <div className="source-navigator-row">{entry.type === SourceEntryType.DIRECTORY ? <button type="button" className="icon-button" aria-label={`${expanded.has(entry.path) ? 'Collapse' : 'Expand'} ${entry.path}`} aria-expanded={expanded.has(entry.path)} onClick={() => toggle(entry.path)}>{expanded.has(entry.path) ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}</button> : <span className="source-navigator-spacer"/>}{entryLink(entry)}</div>
       {entry.type === SourceEntryType.DIRECTORY && expanded.has(entry.path) && depth < maxDepth ? directory(entry.path, depth + 1) : null}
     </li>)}{query.data.page?.nextPage ? <li><Link {...sourceOptions(location, commitId, path)}>Open folder for more entries</Link></li> : null}</ul> : <p className="field-help">This folder is empty.</p>;
@@ -87,7 +86,7 @@ function Folders({ location, commitId, repositoryId, userId }: Props) {
     <Link className="source-navigator-root" {...sourceOptions(location, commitId, '')} aria-current={!location.path ? 'page' : undefined}><Folder size={15} aria-hidden="true"/>{location.name}</Link>
     <input className="source-navigator-search" type="search" aria-label="Filter expanded folder entries" placeholder="Filter expanded folders…" autoComplete="off" value={filter} onChange={event => setFilter(event.target.value)}/>
     <p className="field-help source-navigator-help">Filter includes loaded entries in expanded folders.</p>
-    {failed ? <PanelError error={failed.error!} retry={() => void failed.refetch()}/> : !root.isSuccess || root.isFetching ? <Loading label="Loading repository files…"/> : filter ? <ul className="source-navigator-results">{sorted(loaded.filter(entry => entry.path.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))).map(entry => <li key={entry.path}>{entryLink(entry, true)}</li>)}{!loaded.some(entry => entry.path.toLocaleLowerCase().includes(filter.toLocaleLowerCase())) ? <li className="field-help">No loaded entries match.</li> : null}</ul> : directory('', 0)}
+    {failed ? <PanelError error={failed.error!} retry={() => void failed.refetch()}/> : !root.isSuccess || root.isFetching ? <Loading label="Loading repository files…"/> : filter ? <ul className="source-navigator-results">{sortedSourceEntries(loaded.filter(entry => entry.path.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))).map(entry => <li key={entry.path}>{entryLink(entry, true)}</li>)}{!loaded.some(entry => entry.path.toLocaleLowerCase().includes(filter.toLocaleLowerCase())) ? <li className="field-help">No loaded entries match.</li> : null}</ul> : directory('', 0)}
     {notice ? <p className="field-help" role="status">{notice}</p> : null}
   </nav>;
 }
