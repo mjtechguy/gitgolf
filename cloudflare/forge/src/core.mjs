@@ -34,6 +34,7 @@ import { sourceAPI, sourceCapability } from './source-api.mjs';
 import { agenticModeAPI, agenticCapability, landingCapability } from './agentic-mode.mjs';
 import { landAPI, landSoon } from './land-queue.mjs';
 import { agentInboxAPI, inboxCapability } from './agent-inbox.mjs';
+import { cleanUpAgentBranchSoon } from './agent-branches.mjs';
 import { automationsAPI, automationEvent, automationCapability, processAutomations } from './automations.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
@@ -612,7 +613,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     }
     if (url.pathname === '/native/agent-inbox' || url.pathname === '/native/agent-inbox/read') {
       // The agentic inbox (docs/AGENTIC_MODE.md): reading it overlaps other requests; asking for an intent summary admits an AI run.
-      if (url.pathname.endsWith('/read') !== ['inbox', 'summary'].includes(body.action)) invalid(url.pathname.endsWith('/read') ? 'This route only reads the agentic inbox.' : 'This route only asks for intent summaries.');
+      if (url.pathname.endsWith('/read') !== ['inbox', 'summary', 'branches'].includes(body.action)) invalid(url.pathname.endsWith('/read') ? 'This route only reads the agentic inbox.' : 'This route only asks for intent summaries.');
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (body.repositoryId !== String(row.id) || row.role === 'public') deny();
       return reply(await agentInboxAPI(db, env, person, row, request, body, action => withArtifact(env, row, action)));
@@ -884,7 +885,13 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       if(method !== 'GetPullRequestMergeObservation') unsupported();
       return reply(await pullMergeObservation(db,env,person,row,body,action=>withArtifact(env,row,action)));
     }
-    if (service === 'StandardPullMergeService') return reply(await standardPullMerge(db,env,person,row,method,body,action=>withArtifact(env,row,action),providerFetch));
+    if (service === 'StandardPullMergeService') {
+      const value = await standardPullMerge(db,env,person,row,method,body,action=>withArtifact(env,row,action),providerFetch);
+      // A merged agent branch is deleted while agentic mode is on (agent-branches.mjs checks every rule again).
+      if (method === 'SubmitStandardPullMerge' && value?.operation?.phase === 'STANDARD_PULL_MERGE_PHASE_SUCCEEDED')
+        await cleanUpAgentBranchSoon(env, { repositoryId: row.id, pullRequestId: value.operation.pullRequestId, headCommitId: value.operation.headCommitId, why: 'merged' }, { withArtifact, providerFetch });
+      return reply(value);
+    }
     if (service === 'RepositoryRulesService') return reply(await repositoryRules(db, env, person, row, request, method, body));
     if (service === 'RepositoryAccessService') return reply(await repositoryCollaborators(db, env, person, row, method, body));
     if (service === 'RepositoryService' && resourceMethods.has(method)) return reply(await discussionResources(db, env, person, row, method, body));
@@ -901,6 +908,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       // Automations: a new issue or pull request (a replayed request finds its runs already queued by their dedupe key).
       if ((method === 'CreateIssue' || method === 'CreatePullRequest') && value?.mutation?.number)
         await automationEvent(env, { type: method === 'CreateIssue' ? 'issue.opened' : 'pull_request.opened', repositoryId: row.id, number: value.mutation.number, headCommit: value.pullRequest?.head?.commitId || '', actorId: person.id });
+      // A closed agent pull request's head branch is deleted while agentic mode is on, at the head it had when it was closed.
+      const closed = method === 'UpdatePullRequest' && (body.state === 'ISSUE_STATE_CLOSED' || body.state === 2);
+      if (closed && value?.mutation?.pullRequestId && value.pullRequest?.state === 'ISSUE_STATE_CLOSED' && !value.pullRequest.merged)
+        await cleanUpAgentBranchSoon(env, { repositoryId: row.id, pullRequestId: value.mutation.pullRequestId, headCommitId: value.pullRequest.head?.commitId, why: 'closed' }, { withArtifact, providerFetch });
       // A pull request whose head already passed its checks may land at once (agentic mode).
       if (method === 'CreatePullRequest' && value?.mutation?.number) landSoon(env, row.id, value.pullRequest?.head?.commitId, withArtifact);
       return reply(value);

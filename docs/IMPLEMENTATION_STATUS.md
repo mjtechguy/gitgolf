@@ -1,5 +1,50 @@
 # Golf implementation status
 
+## 2026-10-16: Agentic inbox, second slice: batch land, revert, agent branches (AM-5, no migration, not on hosted)
+
+[`AGENTIC_MODE.md`](AGENTIC_MODE.md) "Inbox and intent summaries". Built and tested locally; not deployed. No schema change.
+
+**Built:**
+- **Batch approve and land.**
+  - The inbox marks each row the caller may land (`canLand`, the pull request Land button's rule): the policy says land, or it waits only for a writer who is not the author.
+  - **Approve and land selected** opens a TanStack Form confirmation with merge or squash. It then sends one `POST /native/land { action: 'land', number, headCommitId, method, idempotencyKey }` per pull request, three at a time, with one key per pull request per confirmation. That is the land queue's existing contract, unchanged.
+  - Each answer is shown as given: landed, queued, needs a rebase (paths), blocked or failed (reasons), refused (the Worker's message) or unknown.
+  - `repository.agentic-landing` is reported READY at schema ≥ 42, so on hosted (schema 52) the action appears for writers.
+- **Revert from Landed.** `POST /native/land { action: 'revert', id, number, landedCommitId, reason?, idempotencyKey }` in `land-queue.mjs`.
+  - It uses the automatic revert's inverse merge, now shared as `inverseCommit`. The commit is written as the person, through the branch fence, under the push fence's authority guard.
+  - It is claimed once per landing, and the claim also holds the automatic revert off. It is settled by maintenance when unconfirmed.
+  - The pull request gets a comment. The revert is audited as `agentic_mode.revert_landing` (refused when it does not apply). The UI asks for confirmation with an optional reason.
+- **Agent branches (`agent-branches.mjs`).** `golf-agent/*` and the branch patterns of API tokens scoped to the repository (never `*`, never the default branch).
+  - **Branches page:** they are hidden among the loaded branches, with **Show agent branches** and an honest count. The patterns come from `POST /native/agent-inbox/read { action: 'branches' }`.
+  - **Deletion:** while agentic mode is on, the head branch is deleted after a land (`landed()`), a standard merge or a close (`UpdatePullRequest`).
+    - It is one fenced ref update to zero (`source-api.mjs` `deleteBranchAt`, `ref-writes.mjs`) under the agentic-mode administrator.
+    - A guard in the reservation rechecks access and versions, and that no open pull request (head or base) and no unfinished agent task uses the branch.
+    - Golf deletes only when the head is still the pull request's head and no branch rule covers the branch.
+    - Each deletion is audited as `agentic_mode.branch_delete` with the full head commit. Each skip is logged as `golf.agent_branch_kept` with the reason.
+
+**Verified locally:**
+- **`node --test cloudflare/forge/*.test.mjs`:** 770 tests, 769 pass, 1 skipped.
+  - New in `land-queue.test.mjs`:
+    - the batch contract: landed, needs rebase, refused, replay, one key per pull request;
+    - person revert: authority, exact landing, commit identity and tree, comment, intake, audit, replay, conflict, and the automatic revert held off and settled;
+    - branch deletion after land, merge and close;
+    - the safety cases: head moved, another open pull request (head or base), branch rule, unfinished task, non-agent branch, agentic mode off or turned off by policy, administrator without write, and a guard race that sends nothing.
+  - `agent-inbox.test.mjs` checks `canLand` and `actions`.
+- **`node --test web/tests/*.test.ts`:** 24 tests, 22 pass. The 2 failures are the known pre-existing ones (`navigation-cache`, one `runtime-capabilities`).
+- **`npm run typecheck`, `npm run build`, `npm run build:native`:** clean.
+- **Playwright:**
+  - `agent-inbox.spec.ts`: 16/16, including the inbox in all 9 layouts at 1440 and 390 px;
+  - `repository-ref-management.spec.ts`: 17/17;
+  - `land.spec.ts`, `agentic-mode.spec.ts`, `pull-ai-draft.spec.ts`, `layout-presets.spec.ts`: pass;
+  - `native-agent-hosts.spec.ts:283` failed once and passed on rerun;
+  - `repository-browser.spec.ts:132` and `:382` (Markdown rendering) fail. This change does not touch those files.
+
+**Not done:**
+- A hosted walkthrough.
+- The branch picker still lists agent branches. Hiding works on loaded pages only.
+- Deletion is best-effort after the response, with no retry sweep.
+- Closing an unmerged agent pull request deletes its branch; the audit entry keeps the head commit.
+
 
 ## 2026-10-16: Agent pull requests land: 71 of 71 on hosted
 

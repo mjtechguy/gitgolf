@@ -13,7 +13,7 @@ export type LandMethod = 'merge' | 'squash';
 export type LandOperation = { id: string; repositoryId: string; pullRequestId: string; number: number; trigger: 'person' | 'policy'; actorId: string; actor: string; state: LandState; method: LandMethod;
   headCommitId: string; baseCommitId: string; landedCommitId: string; revertCommitId: string; attempts: number; createdAt: string; updatedAt: string;
   detail: { reasons?: string[]; conflicts?: { path: string; reason: string }[]; conflictCount?: number; postLand?: { verdict: string; checks: string[]; action?: string };
-    revert?: { state: string; reason?: string; commitId?: string }; issue?: { number?: number; assignee?: string; skipped?: string } } };
+    revert?: { state: string; reason?: string; commitId?: string; trigger?: 'person'; actor?: string; conflicts?: { path: string; reason: string }[] }; issue?: { number?: number; assignee?: string; skipped?: string } } };
 type Target = { repository: { owner: string; name: string }; repositoryId: string };
 
 export const agenticKey = (userId: string, owner: string, name: string) => ['native-agentic-mode', userId, owner, name] as const;
@@ -33,7 +33,15 @@ export const landPull = (target: Target, number: number, headCommitId: string, m
 export const landStateLabels: Record<LandState, string> = { QUEUED: 'Queued', LANDING: 'Landing', LANDED: 'Landed', NEEDS_REBASE: 'Needs a rebase', BLOCKED: 'Blocked', FAILED: 'Failed', REVERTED: 'Reverted' };
 // One line on what a land operation came to, from its stored detail.
 export function landSummary(op: LandOperation) {
-  const d = op.detail;
+  const d = op.detail, by = d.revert?.trigger === 'person' ? d.revert.actor || 'a person' : '';
+  // A person's revert from the agentic inbox (POST /native/land action revert).
+  if (by && op.state === 'REVERTED') return `Reverted by ${by} from the agentic inbox${op.revertCommitId ? ' with ' + op.revertCommitId.slice(0, 12) : ''}.`;
+  if (by && op.state === 'LANDED') {
+    if (d.revert?.state === 'conflict') return `Landed. A revert by ${by} conflicts with later changes in ${(d.revert.conflicts || []).map(c => c.path).join(', ') || 'some paths'}; nothing was reverted.`;
+    if (d.revert?.state === 'noop') return `Landed. A revert by ${by} found that the base branch no longer holds the change.`;
+    if (d.revert?.state === 'refused') return `Landed. A revert by ${by} was refused: ${d.revert.reason || 'refused'}.`;
+    return `Landed. A revert by ${by} is in progress${d.revert?.state === 'unknown' ? '; its outcome is confirmed by maintenance' : ''}.`;
+  }
   if (op.state === 'REVERTED') return `Reverted automatically${op.revertCommitId ? ' with ' + op.revertCommitId.slice(0, 12) : ''}: required checks failed after landing (${(d.postLand?.checks || []).join(', ')}).`;
   if (op.state === 'NEEDS_REBASE') return `Conflicts with the base branch in ${(d.conflicts || []).map(c => c.path).join(', ') || 'some paths'}${(d.conflictCount || 0) > (d.conflicts || []).length ? ` and ${(d.conflictCount || 0) - (d.conflicts || []).length} more` : ''}.`;
   if (op.state === 'LANDED') {

@@ -568,21 +568,90 @@ for the repository. Otherwise it stays the Agent workspace view, as does
 - Live updates use the repository activity stream (topics `source`, `pulls`, `actions`,
   `agents`). Without a live connection the inbox is read again every 30 seconds while
   the page is visible.
-- **Land selected** and the selection boxes on rows that may land appear only while the
-  Worker reports capability `repository.agentic-landing` ready. The action sends one
-  `POST /native/land { action: 'land', number, headCommitId, idempotencyKey }` per
-  selected pull request and shows each answer. Without that capability the inbox says
-  that Golf does not land pull requests from it.
+- **Approve and land selected** (writers, while the Worker reports capability
+  `repository.agentic-landing` ready and the inbox's `actions.land` is true). Rows the
+  caller may land carry `canLand` from the same evaluation as the pull request's Land
+  button: the policy says land, or it waits only for a writer who is not the author
+  (that writer's land request is the approval; no review is recorded). A TanStack Form
+  confirmation lists the selection with each head and asks for merge or squash. It then
+  sends one `POST /native/land { action: 'land', number, headCommitId, method,
+  idempotencyKey }` per pull request, three at a time, with one key per pull request
+  fixed for that confirmation. Each answer is shown as the land queue gave it: landed,
+  queued, needs a rebase (with paths), blocked or failed (with reasons), refused (the
+  Worker's message) or unknown. Without the capability the inbox says that Golf does
+  not land pull requests from it.
+- **Revert…** on a **Landed** row that is still LANDED (writers, `actions.revert`). See
+  "Reverting from the inbox" below. The **Revert** column describes a landing's revert:
+  automatic, by a person, in progress, conflicting or refused.
+
+### Reverting from the inbox
+
+`POST /native/land { action: 'revert', id, number, landedCommitId, reason?,
+idempotencyKey }` (`land-queue.mjs`), for a signed-in browser session with a write or
+admin grant.
+- **What it does.** It runs the same inverse three-way merge as the automatic revert
+  (`git revert -m 1` of the landed commit onto the current base tip). The commit is
+  written through the branch fence (`source-api.mjs` `commitTree`) as the person, under
+  the push fence's authority guard: grant, access and identity versions, and branch
+  rules. Pipelines run on the revert push, and the pull request gets a comment naming
+  the person and the reason.
+- **One revert per landing.** The claim is `detail.revert` with the request's key. It is
+  refused while another revert of the landing is in flight, and while an automatic revert
+  claimed it within the last ten minutes without recording an attempt. The claim also
+  takes the post-landing check (`detail.postLand.verdict = 'person_revert'`), so failing
+  checks cannot start an automatic revert alongside it. A revert that does not apply
+  gives that check back.
+- **Answers.** `phase` is REVERTED, REVERTING (sent, not confirmed; maintenance settles it
+  from the branch fence) or REVERT_REFUSED, with `revert.state` `conflict` (paths),
+  `noop` or `refused` (reason). A replayed key returns the original answer.
+- **Audit.** Recorded as `agentic_mode.revert_landing`; a refused revert is recorded as
+  refused.
+
+### Agent branches (`agent-branches.mjs`)
+
+An agent branch is either of these:
+- a coding agent task's proposal branch, `golf-agent/*`;
+- a branch matching the write branch pattern of an API token whose scope includes the
+  repository and whose owner holds a grant there (for example `agent/*`). This counts
+  revoked and expired tokens; `*` alone never counts.
+
+The default branch is never an agent branch.
+- **Branch list.** The Branches page hides agent branches among the loaded branches and
+  says how many. **Show agent branches** lists them. Where the inbox capability is
+  ready, the patterns come from `POST /native/agent-inbox/read { action: 'branches' }`;
+  otherwise only `golf-agent/*` is known.
+- **Deletion.** While agentic mode is on (setting and feature policy), Golf deletes the
+  head branch of a pull request after it lands (`land-queue.mjs` `landed`), merges (the
+  standard native merge) or is closed (`UpdatePullRequest`). It runs after the response
+  where the runtime offers `waitUntil`. The delete is one ref update to zero through the
+  branch fence (`source-api.mjs` `deleteBranchAt`, `ref-writes.mjs`) and is read back.
+  It runs under the administrator whose saved setting authorizes Golf's own writes.
+  The guard, evaluated with the reservation, rechecks:
+  - that administrator's grant and identity version;
+  - the setting and rules versions;
+  - that no open pull request uses the branch as head or base;
+  - that no queued or running agent task writes to it.
+
+  Golf deletes a branch only when all of these hold:
+  - it is an agent branch, not the default branch and not the pull request's base;
+  - no branch rule covers it;
+  - its head is still the head the pull request landed, merged or was closed at.
+
+  A compare-and-swap on that head keeps a later push. Each deletion is audited as
+  `agentic_mode.branch_delete` (actor Golf, via agentic mode), with the full head commit,
+  so the branch can be recreated from it (Source API `branch` `create` with `from`) while
+  Git storage keeps the commit. Each skipped deletion is logged as
+  `golf.agent_branch_kept` with the reason.
 
 ### Limits of this slice
 
-- No revert action in **Landed**, and no batch approval: approvals stay on each pull
-  request.
-- The batch land request shape follows the land queue's route, which this slice does not
-  own. It must be checked against AM-4 item 4 when that lands.
-- Agent branches are not hidden from the branch list yet (AM-5 item 3).
-- The browser spec covers the default layout, not all nine layouts, and there is no hosted
-  walkthrough yet.
+- Hidden agent branches are filtered on the loaded pages of the branch list (the list is
+  paginated by the Worker), and the branch picker still lists every branch.
+- Deleting a branch is best-effort after the response. A repository that stays busy, or
+  an unconfirmed delete, leaves the branch and logs why. No sweep retries it later.
+- Closing an unmerged agent pull request deletes its branch. Its commits are then only
+  reachable from the audit entry's head commit.
+- No hosted walkthrough of batch landing, reverts or branch cleanup yet.
 
 ## Line-level merges
 

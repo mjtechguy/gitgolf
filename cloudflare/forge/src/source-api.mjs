@@ -149,7 +149,7 @@ export async function listTree(read, hash, path, recursive, limit) {
 // ---------- writes ----------
 // The push fence's authority, as for /git/ pushes: current writer grant, access and identity generations, the rules version the request
 // was checked against and a live credential. A token caller's own liveness and scope join through person.token_guard ({sql, values}).
-function authority(person, row, rulesVersion) {
+export function authority(person, row, rulesVersion) {
   const token = person.token_guard;
   return { sql: `EXISTS(SELECT 1 FROM repositories r JOIN grants g ON g.repository_id=r.id JOIN users u ON u.id=g.user_id
       LEFT JOIN repository_access_versions a ON a.repository_id=r.id LEFT JOIN native_identity_versions v ON v.user_id=u.id
@@ -173,6 +173,7 @@ async function write(db, env, person, row, repo, command, pack, rulesVersion, ct
     // The other write may have finished between the reservation and this read: if the same authority guard (grant, versions, rules,
     // credential and token liveness) still holds, it was a lost race for the ref, not a changed access.
     if (await db.prepare(`SELECT 1 WHERE ${authorityNow.sql}`).bind(...authorityNow.values).first()) return { outcome: 'busy' };
+    if (ctx.guardRefused) return { outcome: 'guard_refused' };
     throw new Fault('failed_precondition', 412, 'Your access to this repository or its branch rules changed during the request; nothing was sent.');
   }
   if (record) await record(id);
@@ -206,6 +207,14 @@ export async function commitTree(db, env, person, row, repo, { ref, parent, tree
   const sent = await write(db, env, person, row, repo, { ref, old: parent, next: object.id }, await packObjects([...reachable(objects, treeId), object]), null, ctx,
     record && (id => record(id, object.id)), guard);
   return { ...sent, commitId: object.id };
+}
+
+// Deletes one branch at an exact head for Golf's own cleanup (agent-branches.mjs): the same branch fence, provider readback and audit trail
+// as a branch delete request, under the given guard ({sql, values}, evaluated with the reservation). Returns { outcome: 'applied' | 'refused'
+// | 'busy' | 'guard_refused', id }: refused when the branch no longer held head, guard_refused when the guard did not hold and nothing else
+// was writing. An unknown outcome throws like a commit request (503) and the branch stays fenced until maintenance reads it back.
+export async function deleteBranchAt(db, env, person, row, repo, { ref, head, guard }, ctx) {
+  return write(db, env, person, row, repo, { ref, old: head, next: zero }, new Uint8Array(), null, { ...ctx, guardRefused: true }, undefined, guard);
 }
 
 function decodeBase64(value, path) {
@@ -258,7 +267,7 @@ async function commitInput(body, literalPath) {
     hash: key && await digest(JSON.stringify(['golf.source.commit.v1', name, expected, base, onStale, text, fingerprint])) };
 }
 
-function identity(env, person, time) {
+export function identity(env, person, time) {
   const clean = value => String(value || '').replace(/[<>\p{Cc}]/gu, '').trim(), login = clean(person.login).replace(/[\s@]/g, '');
   const email = typeof person.email === 'string' && /^[^\s<>@]{1,64}@[^\s<>@]{1,190}$/.test(person.email) ? person.email : `${login}@users.noreply.${new URL(env.PUBLIC_ORIGIN).hostname}`;
   return { name: clean(person.full_name) || login, email, time, tz: '+0000' };
