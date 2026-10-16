@@ -2160,6 +2160,22 @@ test('invitation acceptance checks authority in its transaction and recovers a l
   assert.equal(f.sql.prepare('SELECT generation FROM collaborator_versions WHERE user_id=3').get().generation, 1);
 });
 
+test('invitation acceptance never lowers a role the recipient gained after the preflight', async t => {
+  const f = await invitationFixture(t), { invitation } = await f.createInvitation('bob', 'write'), batch = f.env.DB.batch;
+  f.env.DB.batch = async statements => { f.sql.exec("INSERT INTO grants VALUES(1,2,'admin')"); return batch(statements); };
+  const response = await f.invite('RespondRepositoryInvitation', { invitationId: invitation.id, expectedRevision: '1', decision: 1, idempotencyKey: crypto.randomUUID() }, 'bob@example.invalid');
+  assert.equal(response.status, 200, await response.clone().text()); const result = await response.json();
+  assert.equal(result.operation.phase, 'REJECTED'); assert.equal(result.invitation.state, 'PENDING');
+  assert.equal(f.sql.prepare('SELECT role FROM grants WHERE user_id=2').get().role, 'admin');
+  // The rank fence is in the write itself, not only in the generation fence the grant triggers maintain.
+  const g = await invitationFixture(t); g.sql.exec("INSERT INTO grants VALUES(1,2,'read')");
+  const promoted = await g.createInvitation('bob', 'write'), original = g.env.DB.batch;
+  g.env.DB.batch = async statements => { g.sql.exec("DROP TRIGGER grants_update_revision; UPDATE grants SET role='admin' WHERE user_id=2"); return original(statements); };
+  const raced = await (await g.invite('RespondRepositoryInvitation', { invitationId: promoted.invitation.id, expectedRevision: '1', decision: 1, idempotencyKey: crypto.randomUUID() }, 'bob@example.invalid')).json();
+  assert.equal(raced.operation.phase, 'REJECTED'); assert.equal(raced.invitation.state, 'PENDING');
+  assert.equal(g.sql.prepare('SELECT role FROM grants WHERE user_id=2').get().role, 'admin');
+});
+
 async function resourcesFixture(t) {
   const f = await fixture(t); await f.create();
   const target = { repository: { owner: 'alice', name: 'project' }, repositoryId: '1' };
