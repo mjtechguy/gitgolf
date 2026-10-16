@@ -5,14 +5,14 @@ import { AgentEventBodyState,ActionRunKind,GetActionRunResponseSchema,GetAuthent
 import { GetAgentControlResponseSchema,SubmitAgentCommandRequestSchema,SubmitAgentCommandResponseSchema } from '../src/gen/golf/v1/agent_control088_pb';
 const id='12345678-1234-4234-8234-123456789012',attempt='b'.repeat(32),commit='a'.repeat(40),repo='21',actor='7',url=`/alex/private/actions/tasks/${id}`;
 async function fixture(page:Page){
- const state={sandbox:true,fileTools:true,nativeVersion:'1.18.34',current:'idle',revision:1,deny:false,ended:false,lost:false,commands:[] as unknown[],barrier:undefined as Promise<void>|undefined};
+ const state={sandbox:true,fileTools:true,nativeVersion:'1.18.34',current:'idle',revision:1,deny:false,ended:false,lost:false,commands:[] as unknown[],barrier:undefined as Promise<void>|undefined,runBarrier:undefined as Promise<void>|undefined};
  await page.route('**/rpc/**',async route=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
   if(method==='GetSession')return state.ended?respond(route,GetSessionResponseSchema,{}):respond(route,GetSessionResponseSchema,{user:{id:actor,login:'alex'}});
   if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema, portableRuntimeFixture);
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:repo,name:'private',fullName:'alex/private',defaultBranch:'main',private:true}});
-  if(method==='GetActionRun'){const task={id,repository:{owner:'alex',name:'private'},state:'running',commitId:commit,version:'1',createdAt:'2026-10-01T12:00:00Z',workerId:'worker-1',attemptId:attempt,modelId:'opencode-go/model',tokens:'0',summary:'Private retained proposal'};return respond(route,GetActionRunResponseSchema,{repositoryId:repo,summary:{ref:{kind:ActionRunKind.CODING_TASK,id},repositoryId:repo,ownerId:actor,title:'Coding task',state:task.state,commitId:commit,createdAt:task.createdAt,workerId:task.workerId,attemptId:attempt,modelId:task.modelId},detail:{case:'task',value:task}});}
+  if(method==='GetActionRun'){if(state.runBarrier)await state.runBarrier;const task={id,repository:{owner:'alex',name:'private'},state:'running',commitId:commit,version:'1',createdAt:'2026-10-01T12:00:00Z',workerId:'worker-1',attemptId:attempt,modelId:'opencode-go/model',tokens:'0',summary:'Private retained proposal'};return respond(route,GetActionRunResponseSchema,{repositoryId:repo,summary:{ref:{kind:ActionRunKind.CODING_TASK,id},repositoryId:repo,ownerId:actor,title:'Coding task',state:task.state,commitId:commit,createdAt:task.createdAt,workerId:task.workerId,attemptId:attempt,modelId:task.modelId},detail:{case:'task',value:task}});}
   if(method==='ListAgentTaskEvents')return respond(route,ListAgentTaskEventsResponseSchema,{repositoryId:repo,taskId:id,attemptId:attempt,commitId:commit,nativeInitiatorId:actor,bodyState:AgentEventBodyState.WITHHELD,events:[]});
   if(method==='GetAgentControl'){
    if(state.barrier)await state.barrier;if(state.deny)return reject(route,'permission_denied','Current managed agent authority revoked.');if(state.ended)return reject(route,'unauthenticated','Session ended.');
@@ -42,6 +42,13 @@ test('missing pinned sandbox and wrong native version never enable controls',asy
 });
 test('a lost command acknowledgement disables further writes until explicit inspection',async({page})=>{
  const s=await fixture(page);s.lost=true;await page.goto(url);await panel(page).getByRole('button',{name:'Resume native session'}).click();await expect(panel(page)).toContainText('No automatic retry');await expect(panel(page).getByRole('button',{name:'Resume native session'})).toBeDisabled();await page.waitForTimeout(5300);expect(s.commands).toHaveLength(1);s.lost=false;await panel(page).getByRole('button',{name:'Refresh controls'}).click();await expect(panel(page).getByRole('button',{name:'Resume native session'})).toBeEnabled();
+});
+test('an explicit refresh interrupted by a parent run check inspects again once the check passes',async({page})=>{
+ const s=await fixture(page);s.lost=true;await page.goto(url);await panel(page).getByRole('button',{name:'Resume native session'}).click();await expect(panel(page)).toContainText('No automatic retry');s.lost=false;
+ let releaseControl!:()=>void,releaseRun!:()=>void;s.barrier=new Promise<void>(r=>releaseControl=r);await panel(page).getByRole('button',{name:'Refresh controls'}).click();await expect(panel(page)).toContainText('Checking managed agent controls…');
+ // The parent run check starts while the inspection is in flight and discards its receipt.
+ s.runBarrier=new Promise<void>(r=>releaseRun=r);await page.getByRole('button',{name:'Refresh selected run'}).click();await expect(panel(page)).toHaveCount(0);releaseControl();s.barrier=undefined;releaseRun();s.runBarrier=undefined;
+ await expect(panel(page).getByRole('button',{name:'Resume native session'})).toBeEnabled();expect(s.commands).toHaveLength(1);
 });
 test('current authority loss removes completed ACP text and the prior proposal',async({page})=>{
  const s=await fixture(page);await page.goto(url);await expect(panel(page)).toContainText('Completed native reply');s.deny=true;await panel(page).getByRole('button',{name:'Refresh controls'}).click();await expect(page.getByRole('alert')).toContainText('authority revoked');await expect(panel(page)).toHaveCount(0);await expect(page.getByText('Private retained proposal',{exact:true})).toHaveCount(0);
