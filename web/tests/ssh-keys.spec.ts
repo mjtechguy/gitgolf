@@ -33,7 +33,7 @@ async function backend(page: Page) {
       state.removed.push(id); state.keys = state.keys.filter((key) => key.id !== id);
       return respond(route, DeleteSSHKeyResponseSchema, {});
     }
-    return reject(route, 'not_found', 'Unknown fixture method.');
+    return reject(route, 'unimplemented', 'Unknown fixture method.');
   });
   return state;
 }

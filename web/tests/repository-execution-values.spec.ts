@@ -1,6 +1,6 @@
 import { portableRuntimeFixture } from './runtime-fixture';
 import { expect, test, type Page } from '@playwright/test';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import {writeHarness} from './harness-file';
 import { resolve } from 'node:path';
 import { create } from '@bufbuild/protobuf';
 import { GetAuthenticationOptionsResponseSchema,GetSessionResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryAccessResponseSchema, ListRepositoryExecutionValuesResponseSchema, SaveRepositoryExecutionValueRequestSchema, GetRepositoryExecutionValueOperationRequestSchema, RepositoryExecutionValueKind as Kind, type RepositoryExecutionValue, type InheritedExecutionValue, ExecutionValueScope as Scope, SaveRepositoryExecutionBindingRequestSchema, GetRepositoryExecutionVariableResponseSchema } from '../src/gen/golf/v1/golf_pb';
@@ -11,10 +11,9 @@ import { WorkflowRunOrigin as Origin } from '../src/gen/golf/v1/golf_pb';
 // This mounts the actual new component/Connect client in a test-only host. The
 // product route/API registration is a separate parent-owned integration proof.
 const host = resolve(import.meta.dirname, '../.tmp/execution-values-fixture.html');
-test.beforeAll(async () => { await mkdir(resolve(import.meta.dirname, '../.tmp'), { recursive: true }); await writeFile(host, `<!doctype html><html><body><main id="root"></main><script type="module">
+test.beforeAll(async () => { await writeHarness(host, `<!doctype html><html><body><main id="root"></main><script type="module">
 import React from 'react';import {createRoot} from 'react-dom/client';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {createClient} from '@connectrpc/connect';import {createConnectTransport} from '@connectrpc/connect-web';import {RepositoryExecutionValueService} from '/src/gen/golf/v1/golf_pb.ts';import {RepositoryExecutionValues} from '/src/RepositoryExecutionValues.tsx';import '/src/styles.css';const client=createClient(RepositoryExecutionValueService,createConnectTransport({baseUrl:'/rpc',useBinaryFormat:false}));createRoot(document.getElementById('root')).render(React.createElement(QueryClientProvider,{client:new QueryClient({defaultOptions:{queries:{retry:false}}})},React.createElement(RepositoryExecutionValues,{client,userId:'42',owner:'alice',name:'example',signingOut:false})));
-</script></body></html>`, { flag: 'wx' }); });
-test.afterAll(async () => { await rm(host, { force: true }); });
+</script></body></html>`); });
 const target = { repository: { owner: 'alice', name: 'example' }, repositoryId: '9007199254740993', ownerId: '42', accessRevision: 'a'.repeat(64) };
 const date = '2026-10-04T12:00:00Z';
 const inputDefinitions = [

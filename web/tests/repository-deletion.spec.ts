@@ -1,14 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
-import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { writeHarness } from './harness-file';
 import { resolve } from 'node:path';
 import { create, type MessageInitShape } from '@bufbuild/protobuf';
 import { DeleteRepositoryRequestSchema, DeleteRepositoryResponseSchema, GetRepositoryDeletionOperationRequestSchema, GetRepositoryDeletionOperationResponseSchema, GetRepositoryLifecycleResponseSchema, RepositoryLifecycleSchema, RepositoryLifecycleOperationSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 const repositoryId = '9007199254740993', password = 'My current Golf password!';
-let fixture = '';
-test.beforeAll(async ({}, info) => {
- const directory=resolve(process.cwd(),'tests/.tmp');mkdirSync(directory,{recursive:true});fixture=`/tests/.tmp/repository-deletion-${info.workerIndex}.tsx`;
- writeFileSync(resolve(process.cwd(),fixture.slice(1)),`
+const fixture = '/tests/.tmp/repository-deletion.tsx';
+test.beforeAll(async () => {
+ await writeHarness(resolve(import.meta.dirname,'.tmp/repository-deletion.tsx'),`
  import React from 'react'; import {createRoot} from 'react-dom/client';
  import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {createClient} from '@connectrpc/connect';import {createConnectTransport} from '@connectrpc/connect-web';
  import {RepositoryLifecycleService} from '../../src/gen/golf/v1/golf_pb';import {RepositoryDeletion} from '../../src/RepositoryDeletion';
@@ -19,7 +18,6 @@ test.beforeAll(async ({}, info) => {
  function Fixture(){const[state,set]=React.useState({userId:'42',signingOut:false,repositoryId:'${repositoryId}'});window.deletionFixture={set,cache};return <QueryClientProvider client={cache}><main className="page-stack"><RepositoryDeletion client={client} {...state} owner="alice" name="example" onDeleted={()=>{window.deletedCallbacks=(window.deletedCallbacks||0)+1;}}/></main></QueryClientProvider>;}
  createRoot(document.getElementById('root')).render(location.search==='?strict=1'?<React.StrictMode><Fixture/></React.StrictMode>:<Fixture/>);`);
 });
-test.afterAll(()=>{if(fixture)rmSync(resolve(process.cwd(),fixture.slice(1)),{force:true});});
 async function backend(page:Page) {
  const state={lifecycle:create(RepositoryLifecycleSchema,{repository:{owner:'alice',name:'example'},repositoryId,ownerId:'42',revision:'a'.repeat(64),canManage:true,stepUpAvailable:true,activeWorkCount:'0',deleteAvailable:true}),reads:0,statusReads:[] as string[],writes:[] as ReturnType<typeof create<typeof DeleteRepositoryRequestSchema>>[],operation:undefined as MessageInitShape<typeof RepositoryLifecycleOperationSchema>|undefined,lost:false,refused:false,bad:'',writeDenied:'' as 'unauthenticated'|'permission_denied'|'',statusDenied:'' as 'unauthenticated'|'permission_denied'|'',noEffect:false,denied:false,readUnauthenticated:false,absent:false,readBarrier:undefined as Promise<void>|undefined,writeBarrier:undefined as Promise<void>|undefined,statusBarrier:undefined as Promise<void>|undefined};
  await page.route(url=>url.pathname==='/deletion-fixture.html',route=>route.fulfill({contentType:'text/html',body:`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module">import RefreshRuntime from "/@react-refresh";RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;await import("${fixture}");</script></body></html>`}));

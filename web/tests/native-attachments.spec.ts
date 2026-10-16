@@ -1,16 +1,16 @@
 import {test,expect,type Page} from '@playwright/test';
-import {mkdir,writeFile,rm,readFile} from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
+import {writeHarness} from './harness-file';
 import {resolve} from 'node:path';
 
 // Discussion attachments against the Cloudflare-native Worker itself (D1 on node:sqlite, in-memory R2). Carol only reads
 // the repository but opened issue 1, so she may attach to its description; the public Worker supplies her Access email.
 const host=resolve(import.meta.dirname,'../.tmp/native-attachments.html');
-test.beforeAll(async()=>{await mkdir(resolve(import.meta.dirname,'../.tmp'),{recursive:true});await writeFile(host,`<!doctype html><html><body><main id="root" class="app-main"></main><script type="module">
+test.beforeAll(async()=>{await writeHarness(host,`<!doctype html><html><body><main id="root" class="app-main"></main><script type="module">
 import React from'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{create}from'@bufbuild/protobuf';import{DiscussionTargetSchema}from'/src/gen/golf/v1/golf_pb.ts';import{DiscussionAttachments}from'/src/DiscussionAttachments.tsx';import'/src/styles.css';
 const cache=new QueryClient({defaultOptions:{queries:{retry:false}}});cache.setQueryData(['session'],{id:'3'});
 createRoot(document.getElementById('root')).render(React.createElement(QueryClientProvider,{client:cache},React.createElement(DiscussionAttachments,{userId:'3',target:create(DiscussionTargetSchema,{repository:{owner:'alice',name:'project'},repositoryId:'1',issueId:'1',number:1})})));
-</script></body></html>`,{flag:'wx'});});
-test.afterAll(()=>rm(host,{force:true}));
+</script></body></html>`);});
 
 type Forge={sql:{exec:(sql:string)=>void;prepare:(sql:string)=>{get:(...values:unknown[])=>Record<string,number|string>}};objects:Map<string,{bytes:Uint8Array}>;bucket:{puts:number};dispatch:(request:Request)=>Promise<Response>};
 test('an issue author with read access attaches a file and downloads the verified bytes from the native Worker',async({page}:{page:Page})=>{

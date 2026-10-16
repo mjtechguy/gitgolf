@@ -29,7 +29,7 @@ async function backend(page: Page) {
       if (!write) return reject(route, 'not_found', 'No completed operation.');
       return respond(route, GetGolfUserAccessOperationResponseSchema, { operation: receipt(write), user: state.target });
     }
-    return reject(route, 'not_found', 'Unsupported fixture.');
+    return reject(route, 'unimplemented', 'Unsupported fixture.');
   });
   return state;
 }

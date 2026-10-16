@@ -32,7 +32,7 @@ async function backend(page:Page){
    return respond(route,GetWorkflowArtifactResponseSchema,{artifact:state.present?artifact:undefined});
   }
   if(!method.startsWith('Get')&&!method.startsWith('List'))state.writes.push(method);
-  return reject(route,'not_found','No additional source fixture.');
+  return reject(route,'unimplemented','No additional source fixture.');
  });return state;
 }
 

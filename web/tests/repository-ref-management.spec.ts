@@ -1,15 +1,15 @@
 import {test,expect,type Page} from '@playwright/test';
-import {mkdir,writeFile,rm} from 'node:fs/promises';
+import {writeHarness} from './harness-file';
 import {resolve} from 'node:path';
 import {request,respond,reject} from './rpc';
 import {ListCapabilitiesResponseSchema,GetRepositoryAccessResponseSchema,GetRepositoryRulesResponseSchema,ListBranchesResponseSchema,ListTagsResponseSchema,SubmitRepositoryRefMutationRequestSchema,SubmitRepositoryRefMutationResponseSchema,GetRepositoryRefMutationOperationRequestSchema,GetRepositoryRefMutationOperationResponseSchema,RepositoryRefMutationKind as Kind,RepositoryRefMutationPhase as Phase} from '../src/gen/golf/v1/golf_pb';
 const host=resolve(import.meta.dirname,'../.tmp/repository-ref-management.html'),H='a'.repeat(40),R='b'.repeat(64),key='golf.ref-mutation.v1:42:11';
-test.beforeAll(async()=>{await mkdir(resolve(import.meta.dirname,'../.tmp'),{recursive:true});await writeFile(host,`<!doctype html><html><body><main id="root" class="app-main"></main><script type="module">
+test.beforeAll(async()=>{await writeHarness(host,`<!doctype html><html><body><main id="root" class="app-main"></main><script type="module">
 import React,{useEffect,useState}from'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{createRootRoute,createRoute,createRouter,RouterProvider}from'@tanstack/react-router';import{RepositoryRefManagement}from'/src/RepositoryRefManagement.tsx';import'/src/styles.css';
 const cache=new QueryClient({defaultOptions:{queries:{retry:false}}});cache.setQueryData(['session'],{id:'42'});
 function Host(){const[s,set]=useState({userId:'42',repositoryId:'11',defaultBranch:'main',blocked:new URLSearchParams(location.search).has('blocked'),location:{kind:'repository',owner:'alex',name:'private',view:new URLSearchParams(location.search).get('tags')?'tags':'branches',ref:'${H}',path:'',branch:'main',state:'open'}});useEffect(()=>{const f=e=>{if(e.detail.userId)cache.setQueryData(['session'],{id:e.detail.userId});set(v=>({...v,...e.detail}));};window.addEventListener('ref-fixture',f);return()=>window.removeEventListener('ref-fixture',f);},[]);return React.createElement(RepositoryRefManagement,s);}
 const root=createRootRoute({component:Host}),route=createRoute({getParentRoute:()=>root,path:'/$'}),router=createRouter({routeTree:root.addChildren([route])});createRoot(document.getElementById('root')).render(React.createElement(QueryClientProvider,{client:cache},React.createElement(RouterProvider,{router})));
-</script></body></html>`,{flag:'wx'});});test.afterAll(()=>rm(host,{force:true}));
+</script></body></html>`);});
 async function fixture(page:Page){const state={writes:[]as ReturnType<typeof request<typeof SubmitRepositoryRefMutationRequestSchema>>[],reads:[]as string[],manage:true,protected:false,denied:false,lost:false,badReceipt:false,badInventory:false,phase:Phase.SUCCEEDED,receipt:undefined as Record<string,unknown>|undefined,agents:false,agentInbox:false,patternReads:0};
  await page.route('**/native/agent-inbox/read',async route=>{state.patternReads++;const body=route.request().postDataJSON();expect(body).toEqual({repository:{owner:'alex',name:'private'},repositoryId:'11',action:'branches'});return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({repositoryId:'11',defaultBranch:'main',patterns:['golf-agent/*','agent/*'],cleanup:true})});});
  await page.route('**/rpc/**',async route=>{const method=new URL(route.request().url()).pathname.split('/').at(-1);

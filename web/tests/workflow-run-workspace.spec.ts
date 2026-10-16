@@ -19,8 +19,7 @@ async function backend(page:Page){
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='WatchRepository'){
    state.watches++;
-   // Without the live fixture the stream answers the way a Connect server reports an unimplemented streaming method
-   // (rpc.ts's HTTP 501 reaches a stream as Unknown, which is a dropped stream with fallback revalidation).
+   // Without the live fixture the stream answers the way a Connect server reports an unimplemented streaming method.
    if(state.streamDown)return reject(route,'unavailable','Live stream down.');
    if(state.streamFailure){await state.streamFailure;state.streamFailure=undefined;return reject(route,'unavailable','Live stream dropped.');}
    if(!state.live)return route.fulfill({status:200,contentType:'application/connect+json',body:frame(2,{error:{code:'unimplemented',message:'Live fixture not enabled.'}})});
@@ -53,7 +52,7 @@ async function backend(page:Page){
    state.state=WorkflowRunState.CANCELLED;if(state.cancelLost)return reject(route,'unavailable','Cancellation response lost.');
    return respond(route,CancelWorkflowRunResponseSchema,{run:run()});
   }
-  return reject(route,'not_found','Unavailable workspace fixture.');
+  return reject(route,'unimplemented','Unavailable workspace fixture.');
  });return state;
 }
 

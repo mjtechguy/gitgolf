@@ -53,7 +53,7 @@ async function backend(page: Page) {
       return respond(route,ListRepositoryTeamAccessResponseSchema,{...bound,canManage:state.teamManage});
     }
     if (/^(?:Set|Add|Create|Remove|Delete|Attach|Detach|Respond|Revoke|Update)/.test(method)) state.writes.push(method);
-    return reject(route,'not_found','Unsupported observation fixture.');
+    return reject(route,'unimplemented','Unsupported observation fixture.');
   });
   return state;
 }

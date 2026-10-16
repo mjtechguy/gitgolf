@@ -32,7 +32,7 @@ async function backend(page:Page){
    if(state.lost)return route.abort('failed');
    return respond(route,ChangeRepositoryArchiveStateResponseSchema,{operation:state.bad?{...state.operation,actorId:'84'}:state.operation,lifecycle:state.lifecycle});
   }
-  return reject(route,'not_found','No fixture for this procedure.');
+  return reject(route,'unimplemented','No fixture for this procedure.');
  });return state;
 }
 async function open(page:Page){await page.goto('/alice/example/settings');await expect(page.getByRole('button',{name:'Archive repository',exact:true})).toBeVisible();}

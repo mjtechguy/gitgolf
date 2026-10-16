@@ -33,7 +33,7 @@ async function inventory(page: Page, count = 55) {
         page: { nextPage: start + length < state.count ? number + 1 : 0 },
       });
     }
-    return reject(route, 'not_found', 'Unsupported fixture operation.');
+    return reject(route, 'unimplemented', 'Unsupported fixture operation.');
   });
   await page.goto('/admin/settings');
   await expect(page.getByRole('table', { name: 'Local accounts', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(Math.min(20, state.count));

@@ -1,7 +1,7 @@
 import { portableRuntimeFixture } from './runtime-fixture';
 import {expect,test,type Page} from '@playwright/test';
 import {create,clone,toJson} from '@bufbuild/protobuf';
-import {GetSessionResponseSchema,GetAuthenticationOptionsResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryResponseSchema,GetPullRequestResponseSchema,ListPullRequestReviewsResponseSchema,ListReviewerRunsResponseSchema,GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,GetPullRequestMergeObservationRequestSchema,GetPullRequestMergeObservationResponseSchema,PullRequestSchema,PullRequestMergeObservationSchema,PullMergeConflictSchema,ProtectedReviewObservationSchema,RepositorySchema,UserSchema,IssueState,PullMergeTargetProtection,PullMergeSourceState,RepositorySourceRefKind,WatchRepositoryResponseSchema,type PullRequestMergeObservation} from '../src/gen/golf/v1/golf_pb';
+import {GetPullReviewRequestsRequestSchema,GetPullReviewRequestsResponseSchema,GetSessionResponseSchema,GetAuthenticationOptionsResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryResponseSchema,GetPullRequestResponseSchema,ListPullRequestReviewsResponseSchema,ListReviewerRunsResponseSchema,GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,GetPullRequestMergeObservationRequestSchema,GetPullRequestMergeObservationResponseSchema,PullRequestSchema,PullRequestMergeObservationSchema,PullMergeConflictSchema,ProtectedReviewObservationSchema,RepositorySchema,UserSchema,IssueState,PullMergeTargetProtection,PullMergeSourceState,RepositorySourceRefKind,WatchRepositoryResponseSchema,type PullRequestMergeObservation} from '../src/gen/golf/v1/golf_pb';
 import {respond,request,reject,disabledAgentTasks} from './rpc';
 
 const key={owner:'alex',name:'private'},H='a'.repeat(40),B='b'.repeat(40),R='e'.repeat(64);
@@ -27,6 +27,8 @@ async function backend(page:Page,native=false,merge=false){
   if(method==='ListAgentTasks')return disabledAgentTasks(route);
   if(method==='GetPullRequestDiscussion')return respond(route,GetPullRequestDiscussionResponseSchema,{issue:{id:'101',number:7,title:original.title,state:IssueState.OPEN}});
   if(method==='ListIssueComments')return respond(route,ListIssueCommentsResponseSchema,{});
+  // An unanswered read renders its own alert, which made the single-alert assertions racy.
+  if(method==='GetPullReviewRequests'){const input=request(route,GetPullReviewRequestsRequestSchema);return respond(route,GetPullReviewRequestsResponseSchema,{repositoryId:input.repositoryId,pullRequestId:input.pullRequestId,number:input.number,pullRevision:state.pull.revision,requestsRevision:'f'.repeat(64),canManage:false,reviewers:[],teams:[]});}
   if(method==='GetPullRequestMergeObservation'){
    state.count++;const input=request(route,GetPullRequestMergeObservationRequestSchema);
    expect(route.request().headers()['connect-protocol-version']).toBe('1');

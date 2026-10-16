@@ -22,7 +22,7 @@ async function backend(page: Page, canEdit = true) {
       return respond(route, UpdateProfileResponseSchema, { profile: state.profile }).catch(() => {});
     }
     if (method === 'Logout') {if(state.logoutFailed)return reject(route,'unavailable','Sign-out could not be completed.');state.signedIn=false;return route.fulfill({contentType:'application/json',body:'{}'});}
-    return reject(route, 'not_found', 'Unsupported profile fixture.');
+    return reject(route, 'unimplemented', 'Unsupported profile fixture.');
   });
   return state;
 }

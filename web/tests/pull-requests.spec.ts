@@ -286,7 +286,9 @@ test('list failures hide earlier pages and empty repositories still support pull
   await expect(page.getByRole('alert')).toHaveText('Pull requests not found or inaccessible.');
   await expect(page.getByRole('link', { name: pull.title })).toHaveCount(0);
   state.listStatus = 200; state.empty = true;
-  await page.getByRole('button', { name: 'Refresh repository access' }).click();
+  // The list's own Try again re-reads it. (Refresh repository access re-reads only the repository; this used to pass
+  // because the fixture's dropped live stream revalidated the list every few seconds.)
+  await page.getByRole('region', { name: 'Pull requests' }).getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByRole('heading', { name: 'No open pull requests.' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'No commits yet.' })).toHaveCount(0);
   expect(state.methods).not.toContain('ListBranches');

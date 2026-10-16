@@ -12,9 +12,19 @@ export function request<Schema extends DescMessage>(route: Route, schema: Schema
   return fromJson(schema, route.request().postDataJSON());
 }
 export function reject(route: Route, code: 'invalid_argument' | 'unauthenticated' | 'permission_denied' | 'not_found' | 'already_exists' | 'failed_precondition' | 'resource_exhausted' | 'unavailable' | 'unimplemented', message: string) {
-  // Existing unary fixtures deliberately do not implement the new live method.
-  // Keep resource denials distinct from an absent fixture procedure.
-  if (code === 'not_found' && route.request().url().endsWith('/WatchRepository')) code = 'unimplemented';
+  if (route.request().url().endsWith('/WatchRepository')) {
+    // Existing unary fixtures deliberately do not implement the live method; keep resource denials distinct from an
+    // absent fixture procedure.
+    if (code === 'not_found') code = 'unimplemented';
+    // A server stream carries its error in the end-of-stream frame. Connect clients derive a stream's code from the
+    // HTTP status alone, so a 501 would arrive as Unknown: a dropped stream that revalidates the page and reconnects
+    // with backoff for the rest of the test. Unimplemented here settles the page on manual updates.
+    const body = Buffer.from(JSON.stringify({ error: { code, message } }));
+    const header = Buffer.alloc(5);
+    header[0] = 2;
+    header.writeUInt32BE(body.length, 1);
+    return route.fulfill({ status: 200, contentType: 'application/connect+json', body: Buffer.concat([header, body]) });
+  }
   const status = { invalid_argument:400, unauthenticated: 401, permission_denied: 403, not_found: 404, already_exists: 409, failed_precondition: 400, resource_exhausted: 429, unavailable: 503, unimplemented: 501 }[code];
   return route.fulfill({ status, contentType: 'application/json', json: { code, message } });
 }

@@ -29,7 +29,7 @@ async function backend(page: Page, admin = true) {
         { id: '9007199254740998', username: 'disabled-user', email: 'disabled@example.invalid', nativeUserId: '9007199254740994', disabled: true, createdAt: '2026-10-01T10:00:00Z' },
       ] : [{ id: '21', username: 'next-account', nativeUserId: '22', credentialVersion: state.disabled ? '2' : '1', disabled: state.disabled, createdAt: '2026-09-01T10:00:00Z' }], page: { nextPage: number === 1 ? 2 : 0 } });
     }
-    return reject(route, 'not_found', 'Unsupported fixture.');
+    return reject(route, 'unimplemented', 'Unsupported fixture.');
   });
   return state;
 }

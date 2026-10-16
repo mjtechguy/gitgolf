@@ -33,7 +33,7 @@ async function backend(page: Page, admin = false) {
     if (method === 'RefreshCodexConnection') { state.checks.push(request(route, RefreshCodexConnectionRequestSchema)); state.row = connected(); return respond(route, RefreshCodexConnectionResponseSchema, { connection: state.row, usage: state.usage }); }
     if (method === 'DisconnectCodexConnection') { state.disconnects.push(request(route, DisconnectCodexConnectionRequestSchema)); state.row = create(CodexConnectionSchema, { state: CodexConnectionState.UNCONFIGURED, version: '3' }); return respond(route, DisconnectCodexConnectionResponseSchema, { connection: state.row }); }
     if (method === 'Logout') return state.logoutFailed ? reject(route, 'unavailable', 'Sign-out could not be completed.') : route.fulfill({ contentType: 'application/json', body: '{}' });
-    return reject(route, 'not_found', 'Unsupported Codex fixture.');
+    return reject(route, 'unimplemented', 'Unsupported Codex fixture.');
   }); return state;
 }
 test('agent settings has compact current inventory, explicit Connect and status setup navigation', async ({ page }) => {
