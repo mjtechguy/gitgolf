@@ -36,7 +36,7 @@ function AgentWorkspaceView({ location, repositoryId, userId }: Props) {
   const context = { repository: {owner:location.owner,name:location.name}, repositoryId };
   const interval = visible && !live ? 15000 : false;
   const config = useQuery({...privateQuery,queryKey:['native-config',userId],queryFn:({signal})=>nativeAPI<Config>('/native/config',{},signal)});
-  const pulls = useQuery({...privateQuery,queryKey:[...scope,'pulls'],queryFn:({signal})=>nativeAPI<{pullRequests:Pull[];page:{nextPage:number}}>('/rpc/golf.v1.RepositoryService/ListPullRequests',{...context,state:'ISSUE_STATE_ALL',page:{limit:100}},signal),refetchInterval:interval});
+  const pulls = useQuery({...privateQuery,queryKey:[...scope,'pulls'],queryFn:({signal})=>nativeAPI<{pullRequests:Pull[];page:{nextPage:number}}>('/rpc/golf.v1.RepositoryService/ListPullRequests',{...context,state:'ISSUE_STATE_ALL',sort:'newest',page:{limit:100}},signal),refetchInterval:interval});
   const number = location.pull ?? pulls.data?.pullRequests[0]?.number;
   const refresh = () => { void cache.resetQueries({queryKey:scope}).then(()=>setDetailError(undefined)); void config.refetch(); };
   const columns: DataTableColumn<Pull>[] = [
@@ -50,7 +50,7 @@ function AgentWorkspaceView({ location, repositoryId, userId }: Props) {
     <NativeAgentTasks context={context} userId={userId} title="Agent tasks in this repository"/>
     {error?<PanelError error={error} retry={refresh}/>:!config.data||!pulls.data?<Loading label="Reading repository work…"/>:<>
       {!config.data.agents?<p className="field-help">Agent execution is not enabled on this installation. Existing CI and review evidence is available below.</p>:null}
-      <section className="browser-panel"><div className="browser-panel-heading"><h2>Work by pull request</h2><Link {...repositoryOptions(location,{view:'pulls',pull:undefined})}>All pull requests</Link></div><DataTable data={pulls.data.pullRequests} columns={columns} getRowId={p=>p.id} label="workspace pull requests" emptyMessage="No pull requests yet. Open a pull request to track its work here."/>{pulls.data.page.nextPage?<p className="panel-footnote">Latest 100 pull requests loaded. Use All pull requests for older work.</p>:null}</section>
+      <section className="browser-panel"><div className="browser-panel-heading"><h2>Work by pull request</h2><Link {...repositoryOptions(location,{view:'pulls',pull:undefined})}>All pull requests</Link></div><DataTable data={pulls.data.pullRequests} columns={columns} getRowId={p=>p.id} label="workspace pull requests" emptyMessage="No pull requests yet. Open a pull request to track its work here."/>{pulls.data.page.nextPage?<p className="panel-footnote">The 100 newest pull requests, open and closed, are loaded. Use All pull requests for older work.</p>:null}</section>
       {number?<SelectedWork key={number} onError={setDetailError} {...{context,scope,number,config:config.data,interval,location}}/>:null}
     </>}
   </div>;
