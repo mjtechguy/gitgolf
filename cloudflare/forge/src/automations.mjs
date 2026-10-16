@@ -234,18 +234,20 @@ export async function automationsAPI(db, env, person, request, body, read, deps)
 
   if (action === 'list') {
     const { results } = await db.prepare('SELECT * FROM automations WHERE scope=? AND scope_id=? AND deleted=0 ORDER BY name,created_at LIMIT ?').bind(scope.scope, scope.scopeId, automationBounds.perScope).all();
-    // A repository also lists the organization and installation automations that reach it, read-only.
-    let inherited = [];
+    // A repository also lists the organization and installation automations that reach it, read-only. The target filter runs
+    // before the limit, so automations aimed at other repositories never take a slot; both scopes fit under it.
+    let inherited = [], inheritedTruncated = false;
     if (scope.row) {
-      const { results: wider } = await db.prepare("SELECT * FROM automations WHERE deleted=0 AND (scope='installation' OR scope='organization' AND scope_id=?) ORDER BY scope,name LIMIT 100")
-        .bind(scope.row.owner_kind === 'ORGANIZATION' ? String(scope.row.owner_id) : '-').all();
-      inherited = wider.filter(a => { const repos = stored(a).target.repositories; return !repos.length || repos.includes(scope.scopeId); });
+      const { results: wider } = await db.prepare(`SELECT * FROM automations WHERE deleted=0 AND (scope='installation' OR scope='organization' AND scope_id=?)
+        AND (COALESCE(json_array_length(target,'$.repositories'),0)=0 OR EXISTS(SELECT 1 FROM json_each(target,'$.repositories') WHERE value=?)) ORDER BY scope,name LIMIT ?`)
+        .bind(scope.row.owner_kind === 'ORGANIZATION' ? String(scope.row.owner_id) : '-', scope.scopeId, 2 * automationBounds.perScope + 1).all();
+      inherited = wider.slice(0, 2 * automationBounds.perScope); inheritedTruncated = wider.length > inherited.length;
     }
     const hostsSQL = "SELECT id,name,scope FROM agent_hosts WHERE deleted=0 AND state='ACTIVE' AND (scope='installation' OR scope='organization' AND scope_id=? OR scope='personal' AND scope_id=?) ORDER BY name,id LIMIT 100";
     const orgId = scope.scope === 'organization' ? scope.scopeId : scope.row?.owner_kind === 'ORGANIZATION' ? String(scope.row.owner_id) : '-';
     const { results: hosts } = scope.manage ? await db.prepare(hostsSQL).bind(orgId, String(person.id)).all() : { results: [] };
     return { scope: { scope: scope.scope, scopeId: scope.scopeId, name: scope.name }, canManage: scope.manage, featureOn: !feature, featureReason: feature?.reason || '',
-      automations: await automationViews(db, env, results), inherited: await automationViews(db, env, inherited), tools: toolCatalogue(),
+      automations: await automationViews(db, env, results), inherited: await automationViews(db, env, inherited), inheritedTruncated, tools: toolCatalogue(),
       engines: await automationEngines(db, env, person, { scope: scope.scope, scopeId: scope.scopeId }), enginesRegistered: enginesRegistered(),
       hosts: hosts.map(h => ({ id: String(h.id), name: h.name, scope: h.scope })), places: { 'agent-host': '', ...placeNotes } };
   }

@@ -42,7 +42,7 @@ applied; a person who lost access makes the run `REFUSED`, and nothing is writte
 
 | Action | Route | Fields | Answer |
 | --- | --- | --- | --- |
-| `list` | read | — | `{ scope, canManage, featureOn, featureReason, automations, inherited, tools, engines, enginesRegistered, hosts, places }`. `inherited`: the organization and installation automations reaching a repository, read-only. |
+| `list` | read | — | `{ scope, canManage, featureOn, featureReason, automations, inherited, inheritedTruncated, tools, engines, enginesRegistered, hosts, places }`. `inherited`: the organization and installation automations reaching a repository (targets every repository in scope or names this one, filtered before the limit), read-only, by scope then name; `inheritedTruncated` when more than both scopes' bound (200) match. |
 | `get` | read | `id` | `{ automation (with instructions), instructionVersions }` |
 | `instructions` | read | `id`, `version` | `{ version, text, createdBy, createdAt, current }` |
 | `runs` | read | `automationId?` | `{ runs, truncated }`, newest 50. A repository sees every run on it. |

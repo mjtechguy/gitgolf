@@ -100,7 +100,7 @@ export function AutomationSettings({ target, userId }: { target: AutomationTarge
     {data && manage && running ? <RunNow key={running.id} automation={running} inventory={data} target={target} close={() => open()}
       done={text => { open(); setNotice(text); void refresh(); }} /> : null}
     {data?.inherited.length ? <section className="browser-panel" aria-labelledby="automations-inherited-title"><div className="browser-panel-heading"><h2 id="automations-inherited-title">From the organization and installation</h2></div>
-      <p className="field-help">These automations are managed at a wider scope and also run on this repository. They are shown read-only.</p>
+      <p className="field-help">These automations are managed at a wider scope and also run on this repository. They are shown read-only.{data.inheritedTruncated ? ` Only the first ${data.inherited.length} by scope and name are listed; others that reach this repository are not shown.` : ''}</p>
       <DataTable data={data.inherited} getRowId={a => a.id} label="inherited automations" pagination={false} columns={[
         { accessorKey: 'name', header: 'Automation', cell: ({ row: { original: a } }) => <div className="automation-name"><strong>{a.name}</strong><small>{a.toolLabel}</small></div> },
         { id: 'scope', header: 'Managed by', accessorFn: a => a.scope === 'organization' ? `Organization ${a.scopeName}` : 'Installation' },

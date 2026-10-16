@@ -146,6 +146,20 @@ test('organization owners and operations administrators manage their scopes; mem
   assert.deepEqual(audit.map(row => [row.scope, row.scope_id]), [['organization', '2'], ['organization', '2'], ['installation', 'alice']]);
 });
 
+test('inherited automations are filtered by target before the limit', async t => {
+  const f = await fixture(t);
+  const installation = await f.signed('/native/automations', { scope: 'installation', action: 'create', tool: 'pr-reviewer', target: { repositories: ['alice/project'] } });
+  assert.equal(installation.status, 200, JSON.stringify(installation));
+  // A full installation scope aimed at another repository sorts before the organization's one automation.
+  f.sql.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<99) INSERT INTO automations SELECT printf('00000000-0000-4000-8000-%012d',i),scope,scope_id,owner_id,tool,'Other '||printf('%03d',i),
+    enabled,kill_switch,trigger,target,engine,place,host_id,instructions_version,output,limits,approvals,version,next_run_at,deleted,created_by,updated_by,created_at,updated_at FROM automations CROSS JOIN n WHERE id='${installation.automation.id}'`);
+  assert.equal((await f.signed('/native/automations', { scope: 'organization', organization: 'team', action: 'create', tool: 'issue-triage' })).status, 200);
+  const tooling = await f.read({ action: 'list' }, 'alice', { owner: 'team', name: 'tooling' }, '2');
+  assert.deepEqual(tooling.inherited.map(a => [a.scope, a.name]), [['organization', 'Issue triage']]); assert.equal(tooling.inheritedTruncated, false);
+  const project = await f.read({ action: 'list' });
+  assert.equal(project.inherited.length, 100); assert.ok(project.inherited.every(a => a.scope === 'installation')); assert.equal(project.inheritedTruncated, false);
+});
+
 test('engines and places are validated honestly: cloud sandboxes are phase 3, SSH hosts are not available, the registry is optional', async t => {
   const f = await fixture(t);
   const host = await f.connect();
