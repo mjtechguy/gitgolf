@@ -73,7 +73,11 @@ export const disclosureDismiss = {
     if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); event.stopPropagation(); }
   },
   onBlur: (event: FocusEvent<HTMLDetailsElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    // A control that disables itself (Load more → Loading…) drops focus to nowhere; that is not leaving the disclosure.
+    const lost = event.target as HTMLElement & { disabled?: boolean };
+    if (!event.relatedTarget && (lost.disabled || !lost.isConnected)) { event.currentTarget.querySelector('summary')?.focus(); return; }
+    event.currentTarget.open = false;
   },
 };
 
