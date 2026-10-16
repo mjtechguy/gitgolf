@@ -163,6 +163,42 @@ fully serial rerun (`--workers=1`, 65 min) passed 16 of them. The remaining fail
 - Remaining for Q-2: groups I, J and K; the flaky list; the switcher overflow bug; the `pull-review-comments` collapse under
   load; then two consecutive green runs.
 
+**Status, part C (2026-10-16): product fixes for the switcher overflow, the inline-comment collapse and group K.** Exit not
+met. Same wrapper as Q-1 (port 4579). Other worktrees loaded the machine throughout (load average 9–33 on 12 threads).
+
+- **Switcher overflow (E, real bug).** Below 720px the dropdown was positioned from the trigger (x≈104 at 320px) at a fixed
+  300px width. It now anchors to the header: `left:16px`, `max-width:calc(100% - 32px)`. Measured at 11 widths from 320 to
+  1440px in every appearance and layout: the dropdown stays inside the viewport. `workspace-switcher` passes 4 of 4;
+  with `repository-compare`, `native-forge078-integration` and `workspace`, 64 of 64.
+- **Inline-comment panel collapse (A, 9 tests).** Root cause in the product: the review list shows "Loading reviews…"
+  while it revalidates, which unmounts its rows, and the panel's open state lived in the row. Any revalidation closed an
+  opened panel. The open state now lives in the review list (`PullRequestBrowser.tsx`), keyed by review and commit, and the
+  panel reopens with a fresh read. What revalidated in the specs: their fixtures rejected `WatchRepository` with HTTP 501,
+  which Connect reports to a stream as Unknown. `RepositoryLive` treats that as a dropped stream and revalidates pulls
+  after 0, 1, 2, 4… s, so under load a retry landed after the panel opened. Both specs now answer it as a Connect stream
+  reports Unimplemented. A new test drops the stream on purpose with the panel open; it fails without the product fix.
+  The "Files changed comments fit" measurement also raced the lazy syntax highlighter replacing the diff rows; it now
+  measures in one read. Before: `--workers=8 --repeat-each=3`, at least 20 failures. After: `--workers=6`, 77 of 77;
+  `--workers=6 --repeat-each=3`, 231 of 231.
+- **Group K (source rows under load).** Each of up to 1000 rows mounted a query observer (one cache entry per row), its
+  own IntersectionObserver and two page listeners, all twice in development StrictMode. Every cache event of a
+  private-navigation query also rescanned the whole cache for retention. Now one shared observer and one pair of listeners
+  serve all rows, a row mounts its query only when it is visible, settled or retained, and the retention scan skips
+  queries without data. With CPU throttled 4×, the mount task dropped from 2.12–2.19 s to 1.63–1.82 s (3 runs each); the
+  same directory without row changes takes about 1.7 s. With CPU throttled 3× (2 workers, 2 repeats): before, 4 of 10
+  failed; after, 10 of 10 passed. The spec now waits for the 1000-row listing before asserting on row reads.
+  Unthrottled: `--workers=6 --repeat-each=3`, 177 of 177; `--workers=12 --repeat-each=3`, 177 of 177.
+- Remaining: rendering the 1000-row listing in the development build is one main-thread task (about 1.7 s at 4× CPU).
+  Under heavier load (3× CPU at 3 workers, or 4×) the listing, or the 3-slot read queue reaching row-980, can still exceed
+  the 5 s expectation in both old and new code. `rpc.ts`'s `reject()` for `WatchRepository` should answer with an HTTP 200
+  Connect end-stream error (`unimplemented`); every spec that relies on it currently gets fallback revalidation. Not
+  changed here (test infrastructure is owned elsewhere).
+- Checks: `npm run typecheck`, `npm run build`, `npm run build:native` pass; `node --test web/tests/*.test.ts` 29 of 29.
+  Specs covering the touched components (`layout-presets`, `pull-requests`, `pull-review-create`, `repository-browser`,
+  `source-navigator`, `source-identity`, `readable-source`, `missing-resource-refetch`) at 6 workers: 248 passed and 5
+  failed at load average 29; the 5 (`layout-presets` 124, `repository-browser` 338, `pull-requests` 530, 566, 612) passed
+  on rerun at 2 workers (20 of 20).
+
 ## Q-3 Keep it green
 
 - A documented local gate for UI changes: affected specs, then the full suite before merging a change that touches shared

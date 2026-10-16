@@ -16,18 +16,20 @@ const comment=create(PullRequestReviewCommentSchema,{id:'9007199254740994',revie
 const oldComment=create(PullRequestReviewCommentSchema,{...comment,id:'9007199254740995',body:'Old side observation',user:undefined,newLine:0,oldLine:4,resolved:false,htmlUrl:'javascript:alert(1)'});
 const reply=create(PullRequestReviewCommentSchema,{...comment,id:'9007199254740996',body:'Reply from another author',user:create(UserSchema,{id:'4',login:'contributor'}),resolved:false,htmlUrl:'https://forge.example/owner/sample/pulls/3#issuecomment-9007199254740996'});
 async function backend(page:Page){
- const s={signedIn:true,user:clone(UserSchema,user),pull:clone(PullRequestSchema,pull),review:clone(PullRequestReviewSchema,review),comments:[clone(PullRequestReviewCommentSchema,comment),clone(PullRequestReviewCommentSchema,oldComment),clone(PullRequestReviewCommentSchema,reply)],reads:[] as GetPullRequestReviewCommentsRequest[],reviewReads:0,discussionReads:0,denied:false,expired:false,detailDenied:false,hold:undefined as Promise<void>|undefined,currentHead:head,wrong:'',detailHold:undefined as Promise<void>|undefined,live:false,streamChange:false,streamCursor:1};
+ const s={signedIn:true,user:clone(UserSchema,user),pull:clone(PullRequestSchema,pull),review:clone(PullRequestReviewSchema,review),comments:[clone(PullRequestReviewCommentSchema,comment),clone(PullRequestReviewCommentSchema,oldComment),clone(PullRequestReviewCommentSchema,reply)],reads:[] as GetPullRequestReviewCommentsRequest[],reviewReads:0,discussionReads:0,denied:false,expired:false,detailDenied:false,hold:undefined as Promise<void>|undefined,currentHead:head,wrong:'',detailHold:undefined as Promise<void>|undefined,live:false,streamChange:false,streamCursor:1,streamHold:undefined as Promise<void>|undefined,reviewsHold:undefined as Promise<void>|undefined};
  await page.route('**/rpc/**',async route=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,portableRuntimeFixture);
   if(method==='GetSession')return s.signedIn?respond(route,GetSessionResponseSchema,{user:s.user}):reject(route,'unauthenticated','Sign in required.');
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
   if(method==='Logout'){s.signedIn=false;return respond(route,LogoutResponseSchema,{});}
-  if(method==='WatchRepository'){if(!s.live)return reject(route,'unimplemented','No live stream in this unary fixture.');const changing=s.streamChange;if(changing){s.streamChange=false;s.streamCursor++;}const envelope=(flags:number,value:unknown)=>{const data=Buffer.from(JSON.stringify(value));const header=Buffer.alloc(5);header[0]=flags;header.writeUInt32BE(data.length,1);return Buffer.concat([header,data]);};return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([envelope(0,toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:'7',cursor:String(s.streamCursor),kind:changing?'change':'heartbeat',topics:changing?['pulls']:[]}))),envelope(0,toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:'7',cursor:String(s.streamCursor),kind:'reconnect'}))),envelope(2,{})])});}
+  // Without the live fixture the stream answers the way a Connect server reports an unimplemented streaming method. rpc.ts's
+  // HTTP 501 reaches a stream as Unknown: a dropped stream whose fallback revalidates the pull every 1-15 s mid-test.
+  if(method==='WatchRepository'){const envelope=(flags:number,value:unknown)=>{const data=Buffer.from(JSON.stringify(value));const header=Buffer.alloc(5);header[0]=flags;header.writeUInt32BE(data.length,1);return Buffer.concat([header,data]);};const drop=s.streamHold;if(drop){await drop;return reject(route,'unavailable','Live stream dropped.');}if(!s.live)return route.fulfill({status:200,contentType:'application/connect+json',body:envelope(2,{error:{code:'unimplemented',message:'No live stream in this unary fixture.'}})});const changing=s.streamChange;if(changing){s.streamChange=false;s.streamCursor++;}return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([envelope(0,toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:'7',cursor:String(s.streamCursor),kind:changing?'change':'heartbeat',topics:changing?['pulls']:[]}))),envelope(0,toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:'7',cursor:String(s.streamCursor),kind:'reconnect'}))),envelope(2,{})])});}
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository});
   if(method==='GetPullRequest'){if(s.detailHold)await s.detailHold;return s.detailDenied?reject(route,'permission_denied','Pull request access revoked.'):respond(route,GetPullRequestResponseSchema,{pullRequest:s.pull});}
-  if(method==='ListPullRequestReviews'){s.reviewReads++;return respond(route,ListPullRequestReviewsResponseSchema,{reviews:[s.review]});}
+  if(method==='ListPullRequestReviews'){s.reviewReads++;if(s.reviewsHold)await s.reviewsHold;return respond(route,ListPullRequestReviewsResponseSchema,{reviews:[s.review]});}
   if(method==='GetPullRequestDiff'){const rawDiff='diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1 @@\n-old\n+new\n';return respond(route,GetPullRequestDiffResponseSchema,{repositoryId:repository.id,pullRequestId:s.pull.id,mergeBaseCommitId:s.pull.mergeBaseCommitId,baseCommitId:base,headCommitId:head,rawDiff,byteSize:new TextEncoder().encode(rawDiff).byteLength});}
   if(method==='GetPullRequestDiscussion'){s.discussionReads++;return respond(route,GetPullRequestDiscussionResponseSchema,{issue:{id:'14',number:3,title:pull.title,state:IssueState.OPEN}});}
   if(method==='ListIssueComments')return respond(route,ListIssueCommentsResponseSchema,{});
@@ -85,6 +87,12 @@ test('refresh hides private comments while revalidating and denial clears the co
  const s=await backend(page);await open(page);await expect(panel(page)).toContainText('PRIVATE INLINE');let release!:()=>void;s.hold=new Promise(r=>release=r);s.denied=true;await page.getByRole('button',{name:`Refresh inline comments for review ${review.id}`} ).click();await expect(panel(page)).toContainText('Reading inline comments');await expect(panel(page)).not.toContainText('PRIVATE INLINE');release();await expect(panel(page).getByRole('alert')).toContainText('inaccessible');await expect(panel(page)).not.toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(3);
 });
 
+test('a dropped live stream revalidates reviews without collapsing an opened inline-comment panel',async({page})=>{
+ const s=await backend(page);let drop!:()=>void;s.streamHold=new Promise(r=>drop=r);await open(page);await expect(panel(page)).toContainText('PRIVATE INLINE');const reads=s.reads.length;
+ let release!:()=>void;s.reviewsHold=new Promise(r=>release=r);drop();s.streamHold=undefined;await expect(page.getByText('Loading reviews…',{exact:true})).toBeVisible();await expect(panel(page)).toHaveCount(0);
+ release();s.reviewsHold=undefined;await expect(page.getByRole('button',{name:'Hide inline comments (3)',exact:true})).toHaveAttribute('aria-expanded','true');await expect(panel(page)).toContainText('PRIVATE INLINE');expect(s.reads.length).toBeGreaterThan(reads);
+});
+
 test('collapse cancels an inflight read; later reopen performs a fresh read',async({page})=>{
  const s=await backend(page);let release!:()=>void;s.hold=new Promise(r=>release=r);await open(page);await expect.poll(()=>s.reads.length).toBe(2);await page.getByRole('button',{name:'Hide inline comments (3)',exact:true}).click();await expect(panel(page)).toHaveCount(0);release();s.hold=undefined;await page.getByRole('button',{name:'Show inline comments (3)',exact:true}).click();await expect(panel(page)).toContainText('PRIVATE INLINE');expect(s.reads).toHaveLength(4);
 });
@@ -129,10 +137,12 @@ for(const theme of ['dark','light'])for(const width of [1280,390,320])test(`File
   expect(lines).toEqual({lines:label==='Show review comments'?0:1,inside:true,clipped:false});
   if(width<=760)expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
  }
- const toolbar=await page.locator('.diff-toolbar').boundingBox();const firstCode=await page.locator('.diff-code').first().boundingBox();
+ // The diff rows render plain first and are replaced once the lazy syntax module loads. Two boundingBox calls could
+ // straddle that swap (null for a detached row), so wait for a row and measure both boxes in one synchronous read.
+ await expect(page.locator('.diff-code').first()).toBeVisible();const {toolbar,firstCode}=await page.evaluate(()=>({toolbar:document.querySelector('.diff-toolbar')!.getBoundingClientRect().toJSON() as DOMRect,firstCode:document.querySelector('.diff-code')!.getBoundingClientRect().toJSON() as DOMRect}));
  // Offline fixtures retain manual refresh alongside the review actions.
- if(width<=390){expect(toolbar!.height).toBeLessThanOrEqual(150);expect(firstCode!.y).toBeLessThan(850);}
- console.log('Fixture diff density '+JSON.stringify({theme,width,toolbar:toolbar!.height,firstCode:firstCode!.y}));
+ if(width<=390){expect(toolbar.height).toBeLessThanOrEqual(150);expect(firstCode.y).toBeLessThan(850);}
+ console.log('Fixture diff density '+JSON.stringify({theme,width,toolbar:toolbar.height,firstCode:firstCode.y}));
  await page.screenshot({path:`test-results/compact-review-toolbar-${theme}-${width}.png`});
  await page.getByRole('button',{name:'Split',exact:true}).click();await expect(page.getByRole('button',{name:'Split',exact:true})).toHaveAttribute('aria-pressed','true');
  await page.getByRole('button',{name:'Unified',exact:true}).click();await expect(page.getByRole('button',{name:'Unified',exact:true})).toHaveAttribute('aria-pressed','true');

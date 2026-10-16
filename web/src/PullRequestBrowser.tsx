@@ -62,6 +62,9 @@ function RefMetadata({ title, value }: { title: string; value?: PullRequestRef }
 function Reviews({ repositoryKey, queryKey, location, onReview, pull, repositoryId, userId, reviewActionLabel='Review changes',onReviewChanged }: Props & {onReview:()=>void;pull:PullRequest;reviewActionLabel?:string;onReviewChanged?:()=>void}) {
   const query = useInfiniteQuery({ ...privateQuery, queryKey: [...queryKey, 'pull', location.pull, 'reviews'], initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => repositoryClient.listPullRequestReviews({ repository: repositoryKey, number: location.pull, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: followingPage });
+  // Rows unmount while the list revalidates (a refresh or the live fallback), so opened inline comments are kept here.
+  const [openComments, setOpenComments] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleComments = (key: string, open: boolean) => setOpenComments(current => { const next = new Set(current); if (open) next.add(key); else next.delete(key); return next; });
   const reviews = query.isSuccess && (!query.isFetching || query.isFetchingNextPage)
     ? [...new Map(query.data.pages.flatMap((page) => page.reviews).map((review) => [review.id, review])).values()] : [];
   return <section className="browser-panel pull-reviews" aria-labelledby="reviews-title">
@@ -69,14 +72,14 @@ function Reviews({ repositoryKey, queryKey, location, onReview, pull, repository
     <details className="metadata-details panel-disclosure"><summary>About review states</summary><p className="panel-footnote">Native review records do not establish Golf approval eligibility or merge readiness.</p></details>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : query.isPending || (query.isFetching && !query.isFetchingNextPage) ? <Loading label="Loading reviews…" /> : <>
       {reviews.length ? <ol className="pull-review-list">{reviews.map((review) => {
-        const external = repositoryLink(review.htmlUrl);
+        const external = repositoryLink(review.htmlUrl), commentsKey = `${repositoryId}-${pull.id}-${review.id}-${review.commitId}`;
         return <li key={review.id}><div className="pull-review-heading"><h3>{review.user?.login || 'Deleted or unavailable author'}</h3><div className="review-flags"><span className="visibility">{reviewLabels[review.state] || 'Unknown review state'}</span>{review.stale ? <span className="visibility">Outdated</span> : null}{review.commitId && pull.head?.commitId && review.commitId !== pull.head.commitId ? <span className="visibility">Earlier snapshot</span> : null}{review.dismissed ? <span className="visibility">Dismissed</span> : null}</div></div>
           <p className="muted">{review.state===PullRequestReviewState.PENDING?<>Draft updated <DateLabel value={review.updatedAt}/></>:<>Submitted <DateLabel value={review.submittedAt}/> · Updated <DateLabel value={review.updatedAt}/></>}</p>
           {review.state===PullRequestReviewState.APPROVED&&(review.dismissed||review.stale||review.commitId!==pull.head?.commitId)?<p className="field-help">This approval is dismissed or belongs to an earlier snapshot. It does not establish approval of the current head.</p>:null}
           <MarkdownBody text={review.body || 'No review text provided.'} label={`Review ${review.id} body, rendered Markdown`}/>
           <details className="metadata-details"><summary>Review details</summary><dl className="review-metadata"><div><dt>Review ID</dt><dd><code>{review.id}</code></dd></div><div><dt>Reviewed commit</dt><dd><code>{review.commitId || 'Unavailable'}</code></dd></div><div><dt>Marked stale</dt><dd>{review.stale ? 'Yes' : 'No'}</dd></div><div><dt>Dismissed</dt><dd>{review.dismissed ? 'Yes' : 'No'}</dd></div><div><dt>Official</dt><dd>{review.official ? 'Yes' : 'No'}</dd></div></dl></details>
           {[PullRequestReviewState.APPROVED,PullRequestReviewState.REQUEST_CHANGES].includes(review.state)?<RuntimeFeature id="pull.review-lifecycle"><PullReviewLifecycle repository={repositoryKey} repositoryId={repositoryId} userId={userId} pull={pull} review={review} onChanged={()=>{void query.refetch();onReviewChanged?.();}}/></RuntimeFeature>:null}
-          <RuntimeFeature id="pull.advanced-reviews"><PullReviewComments key={`${repositoryId}-${pull.id}-${review.id}-${review.commitId}`} repositoryKey={repositoryKey} repositoryId={repositoryId} userId={userId} queryKey={queryKey} pull={pull} review={review}/></RuntimeFeature>
+          <RuntimeFeature id="pull.advanced-reviews"><PullReviewComments key={commentsKey} open={openComments.has(commentsKey)} onOpenChange={open => toggleComments(commentsKey, open)} repositoryKey={repositoryKey} repositoryId={repositoryId} userId={userId} queryKey={queryKey} pull={pull} review={review}/></RuntimeFeature>
           {external ? <a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open original review<ExternalLink size={14} /></a> : null}
         </li>;
       })}</ol> : <div className="empty-state"><GitPullRequest size={24} /><h3>No visible reviews in the loaded pages.</h3>{query.hasNextPage ? <p>More provider pages may contain visible reviews.</p> : null}</div>}

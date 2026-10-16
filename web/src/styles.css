@@ -1406,9 +1406,10 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
   .workspace-heading { display:flex; gap:8px; }
   .workspace-heading > .brand { font-size:1.5rem; }
   .workspace-heading > .brand > span:last-child { display:none; }
-  .workspace-switcher { position:relative; flex:1; }
+  /* The dropdown anchors to the header (position:relative above), not the trigger, so it stays inside the viewport. */
+  .workspace-switcher { position:static; flex:1; }
   .workspace-switcher > button { width:100%; }
-  .workspace-switcher-dropdown { top:calc(100% + 4px); left:0; right:auto; width:300px; max-width:calc(100vw - 32px); }
+  .workspace-switcher-dropdown { top:calc(100% + 4px); left:16px; right:auto; width:300px; max-width:calc(100% - 32px); }
   .topbar-controls { gap:0; }
   .topbar-controls > a[aria-label="Notifications"] { display:none; }
   .workspace-content main { padding:20px 16px 0; }

@@ -59,8 +59,9 @@ function CommentsRead(props:Props){
   </>}
  </section>;
 }
-export function PullReviewComments(props:Props){
- const [show,setShow]=useState(false);const id=useId();
+// The caller owns the open state so it survives the review list remounting its rows while it revalidates.
+export function PullReviewComments({open:show,onOpenChange,...props}:Props&{open:boolean;onOpenChange:(open:boolean)=>void}){
+ const id=useId();
  if(!props.review.commentsCount||!readable(props.review,props.userId)||!validID(props.repositoryId)||!validID(props.pull.id)||!validID(props.review.id)||!validCommit(props.review.commitId))return null;
- return <div className="review-comments-control"><button type="button" className="text-button" aria-expanded={show} aria-controls={id} onClick={()=>setShow(value=>!value)}><MessageSquare size={15} aria-hidden="true"/>{show?'Hide':'Show'} inline comments ({props.review.commentsCount})</button><div id={id}>{show?<CommentsRead {...props}/>:null}</div></div>;
+ return <div className="review-comments-control"><button type="button" className="text-button" aria-expanded={show} aria-controls={id} onClick={()=>onOpenChange(!show)}><MessageSquare size={15} aria-hidden="true"/>{show?'Hide':'Show'} inline comments ({props.review.commentsCount})</button><div id={id}>{show?<CommentsRead {...props}/>:null}</div></div>;
 }
