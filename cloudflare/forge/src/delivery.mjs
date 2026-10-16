@@ -156,7 +156,10 @@ export async function previewAPI(db, env, person, row, artifact, body) {
   if (!previewPolicy(env)) throw new Fault('failed_precondition', 412, 'An operator-approved protected preview allocation is required.');
   await requireFeature(db, env, row, 'previews');
   if (body.action === 'list') {
-    const { results } = await db.prepare('SELECT * FROM previews WHERE repository_id=? ORDER BY created_at DESC,id DESC LIMIT 101').bind(row.id).all();
+    // With a number, that pull request's previews only, matched before the limit; without one, the repository's newest.
+    if (body.number !== undefined && (!Number.isInteger(body.number) || body.number < 1)) invalid('Use a PR number, or omit it for the repository\'s previews.');
+    const { results } = await db.prepare(`SELECT * FROM previews WHERE repository_id=?${body.number !== undefined ? " AND json_extract(selection,'$.number')=?" : ''} ORDER BY created_at DESC,id DESC LIMIT 101`)
+      .bind(row.id, ...(body.number !== undefined ? [body.number] : [])).all();
     return reply({ previews: results.slice(0, 100).map(p => wire(p, env)), truncated: results.length > 100 });
   }
   if (body.action === 'create') {

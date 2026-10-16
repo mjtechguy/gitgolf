@@ -229,6 +229,28 @@ for (const view of ['conversation', 'checks']) test(`native ${view} connects eac
  await expect(page.getByRole('link', { name: 'Open protected preview' })).toHaveCount(0);
 });
 
+test('native PR previews are read for this pull request; a run outside a full page is not called undeployed', async ({ page }) => {
+ await backend(page, true);
+ const job = { id: '72b855f6-2fe7-42ca-8a83-9a4a65d87f2b', state: 'SUCCEEDED', agentState: 'NONE', testState: 'PASSED', adviceState: 'NONE', stale: false, selection: { headCommitId: H } };
+ const reads: Record<string, unknown>[] = [];
+ await page.route('**/native/**', async route => {
+  const path = new URL(route.request().url()).pathname;
+  if (path === '/native/config') return route.fulfill({ json: { workspace: 'alex', evidence: true, tests: true, previews: true, apps: false } });
+  if (path === '/native/repository-access') return route.fulfill({ json: { role: 'read' } });
+  if (path === '/native/pr-evidence/read') return route.fulfill({ json: { jobs: [job], truncated: true } });
+  if (path === '/native/pr-preview/read') { reads.push(route.request().postDataJSON()); return route.fulfill({ json: { previews: [], truncated: true } }); }
+  return route.fulfill({ status: 404, json: { message: 'Fixture route unavailable' } });
+ });
+ await page.goto('/alex/private/pull/7/checks');
+ const runs = page.getByRole('table', { name: 'PR runs', exact: true });
+ await expect(runs).toContainText('Not among the loaded previews');
+ await expect(runs).not.toContainText('No preview deployed');
+ await expect(page.getByText('Only the latest 100 previews for this pull request are loaded.')).toBeVisible();
+ await expect(page.getByText('Only the latest 100 runs for this pull request are loaded; older runs and their previews are not shown.')).toBeVisible();
+ expect(reads.length).toBeGreaterThan(0);
+ expect(reads.every(body => body.action === 'list' && body.number === 7)).toBe(true);
+});
+
 // Cloudflare-native merge slice: same repository, merge commits and squash, and a named reason when the slice does not admit the pull request.
 const nativeReasons={native_nothing_to_merge:'nothing to merge',native_ancestry_unproven:'too large or too complex to find a single merge base',native_write_unresolved:'no confirmed outcome'} as const;
 function sameRepository(state:Awaited<ReturnType<typeof backend>>,change:(v:PullRequestMergeObservation)=>void=()=>{}){
