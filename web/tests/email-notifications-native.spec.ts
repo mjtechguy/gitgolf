@@ -73,6 +73,19 @@ test('native repository email opens without webhooks and shows provider acceptan
  expect(s.writes[1]!.body).toMatchObject({deliveryId:accepted().id,expectedContactVersion:'1'});await expect(history).toContainText('May duplicate an earlier accepted message');
 });
 
+test('saving a native subscription paused by an access change resumes it instead of turning it off',async({page})=>{
+ const s=await fixture(page);s.state=create(OwnEmailNotificationStateSchema,{...own(),preferenceVersion:'1',enabled:true});
+ s.subscription=create(RepositoryEmailSubscriptionSchema,{id:subId,version:'2',contactVersion:'1',eventTopics:['issues'],enabled:false,authorizationState:'authority_unavailable',updatedAt:'2026-10-14T10:00:00Z',workflowNotifications:1});
+ await page.goto('/alice/example/settings/webhooks');await expect(page.getByRole('table',{name:'My repository email subscription',exact:true})).toContainText('Authorization paused');
+ await page.getByText('Email delivery and privacy',{exact:true}).click();await expect(page.getByText('messages waiting at that moment are cancelled rather than held',{exact:false})).toBeVisible();
+ await page.getByRole('button',{name:'Edit subscription',exact:true}).click();await expect(page.getByLabel('Enable this repository email subscription',{exact:true})).toBeChecked();
+ await expect(page.getByText('This subscription is paused because your access or sign-in address changed.',{exact:false})).toBeVisible();
+ await page.getByRole('button',{name:'Save subscription',exact:true}).click();await expect(page.getByRole('alert')).toContainText('explicitly authorize');expect(s.writes).toHaveLength(0);
+ await page.getByLabel('Authorize background delivery to my Access sign-in address',{exact:true}).check();await page.getByRole('button',{name:'Save subscription',exact:true}).click();
+ await expect(page.getByRole('form')).toHaveCount(0);await expect(page.getByRole('table',{name:'My repository email subscription',exact:true})).toContainText('Enabled');
+ expect(s.writes[0]).toMatchObject({method:'SaveRepositoryEmailSubscription',body:{id:subId,expectedVersion:'2',enabled:true,authorizeBackground:true}});
+});
+
 test('native receipts claiming an SMTP status or a local account are refused as incomplete',async({page})=>{
  const s=await fixture(page,3,3);s.state=create(OwnEmailNotificationStateSchema,{...own(),preferenceVersion:'1',enabled:true});s.invent='smtp';await page.goto('/alice/example/settings/webhooks');
  await expect(page.getByRole('heading',{name:'Webhooks',exact:true,level:1})).toBeVisible();
