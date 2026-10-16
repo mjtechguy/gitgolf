@@ -10,7 +10,7 @@ import { repositoryOptions } from './navigation';
 
 // Mirrors cloudflare/forge/src/contributions.mjs (docs/AGENTS_AND_AUTOMATIONS_PLAN.md, CG-1 and CG-2). Counts, not claims.
 export type ContributionKind = 'commit' | 'pull_opened' | 'pull_merged' | 'review' | 'issue_opened' | 'issue_closed' | 'comment' | 'proposal_created' | 'proposal_accepted';
-export type AiTier = 'agent' | 'assisted' | 'declared' | 'none';
+export type AiTier = 'agent' | 'token' | 'assisted' | 'declared' | 'none';
 type Counts = Record<ContributionKind, number>;
 type Tiers = Record<AiTier, number>;
 type Day = { day: string; human: number; ai: number; kinds: Counts; agentKinds: Counts; tiers: Tiers; repositories: { fullName: string; human: number; ai: number }[]; private: number };
@@ -27,8 +27,9 @@ export const kindLabels: Record<ContributionKind, [string, string]> = {
 };
 export const tierLabels: Record<AiTier, [string, string]> = {
   none: ['Unlabelled', 'Everything else. Never asserted to be written by a person alone.'],
+  token: ['API token (agent or automation)', 'Done through an API token, the way agents and automations outside Golf connect (for example a coding CLI over MCP). Golf reports the token; it cannot tell an agent from a script.'],
   declared: ['Declared AI co-author', 'The commit carries a Co-Authored-By trailer naming an AI tool. Declared by its author, not verified.'],
-  assisted: ['AI-assisted', 'A person merged work a Golf agent produced. The person is the contributor; the AI assisted.'],
+  assisted: ['AI-assisted', 'A person merged work a Golf agent or an API token produced. The person is the contributor; the AI assisted.'],
   agent: ['Golf agent', 'Golf itself made it: an agent task, an agent proposal or a landing by the agentic mode policy. Verified from Golf’s records.'],
 };
 const number = (value: number) => value.toLocaleString();
@@ -121,11 +122,11 @@ export function ContributionGraph({ owner, userId }: { owner: string; userId: st
         ['Longest streak', plural(view.streaks.longest, ['day', 'days'])],
         ['Current streak', plural(view.streaks.current, ['day', 'days'])],
       ]} />
-      {overlay ? <dl className="contribution-tiers" aria-label="AI involvement by tier">{(['agent', 'assisted', 'declared', 'none'] as AiTier[]).map(tier => <div key={tier}><dt>{tierLabels[tier][0]}</dt><dd>{number(view.totals.tiers[tier])}</dd><dd className="field-help">{tierLabels[tier][1]}</dd></div>)}</dl> : null}
+      {overlay ? <dl className="contribution-tiers" aria-label="AI involvement by tier">{(['agent', 'token', 'assisted', 'declared', 'none'] as AiTier[]).map(tier => <div key={tier}><dt>{tierLabels[tier][0]}</dt><dd>{number(view.totals.tiers[tier])}</dd><dd className="field-help">{tierLabels[tier][1]}</dd></div>)}</dl> : null}
       {picked ? <section className="contribution-day-panel" aria-labelledby="contribution-day-title"><h3 id="contribution-day-title">{longDate(picked.day)}</h3>
         <p>{summary(picked.kinds) || 'No contributions of their own.'}</p>
         {summary(picked.agentKinds) ? <p>Golf agent work they ran: {summary(picked.agentKinds)}.</p> : null}
-        {picked.ai ? <p>With AI involvement: {(['assisted', 'declared', 'agent'] as AiTier[]).filter(tier => picked.tiers[tier]).map(tier => `${tierLabels[tier][0]} ${number(picked.tiers[tier])}`).join(' · ')}</p> : null}
+        {picked.ai ? <p>With AI involvement: {(['assisted', 'declared', 'token', 'agent'] as AiTier[]).filter(tier => picked.tiers[tier]).map(tier => `${tierLabels[tier][0]} ${number(picked.tiers[tier])}`).join(' · ')}</p> : null}
         <ul>{picked.repositories.map(repo => { const [repositoryOwner, name] = repo.fullName.split('/'); return <li key={repo.fullName}><Link {...repositoryOptions({ owner: repositoryOwner!, name: name! })}>{repo.fullName}</Link> {plural(repo.human, ['contribution', 'contributions'])}{repo.ai ? `, ${number(repo.ai)} with AI involvement` : ''}</li>; })}
           {picked.private ? <li>{plural(picked.private, ['contribution', 'contributions'])} in private repositories</li> : null}</ul></section>
         : <p className="field-help">Select a day to see what happened and where.</p>}

@@ -235,7 +235,9 @@ CG-3 and CG-4 not started.** What was built, and how it narrows the plan below:
   - Authors are matched by email (and Golf's noreply address); commits by an email with no account are not counted.
 - **Tiers:**
   - *Golf agent:* agent tasks and proposals, policy landings, Golf's agentic identity, agent task commits.
-  - *AI-assisted:* a person merged an agent task's pull request.
+  - *API token:* a pull request opened through an API token (an agent or automation outside Golf; Golf reports the token, not
+    what was behind it).
+  - *AI-assisted:* a person merged an agent task's pull request, or one opened through an API token.
   - *Declared:* a `Co-Authored-By` trailer naming a known AI tool.
   - *Unlabelled:* everything else.
 - **Views built:**

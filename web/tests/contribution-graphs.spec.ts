@@ -9,7 +9,7 @@ const capabilities = ['settings.repository-general', 'settings.repository-access
 const shots = process.env.GOLF_CONTRIBUTION_SHOTS;
 const range = { from: '2025-10-12', to: '2026-10-16', year: null };
 const kinds = (values: Record<string, number> = {}) => ({ commit: 0, pull_opened: 0, pull_merged: 0, review: 0, issue_opened: 0, issue_closed: 0, comment: 0, proposal_created: 0, proposal_accepted: 0, ...values });
-const tiers = (values: Record<string, number> = {}) => ({ agent: 0, assisted: 0, declared: 0, none: 0, ...values });
+const tiers = (values: Record<string, number> = {}) => ({ agent: 0, token: 0, assisted: 0, declared: 0, none: 0, ...values });
 const dayMs = 86400_000;
 
 // Deterministic activity over the year: weekdays busier, a few days with AI involvement.
@@ -37,8 +37,8 @@ function person(owner: string, self: boolean, showPrivate = false) {
 }
 const impact = {
   state: 'on', range, generatedAt: '2026-10-16T09:00:00Z', unreadable: [], excludedRepositories: 1,
-  heatmap: personDays().filter((_, index) => index % 3 === 0).map((day, index) => ({ day: day.day, agent: index % 4, assisted: index % 3 ? 1 : 0, declared: index % 5 === 0 ? 1 : 0, none: day.human })),
-  kinds: { commit: tiers({ agent: 12, declared: 9, none: 410 }), pull_opened: tiers({ agent: 31, none: 64 }), pull_merged: tiers({ agent: 18, assisted: 9, none: 53 }), review: tiers({ agent: 7, none: 88 }),
+  heatmap: personDays().filter((_, index) => index % 3 === 0).map((day, index) => ({ day: day.day, agent: index % 4, token: index % 6 === 1 ? 2 : 0, assisted: index % 3 ? 1 : 0, declared: index % 5 === 0 ? 1 : 0, none: day.human })),
+  kinds: { commit: tiers({ agent: 12, declared: 9, none: 410 }), pull_opened: tiers({ agent: 31, token: 140, none: 12 }), pull_merged: tiers({ agent: 18, assisted: 9, none: 53 }), review: tiers({ agent: 7, none: 88 }),
     issue_opened: tiers({ none: 40 }), issue_closed: tiers({ none: 22 }), comment: tiers({ none: 190 }), proposal_created: tiers({ agent: 46 }), proposal_accepted: tiers({ agent: 18, assisted: 9 }) },
   agentTasks: [{ purpose: 'change', tool: 'claude', state: 'SUCCEEDED', count: 28, tokens: 4_210_000, reported: 28, costed: 26, costUsd: 61.4 }, { purpose: 'change', tool: 'codex', state: 'FAILED', count: 4, tokens: 0, reported: 0, costed: 0, costUsd: 0 },
     { purpose: 'review', tool: 'codex', state: 'SUCCEEDED', count: 7, tokens: 380_000, reported: 7, costed: 0, costUsd: 0 }],
@@ -146,6 +146,10 @@ test('the AI impact page holds counts, not claims: tiers, proposals and acceptan
   await expect(summary).toContainText('27 of 31'); await expect(summary).toContainText('$61.40'); await expect(summary).toContainText('26 of 106');
   await expect(page.getByRole('table', { name: 'AI activity by day, last 12 months' })).toBeVisible();
   await expect(page.getByRole('table', { name: 'contributions by tier' }).getByRole('row', { name: /Pull requests merged/ })).toContainText('80');
+  // Work done through an API token has its own column: Golf reports the token, not what was behind it.
+  const tokenColumn = page.getByRole('table', { name: 'contributions by tier' }).getByRole('columnheader', { name: /API token/ });
+  await expect(tokenColumn).toBeVisible();
+  await expect(page.getByRole('table', { name: 'contributions by tier' }).getByRole('row', { name: /Pull requests opened/ })).toContainText('140');
   // The comparison is labelled as one.
   const comparison = page.getByRole('region', { name: 'Comparison: time to merge' });
   await expect(comparison).toContainText('Comparison, not an effect'); await expect(comparison).toContainText('not a measured effect of AI');

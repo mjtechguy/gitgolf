@@ -17,7 +17,8 @@ import { operationsAdmin } from './operations.mjs';
 import { sha } from './git.mjs';
 
 export const contributionKinds = ['commit', 'pull_opened', 'pull_merged', 'review', 'issue_opened', 'issue_closed', 'comment', 'proposal_created', 'proposal_accepted'];
-export const aiTiers = ['agent', 'assisted', 'declared', 'none'];
+// 'token': done through an API token (an agent or automation outside Golf; Golf reports the token, not what was behind it).
+export const aiTiers = ['agent', 'token', 'assisted', 'declared', 'none'];
 // Per maintenance pass: rows read from each D1 source, repositories walked and commits read from each, Artifacts commit reads outside
 // the batched log, and repositories enrolled for their first walk.
 export const contributionLimits = { events: 500, tasks: 200, evidence: 200, repositories: 3, commits: 200, reads: 40, enroll: 20 };
@@ -57,7 +58,8 @@ function settle(db, time) {
   ];
 }
 // Discussion events: issues and pull requests opened, issues closed, comments, reviews and merges. A pull request opened from an agent
-// task is Golf's (agent); its merge by a person is AI-assisted, and its merge by the agentic mode policy is Golf's.
+// task is Golf's (agent) and one opened through an API token is the token tier; a merge of either by a person is AI-assisted, and a
+// merge by the agentic mode policy is Golf's.
 const policyLanded = "EXISTS(SELECT 1 FROM land_operations l WHERE l.pull_request_id=p.id AND l.trigger='policy' AND l.state IN ('LANDED','REVERTED'))";
 const discussionSource = `FROM discussion_events e JOIN discussions d ON d.id=e.discussion_id LEFT JOIN pull_requests p ON p.discussion_id=d.id
   LEFT JOIN pull_request_origins o ON o.pull_request_id=p.id`;
@@ -67,8 +69,8 @@ const discussionEvents = where => `${insertEvents} SELECT key,day,actor_id,repos
       CASE WHEN e.kind='opened' THEN CASE d.kind WHEN 'issue' THEN 'issue_opened' ELSE 'pull_opened' END
         WHEN e.kind='close' AND d.kind='issue' THEN 'issue_closed' WHEN e.kind='comment' THEN 'comment'
         WHEN e.kind IN ('review_approved','review_comment','review_request_changes') THEN 'review' WHEN e.kind='merge_pull' THEN 'pull_merged' END AS kind,
-      CASE WHEN d.kind!='pull' THEN 'none' WHEN e.kind='merge_pull' AND ${policyLanded} THEN 'agent' WHEN e.kind='merge_pull' AND o.kind='agent-task' THEN 'assisted'
-        WHEN e.kind='opened' AND o.kind='agent-task' THEN 'agent' ELSE 'none' END AS ai_tier
+      CASE WHEN d.kind!='pull' THEN 'none' WHEN e.kind='merge_pull' AND ${policyLanded} THEN 'agent' WHEN e.kind='merge_pull' AND o.kind IN ('agent-task','api-token') THEN 'assisted'
+        WHEN e.kind='opened' AND o.kind='agent-task' THEN 'agent' WHEN e.kind='opened' AND o.kind='api-token' THEN 'token' ELSE 'none' END AS ai_tier
     ${discussionSource} WHERE ${where})
   WHERE kind IS NOT NULL AND day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`;
 // An agent task's proposal merged: accepted, by a person (assisted) or by the policy (agent).
@@ -239,7 +241,7 @@ async function attribute(env, db, row, commits) {
     for (const task of (await db.prepare(`SELECT commit_id FROM agent_tasks WHERE repository_id=? AND commit_id IN (${part.map(() => '?').join()})`).bind(row.id, ...part).all()).results) agents.add(task.commit_id);
     for (const merge of (await db.prepare(`SELECT m.merge_commit_id,o.kind AS origin,${policyLanded} AS policy FROM pull_merge_operations m JOIN pull_requests p ON p.id=m.pull_request_id
         LEFT JOIN pull_request_origins o ON o.pull_request_id=p.id WHERE m.repository_id=? AND m.phase='SUCCEEDED' AND m.merge_commit_id IN (${part.map(() => '?').join()})`).bind(row.id, ...part).all()).results)
-      merges.set(merge.merge_commit_id, merge.policy ? 'agent' : merge.origin === 'agent-task' ? 'assisted' : '');
+      merges.set(merge.merge_commit_id, merge.policy ? 'agent' : merge.origin === 'agent-task' || merge.origin === 'api-token' ? 'assisted' : '');
   }
   return commits.map(commit => {
     const address = email(commit), golf = address === agenticEmail;
@@ -318,7 +320,8 @@ async function personView(db, env, viewer, body) {
     const where = shown(row.repository_id);
     if (!where || !contributionKinds.includes(row.kind) || !aiTiers.includes(row.ai_tier) || !dayOK(row.day)) continue;
     const entry = days.get(row.day) || { day: row.day, human: 0, ai: 0, kinds: emptyCounts(), agentKinds: emptyCounts(), tiers: emptyTiers(), repositories: new Map(), private: 0 };
-    const human = row.ai_tier !== 'agent', count = row.count;
+    // The person's own activity: everything but what Golf's agents or an API token did under their name.
+    const human = row.ai_tier !== 'agent' && row.ai_tier !== 'token', count = row.count;
     entry.tiers[row.ai_tier] += count; totals.tiers[row.ai_tier] += count;
     if (human) { entry.human += count; entry.kinds[row.kind] += count; totals.human += count; totals.kinds[row.kind] += count; }
     else { entry.agentKinds[row.kind] += count; totals.agentKinds[row.kind] += count; }
@@ -391,7 +394,7 @@ async function impactView(db, env, body) {
   const hours = (row) => (Date.parse(row.merged) - Date.parse(row.opened)) / 3600_000;
   const timed = merges.filter(row => Number.isFinite(hours(row)) && hours(row) >= 0);
   const group = rows => ({ count: rows.length, medianHours: median(rows.map(hours)) });
-  const involved = row => row.policy || row.origin === 'agent-task';
+  const involved = row => row.policy || row.origin === 'agent-task' || row.origin === 'api-token';
   const costRows = [...tasks, ...automations];
   return { state: 'on', range, generatedAt: iso(Date.now()), unreadable, excludedRepositories: excluded.length,
     heatmap: [...heat.values()].sort((a, b) => a.day.localeCompare(b.day)), kinds,

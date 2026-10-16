@@ -20,7 +20,7 @@ type Impact = { state: 'on'; range: Range; generatedAt: string; unreadable: stri
   comparison: { label: string; aiInvolved: { count: number; medianHours: number | null }; other: { count: number; medianHours: number | null }; truncated: boolean } } | { state: 'off' | 'unavailable'; reason: string };
 
 const number = (value: number) => value.toLocaleString();
-const tiers: AiTier[] = ['agent', 'assisted', 'declared', 'none'];
+const tiers: AiTier[] = ['agent', 'token', 'assisted', 'declared', 'none'];
 const total = (value: Tiers) => tiers.reduce((sum, tier) => sum + value[tier], 0);
 const duration = (hours: number | null) => hours === null ? 'No merges' : hours < 1 ? `${Math.round(hours * 60)} min` : hours < 48 ? `${hours.toFixed(1)} h` : `${(hours / 24).toFixed(1)} days`;
 const states = (rows: { state: string; count: number }[]) => rows.length ? rows.map(row => `${row.state.toLowerCase().replaceAll('_', ' ')} ${number(row.count)}`).join(' · ') : 'None recorded';
@@ -60,8 +60,8 @@ export function AiImpact({ userId, signingOut }: { userId: string; signingOut: b
   const query = useQuery({ ...privateQuery, queryKey: ['ai-impact', userId, year], enabled: !signingOut, retry: false,
     queryFn: ({ signal }) => nativeAPI<Impact>('/native/contributions/read', { action: 'impact', ...(year === null ? {} : { year }) }, signal) });
   const data = query.data;
-  const cells = useMemo(() => new Map((data?.state === 'on' ? data.heatmap : []).map(day => { const ai = day.agent + day.assisted + day.declared;
-    return [day.day, { value: ai, label: `${number(ai)} with AI involvement on ${longDate(day.day)} (Golf agent ${number(day.agent)}, AI-assisted ${number(day.assisted)}, declared ${number(day.declared)}); ${number(day.none)} unlabelled` }]; })), [data]);
+  const cells = useMemo(() => new Map((data?.state === 'on' ? data.heatmap : []).map(day => { const ai = day.agent + day.token + day.assisted + day.declared;
+    return [day.day, { value: ai, label: `${number(ai)} with AI involvement on ${longDate(day.day)} (Golf agent ${number(day.agent)}, API token ${number(day.token)}, AI-assisted ${number(day.assisted)}, declared ${number(day.declared)}); ${number(day.none)} unlabelled` }]; })), [data]);
   if (query.error) return <PanelError error={query.error} retry={() => void query.refetch()} />;
   if (!data) return <Loading label="Reading AI impact…" />;
   if (data.state !== 'on') return <p className="field-help" role="note">{data.reason}</p>;
@@ -93,7 +93,7 @@ export function AiImpact({ userId, signingOut }: { userId: string; signingOut: b
       <DataTable data={kindRows} columns={kindColumns} getRowId={row => row.kind} label="contributions by tier" pagination={false} /></section>
     <section className="browser-panel" aria-labelledby="ai-impact-comparison"><div className="browser-panel-heading"><h2 id="ai-impact-comparison">Comparison: time to merge</h2><span className="visibility">Comparison, not an effect</span></div>
       <SummaryBand label="Time to merge comparison" items={[
-        ['Median, opened from an agent task or landed by policy', duration(data.comparison.aiInvolved.medianHours), `${number(data.comparison.aiInvolved.count)} merged`],
+        ['Median, opened from an agent task or an API token, or landed by policy', duration(data.comparison.aiInvolved.medianHours), `${number(data.comparison.aiInvolved.count)} merged`],
         ['Median, all other merged pull requests', duration(data.comparison.other.medianHours), `${number(data.comparison.other.count)} merged`],
       ]} />
       <p className="panel-footnote">{data.comparison.label} The two groups differ in size, scope and who chose to use an agent.{data.comparison.truncated ? ' Read from the first 20,000 merges in the period.' : ''}</p></section>
