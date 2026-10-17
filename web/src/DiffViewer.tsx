@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Columns2, List, ListFilter, PanelLeftClose, PanelLeftOpen, Search, Settings2 } from 'lucide-react';
 import { parseDiff } from './diff';
 import type { DiffFile } from './diff';
@@ -30,10 +30,12 @@ function FilePatch({ file, id, split, syntax, fileIndex, ...actions }: { file: D
   })}</tbody></table></div>:!file.binary?<p className="panel-footnote">No supported text hunks in this file.</p>:null}
  </>;
 }
-function ChangedFile({file,id,split,syntax,viewed,onViewed,collapsed,onCollapsed,fileIndex,...actions}:{file:DiffFile;id:string;split:boolean;syntax:boolean;viewed:boolean;onViewed:(value:boolean)=>void;collapsed:boolean;onCollapsed:(value:boolean)=>void;fileIndex:number}&DiffLineActions) {
+// A comparison shows up to 500 files and 12,000 rows. A file renders again only when its own state changes (Viewed,
+// collapsed, the selected lines inside it) or a display preference does, not when another file or the selection elsewhere does.
+const ChangedFile=memo(function ChangedFile({file,id,split,syntax,viewed,onViewed,collapsed,onCollapsed,fileIndex,...actions}:{file:DiffFile;id:string;split:boolean;syntax:boolean;viewed:boolean;onViewed:(index:number,value:boolean)=>void;collapsed:boolean;onCollapsed:(index:number,value:boolean)=>void;fileIndex:number}&DiffLineActions) {
  const expanded=!collapsed;const slash=file.path.lastIndexOf('/');
- return <section id={id} className="diff-file"><div className="diff-file-heading"><button className="diff-file-toggle" aria-expanded={expanded} aria-controls={`${id}-patch`} aria-label={`${expanded?'Collapse':'Expand'} ${file.path}`} onClick={()=>onCollapsed(expanded)}>{expanded?<ChevronDown size={16}/>:<ChevronRight size={16}/>}<code title={file.path}>{slash>=0?<span className="diff-path-parent">{file.path.slice(0,slash+1)}</span>:null}<strong>{file.path.slice(slash+1)}</strong></code></button><CopyButton text={file.path} label={`Copy path ${file.path}`}/><span className="diff-stats"><span className="diff-added">+{file.additions}</span><span className="diff-deleted">−{file.deletions}</span></span><label className="diff-viewed"><input type="checkbox" checked={viewed} onChange={event=>{onViewed(event.target.checked);onCollapsed(event.target.checked);}}/>Viewed</label></div><div id={`${id}-patch`} hidden={!expanded}>{expanded?<FilePatch file={file} id={id} split={split} syntax={syntax} fileIndex={fileIndex} {...actions}/>:null}</div></section>;
-}
+ return <section id={id} className="diff-file"><div className="diff-file-heading"><button className="diff-file-toggle" aria-expanded={expanded} aria-controls={`${id}-patch`} aria-label={`${expanded?'Collapse':'Expand'} ${file.path}`} onClick={()=>onCollapsed(fileIndex,expanded)}>{expanded?<ChevronDown size={16}/>:<ChevronRight size={16}/>}<code title={file.path}>{slash>=0?<span className="diff-path-parent">{file.path.slice(0,slash+1)}</span>:null}<strong>{file.path.slice(slash+1)}</strong></code></button><CopyButton text={file.path} label={`Copy path ${file.path}`}/><span className="diff-stats"><span className="diff-added">+{file.additions}</span><span className="diff-deleted">−{file.deletions}</span></span><label className="diff-viewed"><input type="checkbox" checked={viewed} onChange={event=>{onViewed(fileIndex,event.target.checked);onCollapsed(fileIndex,event.target.checked);}}/>Viewed</label></div><div id={`${id}-patch`} hidden={!expanded}>{expanded?<FilePatch file={file} id={id} split={split} syntax={syntax} fileIndex={fileIndex} {...actions}/>:null}</div></section>;
+});
 
 // Parent keys this workspace by actor, repository and comparison identity.
 // Only display booleans persist; filters, names and Viewed stay private/in-memory.
@@ -46,12 +48,17 @@ export function DiffViewer({text,snapshotId,toolbarAction,...actions}:{text:stri
  const [view,setView]=useState('all');
  const [viewed,setViewed]=useState<Set<number>>(()=>new Set());
  const [collapsed,setCollapsed]=useState<Set<number>>(()=>new Set());
- const collapseFile=(index:number,value:boolean)=>setCollapsed(before=>{const next=new Set(before);if(value)next.add(index);else next.delete(index);return next;});
+ const collapseFile=useCallback((index:number,value:boolean)=>setCollapsed(before=>{const next=new Set(before);if(value)next.add(index);else next.delete(index);return next;}),[]);
+ const markViewed=useCallback((index:number,value:boolean)=>setViewed(before=>{const next=new Set(before);if(value)next.add(index);else next.delete(index);return next;}),[]);
  const fragment=useFragment();const selection=useMemo(()=>diffSelection(fragment,prefix,files),[fragment,prefix,files]);
  const anchor=useRef<{prefix:string;text:string;fragment:string;coordinate:DiffCoordinate}|undefined>(undefined);
  useLayoutEffect(()=>{anchor.current=undefined;},[prefix,text]);
  const selected=selection?.fileIndex;
- const lineActions={...actions,lineSelection:selection,onLineSelect:(coordinate:DiffCoordinate,extend:boolean)=>{
+ // One handler for every line link; it reads the current snapshot and selection when a line is chosen.
+ const current=useRef({prefix,text,fragment,selection,files});
+ useLayoutEffect(()=>{current.current={prefix,text,fragment,selection,files};});
+ const onLineSelect=useCallback((coordinate:DiffCoordinate,extend:boolean)=>{
+  const {prefix,text,fragment,selection,files}=current.current;
   // A Shift pivot belongs only to this exact snapshot and displayed fragment.
   const saved=anchor.current;const previous=saved?.prefix===prefix&&saved.text===text&&saved.fragment===fragment?saved.coordinate:undefined;
   const same=previous?.fileIndex===coordinate.fileIndex&&previous.side===coordinate.side;
@@ -61,7 +68,7 @@ export function DiffViewer({text,snapshotId,toolbarAction,...actions}:{text:stri
   const valid=diffSelection(range,prefix,files),next=valid?range:`#${prefix}-file-${coordinate.fileIndex}-${side}${coordinate.line}`;
   anchor.current={prefix,text,fragment:next,coordinate:extend&&valid?{...coordinate,line:origin}:coordinate};
   window.location.hash=next;
- }};
+ },[]);
  useEffect(()=>{try {localStorage.setItem(preferenceKey,JSON.stringify(display));}catch{/* Private content never enters preference storage. */}},[display]);
  useEffect(()=>{
   if(selection?.side===undefined||selection.first===undefined)return;
@@ -76,7 +83,9 @@ export function DiffViewer({text,snapshotId,toolbarAction,...actions}:{text:stri
  const large=files.length>500||files.reduce((count,file)=>count+file.hunks.reduce((rows,hunk)=>rows+hunk.lines.length,0),0)>12000;
  const entries=useMemo(()=>files.map((file,index)=>({file,index})),[files]);
  const extensions=useMemo(()=>large?[]:[...new Set(files.map(file=>extension(file.path)))].sort(),[files,large]);
- const shown=useMemo(()=>entries.filter(({file,index})=>`${file.path}\n${file.oldPath}`.toLowerCase().includes(filter.toLowerCase())&&!excluded.has(extension(file.path))&&(view==='all'||(view==='viewed')===viewed.has(index))),[entries,filter,excluded,view,viewed]);
+ // Viewed markers change the shown files only when a Viewed filter is selected.
+ const viewedFilter=view==='all'?undefined:viewed;
+ const shown=useMemo(()=>entries.filter(({file,index})=>`${file.path}\n${file.oldPath}`.toLowerCase().includes(filter.toLowerCase())&&!excluded.has(extension(file.path))&&(!viewedFilter||(view==='viewed')===viewedFilter.has(index))),[entries,filter,excluded,view,viewedFilter]);
  const setPreference=(key:keyof Preferences,value:boolean)=>setDisplay(before=>({...before,[key]:value}));
  const filtered=Boolean(filter||excluded.size||view!=='all');
  const clearFilters=()=>{setFilter('');setExcluded(new Set());setView('all');};
@@ -90,7 +99,7 @@ export function DiffViewer({text,snapshotId,toolbarAction,...actions}:{text:stri
   </div></div>
   <div className={`diff-layout ${!display.tree?'without-tree':''}`}>{display.tree?<aside className="diff-files"><label className="diff-search"><Search size={15}/><input aria-label="Filter changed files" placeholder="Filter changed files…" value={filter} onChange={event=>setFilter(event.target.value)}/></label><DiffNavigation entries={shown} prefix={prefix} viewed={viewed} selected={selected} onSelect={index=>collapseFile(index,false)}/></aside>:null}<div className="diff-patches">
    {preamble?<details className="diff-preamble"><summary>Native commit header</summary><pre>{preamble}</pre></details>:null}
-   {shown.map(({file,index})=><ChangedFile key={index} file={file} fileIndex={index} {...lineActions} id={`${prefix}-file-${index}`} split={display.split} syntax={display.syntax} viewed={viewed.has(index)} collapsed={collapsed.has(index)} onCollapsed={value=>collapseFile(index,value)} onViewed={value=>setViewed(before=>{const next=new Set(before);if(value)next.add(index);else next.delete(index);return next;})}/>)}
+   {shown.map(({file,index})=><ChangedFile key={index} file={file} fileIndex={index} {...actions} lineSelection={selected===index?selection:undefined} onLineSelect={onLineSelect} id={`${prefix}-file-${index}`} split={display.split} syntax={display.syntax} viewed={viewed.has(index)} collapsed={collapsed.has(index)} onCollapsed={collapseFile} onViewed={markViewed}/>)}
    {!shown.length?<p className="empty-state">{files.length?'No files match this filter.':'No structured file changes in this output.'}</p>:null}
   </div></div>
   <details className="diff-raw" open={!files.length}><summary>Raw diff</summary><pre className="source-preview" tabIndex={0} aria-label="Unified diff, plain text"><code>{text}</code></pre></details>
