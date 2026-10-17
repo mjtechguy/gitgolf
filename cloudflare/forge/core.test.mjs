@@ -11,7 +11,7 @@ import { previewBundle } from './src/delivery.mjs';
 import { deny, bodyLimit } from './src/common.mjs';
 import { reconcileIndexes } from './src/repository-indexes.mjs';
 import { consumeEvidence, reconcileEvidence } from './src/evidence.mjs';
-import { advertisedRefs, packetLine, receiveCommand, gitRequest } from './src/git.mjs';
+import { advertisedRefs, packetLine, receiveCommand, gitRequest, leaseProviderTokens, revokeProviderTokens } from './src/git.mjs';
 import { treeObject } from './src/git-objects.mjs';
 
 const ownerToken = 'golf_native_' + 'a'.repeat(43), readerToken = 'golf_native_' + 'b'.repeat(43);
@@ -588,6 +588,41 @@ test('provider credentials stay opaque, reject header injection and are always r
   }
   await assert.rejects(gitRequest(env, { createToken() { throw Error('Must not mint'); } }, 'repo-' + 'b'.repeat(32),
     'info/refs?service=git-upload-pack', 'git-upload-pack', null, () => { throw Error('Must not dispatch'); }, 'version=3'), /Unsupported Git protocol/);
+});
+
+test('one artifact handle leases a token per scope for all its Git calls and revokes them together', async t => {
+  const env = { ACCOUNT_ID: 'a'.repeat(32), ARTIFACTS_NAMESPACE: 'native-proof' }, name = 'repo-' + 'b'.repeat(32);
+  const minted = [], live = new Set();
+  let failRevoke = false;
+  const repo = {
+    async createToken(scope, ttl) { assert.equal(ttl, 60); const plaintext = `art_${scope}_${minted.length}`; minted.push(scope); live.add(plaintext); return { plaintext }; },
+    async revokeToken(value) { if (failRevoke) throw Error('provider busy'); live.delete(value); return true; },
+  };
+  const fetcher = async (url, options) => {
+    assert.ok(live.has(options.headers.Authorization.slice(7)));
+    const write = url.endsWith('/git-receive-pack');
+    return new Response('0000', { headers: { 'Content-Type': write ? 'application/x-git-receive-pack-result' : 'application/x-git-upload-pack-advertisement' } });
+  };
+  const read = () => gitRequest(env, repo, name, 'info/refs?service=git-upload-pack', 'git-upload-pack', null, fetcher);
+  const held = leaseProviderTokens(repo);
+  await Promise.all([read(), read()]); await read();
+  await gitRequest(env, repo, name, 'git-receive-pack', 'git-receive-pack', new Uint8Array(4), fetcher); await read();
+  assert.deepEqual(minted, ['read', 'write']);
+  await revokeProviderTokens(repo, held);
+  assert.equal(live.size, 0);
+  // A lease near its expiry is renewed; the retired token is revoked with the rest.
+  const again = leaseProviderTokens(repo);
+  t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  await read(); t.mock.timers.tick(41_000); await read();
+  assert.deepEqual(minted.slice(2), ['read', 'read']);
+  await revokeProviderTokens(repo, again);
+  assert.equal(live.size, 0);
+  // An unconfirmed revocation is logged; it does not fail a request that already completed.
+  const logged = t.mock.method(console, 'log', () => {});
+  failRevoke = true;
+  const unleased = { ...repo };
+  assert.equal((await gitRequest(env, unleased, name, 'info/refs?service=git-upload-pack', 'git-upload-pack', null, fetcher)).contentType, 'application/x-git-upload-pack-advertisement');
+  assert.match(logged.mock.calls.at(-1).arguments[0], /golf\.provider_token_revoke_unconfirmed/);
 });
 
 async function value(response, status = 200) {

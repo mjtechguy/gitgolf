@@ -141,7 +141,9 @@ export default Alchemy.Stack('GolfDemo', {
     name, main: main(), bundle: false, workersDev: false,
     domain: { name: input.hostname, zoneId: input.zone },
     compatibility: { date: '2026-10-08', flags: ['nodejs_compat'] },
-    observability: config().pipe(Output.map(value => value.observability)), limits: { cpuMs: 100 }, crons: ['*/5 * * * *'],
+    // 1 s of CPU per invocation. At 100 ms, Source API commits (up to 232 ms measured), pushes (114 ms) and the maintenance cron, which
+    // settles writes and lands pull requests, were cut off under agent load; 1 s still ends a runaway request.
+    observability: config().pipe(Output.map(value => value.observability)), limits: { cpuMs: 1000 }, crons: ['*/5 * * * *'],
     entrypoints: { PackagesAuthority: {}, TestOutbound: {}, PreviewBroker: {}, ...(agents ? { AgentOutbound: {} } : {}) },
     env: {
       Workspace: Cloudflare.DurableObject('Workspace'),

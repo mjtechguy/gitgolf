@@ -34,7 +34,7 @@ let uiAssets = null;
 await mkdir(bundle, { recursive: true });
 const operations = operationsPolicy(settings);
 const config = { name: settings.worker, compatibilityDate: '2026-10-08', workersDev: settings.workers_dev === true,
-  previewUrls: false, observability: mode === 'retire' ? { enabled: false } : operations.observability, limits: { cpuMs: 100 },
+  previewUrls: false, observability: mode === 'retire' ? { enabled: false } : operations.observability, limits: { cpuMs: 1000 }, // see deploy/alchemy/alchemy.run.ts
   exports: Object.fromEntries(['Workspace', 'RepositoryReads'].map(name => [name, mode === 'retire' ? { type: 'durable-object', state: 'deleted' } : { type: 'durable-object', storage: 'sqlite' }])) };
 if (settings.tests && mode === 'retire') config.exports.PRTestTask = { type: 'durable-object', state: 'deleted' };
 if (settings.agent_path && mode === 'retire') config.exports.PRAgentTask = { type: 'durable-object', state: 'deleted' };
