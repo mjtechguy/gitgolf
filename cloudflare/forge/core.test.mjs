@@ -357,7 +357,7 @@ test('ambiguous Git effects are resent only as the same compare-and-swap, a boun
   // The client receives Git's own refusal; only this branch waits for maintenance.
   const first = await f.sendPush(); assert.equal(first.status, 200);
   const reason = await refusal(first); assert.match(reason, /outcome of this update is unknown/); assert.ok(!reason.includes('sensitive'));
-  assert.match(await refusal(await f.sendPush()), /another push to this branch is in progress/); assert.equal(f.counts().effects, 5);
+  assert.match(await refusal(await f.sendPush()), /another push to this branch is in progress/); assert.equal(f.counts().effects, 6);
   assert.equal(f.sql.prepare('SELECT write_pending FROM repositories').get().write_pending, null);
   assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM git_ref_unknown').get().n, 1);
   assert.equal(f.sql.prepare('SELECT state FROM git_operations').get().state, 'DISPATCHED');

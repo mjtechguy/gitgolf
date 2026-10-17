@@ -140,6 +140,11 @@ function intent(body, target, key) {
 
 // options (land-queue.mjs only): guard(idle) replaces the writer authority with the agentic mode policy's ({sql, values}), and author
 // replaces the commit identity ({name, email}). Everything else, the journal, the reservation and the readback, is this same path.
+// A branch write whose outcome is unknown (git_ref_unknown) holds a merge only when it is on the merge's base or the pull request's head:
+// other branches are independent in Git. Held repository-wide, the few unknown writes a burst of agent pushes leaves behind stopped
+// every landing until maintenance settled them, minutes later. Bind: pull request id, repository id.
+export const unknownMergeWrite = `(SELECT k.operation_id FROM git_ref_unknown k JOIN git_operations g ON g.id=k.operation_id JOIN pull_requests p ON p.id=?
+  WHERE k.repository_id=? AND g.ref IN ('refs/heads/'||p.base_branch,'refs/heads/'||p.head_branch) LIMIT 1)`;
 export async function standardPullMerge(db, env, person, row, method, body, artifact, providerFetch, options = {}) {
   const authorize = idle => options.guard ? options.guard(idle) : authority(person, row, idle);
   const submit = method === 'SubmitStandardPullMerge', target = submit ? body.selection : body, key = { owner: ownerSlug(row, env), name: row.name };
@@ -147,6 +152,11 @@ export async function standardPullMerge(db, env, person, row, method, body, arti
       !Number.isInteger(target.number) || target.number < 1 || target.number > 4294967295) invalid('Select the original merge operation and exact pull request.');
   // Writer authority is rechecked for every submit and inspection; a lost grant reveals no receipt.
   if (!writable(row) || target.repositoryId !== String(row.id) || body.ownerId !== String(row.workspace_id) || target.repository?.owner !== key.owner || target.repository?.name !== key.name) deny();
+  // The row folds any unknown write into write_pending (authorizedRepository); keep only a merge's hold or an unknown write on this pull request's branches.
+  if (row.repository_write_pending !== undefined && row.write_pending && !row.repository_write_pending) {
+    const scoped = await db.prepare(`SELECT ${unknownMergeWrite} AS unknown_write`).bind(Number(target.pullRequestId), row.id).first();
+    row = { ...row, write_pending: scoped?.unknown_write || null };
+  }
   const requested = submit ? intent(body, target, key) : null, hash = requested && await digest(requested.fingerprint);
   const find = () => db.prepare('SELECT * FROM pull_merge_operations WHERE actor_id=? AND operation_id=?').bind(person.id, body.operationId).first();
   let saved = await find();

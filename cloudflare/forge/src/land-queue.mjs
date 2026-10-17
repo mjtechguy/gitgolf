@@ -11,7 +11,7 @@ import { ownerSlug, ownerColumns, ownerJoin } from './owners.mjs';
 import { featureColumns, featureOff } from './feature-policy.mjs';
 import { sha } from './git.mjs';
 import { inventory, pullReviewContext, collaboration } from './collaboration.mjs';
-import { standardPullMerge } from './pull-merge.mjs';
+import { standardPullMerge, unknownMergeWrite } from './pull-merge.mjs';
 import { commitTree, authority as writeAuthority, identity } from './source-api.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
 import { mergeTrees } from './tree-merge.mjs';
@@ -188,7 +188,7 @@ async function land(db, env, principal, row, op, ctx, options = {}) {
     if (attempt > 1) { if (Date.now() - started >= landLimits.budgetMs) break; await pause(attempt - 1); }
     await db.prepare("UPDATE land_operations SET state='LANDING',attempts=?,updated_at=? WHERE id=? AND state IN ('QUEUED','LANDING')").bind(attempt, now(), op.id).run();
     // The repository fence as it is now: an earlier attempt may have met another land's reservation.
-    const fence = await db.prepare('SELECT write_pending,(SELECT k.operation_id FROM git_ref_unknown k WHERE k.repository_id=r.id LIMIT 1) AS unknown_write FROM repositories r WHERE id=?').bind(row.id).first();
+    const fence = await db.prepare(`SELECT write_pending,${unknownMergeWrite} AS unknown_write FROM repositories r WHERE id=?`).bind(op.pull_request_id, row.id, row.id).first();
     const live = { ...row, write_pending: fence?.write_pending || fence?.unknown_write || null };
     // Another write holds the repository: wait for its turn instead of submitting a merge that could only record a refusal.
     if (live.write_pending) { last = 'the repository stayed busy with another write'; continue; }
