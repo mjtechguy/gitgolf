@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
-import { reserveRefWrite, refWriteBlocker, finishRefWrite } from './src/ref-writes.mjs';
+import { reserveRefWrite, refWriteBlocker, finishRefWrite, sendRefUpdate, refUpdatePause } from './src/ref-writes.mjs';
+import { unknownMergeWrite } from './src/pull-merge.mjs';
 
 const zero = '0'.repeat(40), a = 'a'.repeat(40), b = 'b'.repeat(40);
 async function fixture(t) {
@@ -72,4 +73,31 @@ test('a branch write admitted beside a merge settles without touching the merge 
   await finishRefWrite(f.db, { id, repositoryId: 1, applied: true });
   assert.equal(f.sql.prepare('SELECT write_pending FROM repositories WHERE id=1').get().write_pending, 'merge');
   assert.equal(f.sql.prepare('SELECT state FROM git_operations WHERE id=?').get(id).state, 'APPLIED');
+});
+
+test('an update the provider answered without a ref status is sent again, jittered, until it reads back', async () => {
+  const command = { ref: 'refs/heads/agent/two', old: zero, next: a }, waits = [];
+  let sends = 0, landed = 5;
+  const outcome = await sendRefUpdate({ command, send: async () => { sends++; return { bytes: new Uint8Array() }; },
+    read: async () => sends >= landed ? a : zero, pause: async attempt => { waits.push(attempt); } });
+  assert.deepEqual([outcome.applied, outcome.retried, sends], [true, 4, 5]);
+  // Six attempts in all, then the outcome stays unknown for maintenance.
+  sends = 0; landed = 99;
+  const unknown = await sendRefUpdate({ command, send: async () => { sends++; return { bytes: new Uint8Array() }; }, read: async () => zero, pause: async () => {} });
+  assert.deepEqual([unknown.applied, unknown.refused, sends], [false, false, 6]);
+  assert.deepEqual([refUpdatePause(0, () => 0), refUpdatePause(0, () => 1), refUpdatePause(4, () => 0.5)], [100, 300, 3200]);
+});
+
+test('an unknown branch write holds a merge only when it is on the merge base or the pull request head', async t => {
+  const f = await fixture(t);
+  const unknown = (id, ref) => f.sql.exec(`INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) VALUES('${id}',1,1,'${ref}','${zero}','${a}','DISPATCHED','t');
+    INSERT INTO git_ref_unknown(operation_id,repository_id,created_at) VALUES('${id}',1,'t')`);
+  const held = async () => (await f.db.prepare(`SELECT ${unknownMergeWrite} AS id`).bind(1, 1).first()).id;
+  unknown('other', 'refs/heads/agent/two');
+  assert.equal(await held(), null);
+  unknown('head', 'refs/heads/agent/one');
+  assert.equal(await held(), 'head');
+  f.sql.exec("DELETE FROM git_ref_unknown WHERE operation_id='head'");
+  unknown('base', 'refs/heads/main');
+  assert.equal(await held(), 'base');
 });

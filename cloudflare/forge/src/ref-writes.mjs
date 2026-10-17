@@ -49,7 +49,10 @@ export async function refWriteBlocker(db, repositoryId, ref) {
 // without reporting it refused; while the ref still holds the old commit the same compare-and-swap is sent again (a copy that did land
 // is refused by its stale old value and then reads back as applied). Returns {result, applied, refused, retried}; rethrows the last
 // provider error when the outcome stays unknown.
-export async function sendRefUpdate({ send, read, command, attempts = 5, pause = attempt => new Promise(resolve => setTimeout(resolve, 200 * 2 ** attempt)) }) {
+// Six attempts, jittered (about 6 s in all): at ~110 agents the provider dropped the ref status for a burst of new branches through five
+// unjittered attempts (3 s), and those writes ended unknown instead of applied.
+export const refUpdatePause = (attempt, random = Math.random) => 200 * 2 ** attempt * (0.5 + random());
+export async function sendRefUpdate({ send, read, command, attempts = 6, pause = attempt => new Promise(resolve => setTimeout(resolve, refUpdatePause(attempt))) }) {
   let result, failure;
   for (let attempt = 0; ; attempt++) {
     result = undefined; failure = undefined;
