@@ -29,8 +29,10 @@ class DemoSupervisorTest(unittest.TestCase):
         inventory = cloudflare_demo_cleanup.managed_image_inventory
         self.assertEqual(inventory(name, [job], [row]), [row['name'] + ':' + row['tags'][0]])
         self.assertEqual(inventory(name, [job], []), [])
+        # The SSH hosts container's image belongs to the stack, not to a CI job.
+        self.assertEqual(inventory(name, [job], [row, {'name': name + '-ssh', 'tags': ['8f46fca47db3f42f', 'buildcache']}]), [row['name'] + ':' + row['tags'][0]])
         for changed in [{**row, 'name': name + '-r13'}, {**row, 'name': 'foreign-r12'},
-                        {**row, 'tags': ['latest']}, {**row, 'tags': row['tags'] * 2}]:
+                        {**row, 'tags': ['latest']}, {**row, 'tags': row['tags'] * 2}, {**row, 'name': name + '-sshx'}]:
             with self.assertRaises(ValueError): inventory(name, [job], [changed])
 
     def test_orphaned_app_cleanup_uses_original_identity_and_revokes_credential(self):

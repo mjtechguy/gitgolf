@@ -642,15 +642,19 @@ def destroy(directory, value):
     images = managed_image_inventory(value['name'], jobs, cf(value, 'containers', 'images', 'list', '--filter', value['name']+'-r*'))
     inventory = cf(value, 'artifacts', 'namespaces', 'repos', 'list', '--namespace', value['name'], '--limit', '100')
     repositories = inventory.get('repos', []) if isinstance(inventory, dict) else inventory
-    known = {row['artifact_name'] for row in query('SELECT artifact_name FROM repositories')}
+    # Agent task forks (evidence_jobs.agent_fork) are this installation's repositories too.
+    known = {row['artifact_name'] for row in query('SELECT artifact_name FROM repositories')} | \
+        {row['agent_fork'] for row in query("SELECT agent_fork FROM evidence_jobs WHERE agent_fork IS NOT NULL AND agent_fork!=''")}
     if len(repositories) >= 100 or {row['name'] for row in repositories} - known:
         raise ValueError('Unexpected Artifacts repository inventory')
     for image in images: cf(value, 'containers', 'images', 'delete', image, '--force')
     for repo in repositories: cf(value, 'artifacts', 'namespaces', 'repos', 'delete', repo['name'], '--namespace', value['name'], '--force')
     cf(value, 'artifacts', 'namespaces', 'delete', value['name'], '--force')
     run(directory, value, 'destroy')
-    for image in cf(value, 'containers', 'images', 'list', '--filter', '^'+value['name']+'$'):
-        if image['name'] != value['name'] or any(not re.fullmatch(r'(?:[a-f0-9]{16}|buildcache)', tag) for tag in image['tags']):
+    # The images CLI filter is a substring match ('^…$' matches nothing), so the exact names are selected here.
+    for image in cf(value, 'containers', 'images', 'list', '--filter', value['name']):
+        if image['name'] not in (value['name'], value['name']+'-ssh'): continue
+        if any(not re.fullmatch(r'(?:[a-f0-9]{16}|buildcache)', tag) for tag in image['tags']):
             raise ValueError('Container build cache ownership differs')
         for tag in image['tags']: cf(value, 'containers', 'images', 'delete', image['name']+':'+tag, '--force')
     operator = json.loads(private_read(directory/'operator.json'))
