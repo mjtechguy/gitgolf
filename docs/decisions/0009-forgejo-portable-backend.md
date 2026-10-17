@@ -53,8 +53,10 @@ Done and proved:
 
 Still open for Forgejo:
 
-- A coordinated Forgejo backup/restore drill. Recovery tooling is source-ported to
-  Forgejo in the retirement change; no drill has been run.
+- Forgejo recovery beyond the small core drill. On 2026-10-17 `recovery-smoke.py`
+  passed on Forgejo 15.0.9 with local RustFS ([RECOVERY.md](../RECOVERY.md)). The
+  Access-core059 drill cannot run on Forgejo-era images, and a core-only backup,
+  large fixtures and managed agent harness state are unqualified.
 - A receipted live Kubernetes rollout. The [Helm chart README](../../deploy/helm/golf/README.md)
   records one-node k3d/kind runtime proofs on 2026-10-14, but no receipt for them is
   retained in the repository, and [Forgejo setup](../FORGEJO_SETUP.md) still lists a

@@ -68,7 +68,30 @@ def check_native_settings():
     assert (recovery.ROOT/recovery.POSTGRES_INIT).is_file()
 
 
+def check_schema_profiles():
+    # The Forgejo-era schema needs no profile; only schema059 takes access-core059.
+    recovery.validate_profile('202610110095', None)
+    denied(lambda: recovery.validate_profile('202610110095', recovery.ACCESS_PROFILE))
+    denied(lambda: recovery.validate_profile('202610110096', None))
+    denied(lambda: recovery.validate_profile('202610050083', None))
+    native_run = recovery.run
+    try:
+        queries = []
+        recovery.run = lambda command, **kwargs: queries.append(command[-1]) or b'0'
+        recovery.validate_harness_state('fixture', '202610110095', None)
+        assert queries == ['SELECT count(*) FROM golf_codex_connections;']
+        # Older schemas have no harness table; access-core059 fences agents itself.
+        recovery.validate_harness_state('fixture', '202610020021', None)
+        recovery.validate_harness_state('fixture', recovery.ACCESS_SCHEMA, recovery.ACCESS_PROFILE)
+        assert len(queries) == 1
+        recovery.run = lambda command, **kwargs: b'1'
+        denied(lambda: recovery.validate_harness_state('fixture', '202610110095', None))
+    finally:
+        recovery.run = native_run
+
+
 def main():
+    check_schema_profiles()
     compose_files = [Path('/fixture/compose.yaml'), Path('/fixture/compose.ci.yaml'), Path('/fixture/compose.storage.yaml')]
     for label in ['/fixture/compose.yaml', '/fixture/compose.yaml,/fixture/compose.storage.yaml',
                   '/fixture/compose.yaml,/fixture/compose.ci.yaml,/fixture/compose.storage.yaml']:

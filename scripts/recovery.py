@@ -27,7 +27,9 @@ from urllib.parse import parse_qs, unquote, urlsplit
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = 'golf.backup.v1'
-SUPPORTED_SCHEMAS = {'202610020008', '202610020009', '202610020019', '202610020021'}
+# 202610110095 is the schema of every Forgejo-era Golf image; the older labels
+# predate the Forgejo topology and stay only for historical archives.
+SUPPORTED_SCHEMAS = {'202610020008', '202610020009', '202610020019', '202610020021', '202610110095'}
 ACCESS_SCHEMA = '202610040059'
 ACCESS_PROFILE = 'access-core059'
 ACCESS_PG_COMMAND = ['postgres', '-c', 'max_wal_size=64MB', '-c', 'min_wal_size=32MB', '-c', 'checkpoint_timeout=30s']
@@ -302,6 +304,15 @@ def validate_source_bindings(pg, config, schema):
         query = 'SELECT count(*) FROM golf_active_object_connection WHERE profile_id IS NOT NULL;'
         require(run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc', query]).strip() == b'0')
 
+
+
+def validate_harness_state(pg, schema, profile):
+    # Managed agent harness connections (schema022-025) own encrypted auth and
+    # provider caches that no recovery drill has populated yet. The plan keeps
+    # that state outside qualified recovery, so the general profile refuses it.
+    if profile is None and int(schema) >= 202610020022:
+        query = 'SELECT count(*) FROM golf_codex_connections;'
+        require(run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc', query]).strip() == b'0')
 
 
 def validate_profile(schema, profile):
@@ -637,6 +648,7 @@ def backup(args, stage):
     require(pg_version == 'postgres (PostgreSQL) 18.4' and forge_version.startswith(FORGEJO_VERSION) and
             (schema in SUPPORTED_SCHEMAS or schema == ACCESS_SCHEMA))
     validate_profile(schema, args.profile)
+    validate_harness_state(pg, schema, args.profile)
     observation = access_profile_observation(pg, config) if args.profile else None
     key_inventory = None
     if args.profile:
@@ -807,6 +819,7 @@ def restore(args, stage, manifest):
     schema = run(['docker', 'exec', rows['postgres']['Id'], 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
                   'SELECT max(version_id) FROM goose_db_version WHERE is_applied;']).decode().strip()
     require(schema == manifest['versions']['golf_schema'])
+    validate_harness_state(rows['postgres']['Id'], schema, manifest.get('recovery_profile'))
     if manifest.get('recovery_profile'):
         require(access_profile_observation(rows['postgres']['Id'], json.loads((stage/'compose.json').read_text())) == manifest['profile_observation'])
     with (stage/'forgejo-data.tar').open('rb') as file:

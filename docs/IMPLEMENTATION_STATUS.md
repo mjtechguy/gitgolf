@@ -1,5 +1,26 @@
 # Golf implementation status
 
+## 2026-10-17 — First Forgejo backup/restore drill: the core drill passes, Access-core059 cannot run
+
+- **Core drill passes:** `python3 scripts/recovery-smoke.py --image golf-recovery-drill:976f8de-labeled` exited 0 three times in a row. The last run used the final scripts in this change.
+  - Golf image `sha256:445160f727bfea6dfeeadd40833653131d680cd46b3ac76516ea3c319b0c38ec`, built locally from commit `976f8de` with `deploy/docker/Dockerfile`; Golf schema 202610110095.
+  - Forgejo 15.0.9 rootless (`caf1bca332f9`), PostgreSQL 18.4, local RustFS 1.0.0.
+  - It covers an encrypted backup of the stopped core plus RustFS and restore into a fresh quarantined project. It also covers every refusal case: live writers, overwrite, the 1 MiB cap (the fixture is now over 1 MiB, so this no longer skips), wrong identity, truncated ciphertext, damaged payload, mislabeled schema, and existing or non-empty targets.
+  - After restore it checks the invalidation ledger, revoked grants, cancelled runs and quarantined materializations. Old sessions, API keys and attempt tokens are denied. It re-enrolls local accounts, rotates and retires a key, and checks the repository-creation and issue journals. Git refs and signatures, LFS bytes, release attachments, branch protection, the SSH host key and the GnuPG key survive. A signed push after restore works, force-push is denied and the data survives a restart.
+  - All disposable projects, volumes and networks were removed.
+- **Fixes needed before it passed:**
+  - **Schema allowlist:** `recovery.py` accepted only 202610020008/009/019/021, which predate Forgejo. Every Forgejo-era image is at 202610110095, so every Forgejo backup was refused. 202610110095 is now accepted; the older labels stay for historical archives.
+  - **SSH host key:** the drill required at least two host keys, which matched OpenSSH on the old topology. The rootless image's built-in SSH server has one RSA key (`ssh/gitea.rsa`). The drill now requires at least one; it still compares the keys before and after restore.
+  - **Runner poll:** the drill polled with an empty body. Golf answers 204 to a poll that does not declare `golf.runner.job-limits.v1`, so no run was leased. That also meant the post-restore "no run replays" check (which expects 204) passed without proving anything. Both polls now declare the capability.
+- **Also changed:**
+  - **Harness fence:** the plan keeps managed agent harness state (schema022–025) out of qualified recovery until a drill covers it. At 202610110095, backup and restore now refuse any row in `golf_codex_connections`. The drill has none.
+  - **Release creation retry:** one run failed once creating the fixture release; the status code was not recorded and later runs did not repeat it. The drill now retries only 409, 422 or 500, up to 20 times, and prints only the status codes. The retry has not been triggered since.
+  - Journal comparisons print the names of differing fields, never values.
+- **Access-core059 fails:** `scripts/repository-access-recovery-smoke.py` with the same image, `--proxy-image sha256:62eafe52c91cad83c2c74e630bfde917da8c253673e695665d454def84fc9a13` (python:3.13-bookworm) and `--source-revision 976f8de8601b3f04a165d9c31ef3d23aada4e7d6`. It failed at line 658, stage "fresh canonical core and ordinary supported native identities". The profile requires schema 202610040059, but the fresh core migrated to 202610110095. Owned cleanup passed and foreign containers were unchanged. Running it on Forgejo needs a new closed profile for the current schema, with the exclusion inventory re-derived for everything added since schema059. Changing the pinned label alone would not be qualification.
+- **Checks:** `python3 scripts/recovery-test.py` passes, including new schema-profile and harness-fence cases. `python3 scripts/repository-access-recovery-smoke.py --self-check` passes.
+- **Host tools:** `git-lfs` 3.4.1 was installed from Ubuntu's apt repository for the drill.
+- **Still open:** Access-core059 on Forgejo; a core-only backup without RustFS; managed agent harness state; large fixtures, capacity and RPO/RTO; Kubernetes, external stores and the rest of P1.6.
+
 ## 2026-10-16 — Indexes for the review's reads; recent landings by last update (schema 55)
 
 - **Migration 0055** adds four indexes, all `CREATE INDEX IF NOT EXISTS`:
