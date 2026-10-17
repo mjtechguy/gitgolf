@@ -310,6 +310,45 @@ rows; for the refresh, the longest task):
 - Checks: `agent-task-events` and `source-entry-commit` at `--workers=6 --repeat-each=5`, 500 of 500; specs for the other
   touched lists and date labels, 486 of 486. Three new tests fail on `main`.
 
+**Status, part F (2026-10-17): large issue, pull request, conversation and diff views.** Same rules as part E: no
+virtualization, and every read, denial and sign-out hides private rows exactly as before (lists, comments and diffs still
+unmount while they are read again). Issue and pull request rows and conversation comments are memoized components; the
+repository page keeps its query key and repository key stable so they stay memoized; a comment list checks its two runtime
+features once, not twice per comment. Diff files are memoized, the line selection goes only to the file that holds it, and
+the Viewed markers no longer rebuild the file tree unless a Viewed filter is on. List rows, comments and diff files use
+`content-visibility:auto`. Fixture: `web/tests/large-views-fixture.ts` (500 issues, 500 pull requests, 300 comments, a
+100-file diff with 5,400 rows and syntax colours). Measured with Playwright at 4× CPU, `main` and branch builds
+interleaved, median of 5, load average 4–16 (other suites on the machine); time from data arrival to the next frame with
+all rows, or the longest task ("none": no task over 50 ms):
+
+| View | Development before → after | Production before → after |
+| --- | ---: | ---: |
+| Issues, 500 rows, first render | 1,604 → 1,734 ms (noise) | 614 → 421 ms |
+| Issues, "Load more" to 500 (longest task) | 775 → 140 ms | 144 → 61 ms |
+| Pull requests, 500 rows, first render | 1,377 → 1,292 ms | 571 → 384 ms |
+| Pull requests, "Load more" to 500 (longest task) | 796 → 133 ms | 143 → 52 ms |
+| Issue conversation, 300 comments, first render | 5,586 → 5,182 ms | 2,317 → 1,996 ms |
+| Issue conversation, "Load more" to 300 (longest task) | 853 → 387 ms | 294 → 133 ms |
+| Refresh an issue with 300 comments (longest task) | 905 → 55 ms | 174 ms → none |
+| Refresh a pull request with 300 comments (longest task) | 910 → 89 ms | 210 ms → none |
+| Pull request diff, 100 files, first render | 4,304 → 2,922 ms | 2,370 → 895 ms |
+| Same diff, until every hunk has its colours | 11,109 → 8,350 ms | 6,193 → 2,789 ms |
+| Commit diff, same patch, first render | 4,019 → 2,647 ms | 2,658 → 882 ms |
+| Mark one file Viewed (longest task) | 4,665 → 290 ms | 1,238 → 119 ms |
+| Select a line (longest task) | 6,700 → 728 ms | 1,790 → 185 ms |
+
+- Before the change, a click on a line number or a Viewed box rendered all 5,400 rows again and forced a layout of all of
+  them; a refresh of an issue or pull request rendered every comment with its reactions and controls.
+- Remaining: a conversation's first render is mostly Markdown parsing (about 3 ms per comment in development at 4× CPU) and
+  one reactions read per comment (301 requests for 300 comments), which needs a batched API. Syntax colours arrive in a
+  second render that replaces each hunk's rows; highlighting in place would save that second mount. The development
+  build's first list and diff renders are still one long task; production's are under 0.5 s and 0.9 s. Intrinsic sizes
+  are estimates, so the scrollbar length settles as rows render.
+- Checks: the 38 affected specs at `--workers=6 --repeat-each=3`, 2,897 of 2,898; the one failure was the first load of
+  `source-entry-commit`'s 1000-row directory missing its 5 s timeout with the machine's load average near 25 (that spec
+  alone again, 180 of 180). Five new tests fail on `main` (rows rendered again); three guard that a denied refresh still
+  hides every comment and that a deep line link still scrolls to its line.
+
 ## Q-3 Keep it green
 
 - A documented local gate for UI changes: affected specs, then the full suite before merging a change that touches shared

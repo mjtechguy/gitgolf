@@ -149,6 +149,9 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .preview-unavailable h3 { font-size:1.125rem; }
 .preview-unavailable p { font-size:.875rem; line-height:1.8; max-width:580px; overflow-wrap:anywhere; }
 .commit-list>li,.issue-list>li { display:flex; align-items:flex-start; gap:12px; padding:12px 16px; border-bottom:1px solid var(--line); }
+/* Hundreds of loaded issues or pull requests: off-screen rows skip style, layout and paint but stay in the DOM for find-in-page
+   and assistive technology. Focus rings sit inside the row's padding. */
+.issue-list>li { content-visibility:auto; contain-intrinsic-size:auto 71px; }
 .commit-list>li>svg,.issue-list>li>svg { margin-top:3px; color:var(--accent); }
 .commit-list>li>div,.issue-list>li>div { min-width:0; flex:1; }
 .commit-list h3,.issue-list h3 { font-size:.9375rem; line-height:1.6; letter-spacing:-.01em; overflow-wrap:anywhere; }
@@ -187,6 +190,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .issue-comment-list>li:last-child { margin-bottom:0; }
 /* Up to 513 journal rows: off-screen rows skip style, layout and paint but stay in the DOM. Rows already clip (overflow:hidden). */
 .journal-list>li { content-visibility:auto; contain-intrinsic-size:auto 72px; }
+/* Conversation comments, the same way: a timeline loads hundreds; each row already clips. */
+.issue-comments .issue-comment-list>li { content-visibility:auto; contain-intrinsic-size:auto 200px; }
 .issue-comment { padding:0; min-width:0; }
 .issue-comment-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; overflow-wrap:anywhere; padding:8px 16px; background:var(--raised); border-bottom:1px solid var(--line); }
 .issue-comment-byline { display:flex; align-items:baseline; flex-wrap:wrap; gap:5px; min-width:0; font-size:.8125rem; line-height:1.5; color:var(--muted); }
@@ -643,6 +648,9 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .diff-workspace.wrap-lines .diff-lines.split .diff-code { width:auto; }
 .diff-patches { min-width:0; padding:12px; }
 .diff-file { min-width:0; border:1px solid var(--line); border-radius:var(--radius); margin-bottom:12px; overflow:hidden; scroll-margin-top:16px; }
+/* Up to 500 files and 12,000 rows: the browser skips style, layout and paint for files far off screen, which stay in the DOM
+   for find-in-page, line links and assistive technology. A file already clips its content. */
+.diff-file { content-visibility:auto; contain-intrinsic-size:auto 600px; }
 .diff-file-heading { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; padding:6px 12px; background:var(--raised); }
 .diff-file-heading > code { min-width:0; flex:1; overflow-wrap:anywhere; font-family:var(--mono); font-size:.8125rem; }
 .diff-viewed { margin:0; display:flex; align-items:center; gap:6px; font-size:.8125rem; min-height:24px; }
