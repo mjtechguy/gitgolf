@@ -72,7 +72,7 @@ import { discussionAttachments, attachmentMethods } from './attachments.mjs';
 import { featureColumns, publicAllowed, requireFeature, featureOff, policyCapabilities, featurePolicyService, repositoryFeatureService, effectiveFeatures, discussionFeatures } from './feature-policy.mjs';
 import { digest, uuidOK, reply, Fault, deny, invalid, unsupported, conflict, page, user, bodyLimit } from './common.mjs';
 export { digest } from './common.mjs';
-import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, receiveCommand, acceptedReport, refusalReport, refusedRef, remote, sha, validRef, GitProviderError } from './git.mjs';
+import { defaultBranchAdvertisement, defaultBranchRefsV2, gitV2Command, advertisedRefs, bounded, gitRequest, leaseProviderTokens, revokeProviderTokens, receiveCommand, acceptedReport, refusalReport, refusedRef, remote, sha, validRef, GitProviderError } from './git.mjs';
 
 const jsonHeaders = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 // Admission classes: reads overlap (8 at once); transfers (clone, fetch, push) overlap reads and each other (24); anything else is
@@ -205,6 +205,7 @@ export async function activityAuthority(request, env, input) {
 export async function withArtifact(env, row, action, defaultHead = false) {
   const measure = (name, action) => env.timings ? env.timings.measure('artifacts', () => env.timings.measure('artifact_' + name, action)) : action();
   const repo = await measure('open', () => env.ARTIFACTS.get(row.artifact_name));
+  let handle, tokens;
   try {
     // Only independent reads overlap; settle both before disposing the provider handle.
     const reads = await Promise.allSettled([measure('info', () => repo.info()), ...(defaultHead ? [measure('log', () => repo.log({ ref: row.default_branch, limit: 1 }))] : [])]);
@@ -212,8 +213,13 @@ export async function withArtifact(env, row, action, defaultHead = false) {
     const info = reads[0].value;
     if (info.name !== row.artifact_name || info.remote !== remote(env, row.artifact_name)) throw Error('provider identity changed');
     const observed = new Proxy(repo, { get(target, key) { const value = target[key]; return typeof value === 'function' && typeof key === 'string' ? (...args) => measure(key, () => target[key](...args)) : value; } });
-    return await action(cachedRepository(observed, env.gitObjectCache, [env.ACCOUNT_ID, env.ARTIFACTS_NAMESPACE, row.artifact_name], env.timings), info, reads[1]?.value);
-  } finally { repo[Symbol.dispose](); }
+    handle = cachedRepository(observed, env.gitObjectCache, [env.ACCOUNT_ID, env.ARTIFACTS_NAMESPACE, row.artifact_name], env.timings);
+    tokens = leaseProviderTokens(handle);
+    return await action(handle, info, reads[1]?.value);
+  } finally {
+    if (tokens) await revokeProviderTokens(handle, tokens);
+    repo[Symbol.dispose]();
+  }
 }
 
 function wireRepository(row, env, empty) {

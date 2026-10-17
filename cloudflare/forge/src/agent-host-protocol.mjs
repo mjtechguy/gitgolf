@@ -8,7 +8,7 @@ import { digest, Fault, invalid, reply, uuidOK, conflict } from './common.mjs';
 import { advertisedRefs, bounded, defaultBranchAdvertisement, defaultBranchRefsV2, gitRequest, gitV2Command, receiveCommand, refusedRef, refusalReport, acceptedReport, sha } from './git.mjs';
 import { chargeBudget, budgetJSON, budgetText } from './agent-budgets.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
-import { reserveRefWrite, finishRefWrite, sendRefUpdate } from './ref-writes.mjs';
+import { reserveRefWrite, finishRefWrite, sendRefUpdate, mergeHolds } from './ref-writes.mjs';
 import { ownerSlug } from './owners.mjs';
 import { featureOff } from './feature-policy.mjs';
 import { admissionRefusal, agentSchema, agentTools, byteLength, isReview, maxDuration, now, parse, random, refuse, repositoryRow, reviewSummaryBytes, scrub, targetURL, terminalStates } from './agent-hosts.mjs';
@@ -290,7 +290,7 @@ async function taskGit(db, env, request, url, id, route, withArtifact, providerF
       if (command.ref !== 'refs/heads/' + task.branch) return text(`This task may push only refs/heads/${task.branch}.`, 403);
       if (command.next === zero) return text('This task may not delete its branch.', 403);
       if (command.old !== zero && command.old !== task.commit_id) return text('Only a new branch, or a fast-forward of the commit this task pushed before, is accepted.', 403);
-      if (repository.write_pending) return text('An unresolved operation fences further changes to this repository.', 409);
+      if (repository.write_pending && await mergeHolds(db, repository.id, command.ref)) return text('An unresolved operation fences further changes to this repository.', 409);
       try { await enforceGitRules(db, repository, { id: task.requested_by }, command.ref); } catch (error) { if (error instanceof Fault) return text(error.message, 403); throw error; }
     }
     return await withArtifact(env, repository, async repo => {

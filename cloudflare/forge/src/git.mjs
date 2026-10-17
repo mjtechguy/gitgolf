@@ -137,9 +137,39 @@ export function remote(env, name) {
 
 export class GitProviderError extends Error {}
 
+// One withArtifact handle leases one provider token per scope (read, write) for all of its Git calls, instead of minting and revoking
+// one per call: a push reads its ref back up to five times, and every call cost two extra provider round-trips. The leases are revoked
+// together when the handle closes; a lease is renewed after 40 s so no call starts on a token near its 60 s expiry.
+const leases = new WeakMap(), leaseMs = 40_000;
+export function leaseProviderTokens(repo) { const held = new Map(); leases.set(repo, held); return held; }
+// Revocation is confirmed, not assumed. An unconfirmed one is logged and does not fail the request: the token never left this Worker and
+// expires within 60 s, and failing a fetch or a push that already happened turned provider hiccups into 503s under load.
+export async function revokeProviderTokens(repo, held) {
+  const pending = [...held.values()].flatMap(lease => [...lease.retired, lease.credential]).filter(Boolean); held.clear();
+  const results = await Promise.allSettled(pending.map(async minted => {
+    const credential = await minted.catch(() => null); // a mint that failed left nothing to revoke
+    return credential?.plaintext === undefined || await repo.revokeToken(credential.plaintext);
+  }));
+  const unconfirmed = results.filter(result => result.status === 'rejected' || result.value !== true).length;
+  if (unconfirmed) console.log(JSON.stringify({ event: 'golf.provider_token_revoke_unconfirmed', count: unconfirmed }));
+}
+async function providerToken(repo, scope) {
+  const held = leases.get(repo);
+  if (!held) return { credential: await repo.createToken(scope, 60), leased: false };
+  let lease = held.get(scope);
+  if (lease && Date.now() - lease.at >= leaseMs) { lease.retired.push(lease.credential); lease.credential = null; }
+  if (!lease?.credential) {
+    const credential = repo.createToken(scope, 60);
+    lease = { at: Date.now(), credential, retired: lease?.retired || [] }; held.set(scope, lease);
+    // A failed mint is not cached: the next call mints again.
+    credential.catch(() => { if (lease.credential === credential) lease.credential = null; });
+  }
+  return { credential: await lease.credential, leased: true };
+}
+
 export async function gitRequest(env, repo, name, suffix, service, body, providerFetch = fetch, protocol = null) {
   if (protocol !== null && !['version=1', 'version=2'].includes(protocol)) throw new GitProviderError('Unsupported Git protocol header.');
-  const credential = await repo.createToken(service === 'git-receive-pack' ? 'write' : 'read', 60);
+  const { credential, leased } = await providerToken(repo, service === 'git-receive-pack' ? 'write' : 'read');
   try {
     if (typeof credential.plaintext !== 'string' || credential.plaintext.length > 1024 || !/^[\x21-\x7e]+$/.test(credential.plaintext)) throw new GitProviderError('Provider Git credential format is unsupported.');
     const headers = { Authorization: `Bearer ${credential.plaintext}`, 'User-Agent': 'Golf-Native-Forge/1' };
@@ -153,7 +183,7 @@ export async function gitRequest(env, repo, name, suffix, service, body, provide
     if (response.headers.get('Content-Type') !== `application/x-${service}-${body ? 'result' : 'advertisement'}`) throw new GitProviderError('Provider Git content type is unsupported.');
     return { bytes, contentType: response.headers.get('Content-Type') };
   } finally {
-    if (await repo.revokeToken(credential.plaintext) !== true) throw new GitProviderError('Provider Git token revocation unconfirmed.');
+    if (!leased) await revokeProviderTokens(repo, new Map([['', { credential: Promise.resolve(credential), retired: [] }]]));
   }
 }
 
