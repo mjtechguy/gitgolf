@@ -3,9 +3,19 @@ import { pipelinePolicy } from './pipeline-policy.mjs';
 import { refusedRef } from './git.mjs';
 import { recordRefWrite } from './contributions.mjs';
 
-// The branch-level push fence (schema 37), shared by /git/ pushes, agent task pushes and the Source API. Pull request merges keep
-// reserving the whole repository through repositories.write_pending; an unsettled write still refuses to start while it is held.
+// The branch-level push fence (schema 37), shared by /git/ pushes, agent task pushes and the Source API. A pull request merge reserves
+// its repository through repositories.write_pending, which keeps merges, rules, settings and reviews ordered; a branch write waits for
+// it only when it writes the merge's base or the head of the pull request being merged. Other branches are independent in Git: with
+// agents landing all the time, a repository-wide wait starved them (half of all pushes and Source API commits refused at ~110 agents).
+// A write_pending that is not a known merge still holds every branch.
 const zero = '0'.repeat(40);
+export const mergeHoldsRef = `EXISTS(SELECT 1 FROM repositories mr LEFT JOIN git_operations mg ON mg.id=mr.write_pending
+  LEFT JOIN pull_merge_operations mm ON mm.git_operation_id=mg.id LEFT JOIN pull_requests mp ON mp.id=mm.pull_request_id
+  WHERE mr.id=? AND mr.write_pending IS NOT NULL AND (mm.git_operation_id IS NULL OR mg.ref=? OR 'refs/heads/'||mp.head_branch=?))`;
+export const mergeHoldsValues = (repositoryId, ref) => [repositoryId, ref, ref];
+export async function mergeHolds(db, repositoryId, ref) {
+  return Boolean(await db.prepare(`SELECT 1 AS held WHERE ${mergeHoldsRef}`).bind(...mergeHoldsValues(repositoryId, ref)).first());
+}
 
 // The journal row and its ref fence commit together, under the caller's authority guard ({sql, values}: grant, versions, credential)
 // evaluated in the same INSERT. False when not admitted: a held repository, an unsettled write to the same ref or a changed authority.
@@ -13,9 +23,9 @@ export async function reserveRefWrite(db, { id, repositoryId, userId, command, g
   try {
     const [, fenced] = await db.batch([
       db.prepare(`INSERT INTO git_operations(id,repository_id,user_id,ref,old_sha,new_sha,state,created_at) SELECT ?,?,?,?,?,?,'DISPATCHED',?
-        WHERE EXISTS(SELECT 1 FROM repositories WHERE id=? AND write_pending IS NULL)
+        WHERE NOT ${mergeHoldsRef}
         AND NOT EXISTS(SELECT 1 FROM git_ref_writes WHERE repository_id=? AND ref=? AND outcome IS NULL) AND ${guard.sql}`)
-        .bind(id, repositoryId, userId, command.ref, command.old, command.next, time, repositoryId, repositoryId, command.ref, ...guard.values),
+        .bind(id, repositoryId, userId, command.ref, command.old, command.next, time, ...mergeHoldsValues(repositoryId, command.ref), repositoryId, command.ref, ...guard.values),
       db.prepare('INSERT INTO git_ref_writes(operation_id,repository_id,ref) SELECT ?,?,? WHERE changes()=1 AND EXISTS(SELECT 1 FROM git_operations WHERE id=?)')
         .bind(id, repositoryId, command.ref, id),
     ]);
@@ -27,11 +37,12 @@ export async function reserveRefWrite(db, { id, repositoryId, userId, command, g
   }
 }
 
-// Why a reservation was not admitted: a merge or legacy write holding the repository, an unsettled write to the same ref, or neither
+// Why a reservation was not admitted: a merge (or legacy write) holding this ref, an unsettled write to the same ref, or neither
 // (the caller's authority changed).
 export async function refWriteBlocker(db, repositoryId, ref) {
-  const state = await db.prepare('SELECT write_pending,EXISTS(SELECT 1 FROM git_ref_writes WHERE repository_id=r.id AND ref=? AND outcome IS NULL) AS busy FROM repositories r WHERE id=?').bind(ref, repositoryId).first();
-  return state?.write_pending ? 'repository' : state?.busy ? 'branch' : '';
+  const state = await db.prepare(`SELECT ${mergeHoldsRef} AS held,EXISTS(SELECT 1 FROM git_ref_writes WHERE repository_id=? AND ref=? AND outcome IS NULL) AS busy`)
+    .bind(...mergeHoldsValues(repositoryId, ref), repositoryId, ref).first();
+  return state?.held ? 'repository' : state?.busy ? 'branch' : '';
 }
 
 // Sends one fenced ref update and reads the ref back. The provider can fail an update that runs alongside others in the same repository

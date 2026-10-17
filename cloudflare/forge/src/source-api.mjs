@@ -5,7 +5,7 @@ import { digest, uuidOK, reply, Fault, invalid, conflict } from './common.mjs';
 import { advertisedRefs, gitRequest, receiveStatus, refusedRef, sha, validRef } from './git.mjs';
 import { GitTreeError, commitObject, emptyTree, packObjects, planTreeEdit, treeReader, treeModes } from './git-objects.mjs';
 import { mergeTrees, changedPaths } from './tree-merge.mjs';
-import { reserveRefWrite, finishRefWrite, sendRefUpdate } from './ref-writes.mjs';
+import { reserveRefWrite, finishRefWrite, sendRefUpdate, refWriteBlocker, mergeHolds } from './ref-writes.mjs';
 import { receiveRequest } from './pull-merge.mjs';
 import { enforceGitRules } from './repository-rules.mjs';
 import { gitCredentialSQL } from './git-credentials.mjs';
@@ -181,9 +181,8 @@ async function write(db, env, person, row, repo, command, pack, rulesVersion, ct
   const id = crypto.randomUUID();
   const authorityNow = guard || authority(person, row, rulesVersion);
   if (!await reserveRefWrite(db, { id, repositoryId: row.id, userId: person.id, command, guard: authorityNow })) {
-    const state = await db.prepare('SELECT write_pending,EXISTS(SELECT 1 FROM git_ref_writes WHERE repository_id=r.id AND ref=? AND outcome IS NULL) AS busy FROM repositories r WHERE id=?').bind(command.ref, row.id).first();
-    // A merge (a person's or a policy landing) holds the whole repository for a few seconds: wait for it like a busy branch.
-    if (state?.write_pending || state?.busy) return { outcome: 'busy' };
+    // A merge (a person's or a policy landing) onto this branch, or of this branch, holds it for a few seconds: wait like a busy branch.
+    if (await refWriteBlocker(db, row.id, command.ref)) return { outcome: 'busy' };
     // The other write may have finished between the reservation and this read: if the same authority guard (grant, versions, rules,
     // credential and token liveness) still holds, it was a lost race for the ref, not a changed access.
     if (await db.prepare(`SELECT 1 WHERE ${authorityNow.sql}`).bind(...authorityNow.values).first()) return { outcome: 'busy' };
@@ -404,7 +403,8 @@ async function branch(db, env, person, row, body, ctx) {
   requireScope(person, row.id, { write: true, ref });
   writer(row);
   if (!create && name === row.default_branch) throw new Fault('failed_precondition', 412, 'The default branch cannot be deleted; choose another default branch first.');
-  if (row.repository_write_pending ?? row.write_pending) conflict();
+  const merging = row.repository_write_pending === undefined ? row.write_pending : row.repository_write_pending;
+  if (row.unknown_write || merging && await mergeHolds(db, row.id, ref)) conflict();
   const rulesVersion = await enforceGitRules(db, row, person, ref);
   return ctx.withArtifact(env, row, async repo => {
     const refs = await refsOf(env, repo, row, ctx.providerFetch), current = refs.get(ref);
