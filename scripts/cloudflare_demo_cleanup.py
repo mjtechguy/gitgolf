@@ -52,6 +52,8 @@ def managed_image_inventory(name, jobs, rows):
         raise ValueError('Managed image inventory exceeds the cleanup bound')
     images = []
     for row in rows:
+        # The SSH hosts container's own image; the stack's destroy releases it and its build tags are removed after.
+        if row.get('name') == name + '-ssh': continue
         if not re.fullmatch(re.escape(name) + r'-r[1-9][0-9]*', row.get('name', '')) or not isinstance(row.get('tags'), list):
             raise ValueError('Managed image repository ownership differs')
         for tag in row['tags']:

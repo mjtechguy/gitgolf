@@ -64,8 +64,9 @@ export default Alchemy.Stack('GolfDemo', {
     zoneId: input.zone, name: input.settings.email.sender.split('@')[1], previewEnabled: false }) : undefined;
   const machine = yield* Cloudflare.Access.ServiceToken('Operator', { name: name + '-operator', duration: '5h' });
   // Zero Trust allows one one-time PIN login method per account: reuse an existing one unmanaged (set by init), else own it.
+  // Retained: destroying the stack leaves the login method in place, because other things on the account sign in with it.
   const identityProviderId = input.accessIdentityProviderId
-    ?? (yield* Cloudflare.Access.IdentityProvider('Login', { name, type: 'onetimepin', config: {} })).identityProviderId;
+    ?? (yield* Cloudflare.Access.IdentityProvider('Login', { name, type: 'onetimepin', config: {} }).pipe(Alchemy.RemovalPolicy.retain())).identityProviderId;
   const policies = [
     { name: 'Approved demo owner', decision: 'allow' as const, include: [{ email: { email: input.email } }] },
     { name: 'Demo operator', decision: 'non_identity' as const, include: [{ serviceToken: { tokenId: machine.serviceTokenId } }] },
