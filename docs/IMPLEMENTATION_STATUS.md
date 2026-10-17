@@ -1,5 +1,22 @@
 # Golf implementation status
 
+## 2026-10-17 — Hosted reliability at about 110 agents: narrower write holds, 1 s CPU (#171, #172, no migration, on hosted)
+
+- **Measured:** three 8-minute runs of the full agent mix on hosted ([data](benchmarks/2026-10-17-write-holds/README.md)). In the
+  last, every push, Source API commit and agent commit succeeded and all 180 agent pull requests landed (p50 5.8 s). Before the fixes,
+  155 of 472 Source API commits and 61 of 179 pushes to the writers' own branches were refused, and 107 of 111 pull requests landed.
+- **Fixed:**
+  - A merge holds only its base and the pull request's head; other branches no longer wait for it (#171).
+  - An unknown branch write holds only merges of its own branch, instead of every landing in the repository (#172).
+  - The forge Worker's CPU limit goes from 100 ms to 1 s. The maintenance cron and the heaviest commits were being cut off (#171).
+  - Artifacts tokens are leased per handle instead of minted and revoked on every Git call. An unconfirmed revocation no longer turns a
+    finished request into a 503 (#171).
+  - Ref updates the provider answers without a status are retried six times, jittered, instead of five (#172).
+- **Open:**
+  - The Workspace queue: `open_pull_request` and CI reports waited p50 6.0 s and p95 18.0 s. The probe peaked at 20.4 s.
+  - One `open_pull_request` answered "could not be confirmed".
+  - A landing refused as busy waits for the next sweep.
+
 ## 2026-10-17 — First Forgejo backup/restore drill: the core drill passes, Access-core059 cannot run
 
 - **Core drill passes:** `python3 scripts/recovery-smoke.py --image golf-recovery-drill:976f8de-labeled` exited 0 three times in a row. The last run used the final scripts in this change.

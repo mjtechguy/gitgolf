@@ -234,6 +234,20 @@ An **Estimated costs** page under Admin → Operations.
 
 ## Found while measuring
 
+- **Merges held every branch (fixed, 2026-10-17, #171 and #172).**
+  - A merge sets `repositories.write_pending`. Every push and Source API commit waited for it to clear, so with agents landing all the
+    time, writes to other branches waited out their budget. At about 110 agents, 155 of 472 Source API commits and 61 of 179 pushes to
+    the writers' own branches were refused.
+  - A branch write now waits only for a merge of its own branch: the merge's base, or the head of the pull request being merged
+    (`ref-writes.mjs` `mergeHoldsRef`). A `write_pending` that is not a known merge still holds every branch.
+  - The same applied to unknown branch writes (`git_ref_unknown`), which held every merge until maintenance settled them. A merge and
+    the land queue now wait only for one on their own branches (`pull-merge.mjs` `unknownMergeWrite`).
+  - Data: [benchmarks/2026-10-17-write-holds](benchmarks/2026-10-17-write-holds/README.md). After both fixes, every write and all 180
+    landings succeeded.
+- **CPU limit (fixed, #171).** The forge Worker allowed 100 ms of CPU per invocation. Source API commits used up to 232 ms and pushes
+  114 ms, and the maintenance cron was cut off at 100 ms. It now allows 1 s.
+- **Provider tokens (fixed, #171).** `gitRequest` no longer mints and revokes a 60 s Artifacts token on every call. Each handle leases
+  one per scope and revokes them together at the end. A revocation that cannot be confirmed is logged; it no longer fails the request.
 - **Merge bases on long histories (fixed).**
   - `repository-diff.mjs` `comparison()` fell back to reading the full ancestry of both tips, capped at 500 commits, whenever the
     base had moved by a merge.
@@ -282,8 +296,7 @@ this installation's Artifacts bill.
 - Each phase's benchmark records how often the provider reports busy. If writes to one hot repository plateau there, the limit is
   the provider's per-repository concurrency, and the answer is batching (for example the land queue merging several pull requests
   per receive-pack), not Golf scale-out.
-- `gitRequest` mints and revokes a 60 s Artifacts token on every call: two extra provider round-trips per Git operation. Reusing
-  a token within a request is a cheap follow-up.
+- `gitRequest` minted and revoked a 60 s Artifacts token on every call. Since #171, tokens are leased per handle.
 
 ## Not in this plan
 
