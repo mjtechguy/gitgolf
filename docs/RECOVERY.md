@@ -1,8 +1,8 @@
 # Offline recovery for the canonical Docker installation
 
-Updated: 2026-10-16. This is bounded P1.6 recovery for the canonical Forgejo core and the optional local RustFS developer profile. It is not a completed production recovery gate. The [operator script](../scripts/recovery.py) creates an encrypted, coordinated backup, validates it and restores it into a fresh, quarantined Docker Compose project. It never starts the restored Golf, Forgejo or RustFS services.
+Updated: 2026-10-17. This is bounded P1.6 recovery for the canonical Forgejo core and the optional local RustFS developer profile. It is not a completed production recovery gate. The [operator script](../scripts/recovery.py) creates an encrypted, coordinated backup, validates it and restores it into a fresh, quarantined Docker Compose project. It never starts the restored Golf, Forgejo or RustFS services.
 
-**Qualification status.** Every native backup/restore drill that previously passed ran on the retired earlier topology. Those drills do not qualify Forgejo. On 2026-10-16 the recovery tooling was ported to the Forgejo 15.0.9 topology in `compose.yaml`. The port is adapted from source and covered by unit tests only. `scripts/recovery-test.py` and `scripts/repository-access-recovery-smoke.py --self-check` pass, but **no Forgejo backup/restore drill has run yet**: neither `scripts/recovery-smoke.py` nor the Access-core059 drill. Until one passes, treat Forgejo recovery as unqualified. The record of results is the [evidence ledger](IMPLEMENTATION_STATUS.md).
+**Qualification status.** Every native backup/restore drill before 2026-10-17 ran on the retired earlier topology and does not qualify Forgejo. On 2026-10-16 the tooling was ported to the Forgejo 15.0.9 topology in `compose.yaml`. On 2026-10-17 the first Forgejo drill ran. `scripts/recovery-smoke.py` **passes**, on three consecutive runs, on a Golf image built from source commit `976f8de` at Golf schema **202610110095**, with the local RustFS profile. The tooling needed three fixes before it passed; the [evidence ledger](IMPLEMENTATION_STATUS.md) lists them. The Access-core059 drill **does not pass**. It stops at its first schema check, because the profile is pinned to schema 202610040059 and every Forgejo-era Golf image migrates to 202610110095. The general core profile is therefore qualified on Forgejo for this small fixture; the Access-core059 profile is not.
 
 The P1.6 exception covers privileged offline recovery only. It uses documented native PostgreSQL and Docker procedures into a fresh, stopped target, with every writer drained and traffic quarantined. It does not authorize application features to write Forgejo's database or repository files, schema surgery across products, or ad hoc edits to a live installation.
 
@@ -13,7 +13,7 @@ Cloudflare and AI are not required. The same origin-side procedure can apply to 
 | Requirement | Current contract |
 | --- | --- |
 | Services | Exactly one `golf`, one rootless `forgejo` and one `postgres` service, optionally one canonical `rustfs`, all in the named Compose project. Supply the complete ordered configuration with repeatable `--compose-file`. Each captured service's file list must be an ordered subset that starts with the same base file. Remove drained worker and daemon containers before capture. |
-| Versions | PostgreSQL **18.4**, Forgejo **15.0.9** (`forgejo --version` must report `15.0.9+gitea-1.22.0`, which is Forgejo's own version string) and Golf schema **202610020021**, or the historically allowlisted **202610020019/008/009**. Schema020 on its own and any other schema are rejected. Schema **202610040059** is accepted only with explicit `--profile access-core059`, under the stricter closed requirements below. Restore uses the source's actual Docker image IDs with `pull_policy: never`, so every captured image must already exist locally. Images are not part of the backup. |
+| Versions | PostgreSQL **18.4**, Forgejo **15.0.9** (`forgejo --version` must report `15.0.9+gitea-1.22.0`, which is Forgejo's own version string) and Golf schema **202610110095**, the schema of every Forgejo-era Golf image. The older labels **202610020021/019/008/009** stay allowlisted for historical archives only; no Forgejo installation produces them. Schema020 on its own and any other schema are rejected, so a new migration needs a passing drill before its backups are accepted. At 202610110095, backup and restore also refuse any managed agent harness connection (`golf_codex_connections`), because no drill has yet covered harness authentication and provider caches; the plan keeps that state outside qualified recovery. Schema **202610040059** is accepted only with explicit `--profile access-core059`, under the stricter closed requirements below. Restore uses the source's actual Docker image IDs with `pull_policy: never`, so every captured image must already exist locally. Images are not part of the backup. |
 | Databases | Separate `golf` and `forgejo` databases and roles in the bundled PostgreSQL service, created by the byte-identical canonical [`deploy/postgres/forgejo-init.sh`](../deploy/postgres/forgejo-init.sh), with matching resolved credentials (`GOLF_DB_PASSWORD`, `FORGEJO_DB_PASSWORD`). No published PostgreSQL port. |
 | Forgejo configuration | `FORGEJO__database__*` must name `postgres:5432`, database and user `forgejo`, and the PostgreSQL service's `FORGEJO_DB_PASSWORD`. The rootless image's own path variables must keep their defaults, so `app.ini` is `/var/lib/gitea/custom/conf/app.ini` inside the data volume. `FORGEJO_WORK_DIR`/`FORGEJO_CUSTOM` overrides, `__FILE` indirection and the legacy `GITEA__` environment prefix are refused. Forgejo reads both prefixes, so refusing the legacy one stops a second spelling from silently overriding a checked setting. Two variables that decode to the same setting are also refused. |
 | Golf configuration | `GOLF_FORGE_URL=http://forgejo:3000`, `GOLF_FORGE_KIND=forgejo`, a lowercase UUIDv4 `GOLF_FORGE_INSTANCE_ID` and a `DATABASE_URL` that matches the bundled `golf` role. |
@@ -25,7 +25,7 @@ Cloudflare and AI are not required. The same origin-side procedure can apply to 
 
 Restore accepts only archives that a trusted operator created from a trusted installation. Successful age decryption proves ciphertext integrity, **not who sent it**: anyone with the public recipient can encrypt a different archive. Archive checks do not make arbitrary Compose configuration, SQL or repository hooks safe input. PostgreSQL warns explicitly that restoring a dump can execute code controlled by the source. Keep backup provenance separately from the encrypted file and its checksum. See [age's public-recipient model](https://github.com/FiloSottile/age) and [PostgreSQL's restore trust warning](https://www.postgresql.org/docs/18/app-pgrestore.html).
 
-## Explicit schema059 Access-core profile (prepared; Forgejo drill not run)
+## Explicit schema059 Access-core profile (not runnable on Forgejo-era images)
 
 `backup --profile access-core059` is an additional closed profile. It does not extend the general schema allowlist. Older profiles keep their existing validation and command syntax. The archive records the exact profile, bounded admission observations and the complete thirteen-family key inventory from the supported operator. Verify refuses missing or unknown profile metadata, unsupported schemas and nonzero forbidden inventories. Restore verifies the authenticated archive before it creates a target. After restoring the databases into the stopped fresh target, it rechecks the actual schema, the closed inventories and the configured key fingerprints and counts independently. It does this **before** it copies the native volume or invalidates credentials. A semantic database mismatch can therefore leave a quarantined fresh PostgreSQL target that needs exact owned cleanup, but it never opens either application.
 
@@ -80,7 +80,7 @@ The helper sets up real personal and organization grants, inherited team attachm
 
 The private manifest keeps only metadata, hashes and closed failure locations. Credentials, dumps and fixture source stay in owner-only temporary files, which are removed along with the fresh resources.
 
-Earlier Access-core059 attempts, including the one that passed, ran on the retired earlier topology. They do not qualify Forgejo. The Forgejo drill has **not run**. Even when it passes, it cannot complete production P1.6, whole-platform or latest-schema recovery, large-capacity recovery, reconciliation of native revocations made after the backup, protected integration, or the full Access/settings scope.
+Earlier Access-core059 attempts, including the one that passed, ran on the retired earlier topology. They do not qualify Forgejo. The Forgejo attempt on 2026-10-17 **failed** at its first schema check (`repository-access-recovery-smoke.py` line 658, stage "fresh canonical core and ordinary supported native identities"). The fresh core migrated to 202610110095, not 202610040059. Owned cleanup passed and foreign containers were unchanged. Running this profile on Forgejo needs a new closed profile for the current schema, with its exclusion inventory re-derived for every consumer added since schema059. Changing the pinned schema label alone would not be qualification. Even when such a drill passes, it cannot complete production P1.6, whole-platform or latest-schema recovery, large-capacity recovery, reconciliation of native revocations made after the backup, protected integration, or the full Access/settings scope.
 
 ## What is captured
 
@@ -222,7 +222,7 @@ python3 scripts/recovery-test.py
 python3 scripts/repository-access-recovery-smoke.py --self-check
 # Supply GOLF_TEST_DATABASE_URL through a private environment for a dedicated disposable PostgreSQL database.
 make test-integration
-# Not yet run on Forgejo. Supply an already-built Golf image and the pinned Forgejo image locally.
+# Supply an already-built Golf image and the pinned Forgejo, PostgreSQL and RustFS images locally. Needs git-lfs.
 python3 scripts/recovery-smoke.py --image '<LOCAL_GOLF_IMAGE_TAG_OR_ID>'
 ```
 
@@ -231,17 +231,17 @@ python3 scripts/recovery-smoke.py --image '<LOCAL_GOLF_IMAGE_TAG_OR_ID>'
 | Offline archive and configuration checks (`recovery-test.py`) | **Pass (2026-10-16).** Covers the single-volume Forgejo archive (paths, duplicates, links, modes, owners and types; `app.ini` database, storage and reference checks), `FORGEJO__` decoding (literal and `_0X2E_` dots, conflict, legacy-prefix and `__FILE` refusal), image path and database environment checks, local RustFS checks, private-file and no-overwrite behavior, Compose dollar escaping and bounded subprocess output. Compose is parsed with `docker compose config`; no container is touched. |
 | Access-core059 self-check | **Pass (2026-10-16).** Covers profile, history and key-family boundaries, the Forgejo actions, mailer and cron fences in the environment and `app.ini`, hook and `.gitconfig` exclusions, and fault-adapter guards. No runtime resources. |
 | Real PostgreSQL invalidation tests | Golf-only and topology-independent; see the ledger. |
-| Full native encrypted backup and fresh restore (`recovery-smoke.py`) | **Not run on Forgejo.** |
-| Access-core059 native drill | **Not run on Forgejo.** |
+| Full native encrypted backup and fresh restore (`recovery-smoke.py`) | **Pass (2026-10-17), three consecutive runs.** Golf image `sha256:445160f727bfea6dfeeadd40833653131d680cd46b3ac76516ea3c319b0c38ec`, built from commit `976f8de`; schema 202610110095; Forgejo 15.0.9 rootless; PostgreSQL 18.4; local RustFS. Covers refusal of live writers, overwrite, the 1 MiB cap, a wrong identity, truncated ciphertext, a damaged payload, a mislabeled schema and existing or non-empty targets. Also covers quarantine, the invalidation ledger, Git refs and signatures, LFS, release attachments, branch protection, the SSH host key, the GnuPG signing key, a post-restore signed push, force-push denial and restart. Disposable resources removed. Small fixture only. |
+| Access-core059 native drill | **Fail (2026-10-17).** Stops at its first schema check: the profile is pinned to schema 202610040059 and Forgejo-era images are at 202610110095. Cleanup passed. |
 
-The following are unverified until a Forgejo drill passes:
+The 2026-10-17 drill settled the points that stayed open until a Forgejo drill passed:
 
-- the exact `forgejo --version` output (the check expects `forgejo version 15.0.9+gitea-1.22.0 …`, derived from Forgejo's Makefile and CLI source)
-- `docker cp` round-tripping of the rootless volume
-- whether `app.ini` mode and ownership pass the archive checks
-- end-to-end restore of Git, LFS, attachments, SSH and signing identity
+- `forgejo --version` prints `forgejo version 15.0.9+gitea-1.22.0 (release name 15.0.9) …`, which the check accepts.
+- `docker cp -a` round-trips the rootless volume, and the copy passes the archive checks.
+- `app.ini` (mode 0600, owner 1000) passes the mode and ownership checks.
+- Git, LFS, release attachments, branch protection, the SSH host key and the GnuPG signing key survive restore. The rootless image's built-in SSH server has a single RSA host key (`ssh/gitea.rsa`).
 
-Earlier drills ran on the retired earlier topology. They do not qualify Forgejo.
+Still unverified on Forgejo: the Access-core059 profile (see above), a core-only backup without local RustFS, and anything larger than this small fixture. Earlier drills ran on the retired earlier topology and do not qualify Forgejo.
 
 Still open: production recovery objectives, Kubernetes, external PostgreSQL/S3/R2, large-capacity recovery, all-repository inventory reconciliation, off-host image distribution, PITR, cross-version restoration, provider revocation and tombstone replay, and outbound-work reconciliation. P1.6 and the broader P1.3 and production release gates stay open.
 

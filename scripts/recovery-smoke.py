@@ -44,6 +44,9 @@ ROOT = Path(__file__).resolve().parents[1]
 STAGE = 'prerequisites'
 FORGEJO_IMAGE = 'codeberg.org/forgejo/forgejo:15.0.9-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413'
 JOB_IMAGE = 'alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0'
+# Golf answers 204 to any poll that does not declare the job-limits capability,
+# so a bare poll can neither lease a run nor prove that none is leasable.
+POLL_BODY = json.dumps({'capabilities': ['golf.runner.job-limits.v1']}).encode()
 # Fixed Golf metadata only. Mutable grant/run/account state is compared separately.
 HISTORY_TABLES = [
     ('golf_users', 'id'), ('golf_audit_events', 'id'), ('golf_crypto_events', 'id'),
@@ -61,6 +64,14 @@ HISTORY_TABLES = [
     ('golf_repository_event_payloads', 'connection_id,payload_sha256'),
     ('golf_automation_credentials', 'grant_id'), ('golf_workflow_run_logs', 'run_id,sequence'),
 ]
+
+
+def same_fields(actual, expected, label):
+    # Report only the names of differing wire fields, never their values.
+    if actual != expected:
+        names = sorted(name for name in set(actual) | set(expected) if actual.get(name) != expected.get(name))
+        print(label+' differs in fields: '+', '.join(names), file=sys.stderr, flush=True)
+    return actual == expected
 
 
 def check(message):
@@ -232,7 +243,9 @@ def main():
                 output = run('ssh-keyscan', '-T', '10', '-p', str(ssh_port), '127.0.0.1')
                 values = sorted(' '.join(line.split()[1:]) for line in output.splitlines()
                                 if line and not line.startswith('#'))
-                assert len(values) >= 2, 'SSH identity is missing'
+                # The rootless image runs Forgejo's built-in SSH server, which
+                # generates a single RSA host key (ssh/gitea.rsa) on first start.
+                assert values, 'SSH identity is missing'
                 return values
 
             passwords = [secrets.token_urlsafe(32) for _ in range(3)]
@@ -438,8 +451,23 @@ def main():
             git('push', remote, '--all'); git('push', remote, '--tags')
             smoke.wait_for_push(owner_token, full_name)
             refs = git('ls-remote', '--heads', '--tags', remote)
-            release = smoke.provider(owner_token, 'POST', route+'/releases',
-                                     {'tag_name': 'fixture-v1', 'name': 'Recovery fixture'}, expected=201)
+            # Forgejo records a pushed tag in its release table from an
+            # asynchronous push queue. A release created while that row is
+            # being written can be refused; retry only that transient refusal.
+            for attempt in range(20):
+                release_request = urllib.request.Request(smoke.FORGE+'/api/v1/'+route+'/releases', method='POST',
+                    data=json.dumps({'tag_name': 'fixture-v1', 'name': 'Recovery fixture'}).encode(),
+                    headers={'Authorization': 'token '+owner_token, 'Content-Type': 'application/json'})
+                try:
+                    with urllib.request.urlopen(release_request, timeout=20) as response:
+                        assert response.status == 201
+                        release = json.load(response)
+                    break
+                except urllib.error.HTTPError as error:
+                    status = error.code; error.close()
+                    print('Release creation attempt '+str(attempt+1)+' returned HTTP '+str(status), file=sys.stderr, flush=True)
+                    assert status in {409, 422, 500} and attempt < 19, 'Release creation failed'
+                    time.sleep(1)
             attachment_bytes = b'Golf attachment recovery\n'+secrets.token_bytes(4096)
             upload = urllib.request.Request(smoke.FORGE+'/api/v1/'+route+'/releases/'+str(release['id'])+
                 '/assets?name=recovery.bin', data=attachment_bytes, method='POST',
@@ -534,11 +562,11 @@ def main():
             while time.monotonic() < deadline and sql("SELECT count(*) FROM golf_push_materializations WHERE state IN ('pending','preparing');") != '0':
                 time.sleep(.5)
             assert sql("SELECT count(*) FROM golf_push_materializations WHERE state IN ('pending','preparing');") == '0'
-            poll = urllib.request.Request(smoke.GOLF+'/internal/ci/poll', data=b'{}', method='POST',
+            poll = urllib.request.Request(smoke.GOLF+'/internal/ci/poll', data=POLL_BODY, method='POST',
                 headers={'Authorization': 'Bearer '+runner_key, 'Golf-Runner-ID': 'recovery-worker', 'Content-Type': 'application/json'})
             assignments = []
             for worker_id, worker_key in workers:
-                request = urllib.request.Request(smoke.GOLF+'/internal/ci/poll', data=b'{}', method='POST',
+                request = urllib.request.Request(smoke.GOLF+'/internal/ci/poll', data=POLL_BODY, method='POST',
                     headers={'Authorization': 'Bearer '+worker_key, 'Golf-Runner-ID': worker_id, 'Content-Type': 'application/json'})
                 with urllib.request.urlopen(request, timeout=15) as response:
                     assert response.status == 200, 'Expected worker assignment'
@@ -837,9 +865,9 @@ def main():
             assert smoke.rpc(owner, 'RepositoryService/GetRepository', {'repository': key})['repository']['id'] == repository['id']
             lookup = {'idempotency_key': creation_request['idempotency_key']}
             observed = smoke.rpc(owner, 'RepositoryService/GetRepositoryCreation', lookup)
-            assert observed['creation'] == creation and observed['repository']['id'] == repository['id']
+            assert same_fields(observed['creation'], creation, 'Restored creation lookup') and observed['repository']['id'] == repository['id']
             replay = smoke.rpc(owner, 'RepositoryService/CreateRepository', creation_request)
-            assert replay['creation'] == creation and replay['repository']['id'] == repository['id']
+            assert same_fields(replay['creation'], creation, 'Restored creation replay') and replay['repository']['id'] == repository['id']
             smoke.rpc(outsider, 'RepositoryService/GetRepositoryCreation', lookup, expected=404)
             for table in ['golf_repository_creations', 'golf_repository_creation_events']:
                 assert rows(table, 'id') == history[table]
@@ -847,9 +875,9 @@ def main():
             for procedure, request, recorded in issue_operations:
                 mutation_lookup = {'idempotency_key': request['idempotency_key']}
                 observed = smoke.rpc(owner, 'RepositoryService/GetIssueMutation', mutation_lookup)
-                assert observed['mutation'] == recorded['mutation']
+                assert same_fields(observed['mutation'], recorded['mutation'], 'Restored issue mutation lookup')
                 replay = smoke.rpc(owner, 'RepositoryService/' + procedure, request)
-                assert replay['mutation'] == recorded['mutation']
+                assert same_fields(replay['mutation'], recorded['mutation'], 'Restored issue mutation replay')
                 if 'issue' in recorded:
                     assert observed['issue']['id'] == replay['issue']['id'] == recorded['issue']['id']
                 if 'comment' in recorded:
